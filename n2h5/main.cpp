@@ -672,7 +672,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                         cmt.dwTimestamp = nevData.dwTimestamp;
                         cmt.data = nevData.comment.data;
                         cmt.flags = nevData.comment.flags;
-                        cmt.szComment = nevData.comment.comment;
+                        strncpy(cmt.szComment, nevData.comment.comment, min(BMI_COMMENT_LEN, sizeof(nevData.comment.comment)));
                         ret = H5PTappend(ptid_comment[id], 1, &cmt);
                     }                    
                     break;
@@ -1082,15 +1082,24 @@ int ConvertNSx22(FILE * pFile, hid_t file)
             ret = H5Aclose(aid);
             ret = H5Dclose(dsid);
         }
+        if (isDataHdr.nNumDatapoints == 0)
+        {
+            printf("Paused section with zero points detected!\n"
+                    " Retrieve the rest of the file as one chunk\n"
+                    " Last section may have unaligned trailing data points\n");
+        }
         int count = 0;
         INT16 anDataBufferCache[cbNUM_ANALOG_CHANS][CHUNK_SIZE_CONTINUOUS];
-        for (UINT32 i = 0; i < isDataHdr.nNumDatapoints; ++i)
+        for (UINT32 i = 0; i < isDataHdr.nNumDatapoints || isDataHdr.nNumDatapoints == 0; ++i)
         {
             INT16 anDataBuffer[cbNUM_ANALOG_CHANS];
             size_t nGot = fread(anDataBuffer, sizeof(INT16), isHdr.cnChannels, pFile);
             if (nGot != isHdr.cnChannels)
             {
-                printf("Fewer data points than specified in data header at the source file");
+                if (isDataHdr.nNumDatapoints == 0)
+                    printf("Paused section %d may be unaligned\n", setCount);
+                else
+                    printf("Fewer data points than specified in data header at the source file!\n");
                 break;
             }
             for (UINT32 j = 0; j < isHdr.cnChannels; ++j)
@@ -1156,6 +1165,7 @@ int main(int argc, char * const argv[])
     }
     if (idxSrcFile >= argc)
     {
+        // TODO: add <srcfile>[,<srcfile2>,...] to combine source files
         printf("Blackrock file conversion utility (version 1.0)\n"
                "Usage: n2h5 [options] <srcfile> [<destfile>]\n"
                "Purpose: Converts srcfile to destfile\n"

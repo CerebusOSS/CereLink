@@ -527,18 +527,20 @@ hid_t CreateTrackingType(hid_t loc, int dim, int width, int maxLen)
 hid_t CreateCommentType(hid_t loc)
 {
     herr_t ret;
-    hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
-    ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
+    // Use fixed-size comments because 
+    //  it is faster, more tools support it, and also allows compression
+    hid_t tid_str_array = H5Tcopy(H5T_C_S1);
+    ret = H5Tset_size(tid_str_array, BMI_COMMENT_LEN);
 
     hid_t tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiComment_t));
     ret = H5Tinsert(tid, "TimeStamp", offsetof(BmiComment_t, dwTimestamp), H5T_NATIVE_UINT32);
     ret = H5Tinsert(tid, "Data", offsetof(BmiComment_t, data), H5T_NATIVE_UINT32);
     ret = H5Tinsert(tid, "Flags", offsetof(BmiComment_t, flags), H5T_NATIVE_UINT8);
-    ret = H5Tinsert(tid, "Comment", offsetof(BmiComment_t, szComment), tid_attr_vl_str);
+    ret = H5Tinsert(tid, "Comment", offsetof(BmiComment_t, szComment), tid_str_array);
 
     ret = H5Tcommit(loc, "BmiComment_t", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-    H5Tclose(tid_attr_vl_str);
+    H5Tclose(tid_str_array);
 
     return tid;
 }

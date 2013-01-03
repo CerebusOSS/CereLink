@@ -189,12 +189,13 @@ typedef struct {
 
 hid_t CreateTrackingType(hid_t loc, int dim, int width, int maxLen = -1);
 
+#define BMI_COMMENT_LEN 256
 // Comment or user event
 typedef struct {
     UINT32 dwTimestamp;
     UINT8  flags;
     UINT32 data;
-    char * szComment;
+    char szComment[BMI_COMMENT_LEN];
 } BmiComment_t;
 
 hid_t CreateCommentType(hid_t loc);
