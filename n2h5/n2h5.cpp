@@ -27,24 +27,31 @@
 #include "n2h5.h"
 
 // Author & Date:   Ehsan Azar   Nov 13, 2012
-// Purpose: Create type for BmiChanFiltAttr_t and commit
+// Purpose: Create type for BmiFiltAttr_t and commit
 // Inputs:
 //  loc  - where to add the type
 // Outputs:
 //   Returns the type id
-hid_t CreateChanFiltAttrType(hid_t loc)
+hid_t CreateFiltAttrType(hid_t loc)
 {
     herr_t ret;
+    hid_t tid = -1;
+    std::string strLink = "BmiFiltAttr_t";
+    // If already there return it
+    if(H5Lexists(loc, strLink.c_str(), H5P_DEFAULT))
+    {
+        tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
+        return tid;
+    }
+    tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiFiltAttr_t));
+    ret = H5Tinsert(tid, "HighPassFreq", offsetof(BmiFiltAttr_t, hpfreq), H5T_NATIVE_UINT32);
+    ret = H5Tinsert(tid, "HighPassOrder", offsetof(BmiFiltAttr_t, hporder), H5T_NATIVE_UINT32);
+    ret = H5Tinsert(tid, "HighPassType", offsetof(BmiFiltAttr_t, hptype), H5T_NATIVE_UINT16);
+    ret = H5Tinsert(tid, "LowPassFreq", offsetof(BmiFiltAttr_t, lpfreq), H5T_NATIVE_UINT32);
+    ret = H5Tinsert(tid, "LowPassOrder", offsetof(BmiFiltAttr_t, lporder), H5T_NATIVE_UINT32);
+    ret = H5Tinsert(tid, "LowPassType", offsetof(BmiFiltAttr_t, lptype), H5T_NATIVE_UINT16);
 
-    hid_t tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiChanFiltAttr_t));
-    ret = H5Tinsert(tid, "HighPassFreq", offsetof(BmiChanFiltAttr_t, hpfreq), H5T_NATIVE_UINT32);
-    ret = H5Tinsert(tid, "HighPassOrder", offsetof(BmiChanFiltAttr_t, hporder), H5T_NATIVE_UINT32);
-    ret = H5Tinsert(tid, "HighPassType", offsetof(BmiChanFiltAttr_t, hptype), H5T_NATIVE_UINT16);
-    ret = H5Tinsert(tid, "LowPassFreq", offsetof(BmiChanFiltAttr_t, lpfreq), H5T_NATIVE_UINT32);
-    ret = H5Tinsert(tid, "LowPassOrder", offsetof(BmiChanFiltAttr_t, lporder), H5T_NATIVE_UINT32);
-    ret = H5Tinsert(tid, "LowPassType", offsetof(BmiChanFiltAttr_t, lptype), H5T_NATIVE_UINT16);
-
-    ret = H5Tcommit(loc, "BmiChanFiltAttr_t", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     return tid;
 }
@@ -58,22 +65,22 @@ hid_t CreateChanFiltAttrType(hid_t loc)
 hid_t CreateChanExtAttrType(hid_t loc)
 {
     herr_t ret;
-
+    hid_t tid = -1;
+    std::string strLink = "BmiChanExtAttr_t";
+    // If already there return it
+    if(H5Lexists(loc, strLink.c_str(), H5P_DEFAULT))
+    {
+        tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
+        return tid;
+    }
     hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
-    ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
-    hid_t tid_chan_attr_filter = CreateChanFiltAttrType(loc);
 
-    hid_t tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiChanExtAttr_t));
-    ret = H5Tinsert(tid, "Label", offsetof(BmiChanExtAttr_t, szLabel), tid_attr_vl_str);
+    tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiChanExtAttr_t));
     ret = H5Tinsert(tid, "NanoVoltsPerLSB", offsetof(BmiChanExtAttr_t, dFactor), H5T_NATIVE_DOUBLE);
-    ret = H5Tinsert(tid, "Filter", offsetof(BmiChanExtAttr_t, filter), tid_chan_attr_filter);
     ret = H5Tinsert(tid, "PhysicalConnector", offsetof(BmiChanExtAttr_t, phys_connector), H5T_NATIVE_UINT8);
     ret = H5Tinsert(tid, "ConnectorPin", offsetof(BmiChanExtAttr_t, connector_pin), H5T_NATIVE_UINT8);
 
-    ret = H5Tcommit(loc, "BmiChanExtAttr_t", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-
-    H5Tclose(tid_chan_attr_filter);
-    H5Tclose(tid_attr_vl_str);
+    ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     return tid;
 }
@@ -87,14 +94,21 @@ hid_t CreateChanExtAttrType(hid_t loc)
 hid_t CreateChanExt1AttrType(hid_t loc)
 {
     herr_t ret;
-
-    hid_t tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiChanExt1Attr_t));
+    hid_t tid = -1;
+    std::string strLink = "BmiChanExt1Attr_t";
+    // If already there return it
+    if(H5Lexists(loc, strLink.c_str(), H5P_DEFAULT))
+    {
+        tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
+        return tid;
+    }
+    tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiChanExt1Attr_t));
     ret = H5Tinsert(tid, "SortCount", offsetof(BmiChanExt1Attr_t, sortCount), H5T_NATIVE_UINT8);
     ret = H5Tinsert(tid, "EnergyThreshold", offsetof(BmiChanExt1Attr_t, energy_thresh), H5T_NATIVE_UINT32);
     ret = H5Tinsert(tid, "HighThreshold", offsetof(BmiChanExt1Attr_t, high_thresh), H5T_NATIVE_INT32);
     ret = H5Tinsert(tid, "LowThreshold", offsetof(BmiChanExt1Attr_t, low_thresh), H5T_NATIVE_INT32);
 
-    ret = H5Tcommit(loc, "BmiChanExt1Attr_t", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     return tid;
 }
@@ -108,46 +122,31 @@ hid_t CreateChanExt1AttrType(hid_t loc)
 hid_t CreateChanExt2AttrType(hid_t loc)
 {
     herr_t ret;
-
+    hid_t tid = -1;
+    std::string strLink = "BmiChanExt2Attr_t";
+    // If already there return it
+    if(H5Lexists(loc, strLink.c_str(), H5P_DEFAULT))
+    {
+        tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
+        return tid;
+    }
     hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
     ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
     hid_t tid_attr_unit_str = H5Tcopy(H5T_C_S1);
     ret = H5Tset_size(tid_attr_unit_str, 16);
 
-    hid_t tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiChanExt2Attr_t));
+    tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiChanExt2Attr_t));
     ret = H5Tinsert(tid, "DigitalMin", offsetof(BmiChanExt2Attr_t, digmin), H5T_NATIVE_INT32);
     ret = H5Tinsert(tid, "DigitalMax", offsetof(BmiChanExt2Attr_t, digmax), H5T_NATIVE_INT32);
     ret = H5Tinsert(tid, "AnalogMin", offsetof(BmiChanExt2Attr_t, anamin), H5T_NATIVE_INT32);
     ret = H5Tinsert(tid, "AnalogMax", offsetof(BmiChanExt2Attr_t, anamax), H5T_NATIVE_INT32);
     ret = H5Tinsert(tid, "AnalogUnit", offsetof(BmiChanExt2Attr_t, anaunit), tid_attr_unit_str);
 
-    ret = H5Tcommit(loc, "BmiChanExt2Attr_t", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     H5Tclose(tid_attr_unit_str);
     H5Tclose(tid_attr_vl_str);
 
-    return tid;
-}
-
-// Author & Date:   Ehsan Azar   Nov 13, 2012
-// Purpose: Create type for BmiDigChanAttr_t and commit
-// Inputs:
-//  loc  - where to add the type
-// Outputs:
-//   Returns the type id
-hid_t CreateDigChanAttrType(hid_t loc)
-{
-    herr_t ret;
-    hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
-    ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
-
-    hid_t tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiDigChanAttr_t));
-    ret = H5Tinsert(tid, "ID", offsetof(BmiDigChanAttr_t, id), H5T_NATIVE_UINT16);
-    ret = H5Tinsert(tid, "Label", offsetof(BmiDigChanAttr_t, szLabel), tid_attr_vl_str);
-
-    ret = H5Tcommit(loc, "BmiDigChanAttr_t", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-
-    H5Tclose(tid_attr_vl_str);
     return tid;
 }
 
@@ -160,14 +159,50 @@ hid_t CreateDigChanAttrType(hid_t loc)
 hid_t CreateChanAttrType(hid_t loc)
 {
     herr_t ret;
+    hid_t tid = -1;
+    std::string strLink = "BmiChanAttr_t";
+    // If already there return it
+    if(H5Lexists(loc, strLink.c_str(), H5P_DEFAULT))
+    {
+        tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
+        return tid;
+    }
+    hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
+    ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
 
-    hid_t tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiChanAttr_t));
+    tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiChanAttr_t));
     ret = H5Tinsert(tid, "ID", offsetof(BmiChanAttr_t, id), H5T_NATIVE_UINT16);
-    ret = H5Tinsert(tid, "Clock", offsetof(BmiChanAttr_t, fClock), H5T_NATIVE_FLOAT);
-    ret = H5Tinsert(tid, "SampleRate", offsetof(BmiChanAttr_t, fSampleRate), H5T_NATIVE_FLOAT);
-    ret = H5Tinsert(tid, "SampleBits", offsetof(BmiChanAttr_t, nSampleBits), H5T_NATIVE_UINT8);
+    ret = H5Tinsert(tid, "Label", offsetof(BmiChanAttr_t, szLabel), tid_attr_vl_str);
 
-    ret = H5Tcommit(loc, "BmiChanAttr_t", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    H5Tclose(tid_attr_vl_str);
+    return tid;
+}
+
+// Author & Date:   Ehsan Azar   Nov 13, 2012
+// Purpose: Create type for BmiSamplingAttr_t and commit
+// Inputs:
+//  loc  - where to add the type
+// Outputs:
+//   Returns the type id
+hid_t CreateSamplingAttrType(hid_t loc)
+{
+    herr_t ret;
+    hid_t tid = -1;
+    std::string strLink = "BmiSamplingAttr_t";
+    // If already there return it
+    if(H5Lexists(loc, strLink.c_str(), H5P_DEFAULT))
+    {
+        tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
+        return tid;
+    }
+    tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiSamplingAttr_t));
+    ret = H5Tinsert(tid, "Clock", offsetof(BmiSamplingAttr_t, fClock), H5T_NATIVE_FLOAT);
+    ret = H5Tinsert(tid, "SampleRate", offsetof(BmiSamplingAttr_t, fSampleRate), H5T_NATIVE_FLOAT);
+    ret = H5Tinsert(tid, "SampleBits", offsetof(BmiSamplingAttr_t, nSampleBits), H5T_NATIVE_UINT8);
+
+    ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     return tid;
 }
@@ -181,10 +216,18 @@ hid_t CreateChanAttrType(hid_t loc)
 hid_t CreateRootAttrType(hid_t loc)
 {
     herr_t ret;
+    hid_t tid = -1;
+    std::string strLink = "BmiRootAttr_t";
+    // If already there return it
+    if(H5Lexists(loc, strLink.c_str(), H5P_DEFAULT))
+    {
+        tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
+        return tid;
+    }
     hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
     ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
 
-    hid_t tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiRootAttr_t));
+    tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiRootAttr_t));
     ret = H5Tinsert(tid, "MajorVersion", offsetof(BmiRootAttr_t, nMajorVersion), H5T_NATIVE_UINT32);
     ret = H5Tinsert(tid, "MinorVersion", offsetof(BmiRootAttr_t, nMinorVersion), H5T_NATIVE_UINT32);
     ret = H5Tinsert(tid, "Flags", offsetof(BmiRootAttr_t, nFlags), H5T_NATIVE_UINT32);
@@ -193,7 +236,7 @@ hid_t CreateRootAttrType(hid_t loc)
     ret = H5Tinsert(tid, "Application", offsetof(BmiRootAttr_t, szApplication), tid_attr_vl_str); // application that created the file
     ret = H5Tinsert(tid, "Comment", offsetof(BmiRootAttr_t, szComment), tid_attr_vl_str); // file comments
 
-    ret = H5Tcommit(loc, "BmiRootAttr_t", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     H5Tclose(tid_attr_vl_str);
     return tid;
@@ -208,16 +251,23 @@ hid_t CreateRootAttrType(hid_t loc)
 hid_t CreateSynchAttrType(hid_t loc)
 {
     herr_t ret;
-
+    hid_t tid = -1;
+    std::string strLink = "BmiSynchAttr_t";
+    // If already there return it
+    if(H5Lexists(loc, strLink.c_str(), H5P_DEFAULT))
+    {
+        tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
+        return tid;
+    }
     hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
     ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
 
-    hid_t tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiSynchAttr_t));
+    tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiSynchAttr_t));
     ret = H5Tinsert(tid, "ID", offsetof(BmiSynchAttr_t, id), H5T_NATIVE_UINT16);
     ret = H5Tinsert(tid, "Label", offsetof(BmiSynchAttr_t, szLabel), tid_attr_vl_str);
     ret = H5Tinsert(tid, "FPS", offsetof(BmiSynchAttr_t, fFps), H5T_NATIVE_FLOAT);
 
-    ret = H5Tcommit(loc, "BmiSynchAttr_t", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     H5Tclose(tid_attr_vl_str);
     return tid;
@@ -232,16 +282,24 @@ hid_t CreateSynchAttrType(hid_t loc)
 hid_t CreateTrackingAttrType(hid_t loc)
 {
     herr_t ret;
+    hid_t tid = -1;
+    std::string strLink = "BmiTrackingAttr_t";
+    // If already there return it
+    if(H5Lexists(loc, strLink.c_str(), H5P_DEFAULT))
+    {
+        tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
+        return tid;
+    }
     hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
     ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
 
-    hid_t tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiTrackingAttr_t));
+    tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiTrackingAttr_t));
     ret = H5Tinsert(tid, "Label", offsetof(BmiTrackingAttr_t, szLabel), tid_attr_vl_str);
     ret = H5Tinsert(tid, "Type", offsetof(BmiTrackingAttr_t, type), H5T_NATIVE_UINT16);
     ret = H5Tinsert(tid, "TrackID", offsetof(BmiTrackingAttr_t, trackID), H5T_NATIVE_UINT16);
     ret = H5Tinsert(tid, "MaxPoints", offsetof(BmiTrackingAttr_t, maxPoints), H5T_NATIVE_UINT16);
 
-    ret = H5Tcommit(loc, "BmiTrackingAttr_t", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     H5Tclose(tid_attr_vl_str);
     return tid;
@@ -259,23 +317,29 @@ hid_t CreateTrackingAttrType(hid_t loc)
 hid_t CreateSpike16Type(hid_t loc, UINT16 spikeLength)
 {
     herr_t ret;
+    hid_t tid = -1;
+
+    // e.g. for spike length of 48 type name will be "BmiSpike16_48_t"
+    char szNum[4] = {'\0'};
+    sprintf(szNum, "%u", spikeLength);
+    std::string strLink = "BmiSpike16_";
+    strLink += szNum;
+    strLink += "_t";
+    // If already there return it
+    if(H5Lexists(loc, strLink.c_str(), H5P_DEFAULT))
+    {
+        tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
+        return tid;
+    }
+
     hsize_t     dims[1] = {spikeLength};
     hid_t tid_arr_wave = H5Tarray_create(H5T_NATIVE_INT16, 1, dims);
 
-    hid_t tid = H5Tcreate(H5T_COMPOUND, offsetof(BmiSpike16_t, wave) + sizeof(INT16) * spikeLength);
+    tid = H5Tcreate(H5T_COMPOUND, offsetof(BmiSpike16_t, wave) + sizeof(INT16) * spikeLength);
     ret = H5Tinsert(tid, "TimeStamp", offsetof(BmiSpike16_t, dwTimestamp), H5T_NATIVE_UINT32);
     ret = H5Tinsert(tid, "Unit", offsetof(BmiSpike16_t, unit), H5T_NATIVE_UINT8);
     ret = H5Tinsert(tid, "Wave", offsetof(BmiSpike16_t, wave), tid_arr_wave);
-
-    {
-        // e.g. for spike length of 48 type name will be "BmiSpike16_48_t"
-        char szNum[4] = {'\0'};
-        sprintf(szNum, "%u", spikeLength);
-        std::string strLabel = "BmiSpike16_";
-        strLabel += szNum;
-        strLabel += "_t";
-        ret = H5Tcommit(loc, strLabel.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    }
+    ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     H5Tclose(tid_arr_wave);
     return tid;
@@ -290,11 +354,19 @@ hid_t CreateSpike16Type(hid_t loc, UINT16 spikeLength)
 hid_t CreateDig16Type(hid_t loc)
 {
     herr_t ret;
+    hid_t tid = -1;
+    std::string strLink = "BmiDig16_t";
+    // If already there return it
+    if(H5Lexists(loc, strLink.c_str(), H5P_DEFAULT))
+    {
+        tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
+        return tid;
+    }
 
-    hid_t tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiDig16_t));
+    tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiDig16_t));
     ret = H5Tinsert(tid, "TimeStamp", offsetof(BmiDig16_t, dwTimestamp), H5T_NATIVE_UINT32);
     ret = H5Tinsert(tid, "Value", offsetof(BmiDig16_t, value), H5T_NATIVE_UINT16);
-    ret = H5Tcommit(loc, "BmiDig16_t", tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     return tid;
 }

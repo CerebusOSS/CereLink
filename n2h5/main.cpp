@@ -43,13 +43,42 @@
 #define CHUNK_SIZE_CONTINUOUS   (1024)
 #define CHUNK_SIZE_EVENT        (1024)
 
-UINT16 g_spikeLength = 48;
-hid_t g_tid_spike = -1;
-hid_t g_tid_dig = -1;
-hid_t g_tid_comment = -1;
-hid_t g_tid_tracking[cbMAXTRACKOBJ];
-bool  g_bFixedLengthTracking[cbMAXTRACKOBJ];
-hid_t g_tid_synch = -1;
+UINT16 g_nCombine = 0; // subchannel combine level
+bool g_bAppend = false;
+bool g_bNoSpikes = false;
+
+// Author & Date:   Ehsan Azar   Jan 16, 2013
+// Purpose: Add created header to the hdf file
+// Inputs:
+//  file  - the destination file
+//  header - Root header
+// Outputs:
+//   Returns 0 on success, error code otherwise
+int AddRoot(hid_t file, BmiRootAttr_t & header)
+{
+    herr_t ret;
+
+    // Add file header as attribute of the root group
+    {
+        std::string strAttr = "BmiRoot";
+        hsize_t     dims[1] = {1};
+        hid_t space = H5Screate_simple(1, dims, NULL);
+        hid_t gid_root = H5Gopen(file, "/", H5P_DEFAULT);
+        if(!H5Aexists(gid_root, strAttr.c_str()))
+        {
+            hid_t tid_root_attr = CreateRootAttrType(file);
+            hid_t aid_root = H5Acreate(gid_root, strAttr.c_str(), tid_root_attr, space, H5P_DEFAULT, H5P_DEFAULT);
+            ret = H5Awrite(aid_root, tid_root_attr, &header);
+            ret = H5Aclose(aid_root);
+            H5Tclose(tid_root_attr);
+        }
+
+        ret = H5Gclose(gid_root);
+        ret = H5Sclose(space);
+    }
+
+    return 0;
+}
 
 // Author & Date:   Ehsan Azar   Nov 17, 2012
 // Purpose: Create and add root
@@ -61,9 +90,6 @@ hid_t g_tid_synch = -1;
 //   Returns 0 on success, error code otherwise
 int AddRoot(FILE * pFile, hid_t file, NevHdr & isHdr)
 {
-    herr_t ret;
-    hid_t tid_root_attr = CreateRootAttrType(file);
-
     BmiRootAttr_t header;
     memset(&header, 0, sizeof(header));
     header.nMajorVersion = 1;
@@ -80,19 +106,8 @@ int AddRoot(FILE * pFile, hid_t file, NevHdr & isHdr)
         ts.chNull = '\0';
         header.szDate = (char *)&ts;
     }
-    // Add file header as attribute of the root group
-    {
-        hsize_t     dims[1] = {1};
-        hid_t space = H5Screate_simple(1, dims, NULL);
-        hid_t gid_root = H5Gopen(file, "/", H5P_DEFAULT);
-        hid_t aid_root = H5Acreate(gid_root, "BmiRoot", tid_root_attr, space, H5P_DEFAULT, H5P_DEFAULT);
-        ret = H5Awrite(aid_root, tid_root_attr, &header);
-        ret = H5Aclose(aid_root);
-        ret = H5Gclose(gid_root);
-        ret = H5Sclose(space);
-    }
-    H5Tclose(tid_root_attr);
-    return 0;
+
+    return AddRoot(file, header);
 }
 
 // Author & Date:   Ehsan Azar   Nov 17, 2012
@@ -106,9 +121,6 @@ int AddRoot(FILE * pFile, hid_t file, NevHdr & isHdr)
 //   Returns 0 on success, error code otherwise
 int AddRoot(const char * szSrcFile, FILE * pFile, hid_t file, Nsx21Hdr & isHdr)
 {
-    herr_t ret;
-    hid_t tid_root_attr = CreateRootAttrType(file);
-
     BmiRootAttr_t header;
     memset(&header, 0, sizeof(header));
     header.nMajorVersion = 1;
@@ -141,19 +153,8 @@ int AddRoot(const char * szSrcFile, FILE * pFile, hid_t file, Nsx21Hdr & isHdr)
     time_t t = st.st_mtime;
     // TODO: use strftime to convert to st
 #endif
-    // Add file header as attribute of the root group
-    {
-        hsize_t     dims[1] = {1};
-        hid_t space = H5Screate_simple(1, dims, NULL);
-        hid_t gid_root = H5Gopen(file, "/", H5P_DEFAULT);
-        hid_t aid_root = H5Acreate(gid_root, "BmiRoot", tid_root_attr, space, H5P_DEFAULT, H5P_DEFAULT);
-        ret = H5Awrite(aid_root, tid_root_attr, &header);
-        ret = H5Aclose(aid_root);
-        ret = H5Gclose(gid_root);
-        ret = H5Sclose(space);
-    }
-    H5Tclose(tid_root_attr);
-    return 0;
+
+    return AddRoot(file, header);
 }
 
 // Author & Date:   Ehsan Azar   Nov 17, 2012
@@ -166,9 +167,6 @@ int AddRoot(const char * szSrcFile, FILE * pFile, hid_t file, Nsx21Hdr & isHdr)
 //   Returns 0 on success, error code otherwise
 int AddRoot(FILE * pFile, hid_t file, Nsx22Hdr & isHdr)
 {
-    herr_t ret;
-    hid_t tid_root_attr = CreateRootAttrType(file);
-
     BmiRootAttr_t header;
     memset(&header, 0, sizeof(header));
     header.nMajorVersion = 1;
@@ -185,32 +183,22 @@ int AddRoot(FILE * pFile, hid_t file, Nsx22Hdr & isHdr)
         ts.chNull = '\0';
         header.szDate = (char *)&ts;
     }
-    // Add file header as attribute of the root group
-    {
-        hsize_t     dims[1] = {1};
-        hid_t space = H5Screate_simple(1, dims, NULL);
-        hid_t gid_root = H5Gopen(file, "/", H5P_DEFAULT);
-        hid_t aid_root = H5Acreate(gid_root, "BmiRoot", tid_root_attr, space, H5P_DEFAULT, H5P_DEFAULT);
-        ret = H5Awrite(aid_root, tid_root_attr, &header);
-        ret = H5Aclose(aid_root);
-        ret = H5Gclose(gid_root);
-        ret = H5Sclose(space);
-    }
-    H5Tclose(tid_root_attr);
-    return 0;
+
+    return AddRoot(file, header);
 }
 
-// Author & Date:   Ehsan Azar   Nov 17, 2012
-// Purpose: Create groups and packet tables for sampled data
+// Author & Date:   Ehsan Azar   Nov 13, 2012
+// Purpose: Convert NEV 
 // Inputs:
 //  pFile - the source file
 //  file  - the destination file
 // Outputs:
-//  isHdr - NEV header
-//  Returns 0 on success, error code otherwise
-int CreateNevGroups(FILE * pFile, hid_t file, NevHdr & isHdr)
+//   Returns 0 on success, error code otherwise
+int ConvertNev(FILE * pFile, hid_t file)
 {
     herr_t ret;
+    
+    NevHdr isHdr;
     fseeko(pFile, 0, SEEK_SET);    // read header from beginning of file
     if (fread(&isHdr, sizeof(isHdr), 1, pFile) != 1)
     {
@@ -222,22 +210,34 @@ int CreateNevGroups(FILE * pFile, hid_t file, NevHdr & isHdr)
     if (AddRoot(pFile, file, isHdr))
         return 1;
 
+    UINT16 nSpikeLength = 48;
+    hid_t tid_spike = -1;
+    hid_t tid_dig = -1;
+    hid_t tid_comment = -1;
+    hid_t tid_tracking[cbMAXTRACKOBJ];
+    bool  bFixedLengthTracking[cbMAXTRACKOBJ];
+    hid_t tid_synch = -1;
+    hid_t tid_sampling_attr = -1;
+    hid_t tid_filt_attr = -1;
+
     // 21, 22, 23 flat file verion number
     UINT32 nVer = isHdr.byFileRevMajor * 10 + isHdr.byFileRevMinor;
 
-    g_spikeLength = (isHdr.dwBytesPerPacket - 8) / 2;
+    nSpikeLength = (isHdr.dwBytesPerPacket - 8) / 2;
 
     char * szMapFile = NULL;
     BmiTrackingAttr_t trackingAttr[cbMAXTRACKOBJ];
     memset(trackingAttr, 0, sizeof(trackingAttr));
     BmiSynchAttr_t synchAttr;
     memset(&synchAttr, 0, sizeof(synchAttr));
-    BmiDigChanAttr_t digChanAttr[cbNUM_DIGIN_CHANS + cbNUM_SERIAL_CHANS];
-    memset(digChanAttr, 0, sizeof(digChanAttr));
-    BmiChanAttr_t chanAttr[cbNUM_ANALOG_CHANS];
+    BmiSamplingAttr_t samplingAttr[cbNUM_ANALOG_CHANS];
+    memset(samplingAttr, 0, sizeof(samplingAttr));
+    BmiChanAttr_t chanAttr[cbMAXCHANS];
     memset(chanAttr, 0, sizeof(chanAttr));
     BmiChanExtAttr_t chanExtAttr[cbNUM_ANALOG_CHANS];
     memset(chanExtAttr, 0, sizeof(chanExtAttr));
+    BmiFiltAttr_t filtAttr[cbNUM_ANALOG_CHANS];
+    memset(filtAttr, 0, sizeof(filtAttr));
     // NEV provides Ext1 additional header
     BmiChanExt1Attr_t chanExt1Attr[cbNUM_ANALOG_CHANS];
     memset(chanExt1Attr, 0, sizeof(chanExt1Attr));
@@ -253,7 +253,7 @@ int CreateNevGroups(FILE * pFile, hid_t file, NevHdr & isHdr)
         if (0 == strncmp(isExtHdr.achPacketID, "NEUEVWAV", sizeof(isExtHdr.achPacketID)))
         {
             if (isExtHdr.neuwav.wave_samples != 0)
-                g_spikeLength = isExtHdr.neuwav.wave_samples;
+                nSpikeLength = isExtHdr.neuwav.wave_samples;
             int id = isExtHdr.id;
             if (id == 0 || id > cbNUM_ANALOG_CHANS)
             {
@@ -263,9 +263,9 @@ int CreateNevGroups(FILE * pFile, hid_t file, NevHdr & isHdr)
             id--; // make it zero-based
             chanAttr[id].id = isExtHdr.id;
             // Currently all spikes are sampled at clock rate
-            chanAttr[id].fClock = float(isHdr.dwTimeStampResolutionHz);
-            chanAttr[id].fSampleRate = float(isHdr.dwSampleResolutionHz);
-            chanAttr[id].nSampleBits = isExtHdr.neuwav.wave_bytes * 8;
+            samplingAttr[id].fClock = float(isHdr.dwTimeStampResolutionHz);
+            samplingAttr[id].fSampleRate = float(isHdr.dwSampleResolutionHz);
+            samplingAttr[id].nSampleBits = isExtHdr.neuwav.wave_bytes * 8;
 
             chanExtAttr[id].phys_connector = isExtHdr.neuwav.phys_connector;
             chanExtAttr[id].connector_pin = isExtHdr.neuwav.connector_pin;
@@ -286,7 +286,7 @@ int CreateNevGroups(FILE * pFile, hid_t file, NevHdr & isHdr)
                 return 1;
             }
             id--;
-            chanExtAttr[id].szLabel = _strdup(isExtHdr.neulabel.label);
+            chanAttr[id].szLabel = _strdup(isExtHdr.neulabel.label);
         }
         else if (0 == strncmp(isExtHdr.achPacketID, "NEUEVFLT", sizeof(isExtHdr.achPacketID)))
         {
@@ -297,12 +297,12 @@ int CreateNevGroups(FILE * pFile, hid_t file, NevHdr & isHdr)
                 return 1;
             }
             id--;
-            chanExtAttr[id].filter.hpfreq = isExtHdr.neuflt.hpfreq;
-            chanExtAttr[id].filter.hporder = isExtHdr.neuflt.hporder;
-            chanExtAttr[id].filter.hptype = isExtHdr.neuflt.hptype;
-            chanExtAttr[id].filter.lpfreq = isExtHdr.neuflt.lpfreq;
-            chanExtAttr[id].filter.lporder = isExtHdr.neuflt.lporder;
-            chanExtAttr[id].filter.lptype = isExtHdr.neuflt.lptype;
+            filtAttr[id].hpfreq = isExtHdr.neuflt.hpfreq;
+            filtAttr[id].hporder = isExtHdr.neuflt.hporder;
+            filtAttr[id].hptype = isExtHdr.neuflt.hptype;
+            filtAttr[id].lpfreq = isExtHdr.neuflt.lpfreq;
+            filtAttr[id].lporder = isExtHdr.neuflt.lporder;
+            filtAttr[id].lptype = isExtHdr.neuflt.lptype;
         }
         else if (0 == strncmp(isExtHdr.achPacketID, "VIDEOSYN", sizeof(isExtHdr.achPacketID)))
         {
@@ -333,29 +333,37 @@ int CreateNevGroups(FILE * pFile, hid_t file, NevHdr & isHdr)
             int id = 0;
             if (isExtHdr.diglabel.mode == 0)
             {
-                id = 1; // Serial
-                digChanAttr[id].id = cbFIRST_SERIAL_CHAN + 1;
+                id = cbFIRST_SERIAL_CHAN; // Serial
+                chanAttr[id].id = cbFIRST_SERIAL_CHAN + 1;
             }
             else if (isExtHdr.diglabel.mode == 1)
             {
-                id = 0; // Digital
-                digChanAttr[id].id = cbFIRST_DIGIN_CHAN + 1;
+                id = cbFIRST_DIGIN_CHAN; // Digital
+                chanAttr[id].id = cbFIRST_DIGIN_CHAN + 1;
             } else {
                 printf("Invalid digital input mode in source file header\n");
                 return 1;
             }
-            digChanAttr[id].szLabel = _strdup(isExtHdr.diglabel.label);
+            chanAttr[id].szLabel = _strdup(isExtHdr.diglabel.label);
         } else {
             printf("Unknown header (%7s) in the source file\n", isExtHdr.achPacketID);
         }
     } // end for (UINT32 i = 0
+
+    UINT32 nChannelOffset = 0;
+    UINT32 nDigChannelOffset = 0;
+    UINT32 nSerChannelOffset = 0;
 
     hsize_t     dims[1] = {1};
     hid_t space_attr = H5Screate_simple(1, dims, NULL);
 
     // Add channel group
     {
-        hid_t gid_channel = H5Gcreate(file, "channel", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t gid_channel = -1;
+        if (H5Lexists(file, "channel", H5P_DEFAULT))
+            gid_channel = H5Gopen(file, "channel", H5P_DEFAULT);
+        else
+            gid_channel = H5Gcreate(file, "channel", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if (szMapFile != NULL)
         {
             hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
@@ -365,64 +373,136 @@ int CreateNevGroups(FILE * pFile, hid_t file, NevHdr & isHdr)
             ret = H5Aclose(aid);
             H5Tclose(tid_attr_vl_str);
         }
-        g_tid_spike = CreateSpike16Type(gid_channel, g_spikeLength);
+        if (g_bAppend)
+        {
+            bool bExists = false;
+            // Find the last place to append to
+            do {
+                nChannelOffset++;
+                std::string strLabel = "channel";
+                char szNum[7];
+                sprintf(szNum, "%05u", nChannelOffset);
+                strLabel += szNum;
+                bExists = (H5Lexists(gid_channel, strLabel.c_str(), H5P_DEFAULT) != 0);
+            } while(bExists);
+            nChannelOffset--;
+            do {
+                nDigChannelOffset++;
+                std::string strLabel = "digital";
+                char szNum[7];
+                sprintf(szNum, "%05u", nDigChannelOffset);
+                strLabel += szNum;
+                bExists = (H5Lexists(gid_channel, strLabel.c_str(), H5P_DEFAULT) != 0);
+            } while(bExists);
+            nDigChannelOffset--;
+            do {
+                nSerChannelOffset++;
+                std::string strLabel = "serial";
+                char szNum[7];
+                sprintf(szNum, "%05u", nSerChannelOffset);
+                strLabel += szNum;
+                bExists = (H5Lexists(gid_channel, strLabel.c_str(), H5P_DEFAULT) != 0);
+            } while(bExists);
+            nSerChannelOffset--;
+        }
+        tid_spike = CreateSpike16Type(gid_channel, nSpikeLength);
         hid_t tid_chan_attr = CreateChanAttrType(gid_channel);
         hid_t tid_chanext_attr = CreateChanExtAttrType(gid_channel);
         hid_t tid_chanext1_attr = CreateChanExt1AttrType(gid_channel);
+        tid_sampling_attr = CreateSamplingAttrType(gid_channel);
+        tid_filt_attr = CreateFiltAttrType(gid_channel);
         for (int i = 0; i < cbNUM_ANALOG_CHANS; ++i)
         {
             if (chanAttr[i].id == 0)
                 continue;
-            char szNum[6];
+            char szNum[7];
             std::string strLabel = "channel";
-            sprintf(szNum, "%05u", chanAttr[i].id);
+            sprintf(szNum, "%05u", chanAttr[i].id + nChannelOffset);
             strLabel += szNum;
-            hid_t gid = H5Gcreate(gid_channel, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            hid_t gid = -1;
+            if (H5Lexists(gid_channel, strLabel.c_str(), H5P_DEFAULT))
+                gid = H5Gopen(gid_channel, strLabel.c_str(), H5P_DEFAULT);
+            else
+                gid = H5Gcreate(gid_channel, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
             // Basic channel attributes
-            hid_t aid = H5Acreate(gid, "BmiChan", tid_chan_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            ret = H5Awrite(aid, tid_chan_attr, &chanAttr[i]);
-            ret = H5Aclose(aid);
+            if (!H5Aexists(gid, "BmiChan"))
+            {
+                hid_t aid = H5Acreate(gid, "BmiChan", tid_chan_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+                ret = H5Awrite(aid, tid_chan_attr, &chanAttr[i]);
+                ret = H5Aclose(aid);
+            }
 
             // Extra channel attributes
-            aid = H5Acreate(gid, "BmiChanExt", tid_chanext_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            ret = H5Awrite(aid, tid_chanext_attr, &chanExtAttr[i]);
-            ret = H5Aclose(aid);
+            if (!H5Aexists(gid, "BmiChanExt"))
+            {
+                hid_t aid = H5Acreate(gid, "BmiChanExt", tid_chanext_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+                ret = H5Awrite(aid, tid_chanext_attr, &chanExtAttr[i]);
+                ret = H5Aclose(aid);
+            }
 
             // Additional extra channel attributes
-            aid = H5Acreate(gid, "BmiChanExt1", tid_chanext1_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            ret = H5Awrite(aid, tid_chanext1_attr, &chanExt1Attr[i]);
-            ret = H5Aclose(aid);
+            if (!H5Aexists(gid, "BmiChanExt1"))
+            {
+                hid_t aid = H5Acreate(gid, "BmiChanExt1", tid_chanext1_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+                ret = H5Awrite(aid, tid_chanext1_attr, &chanExt1Attr[i]);
+                ret = H5Aclose(aid);
+            }
 
             ret = H5Gclose(gid);
         }
         ret = H5Tclose(tid_chanext1_attr);
         ret = H5Tclose(tid_chanext_attr);
-        ret = H5Tclose(tid_chan_attr);
 
         // Add digital and serial channel and their attributes
         {
-            g_tid_dig = CreateDig16Type(gid_channel);
-            hid_t gid = H5Gcreate(gid_channel, "digital1", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-            hid_t tid = CreateDigChanAttrType(gid_channel);
-            if (digChanAttr[0].id)
+            UINT16 id = 1 + 0;
+            char szNum[7];
+            std::string strLabel = "digital";
+            sprintf(szNum, "%05u", id + nDigChannelOffset);
+            strLabel += szNum;
+            tid_dig = CreateDig16Type(gid_channel);
+            hid_t gid = -1;
+            if (H5Lexists(gid_channel, strLabel.c_str(), H5P_DEFAULT))
+                gid = H5Gopen(gid_channel, strLabel.c_str(), H5P_DEFAULT);
+            else
+                gid = H5Gcreate(gid_channel, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            if (chanAttr[cbFIRST_DIGIN_CHAN].id)
             {
-                hid_t aid = H5Acreate(gid, "BmiDigChan", tid, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-                ret = H5Awrite(aid, tid, &digChanAttr[0]);
-                ret = H5Aclose(aid);
+                if (!H5Aexists(gid, "BmiChan"))
+                {
+                    hid_t aid = H5Acreate(gid, "BmiChan", tid_chan_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+                    ret = H5Awrite(aid, tid_chan_attr, &chanAttr[cbFIRST_DIGIN_CHAN]);
+                    ret = H5Aclose(aid);
+                }
             }
-            ret = H5Gclose(gid);
-
-            gid = H5Gcreate(gid_channel, "serial1", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-            if (digChanAttr[1].id)
-            {
-                hid_t aid = H5Acreate(gid, "BmiDigChan", tid, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-                ret = H5Awrite(aid, tid, &digChanAttr[1]);
-                ret = H5Aclose(aid);
-            }
-            ret = H5Tclose(tid);
             ret = H5Gclose(gid);
         }
+
+        // Add digital and serial channel and their attributes
+        {
+            UINT16 id = 1 + 0;
+            char szNum[7];
+            std::string strLabel = "serial";
+            sprintf(szNum, "%05u", id + nSerChannelOffset);
+            strLabel += szNum;
+            hid_t gid = -1;
+            if (H5Lexists(gid_channel, strLabel.c_str(), H5P_DEFAULT))
+                gid = H5Gopen(gid_channel, strLabel.c_str(), H5P_DEFAULT);
+            else
+                gid = H5Gcreate(gid_channel, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            if (chanAttr[cbFIRST_SERIAL_CHAN].id)
+            {
+                if (!H5Aexists(gid, "BmiChan"))
+                {
+                    hid_t aid = H5Acreate(gid, "BmiChan", tid_chan_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+                    ret = H5Awrite(aid, tid_chan_attr, &chanAttr[cbFIRST_SERIAL_CHAN]);
+                    ret = H5Aclose(aid);
+                }
+            }
+            ret = H5Gclose(gid);
+        }
+        ret = H5Tclose(tid_chan_attr);
 
         ret = H5Gclose(gid_channel);
     }
@@ -431,29 +511,40 @@ int CreateNevGroups(FILE * pFile, hid_t file, NevHdr & isHdr)
     // Add video group
     if (nVer >= 23)
     {
-        hid_t gid_video = H5Gcreate(file, "video", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t gid_video = -1;
+        if (H5Lexists(file, "video", H5P_DEFAULT))
+            gid_video = H5Gopen(file, "video", H5P_DEFAULT);
+        else
+            gid_video = H5Gcreate(file, "video", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         hid_t tid_tracking_attr = CreateTrackingAttrType(gid_video);
         hid_t tid_synch_attr = CreateSynchAttrType(gid_video);
-        g_tid_synch = CreateSynchType(gid_video);
+        tid_synch = CreateSynchType(gid_video);
         // Add synchronization groups
         if (synchAttr.szLabel != NULL)
         {
             bHasVideo = true;
-            char szNum[6];
+            char szNum[7];
             std::string strLabel = "synch";
             sprintf(szNum, "%05u", synchAttr.id);
             strLabel += szNum;
-            hid_t gid = H5Gcreate(gid_video, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-            hid_t aid = H5Acreate(gid, "BmiSynch", tid_synch_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            ret = H5Awrite(aid, tid_synch_attr, &synchAttr);
-            ret = H5Aclose(aid);
-            ret = H5Gclose(gid);
+            hid_t gid = -1;
+            if (H5Lexists(gid_video, strLabel.c_str(), H5P_DEFAULT))
+                gid = H5Gopen(gid_video, strLabel.c_str(), H5P_DEFAULT);
+            else
+                gid = H5Gcreate(gid_video, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            if (!H5Aexists(gid, "BmiSynch"))
+            {
+                hid_t aid = H5Acreate(gid, "BmiSynch", tid_synch_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+                ret = H5Awrite(aid, tid_synch_attr, &synchAttr);
+                ret = H5Aclose(aid);
+                ret = H5Gclose(gid);
+            }
         }
         // Add tracking groups
         for (int i = 0; i < cbMAXTRACKOBJ; ++i)
         {
-            g_tid_tracking[i] = -1;
-            g_bFixedLengthTracking[i] = false;
+            tid_tracking[i] = -1;
+            bFixedLengthTracking[i] = false;
             if (trackingAttr[i].szLabel != NULL)
             {
                 bHasVideo = true;
@@ -481,21 +572,29 @@ int CreateNevGroups(FILE * pFile, hid_t file, NevHdr & isHdr)
                 // The only fixed length now is the case for single point tracking
                 if (trackingAttr[i].maxPoints == 1)
                 {
-                    g_bFixedLengthTracking[i] = true;
-                    g_tid_tracking[i] = CreateTrackingType(gid_video, dim, width,  1);
+                    bFixedLengthTracking[i] = true;
+                    tid_tracking[i] = CreateTrackingType(gid_video, dim, width,  1);
                 } else {
-                    g_tid_tracking[i] = CreateTrackingType(gid_video, dim, width);
+                    tid_tracking[i] = CreateTrackingType(gid_video, dim, width);
                 }
-                char szNum[6];
+                char szNum[7];
                 std::string strLabel = "tracking";
                 sprintf(szNum, "%05u", trackingAttr[i].trackID);
                 strLabel += szNum;
 
-                hid_t gid = H5Gcreate(gid_video, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-                hid_t aid = H5Acreate(gid, "BmiTracking", tid_tracking_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-                ret = H5Awrite(aid, tid_tracking_attr, &trackingAttr[i]);
-                ret = H5Aclose(aid);
-                ret = H5Gclose(gid);
+                hid_t gid = -1;
+                if (H5Lexists(gid_video, strLabel.c_str(), H5P_DEFAULT))
+                    gid = H5Gopen(gid_video, strLabel.c_str(), H5P_DEFAULT);
+                else
+                    gid = H5Gcreate(gid_video, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+                if (!H5Aexists(gid, "BmiTracking"))
+                {
+                    hid_t aid = H5Acreate(gid, "BmiTracking", tid_tracking_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+                    ret = H5Awrite(aid, tid_tracking_attr, &trackingAttr[i]);
+                    ret = H5Aclose(aid);
+                    ret = H5Gclose(gid);
+                }
             } // end if (trackingAttr[i].szLabel
         } // end for (int i = 0
         ret = H5Tclose(tid_tracking_attr);
@@ -506,7 +605,7 @@ int CreateNevGroups(FILE * pFile, hid_t file, NevHdr & isHdr)
     if (nVer >= 23)
     {
         hid_t gid_comment = H5Gcreate(file, "comment", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-        g_tid_comment = CreateCommentType(gid_comment);
+        tid_comment = CreateCommentType(gid_comment);
         {
             // NeuroMotive charset is fixed
             hid_t aid = H5Acreate(gid_comment, "NeuroMotiveCharset", H5T_NATIVE_UINT8, space_attr, H5P_DEFAULT, H5P_DEFAULT);
@@ -533,26 +632,9 @@ int CreateNevGroups(FILE * pFile, hid_t file, NevHdr & isHdr)
         ret = H5Gclose(gid_comment);
     }
     ret = H5Sclose(space_attr);
-    return 0;
-}
 
-// Author & Date:   Ehsan Azar   Nov 13, 2012
-// Purpose: Convert NEV 
-// Inputs:
-//  pFile - the source file
-//  file  - the destination file
-// Outputs:
-//   Returns 0 on success, error code otherwise
-int ConvertNev(FILE * pFile, hid_t file)
-{
-    herr_t ret;
-    
-    NevHdr isHdr;
-    if (CreateNevGroups(pFile, file, isHdr))
-    {
-        return 1;
-    }
-
+    // ---------------------------------------------------------------------------------------------
+    // Done with reading headers
     // Add packet tables
     {
         size_t chunk_size = CHUNK_SIZE_EVENT;
@@ -579,31 +661,47 @@ int ConvertNev(FILE * pFile, hid_t file)
 
             if (nevData.wPacketID >= 1 && nevData.wPacketID <= cbNUM_ANALOG_CHANS) // found spike data
             {
-                int id = nevData.wPacketID; // 1-based
-                if (ptid_spike[id - 1] < 0)
+                if (!g_bNoSpikes)
                 {
-                    char szNum[6];
-                    std::string strLabel = "/channel/channel";
-                    sprintf(szNum, "%05u", id);
-                    strLabel += szNum;
-                    hid_t gid;
-                    if(H5Lexists(file, strLabel.c_str(), H5P_DEFAULT))
+                    int id = nevData.wPacketID; // 1-based
+                    if (ptid_spike[id - 1] < 0)
                     {
-                        gid = H5Gopen(file, strLabel.c_str(), H5P_DEFAULT);
-                    } else {
-                        printf("Creating %s without attributes\n", strLabel.c_str());
-                        gid = H5Gcreate(file, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                        char szNum[7];
+                        std::string strLabel = "/channel/channel";
+                        sprintf(szNum, "%05u", id + nChannelOffset);
+                        strLabel += szNum;
+                        hid_t gid;
+                        if(H5Lexists(file, strLabel.c_str(), H5P_DEFAULT))
+                        {
+                            gid = H5Gopen(file, strLabel.c_str(), H5P_DEFAULT);
+                        } else {
+                            printf("Creating %s without attributes\n", strLabel.c_str());
+                            gid = H5Gcreate(file, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                        }
+                        ptid_spike[id - 1] = H5PTcreate_fl(gid, "spike_set", tid_spike, chunk_size, compression);
+                        hid_t dsid = H5Dopen(gid, "spike_set", H5P_DEFAULT);
+                        ret = H5Gclose(gid);
+                        hid_t space_attr = H5Screate_simple(1, dims, NULL);
+
+                        // Add data sampling attribute
+                        hid_t aid = H5Acreate(dsid, "Sampling", tid_sampling_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+                        ret = H5Awrite(aid, tid_sampling_attr, &samplingAttr[id - 1]);
+                        ret = H5Aclose(aid);
+                        // Add data filtering attribute
+                        aid = H5Acreate(dsid, "Filter", tid_filt_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+                        ret = H5Awrite(aid, tid_filt_attr, &filtAttr[id - 1]);
+                        ret = H5Aclose(aid);
+
+                        ret = H5Sclose(space_attr);
                     }
-                    ptid_spike[id - 1] = H5PTcreate_fl(gid, "spike_set", g_tid_spike, chunk_size, compression);
-                    H5Gclose(gid);
-                }
-                BmiSpike16_t spk;
-                spk.dwTimestamp = nevData.dwTimestamp;
-                spk.res = nevData.spike.res;
-                spk.unit = nevData.spike.unit;
-                for (int i = 0; i < g_spikeLength; ++i)
-                    spk.wave[i] = nevData.spike.wave[i];
-                ret = H5PTappend(ptid_spike[id - 1], 1, &spk);
+                    BmiSpike16_t spk;
+                    spk.dwTimestamp = nevData.dwTimestamp;
+                    spk.res = nevData.spike.res;
+                    spk.unit = nevData.spike.unit;
+                    for (int i = 0; i < nSpikeLength; ++i)
+                        spk.wave[i] = nevData.spike.wave[i];
+                    ret = H5PTappend(ptid_spike[id - 1], 1, &spk);
+                } // end if (!g_bNoSpikes
             } else {
                 switch (nevData.wPacketID)
                 {
@@ -618,8 +716,13 @@ int ConvertNev(FILE * pFile, hid_t file)
                     {
                         if (ptid_serial < 0)
                         {
-                            hid_t gid = H5Gopen(file, "/channel/serial1", H5P_DEFAULT);
-                            ptid_serial = H5PTcreate_fl(gid, "serial_set", g_tid_dig, chunk_size, compression);
+                            UINT16 id = 1 + 0;
+                            char szNum[7];
+                            std::string strLabel = "/channel/serial";
+                            sprintf(szNum, "%05u", id + nSerChannelOffset);
+                            strLabel += szNum;
+                            hid_t gid = H5Gopen(file, strLabel.c_str(), H5P_DEFAULT);
+                            ptid_serial = H5PTcreate_fl(gid, "serial_set", tid_dig, chunk_size, compression);
                             H5Gclose(gid);
                         }
                         BmiDig16_t dig;
@@ -629,8 +732,13 @@ int ConvertNev(FILE * pFile, hid_t file)
                     } else {
                         if (ptid_digital < 0)
                         {
-                            hid_t gid = H5Gopen(file, "/channel/digital1", H5P_DEFAULT);
-                            ptid_digital = H5PTcreate_fl(gid, "digital_set", g_tid_dig, chunk_size, compression);
+                            UINT16 id = 1 + 0;
+                            char szNum[7];
+                            std::string strLabel = "/channel/digital";
+                            sprintf(szNum, "%05u", id + nDigChannelOffset);
+                            strLabel += szNum;
+                            hid_t gid = H5Gopen(file, strLabel.c_str(), H5P_DEFAULT);
+                            ptid_digital = H5PTcreate_fl(gid, "digital_set", tid_dig, chunk_size, compression);
                             H5Gclose(gid);
                         }
                         BmiDig16_t dig;
@@ -644,7 +752,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                         int id = nevData.comment.charset; // 0-based
                         if (ptid_comment[id] < 0)
                         {
-                            char szNum[6];
+                            char szNum[7];
                             std::string strLabel = "/comment/comment";
                             sprintf(szNum, "%05u", id + 1);
                             strLabel += szNum;
@@ -665,7 +773,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                                 }
                             }
 
-                            ptid_comment[id] = H5PTcreate_fl(gid, "comment_set", g_tid_comment, chunk_size, compression);
+                            ptid_comment[id] = H5PTcreate_fl(gid, "comment_set", tid_comment, chunk_size, compression);
                             H5Gclose(gid);
                         }
                         BmiComment_t cmt;
@@ -686,7 +794,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                         }
                         if (ptid_synch < 0)
                         {
-                            char szNum[6];
+                            char szNum[7];
                             std::string strLabel = "/video/synch";
                             sprintf(szNum, "%05u", id + 1);
                             strLabel += szNum;
@@ -698,7 +806,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                                 printf("Creating %s without attributes\n", strLabel.c_str());
                                 gid = H5Gcreate(file, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
                             }
-                            ptid_synch = H5PTcreate_fl(gid, "synch_set", g_tid_synch, chunk_size, compression);
+                            ptid_synch = H5PTcreate_fl(gid, "synch_set", tid_synch, chunk_size, compression);
                             H5Gclose(gid);
                         }
                         BmiSynch_t synch;
@@ -719,7 +827,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                         }
                         if (ptid_tracking[id] < 0)
                         {
-                            char szNum[6];
+                            char szNum[7];
                             std::string strLabel = "/video/tracking";
                             sprintf(szNum, "%05u", id + 1);
                             strLabel += szNum;
@@ -731,18 +839,18 @@ int ConvertNev(FILE * pFile, hid_t file)
                                 printf("Creating %s without attributes\n", strLabel.c_str());
                                 gid = H5Gcreate(file, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
                             }
-                            if (g_tid_tracking[id] < 0)
+                            if (tid_tracking[id] < 0)
                             {
                                 printf("Creating tracking set with undefined type\n");
                                 hid_t gid_video = H5Gopen(file, "/video", H5P_DEFAULT);
-                                g_tid_tracking[id] = CreateTrackingType(gid_video, 2, 2);
+                                tid_tracking[id] = CreateTrackingType(gid_video, 2, 2);
                                 ret = H5Gclose(gid_video);
                             }
-                            ptid_tracking[id] = H5PTcreate_fl(gid, "tracking_set", g_tid_tracking[id], chunk_size, compression);
+                            ptid_tracking[id] = H5PTcreate_fl(gid, "tracking_set", tid_tracking[id], chunk_size, compression);
                             H5Gclose(gid);
                         }
 
-                        if (g_bFixedLengthTracking[id])
+                        if (bFixedLengthTracking[id])
                         {
                             BmiTracking_fl_t tr;
                             tr.dwTimestamp = nevData.dwTimestamp;
@@ -804,6 +912,8 @@ int ConvertNSx21(const char * szSrcFile, FILE * pFile, hid_t file)
 
     BmiChanAttr_t chanAttr[cbNUM_ANALOG_CHANS];
     memset(chanAttr, 0, sizeof(chanAttr));
+    BmiSamplingAttr_t samplingAttr[cbNUM_ANALOG_CHANS];
+    memset(samplingAttr, 0, sizeof(samplingAttr));
 
     // Add root attribute
     if (AddRoot(szSrcFile, pFile, file, isHdr))
@@ -817,10 +927,16 @@ int ConvertNSx21(const char * szSrcFile, FILE * pFile, hid_t file)
         hsize_t     dims[1] = {1};
         hid_t space_attr = H5Screate_simple(1, dims, NULL);
 
-        hid_t gid_channel = H5Gcreate(file, "channel", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t gid_channel = -1;
+        if (H5Lexists(file, "channel", H5P_DEFAULT))
+            gid_channel = H5Gopen(file, "channel", H5P_DEFAULT);
+        else
+            gid_channel = H5Gcreate(file, "channel", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         hid_t tid_chan_attr = CreateChanAttrType(gid_channel);
+        hid_t tid_sampling_attr = CreateSamplingAttrType(gid_channel);
         for (UINT32 i = 0; i < isHdr.cnChannels; ++i)
         {
+            char szNum[7];
             UINT32 id; // 1-based
             if (fread(&id, sizeof(UINT32), 1, pFile) != 1)
             {
@@ -828,40 +944,76 @@ int ConvertNSx21(const char * szSrcFile, FILE * pFile, hid_t file)
                 return 1;
             }
             chanAttr[i].id = id;
-            chanAttr[i].fClock = 30000;
+            std::string strLabel = "chan";
+            sprintf(szNum, "%u", id);
+            strLabel += szNum;
+            chanAttr[i].szLabel = _strdup(strLabel.c_str());
+            samplingAttr[i].fClock = 30000;
             // FIXME: This might be incorrect for really old file recordings
             // TODO: search the file to see if 14 is more accurate
-            chanAttr[i].nSampleBits = 16;
-            chanAttr[i].fSampleRate = float(30000.0) / isHdr.nPeriod;
+            samplingAttr[i].nSampleBits = 16;
+            samplingAttr[i].fSampleRate = float(30000.0) / isHdr.nPeriod;
 
-            char szNum[6];
-            std::string strLabel = "channel";
-            sprintf(szNum, "%05u", id);
+            UINT32 nChannelOffset = 0;
+            if (g_bAppend)
+            {
+                bool bExists = false;
+                // Find the last place to append to
+                do {
+                    nChannelOffset++;
+                    std::string strLabel = "channel";
+                    char szNum[7];
+                    sprintf(szNum, "%05u", nChannelOffset);
+                    strLabel += szNum;
+                    bExists = (H5Lexists(gid_channel, strLabel.c_str(), H5P_DEFAULT) != 0);
+                } while(bExists);
+                nChannelOffset--;
+            }
+
+            strLabel = "channel";
+            sprintf(szNum, "%05u", id + nChannelOffset);
             strLabel += szNum;
-            hid_t gid = H5Gcreate(gid_channel, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            hid_t gid = -1;
+            if (H5Lexists(gid_channel, strLabel.c_str(), H5P_DEFAULT))
+                gid = H5Gopen(gid_channel, strLabel.c_str(), H5P_DEFAULT);
+            else
+                gid = H5Gcreate(gid_channel, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
             // Basic channel attributes
             hid_t aid = H5Acreate(gid, "BmiChan", tid_chan_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
             ret = H5Awrite(aid, tid_chan_attr, &chanAttr[i]);
             ret = H5Aclose(aid);
 
+            // If need to go one level deeper
+            if (g_nCombine > 0)
+            {
+                hid_t gidParent = gid;
+                sprintf(szNum, "%05u", g_nCombine);
+                strLabel = szNum;
+                if (H5Lexists(gidParent, strLabel.c_str(), H5P_DEFAULT))
+                    gid = H5Gopen(gidParent, strLabel.c_str(), H5P_DEFAULT);
+                else
+                    gid = H5Gcreate(gidParent, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                ret = H5Gclose(gidParent);
+            }
 
             ptid_chan[i] = H5PTcreate_fl(gid, "continuous_set", H5T_NATIVE_INT16, chunk_size, compression);
 
             hid_t dsid = H5Dopen(gid, "continuous_set", H5P_DEFAULT);
             ret = H5Gclose(gid);
-            aid = H5Acreate(dsid, "Offset", H5T_NATIVE_UINT32, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            UINT32 nOffset = 0; // 2.1 does not have paused headers
-            ret = H5Awrite(aid, H5T_NATIVE_UINT32, &nOffset);
+            // Add data start clock attribute
+            aid = H5Acreate(dsid, "StartClock", H5T_NATIVE_UINT32, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+            UINT32 nStartTime = 0; // 2.1 does not have paused headers
+            ret = H5Awrite(aid, H5T_NATIVE_UINT32, &nStartTime);
             ret = H5Aclose(aid);
-#if 0
-            hid_t dapl = H5Dget_access_plist(dsid);
-            size_t rdcc_nslots, rdcc_nbytes;
-            double rdcc_w0;
-            ret =  H5Pget_chunk_cache(dapl, &rdcc_nslots, &rdcc_nbytes, &rdcc_w0);
-#endif
+            // Add data sampling attribute
+            aid = H5Acreate(dsid, "Sampling", tid_sampling_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+            ret = H5Awrite(aid, tid_sampling_attr, &samplingAttr[i]);
+            ret = H5Aclose(aid);
+
             ret = H5Dclose(dsid);
         } // end for (UINT32 i = 0
+        ret = H5Tclose(tid_sampling_attr);
         ret = H5Tclose(tid_chan_attr);
         ret = H5Gclose(gid_channel);
         ret = H5Sclose(space_attr);
@@ -930,6 +1082,10 @@ int ConvertNSx22(FILE * pFile, hid_t file)
         return 1;
     }
 
+    BmiFiltAttr_t filtAttr[cbNUM_ANALOG_CHANS];
+    memset(filtAttr, 0, sizeof(filtAttr));
+    BmiSamplingAttr_t samplingAttr[cbNUM_ANALOG_CHANS];
+    memset(samplingAttr, 0, sizeof(samplingAttr));
     BmiChanAttr_t chanAttr[cbNUM_ANALOG_CHANS];
     memset(chanAttr, 0, sizeof(chanAttr));
     BmiChanExtAttr_t chanExtAttr[cbNUM_ANALOG_CHANS];
@@ -962,9 +1118,9 @@ int ConvertNSx22(FILE * pFile, hid_t file)
             return 1;
         }
         chanAttr[i].id = isExtHdr.id;
-        chanAttr[i].fClock = float(isHdr.nResolution);
-        chanAttr[i].fSampleRate = float(isHdr.nResolution) / float(isHdr.nPeriod);
-        chanAttr[i].nSampleBits = 16;
+        samplingAttr[i].fClock = float(isHdr.nResolution);
+        samplingAttr[i].fSampleRate = float(isHdr.nResolution) / float(isHdr.nPeriod);
+        samplingAttr[i].nSampleBits = 16;
 
         chanExtAttr[i].phys_connector = isExtHdr.phys_connector;
         chanExtAttr[i].connector_pin = isExtHdr.connector_pin;
@@ -985,13 +1141,13 @@ int ConvertNSx22(FILE * pFile, hid_t file)
             printf("Unknown analog unit for channel %u, uV used\n", isExtHdr.id);
             chanExtAttr[i].dFactor = UINT32((anarange * INT64(1E3)) / digrange);
         }
-        chanExtAttr[i].filter.hpfreq = isExtHdr.hpfreq;
-        chanExtAttr[i].filter.hporder = isExtHdr.hporder;
-        chanExtAttr[i].filter.hptype = isExtHdr.hptype;
-        chanExtAttr[i].filter.lpfreq = isExtHdr.lpfreq;
-        chanExtAttr[i].filter.lporder = isExtHdr.lporder;
-        chanExtAttr[i].filter.lptype = isExtHdr.lptype;
-        chanExtAttr[i].szLabel = _strdup(isExtHdr.label);
+        filtAttr[i].hpfreq = isExtHdr.hpfreq;
+        filtAttr[i].hporder = isExtHdr.hporder;
+        filtAttr[i].hptype = isExtHdr.hptype;
+        filtAttr[i].lpfreq = isExtHdr.lpfreq;
+        filtAttr[i].lporder = isExtHdr.lporder;
+        filtAttr[i].lptype = isExtHdr.lptype;
+        chanAttr[i].szLabel = _strdup(isExtHdr.label);
 
         chanExt2Attr[i].anamax = isExtHdr.anamax;
         chanExt2Attr[i].anamin = isExtHdr.anamin;
@@ -1002,36 +1158,77 @@ int ConvertNSx22(FILE * pFile, hid_t file)
 
     hsize_t     dims[1] = {1};
     hid_t space_attr = H5Screate_simple(1, dims, NULL);
+    hid_t tid_sampling_attr = -1;
+    hid_t tid_filt_attr = -1;
+
+    UINT32 nChannelOffset = 0;
 
     hid_t ptid_chan[cbNUM_ANALOG_CHANS];
     {
-        hid_t gid_channel = H5Gcreate(file, "channel", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        hid_t gid_channel = -1;
+        if (H5Lexists(file, "channel", H5P_DEFAULT))
+            gid_channel = H5Gopen(file, "channel", H5P_DEFAULT);
+        else
+            gid_channel = H5Gcreate(file, "channel", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        
+        if (g_bAppend)
+        {
+            bool bExists = false;
+            // Find the last place to append to
+            do {
+                nChannelOffset++;
+                std::string strLabel = "channel";
+                char szNum[7];
+                sprintf(szNum, "%05u", nChannelOffset);
+                strLabel += szNum;
+                bExists = (H5Lexists(gid_channel, strLabel.c_str(), H5P_DEFAULT) != 0);
+            } while(bExists);
+            nChannelOffset--;
+        }
+
+        tid_sampling_attr = CreateSamplingAttrType(gid_channel);
+        tid_filt_attr = CreateFiltAttrType(gid_channel);
         hid_t tid_chan_attr = CreateChanAttrType(gid_channel);
         hid_t tid_chanext_attr = CreateChanExtAttrType(gid_channel);
         hid_t tid_chanext2_attr = CreateChanExt2AttrType(gid_channel);
         for (UINT32 i = 0; i < isHdr.cnChannels; ++i)
         {
-            int id = chanAttr[i].id;
-            char szNum[6];
             std::string strLabel = "channel";
-            sprintf(szNum, "%05u", id);
-            strLabel += szNum;
-            hid_t gid = H5Gcreate(gid_channel, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            {
+                UINT32 id = chanAttr[i].id + nChannelOffset;
+                char szNum[7];
+                sprintf(szNum, "%05u", id);
+                strLabel += szNum;
+            }
+            hid_t gid = -1;
+            if (H5Lexists(gid_channel, strLabel.c_str(), H5P_DEFAULT))
+                gid = H5Gopen(gid_channel, strLabel.c_str(), H5P_DEFAULT);
+            else
+                gid = H5Gcreate(gid_channel, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
             // Basic channel attributes
-            hid_t aid = H5Acreate(gid, "BmiChan", tid_chan_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            ret = H5Awrite(aid, tid_chan_attr, &chanAttr[i]);
-            ret = H5Aclose(aid);
+            if (!H5Aexists(gid, "BmiChan"))
+            {
+                hid_t aid = H5Acreate(gid, "BmiChan", tid_chan_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+                ret = H5Awrite(aid, tid_chan_attr, &chanAttr[i]);
+                ret = H5Aclose(aid);
+            }
 
             // Extra header attribute
-            aid = H5Acreate(gid, "BmiChanExt", tid_chanext_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            ret = H5Awrite(aid, tid_chanext_attr, &chanExtAttr[i]);
-            ret = H5Aclose(aid);
+            if (!H5Aexists(gid, "BmiChanExt"))
+            {
+                hid_t aid = H5Acreate(gid, "BmiChanExt", tid_chanext_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+                ret = H5Awrite(aid, tid_chanext_attr, &chanExtAttr[i]);
+                ret = H5Aclose(aid);
+            }
 
             // Additional extra channel attributes
-            aid = H5Acreate(gid, "BmiChanExt2", tid_chanext2_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            ret = H5Awrite(aid, tid_chanext2_attr, &chanExt2Attr[i]);
-            ret = H5Aclose(aid);
+            if (!H5Aexists(gid, "BmiChanExt2"))
+            {
+                hid_t aid = H5Acreate(gid, "BmiChanExt2", tid_chanext2_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+                ret = H5Awrite(aid, tid_chanext2_attr, &chanExt2Attr[i]);
+                ret = H5Aclose(aid);
+            }
 
             ret = H5Gclose(gid);
         } // end for (UINT32 i = 0
@@ -1061,14 +1258,34 @@ int ConvertNSx22(FILE * pFile, hid_t file)
         {
             size_t chunk_size = CHUNK_SIZE_CONTINUOUS;
             int compression = -1; // TODO: use options to add compression
-            char szNum[6];
+            char szNum[7];
             std::string strLabel = "/channel/channel";
-            sprintf(szNum, "%05u", chanAttr[i].id);
+            sprintf(szNum, "%05u", chanAttr[i].id + nChannelOffset);
             strLabel += szNum;
             hid_t gid = H5Gopen(file, strLabel.c_str(), H5P_DEFAULT);
+            // If need to go one level deeper
+            if (g_nCombine > 0)
+            {
+                hid_t gidParent = gid;
+                sprintf(szNum, "%05u", g_nCombine);
+                strLabel = szNum;
+                if (H5Lexists(gidParent, strLabel.c_str(), H5P_DEFAULT))
+                    gid = H5Gopen(gidParent, strLabel.c_str(), H5P_DEFAULT);
+                else
+                    gid = H5Gcreate(gidParent, strLabel.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                ret = H5Gclose(gidParent);
+            }
             strLabel = "continuous_set";
             if (setCount > 0)
             {
+                sprintf(szNum, "%05u", setCount);
+                strLabel += szNum;
+            }
+            // We want to keep all data sets
+            while (H5Lexists(gid, strLabel.c_str(), H5P_DEFAULT))
+            {
+                setCount++;
+                strLabel = "continuous_set";
                 sprintf(szNum, "%05u", setCount);
                 strLabel += szNum;
             }
@@ -1076,15 +1293,25 @@ int ConvertNSx22(FILE * pFile, hid_t file)
 
             hid_t dsid = H5Dopen(gid, strLabel.c_str(), H5P_DEFAULT);
             ret = H5Gclose(gid);
-            hid_t aid = H5Acreate(dsid, "Offset", H5T_NATIVE_UINT32, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            UINT32 nOffset = isDataHdr.nTimestamp;
-            ret = H5Awrite(aid, H5T_NATIVE_UINT32, &nOffset);
+            // Add data start clock attribute
+            hid_t aid = H5Acreate(dsid, "StartClock", H5T_NATIVE_UINT32, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+            UINT32 nStartTime = isDataHdr.nTimestamp;
+            ret = H5Awrite(aid, H5T_NATIVE_UINT32, &nStartTime);
             ret = H5Aclose(aid);
+            // Add data sampling attribute
+            aid = H5Acreate(dsid, "Sampling", tid_sampling_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+            ret = H5Awrite(aid, tid_sampling_attr, &samplingAttr[i]);
+            ret = H5Aclose(aid);
+            // Add data filtering attribute
+            aid = H5Acreate(dsid, "Filter", tid_filt_attr, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+            ret = H5Awrite(aid, tid_filt_attr, &filtAttr[i]);
+            ret = H5Aclose(aid);
+
             ret = H5Dclose(dsid);
         }
         if (isDataHdr.nNumDatapoints == 0)
         {
-            printf("Paused section with zero points detected!\n"
+            printf("Data section with zero points detected!\n"
                     " Retrieve the rest of the file as one chunk\n"
                     " Last section may have unaligned trailing data points\n");
         }
@@ -1097,7 +1324,7 @@ int ConvertNSx22(FILE * pFile, hid_t file)
             if (nGot != isHdr.cnChannels)
             {
                 if (isDataHdr.nNumDatapoints == 0)
-                    printf("Paused section %d may be unaligned\n", setCount);
+                    printf("Data section %d may be unaligned\n", setCount);
                 else
                     printf("Fewer data points than specified in data header at the source file!\n");
                 break;
@@ -1150,6 +1377,7 @@ int main(int argc, char * const argv[])
     int idxSrcFile = 1;
     bool bForce = false;
     bool bCache = true;
+    bool bCombine = false;
     for (int i = 1; i < argc; ++i)
     {
         if (strcmp(argv[i], "--force") == 0)
@@ -1162,10 +1390,38 @@ int main(int argc, char * const argv[])
             bCache = false;
             idxSrcFile++;
         }
+        else if (strcmp(argv[i], "--nospikes") == 0)
+        {
+            g_bNoSpikes = true;
+            idxSrcFile++;
+        }
+        else if (strcmp(argv[i], "--append") == 0)
+        {
+            g_bAppend = true;
+            idxSrcFile++;
+        }
+        else if (strcmp(argv[i], "--combine") == 0)
+        {
+            if (i + 1 >= argc || !isdigit(argv[i + 1][0]))
+            {
+                printf("Combine level not specified or is invalid\n");
+                idxSrcFile = argc; // Just to show the usage
+                break;
+            }
+            g_nCombine = atoi(argv[i + 1]);
+            bCombine = true;
+            idxSrcFile += 2;
+            i++;
+        }
+        else if (strcmp(argv[i], "--group") == 0)
+        {
+            // TODO: implement
+            printf("Group addition is not implemented in this version!\n");
+            return 0;
+        }
     }
     if (idxSrcFile >= argc)
     {
-        // TODO: add <srcfile>[,<srcfile2>,...] to combine source files
         printf("Blackrock file conversion utility (version 1.0)\n"
                "Usage: n2h5 [options] <srcfile> [<destfile>]\n"
                "Purpose: Converts srcfile to destfile\n"
@@ -1174,10 +1430,21 @@ int main(int argc, char * const argv[])
                "<destfile> - the converted file to create (hdf5 format)\n"
                "             default is <srcfile>.bh5\n"
                "Options:\n"
-               " --force : overwrites the destination if it exists\n"
-               " --nocache : slower but results in smaller file size\n");
+               " --force    : overwrites the destination if it exists, create if not\n"
+               " --nocache  : slower but results in smaller file size\n"
+               " --nospikes : ignore spikes\n"
+               " --combine <level> : combine to the existing channels at given subchannel level (level 0 means no subchannel)\n"
+               "    same experiment, same channels, different data sets (e.g. different sampling rates or filters)\n"
+               " --append   : append channels to the end of current channels\n"
+               "    same experiment, different channel (e.g. sync systems recording)\n"
+               " --group    : add as new group\n"
+               "    different experiments\n");
         return 0;
     }
+
+    // TODO: implement --append for video and comment data
+    // TODO: implement --group
+
     const char * szSrcFile = argv[idxSrcFile];
     std::string strDest;
     if ((idxSrcFile + 1) >= argc)
@@ -1205,6 +1472,21 @@ int main(int argc, char * const argv[])
         return 0;
     }
 
+    hid_t file;
+    
+    if (g_bAppend || bCombine)
+    {
+        // Open read-only just to validate destination file
+        file = H5Fopen(szDstFile, H5F_ACC_RDONLY, H5P_DEFAULT);
+        if (file < 0 && !bForce)
+        {
+            printf("Cannot append to the destination file or destiantion file does not exist\n"
+                   "Use --force to to ignore this error\n");
+            goto ErrHandle;
+        }
+        H5Fclose(file);
+    }
+
     hid_t facpl = H5P_DEFAULT;
     if (bCache)
     {
@@ -1213,15 +1495,23 @@ int main(int argc, char * const argv[])
         // Useful primes: 401 4049 404819
         ret = H5Pset_cache(facpl, 0, 404819, 4 * 1024 * CHUNK_SIZE_CONTINUOUS, rdcc_w0);
     }
-    hid_t file;
-    file = H5Fcreate(szDstFile, bForce ? H5F_ACC_TRUNC : H5F_ACC_EXCL, H5P_DEFAULT, facpl);
+    if (g_bAppend || bCombine)
+    {
+        file = H5Fopen(szDstFile, H5F_ACC_RDWR, H5P_DEFAULT);
+    } else {
+        file = H5Fcreate(szDstFile, bForce ? H5F_ACC_TRUNC : H5F_ACC_EXCL, H5P_DEFAULT, facpl);
+    }
     if (facpl != H5P_DEFAULT)
         ret = H5Pclose(facpl);
 
     if (file < 0)
     {
-        printf("Cannot create destination file or destiantion file exists\n"
-               "Use --force to overwite the file\n");
+        if (g_bAppend || bCombine)
+            printf("Cannot open the destination file or destination file does not exist\n"
+                   "Use --force to create new file\n");
+        else
+            printf("Cannot create destination file or destiantion file exists\n"
+                   "Use --force to overwite the file\n");
         goto ErrHandle;
     }
     fread(&achFileID, sizeof(achFileID), 1, pFile);

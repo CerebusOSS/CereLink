@@ -24,26 +24,25 @@
 #include "hdf5_hl.h"
 
 //
-// Digital and serial Channel attributes
+// Basic channel attributes
 //
 typedef struct {
     UINT16 id;          // channel id
     char * szLabel;     // Channel label
-} BmiDigChanAttr_t;
-
-hid_t CreateDigChanAttrType(hid_t loc);
-
-//
-// Channel attributes
-//
-typedef struct {
-    UINT16 id;          // channel id
-    float  fClock;       // global clock used for this channel
-    float  fSampleRate;  // sampling done for this channel
-    UINT8  nSampleBits;  // Number of bits in each sample
 } BmiChanAttr_t;
 
 hid_t CreateChanAttrType(hid_t loc);
+
+//
+// Sample rate attributes
+//
+typedef struct {
+    float  fClock;       // global clock used for this data set
+    float  fSampleRate;  // sampling done for this channel
+    UINT8  nSampleBits;  // Number of bits in each sample
+} BmiSamplingAttr_t;
+
+hid_t CreateSamplingAttrType(hid_t loc);
 
 //
 // Channel filter attributes
@@ -57,9 +56,9 @@ typedef struct {
     UINT32 lpfreq;         // Filter frequency in mHz
     UINT32 lporder;        // Filter order
     UINT16 lptype;         // Filter type
-} BmiChanFiltAttr_t;
+} BmiFiltAttr_t;
 
-hid_t CreateChanFiltAttrType(hid_t loc);
+hid_t CreateFiltAttrType(hid_t loc);
 
 //
 // Channel extra attributes addition 1
@@ -93,10 +92,8 @@ hid_t CreateChanExt2AttrType(hid_t loc);
 //
 typedef struct {
     double dFactor;        // nano volts per LSB (used in conversion between digital and analog values)
-    BmiChanFiltAttr_t filter;  // Channel filter
     UINT8  phys_connector;
     UINT8  connector_pin;
-    char * szLabel;        // Channel label
 } BmiChanExtAttr_t;
 
 hid_t CreateChanExtAttrType(hid_t loc);
