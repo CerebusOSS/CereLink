@@ -45,7 +45,6 @@ public:
     CCFXmlItem(cbPKT_NTRODEINFO & pkt, QString strName = "");
     CCFXmlItem(cbPKT_LNC & pkt, QString strName = "");
     CCFXmlItem(cbPKT_FILTINFO & pkt, QString strName = "");
-    CCFXmlItem(cbPKT_AOUT_WAVEFORM & pkt, QString strName = "");
     CCFXmlItem(cbSCALING & pkt, QString strName = "");
     CCFXmlItem(cbFILTDESC & pkt, QString strName = "");
     CCFXmlItem(cbMANUALUNITMAPPING & pkt, QString strName = "");

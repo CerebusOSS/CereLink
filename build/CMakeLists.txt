@@ -43,7 +43,6 @@ SET( LIB_SOURCE
 	../cbhwlib/CCFUtilsXml.cpp
 	../cbhwlib/CCFUtilsXmlItems.cpp
 	../cbhwlib/InstNetwork.cpp
-	../cbhwlib/WCFUtils.cpp
 	../cbhwlib/XmlFile.cpp
 	../Central/Instrument.cpp
 	../Central/UDPsocket.cpp

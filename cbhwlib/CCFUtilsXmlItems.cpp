@@ -374,20 +374,6 @@ CCFXmlItem::CCFXmlItem(cbPKT_FILTINFO & pkt, QString strName)
     m_xmlValue = lst;
 }
 
-// Author & Date: Griffin Milsap       12 Dec 2012
-// Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbPKT_AOUT_WAVEFORM & pkt, QString strName)
-{
-    m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbPKT_AOUT_WAVEFORM");
-
-    // FIXME: Implement this.
-    QVariantList lst;
-
-    // Now use the list
-    m_xmlValue = lst;
-}
-
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
 CCFXmlItem::CCFXmlItem(cbSCALING & pkt, QString strName)
@@ -945,17 +931,6 @@ void ccf::ReadItem(XmlFile * const xml, cbPKT_FILTINFO & item)
     ccf::ReadItem(xml, item.gain, "filterdesc/digfilt/gain");
 }
 
-// Author & Date: Griffin Milsap       10 Dec 2012
-// Purpose: Read this version of item
-// Inputs:
-//   xml      - the xml file in the item group
-//   item     - item for this version
-template<>
-void ccf::ReadItem(XmlFile * const xml, cbPKT_AOUT_WAVEFORM & item)
-{
-    // FIXME: Implement this.
-}
-
 // Author & Date: Ehsan Azar       16 April 2012
 // Purpose: Read this version of item
 // Inputs:
@@ -1174,13 +1149,11 @@ template QVariant ccf::GetCCFXmlItem<cbPKT_SS_DETECT>(cbPKT_SS_DETECT&, QString)
 template QVariant ccf::GetCCFXmlItem<cbPKT_SS_STATISTICS>(cbPKT_SS_STATISTICS&, QString);
 template QVariant ccf::GetCCFXmlItem<cbPKT_LNC>(cbPKT_LNC&, QString);
 template QVariant ccf::GetCCFXmlItem<cbPKT_FILTINFO>(cbPKT_FILTINFO&, QString);
-template QVariant ccf::GetCCFXmlItem<cbPKT_AOUT_WAVEFORM>(cbPKT_AOUT_WAVEFORM&, QString);
 
 template QVariant ccf::GetCCFXmlItem<cbPKT_CHANINFO>(cbPKT_CHANINFO * const, int, QString);
 template QVariant ccf::GetCCFXmlItem<cbPKT_NTRODEINFO>(cbPKT_NTRODEINFO * const, int, QString);
 template QVariant ccf::GetCCFXmlItem<cbPKT_SS_NOISE_BOUNDARY>(cbPKT_SS_NOISE_BOUNDARY * const, int, QString);
 template QVariant ccf::GetCCFXmlItem<cbPKT_FILTINFO>(cbPKT_FILTINFO * const, int, QString);
-template QVariant ccf::GetCCFXmlItem<cbPKT_AOUT_WAVEFORM>(cbPKT_AOUT_WAVEFORM * const, int, QString);
 
 // For link to proceed here we have to mention possible template types if not used in this unit
 template void ccf::ReadItem<cbPKT_ADAPTFILTINFO>(XmlFile * const, cbPKT_ADAPTFILTINFO &, QString);
@@ -1191,10 +1164,8 @@ template void ccf::ReadItem<cbPKT_SS_DETECT>(XmlFile * const, cbPKT_SS_DETECT &,
 template void ccf::ReadItem<cbPKT_SS_STATISTICS>(XmlFile * const, cbPKT_SS_STATISTICS &, QString);
 template void ccf::ReadItem<cbPKT_LNC>(XmlFile * const, cbPKT_LNC &, QString);
 template void ccf::ReadItem<cbPKT_FILTINFO>(XmlFile * const, cbPKT_FILTINFO &, QString);
-template void ccf::ReadItem<cbPKT_AOUT_WAVEFORM>(XmlFile * const, cbPKT_AOUT_WAVEFORM &, QString);
 
 template void ccf::ReadItem<cbPKT_CHANINFO>(XmlFile * const, cbPKT_CHANINFO * const, int, QString);
 template void ccf::ReadItem<cbPKT_NTRODEINFO>(XmlFile * const, cbPKT_NTRODEINFO * const, int, QString);
 template void ccf::ReadItem<cbPKT_SS_NOISE_BOUNDARY>(XmlFile * const, cbPKT_SS_NOISE_BOUNDARY * const, int, QString);
 template void ccf::ReadItem<cbPKT_FILTINFO>(XmlFile * const, cbPKT_FILTINFO * const, int, QString);
-template void ccf::ReadItem<cbPKT_AOUT_WAVEFORM>(XmlFile * const, cbPKT_AOUT_WAVEFORM * const, int, QString);
