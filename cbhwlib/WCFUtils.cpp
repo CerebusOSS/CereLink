@@ -14,7 +14,6 @@
 
 #include "StdAfx.h"
 #include "WCFUtils.h"
-#include "cbhwlib.h"
 #include "debugmacs.h"
 #include "CCFUtilsXmlItems.h"
 #include "CCFUtilsXmlItemsGenerate.h"
@@ -96,6 +95,7 @@ int WCFUtils::SendWCF(LPCSTR szFileName, UINT16 channel)
 //  channel    - the channel read waveform from
 int WCFUtils::WriteWCFNoPrompt(LPCSTR szFileName, UINT16 channel)
 {
+/*
     QString strFilename = QString(szFileName);
     m_szFileName = szFileName;
     QVariantList lst;
@@ -159,6 +159,7 @@ int WCFUtils::WriteWCFNoPrompt(LPCSTR szFileName, UINT16 channel)
     bool bRes = xml.endGroup(true);
     if (bRes)
         return -1;
+*/
     return 0;
 }
 

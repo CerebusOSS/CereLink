@@ -1,0 +1,13 @@
+dist/
+
+*.dir/
+*.user
+*.old
+*.ncb
+*.suo
+UpgradeLog.XML
+_UpgradeReport_Files/
+
+cbmex/Win32
+build/Debug
+build/Release
