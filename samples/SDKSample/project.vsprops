@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="Windows-1252"?>
+<VisualStudioPropertySheet
+	ProjectType="Visual C++"
+	Version="8.00"
+	Name="properties"
+	>
+	<UserMacro
+		Name="CBSDKDIR"
+		Value="$(CBDIR)\cbsdk"
+		PerformEnvironmentSet="true"
+	/>
+	<UserMacro
+		Name="QTDIR"
+		Value="C:\Qt\4.8.1\vs2005"
+		PerformEnvironmentSet="true"
+	/>
+</VisualStudioPropertySheet>
