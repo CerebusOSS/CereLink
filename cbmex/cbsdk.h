@@ -109,6 +109,7 @@ typedef enum _cbSdkResult
     CBSDKRESULT_TIMEOUT                =   -28, // Conection timeout error
     CBSDKRESULT_BUSY                   =   -29, // Resource is busy
     CBSDKRESULT_ERROFFLINE             =   -30, // Instrument is offline
+    CBSDKRESULT_CALLBACKNOTREGISTERED  =   -31, // Cannot configure an unregistered callback
 } cbSdkResult;
 
 typedef enum _cbSdkConnectionType
@@ -447,6 +448,8 @@ CBSDKAPI    cbSdkResult cbSdkSetSpikeConfig(UINT32 nInstance, UINT32 spklength, 
 CBSDKAPI    cbSdkResult cbSdkGetSysConfig(UINT32 nInstance, UINT32 * spklength, UINT32 * spkpretrig = NULL, UINT32 * sysfreq = NULL); // Get global system configuration
 
 CBSDKAPI    cbSdkResult cbSdkSystem(UINT32 nInstance, cbSdkSystemType cmd); // Perform given system command
+
+CBSDKAPI    cbSdkResult cbSdkSetupCallback(UINT32 nInstance, cbSdkCallbackType callbacktype, UINT32 samplebuffersize, UINT32 expirationperiod); // Configure callback to return blocks of data
 
 CBSDKAPI    cbSdkResult cbSdkRegisterCallback(UINT32 nInstance, cbSdkCallbackType callbacktype, cbSdkCallback pCallbackFn, void* pCallbackData);
 CBSDKAPI    cbSdkResult cbSdkUnRegisterCallback(UINT32 nInstance, cbSdkCallbackType callbacktype);
