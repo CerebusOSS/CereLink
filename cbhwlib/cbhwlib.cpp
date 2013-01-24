@@ -421,7 +421,9 @@ cbRESULT cbCheckApp(const char * lpName)
         char * szTmpDir = getenv("TMPDIR");
         _snprintf(szLockName, sizeof(szLockName), "%s/%s.lock", szTmpDir == NULL ? "/tmp" : szTmpDir, lpName);
         FILE * pflock = fopen(szLockName, "w+");
-        if (flock(fileno(pflock), LOCK_EX | LOCK_NB) == 0)
+        if (pflock == NULL)
+            cbRet = cbRESULT_OK; // Assume root has the lock
+        else if (flock(fileno(pflock), LOCK_EX | LOCK_NB) == 0)
             cbRet = cbRESULT_NOCENTRALAPP;
         if (pflock != NULL)
         {
