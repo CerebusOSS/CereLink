@@ -353,10 +353,11 @@ void SdkApp::OnPktTrack(const cbPKT_VIDEOTRACK * const pPkt)
 //   callbacktype  - the calback type to bind
 void SdkApp::LateBindCallback(cbSdkCallbackType callbacktype)
 {
-    if (m_pCallback[callbacktype].function != m_pLateCallback[callbacktype].function)
+    if (m_pCallback[callbacktype] != m_pLateCallback[callbacktype])
     {
         m_lockCallback.lock();
         m_pLateCallback[callbacktype] = m_pCallback[callbacktype];
+        m_pLateCallbackParams[callbacktype] = m_pCallbackParams[callbacktype];
         m_lockCallback.unlock();
     }
 }
@@ -368,21 +369,23 @@ void SdkApp::LateBindCallback(cbSdkCallbackType callbacktype)
 void SdkApp::LinkFailureEvent(cbSdkPktLostEvent & lost)
 {
     m_lastLost = lost;
-    cbCallback pCallback;
+    cbSdkCallback pCallback = NULL;
+    void * pCallbackParams = NULL;
 
     for (int i = 0; i < CBSDKCALLBACK_COUNT; ++i)
     {
-        if (m_pCallback[i].function)
+        if (m_pCallback[i])
         {
             m_lockCallback.lock();
             pCallback = m_pCallback[i];
+            pCallbackParams = m_pCallbackParams[i];
             m_lockCallback.unlock();
             break;
         }
     }
 
-    if (pCallback.function)
-        pCallback.function(m_nInstance, cbSdkPkt_PACKETLOST, &m_lastLost, pCallback.params);
+    if (pCallback)
+        pCallback(m_nInstance, cbSdkPkt_PACKETLOST, &m_lastLost, pCallbackParams);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -394,10 +397,10 @@ void SdkApp::InstInfoEvent(UINT32 instInfo)
     // Late bind the ones needed before usage
     LateBindCallback(CBSDKCALLBACK_ALL);
     LateBindCallback(CBSDKCALLBACK_INSTINFO);
-    if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-        m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_INSTINFO, &m_lastInstInfo, m_pLateCallback[CBSDKCALLBACK_ALL].params);
-    if (m_pLateCallback[CBSDKCALLBACK_INSTINFO].function)
-        m_pLateCallback[CBSDKCALLBACK_INSTINFO].function(m_nInstance, cbSdkPkt_INSTINFO, &m_lastInstInfo, m_pLateCallback[CBSDKCALLBACK_INSTINFO].params);
+    if (m_pLateCallback[CBSDKCALLBACK_ALL])
+        m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_INSTINFO, &m_lastInstInfo, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
+    if (m_pLateCallback[CBSDKCALLBACK_INSTINFO])
+        m_pLateCallback[CBSDKCALLBACK_INSTINFO](m_nInstance, cbSdkPkt_INSTINFO, &m_lastInstInfo, m_pLateCallbackParams[CBSDKCALLBACK_INSTINFO]);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -496,10 +499,10 @@ void SdkApp::SdkAsynchCCF(const ccf::ccfResult res, LPCSTR szFileName, const cbS
 
     LateBindCallback(CBSDKCALLBACK_ALL);
     LateBindCallback(CBSDKCALLBACK_CCF);
-    if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-        m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_CCF, &ev, m_pLateCallback[CBSDKCALLBACK_ALL].params);
-    if (m_pLateCallback[CBSDKCALLBACK_CCF].function)
-        m_pLateCallback[CBSDKCALLBACK_CCF].function(m_nInstance, cbSdkPkt_CCF, &ev, m_pLateCallback[CBSDKCALLBACK_CCF].params);
+    if (m_pLateCallback[CBSDKCALLBACK_ALL])
+        m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_CCF, &ev, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
+    if (m_pLateCallback[CBSDKCALLBACK_CCF])
+        m_pLateCallback[CBSDKCALLBACK_CCF](m_nInstance, cbSdkPkt_CCF, &ev, m_pLateCallbackParams[CBSDKCALLBACK_CCF]);;
 }
 
 // Purpose: sdk stub for SdkApp::SdkAsynchCCF
@@ -538,7 +541,7 @@ cbSdkResult SdkApp::SdkReadCCF(cbSdkCCF * pData, const char * szFileName, bool b
         if (m_instInfo == 0)
             return CBSDKRESULT_CLOSED;
     }
-    CCFUtils config(bSend, bThreaded, &pData->data, m_pCallback[CBSDKCALLBACK_CCF].function ? &cbSdkAsynchCCF : NULL, m_nInstance);
+    CCFUtils config(bSend, bThreaded, &pData->data, m_pCallback[CBSDKCALLBACK_CCF] ? &cbSdkAsynchCCF : NULL, m_nInstance);
     ccf::ccfResult res = config.ReadCCF(szFileName, bConvert);
     if (res)
         return cbSdkErrorFromCCFError(res);
@@ -586,7 +589,7 @@ cbSdkResult SdkApp::SdkWriteCCF(cbSdkCCF * pData, const char * szFileName, bool 
     }
     bool bSend = (szFileName == NULL);
     ccf::ccfResult res;
-    CCFUtils config(bSend, bThreaded, &pData->data, m_pCallback[CBSDKCALLBACK_CCF].function ? &cbSdkAsynchCCF : NULL, m_nInstance);
+    CCFUtils config(bSend, bThreaded, &pData->data, m_pCallback[CBSDKCALLBACK_CCF] ? &cbSdkAsynchCCF : NULL, m_nInstance);
     if (bSend)
         res = config.SendCCF();
     else
@@ -647,7 +650,10 @@ cbSdkResult SdkApp::SdkOpen(UINT32 nInstance, cbSdkConnectionType conType, cbSdk
     // Unregister all callbacks
     m_lockCallback.lock();
     for (int i = 0; i < CBSDKCALLBACK_COUNT; ++i)
-        m_pCallback[i].clear();
+    {
+        m_pCallbackParams[i] = NULL;
+        m_pCallback[i] = NULL;
+    }
     m_lockCallback.unlock();
 
     // Unmask all channels
@@ -825,7 +831,10 @@ cbSdkResult SdkApp::SdkClose()
     // Unregister all callbacks
     m_lockCallback.lock();
     for (int i = 0; i < CBSDKCALLBACK_COUNT; ++i)
-        m_pCallback[i].clear();
+    {
+        m_pCallbackParams[i] = NULL;
+        m_pCallback[i] = NULL;
+    }
     m_lockCallback.unlock();
 
     // Close the app
@@ -3064,43 +3073,6 @@ CBSDKAPI    cbSdkResult cbSdkSystem(UINT32 nInstance, cbSdkSystemType cmd)
     return g_app[nInstance]->SdkSystem(cmd);
 }
 
-// Author & Date:   Griffin Milsap     22 Jan 2013
-// Purpose: Configure a callback to return blocks of data
-// Inputs:
-//   callbacktype     - the calback type to configure
-//   samplebuffersize - the number of frames (or spikes) to return every callback
-//   expirationperiod - TODO: I'm not really sure what this is supposed to do.
-// Outputs:
-//   returns the error code
-
-cbSdkResult SdkApp::SdkSetupCallback(cbSdkCallbackType callbacktype, UINT32 samplebuffersize, UINT32 expirationperiod)
-{
-    if (m_instInfo == 0)
-        return CBSDKRESULT_CLOSED;
-    if (!m_pCallback[callbacktype].function) // Not registered yet
-        return CBSDKRESULT_CALLBACKNOTREGISTERED;
-
-    m_lockCallback.lock();
-    m_pCallback[callbacktype].buffersize = samplebuffersize;
-    m_pCallback[callbacktype].expiration = expirationperiod;
-    m_lockCallback.unlock();
-    return CBSDKRESULT_SUCCESS;
-}
-
-// Purpose: sdk stub for SdkApp::SdkSetupCallback
-CBSDKAPI    cbSdkResult cbSdkSetupCallback(UINT32 nInstance, 
-                                           cbSdkCallbackType callbacktype, UINT32 samplebuffersize, UINT32 expirationperiod)
-{
-    if (callbacktype >= CBSDKCALLBACK_COUNT)
-        return CBSDKRESULT_INVALIDCALLBACKTYPE;
-    if (nInstance >= cbMAXOPEN)
-        return CBSDKRESULT_INVALIDPARAM;
-    if (g_app[nInstance] == NULL)
-        return CBSDKRESULT_CLOSED;
-
-    return g_app[nInstance]->SdkSetupCallback(callbacktype, samplebuffersize, expirationperiod);
-}
-
 // Author & Date:   Ehsan Azar     28 Feb 2011
 // Purpose: Register a callback function
 // Inputs:
@@ -3113,12 +3085,12 @@ cbSdkResult SdkApp::SdkRegisterCallback(cbSdkCallbackType callbacktype, cbSdkCal
 {
     if (m_instInfo == 0)
         return CBSDKRESULT_CLOSED;
-    if (m_pCallback[callbacktype].function) // Already registered
+    if (m_pCallback[callbacktype]) // Already registered
         return CBSDKRESULT_CALLBACKREGFAILED;
 
     m_lockCallback.lock();
-    m_pCallback[callbacktype].params = pCallbackData;
-    m_pCallback[callbacktype].function = pCallbackFn;
+    m_pCallbackParams[callbacktype] = pCallbackData;
+    m_pCallback[callbacktype] = pCallbackFn;
     m_lockCallback.unlock();
     return CBSDKRESULT_SUCCESS;
 }
@@ -3149,11 +3121,12 @@ cbSdkResult SdkApp::SdkUnRegisterCallback(cbSdkCallbackType callbacktype)
 {
     if (m_instInfo == 0)
         return CBSDKRESULT_CLOSED;
-    if (!m_pCallback[callbacktype].function) // Already unregistered
+    if (!m_pCallback[callbacktype]) // Already unregistered
         return CBSDKRESULT_CALLBACKREGFAILED;
 
     m_lockCallback.lock();
-    m_pCallback[callbacktype].clear();
+    m_pCallback[callbacktype] = NULL;
+    m_pCallbackParams[callbacktype] = NULL;
     m_lockCallback.unlock();
     return CBSDKRESULT_SUCCESS;
 }
@@ -3186,6 +3159,13 @@ SdkApp::SdkApp() :
     memset(&m_lastPktVideoSynch, 0, sizeof(m_lastPktVideoSynch));
     memset(&m_lastLost, 0, sizeof(m_lastLost));
     memset(&m_lastInstInfo, 0, sizeof(m_lastInstInfo));
+    for (int i = 0; i < CBSDKCALLBACK_COUNT; ++i)
+    {
+        m_pCallback[i] = 0;
+        m_pCallbackParams[i] = 0;
+        m_pLateCallback[i] = 0;
+        m_pLateCallbackParams[i] = 0;
+    }
 }
 
 // Author & Date: Ehsan Azar       29 April 2012
@@ -3253,99 +3233,99 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
         {
             if (pPkt->type == cbPKTTYPE_SYSHEARTBEAT)
             {
-                if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-                    m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_SYSHEARTBEAT, pPkt, m_pLateCallback[CBSDKCALLBACK_ALL].params);
+                if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                    m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_SYSHEARTBEAT, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
                 // Late bind before usage
                 LateBindCallback(CBSDKCALLBACK_SYSHEARTBEAT);
-                if (m_pLateCallback[CBSDKCALLBACK_SYSHEARTBEAT].function)
-                    m_pLateCallback[CBSDKCALLBACK_SYSHEARTBEAT].function(m_nInstance, cbSdkPkt_SYSHEARTBEAT, pPkt, m_pLateCallback[CBSDKCALLBACK_SYSHEARTBEAT].params);
+                if (m_pLateCallback[CBSDKCALLBACK_SYSHEARTBEAT])
+                    m_pLateCallback[CBSDKCALLBACK_SYSHEARTBEAT](m_nInstance, cbSdkPkt_SYSHEARTBEAT, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_SYSHEARTBEAT]);
             }
             else if (pPkt->type == cbPKTTYPE_REPIMPEDANCE)
             {
-                if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-                    m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_IMPEDANCE, pPkt, m_pLateCallback[CBSDKCALLBACK_ALL].params);
+                if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                    m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_IMPEDANCE, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
                 // Late bind before usage
                 LateBindCallback(CBSDKCALLBACK_IMPEDENCE);
-                if (m_pLateCallback[CBSDKCALLBACK_IMPEDENCE].function)
-                    m_pLateCallback[CBSDKCALLBACK_IMPEDENCE].function(m_nInstance, cbSdkPkt_IMPEDANCE, pPkt, m_pLateCallback[CBSDKCALLBACK_IMPEDENCE].params);
+                if (m_pLateCallback[CBSDKCALLBACK_IMPEDENCE])
+                    m_pLateCallback[CBSDKCALLBACK_IMPEDENCE](m_nInstance, cbSdkPkt_IMPEDANCE, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_IMPEDENCE]);
             }
             else if ((pPkt->type & 0xF0) == cbPKTTYPE_CHANREP)
             {
-                if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-                    m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_CHANINFO, pPkt, m_pLateCallback[CBSDKCALLBACK_ALL].params);
+                if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                    m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_CHANINFO, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
                 // Late bind before usage
                 LateBindCallback(CBSDKCALLBACK_CHANINFO);
-                if (m_pLateCallback[CBSDKCALLBACK_CHANINFO].function)
-                    m_pLateCallback[CBSDKCALLBACK_CHANINFO].function(m_nInstance, cbSdkPkt_CHANINFO, pPkt, m_pLateCallback[CBSDKCALLBACK_CHANINFO].params);
+                if (m_pLateCallback[CBSDKCALLBACK_CHANINFO])
+                    m_pLateCallback[CBSDKCALLBACK_CHANINFO](m_nInstance, cbSdkPkt_CHANINFO, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_CHANINFO]);
             }
             else if (pPkt->type == cbPKTTYPE_NMREP)
             {
-                if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-                    m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_NM, pPkt, m_pLateCallback[CBSDKCALLBACK_ALL].params);
+                if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                    m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_NM, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
                 // Late bind before usage
                 LateBindCallback(CBSDKCALLBACK_NM);
-                if (m_pLateCallback[CBSDKCALLBACK_NM].function)
-                    m_pLateCallback[CBSDKCALLBACK_NM].function(m_nInstance, cbSdkPkt_NM, pPkt, m_pLateCallback[CBSDKCALLBACK_NM].params);
+                if (m_pLateCallback[CBSDKCALLBACK_NM])
+                    m_pLateCallback[CBSDKCALLBACK_NM](m_nInstance, cbSdkPkt_NM, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_NM]);
             }
             else if (pPkt->type == cbPKTTYPE_GROUPREP)
             {
-                if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-                    m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_GROUPINFO, pPkt, m_pLateCallback[CBSDKCALLBACK_ALL].params);
+                if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                    m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_GROUPINFO, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
                 // Late bind before usage
                 LateBindCallback(CBSDKCALLBACK_GROUPINFO);
-                if (m_pLateCallback[CBSDKCALLBACK_GROUPINFO].function)
-                    m_pLateCallback[CBSDKCALLBACK_GROUPINFO].function(m_nInstance, cbSdkPkt_GROUPINFO, pPkt, m_pLateCallback[CBSDKCALLBACK_GROUPINFO].params);
+                if (m_pLateCallback[CBSDKCALLBACK_GROUPINFO])
+                    m_pLateCallback[CBSDKCALLBACK_GROUPINFO](m_nInstance, cbSdkPkt_GROUPINFO, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_GROUPINFO]);
             }
             else if (pPkt->type == cbPKTTYPE_COMMENTREP)
             {
-                if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-                    m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_COMMENT, pPkt, m_pLateCallback[CBSDKCALLBACK_ALL].params);
+                if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                    m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_COMMENT, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
                 // Late bind before usage
                 LateBindCallback(CBSDKCALLBACK_COMMENT);
-                if (m_pLateCallback[CBSDKCALLBACK_COMMENT].function)
-                    m_pLateCallback[CBSDKCALLBACK_COMMENT].function(m_nInstance, cbSdkPkt_COMMENT, pPkt, m_pLateCallback[CBSDKCALLBACK_COMMENT].params);
+                if (m_pLateCallback[CBSDKCALLBACK_COMMENT])
+                    m_pLateCallback[CBSDKCALLBACK_COMMENT](m_nInstance, cbSdkPkt_COMMENT, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_COMMENT]);
                 // Fillout trial if setup
                 OnPktComment(reinterpret_cast<const cbPKT_COMMENT*>(pPkt));
             }
             else if (pPkt->type == cbPKTTYPE_REPFILECFG)
             {
-                if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-                    m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_FILECFG, pPkt, m_pLateCallback[CBSDKCALLBACK_ALL].params);
+                if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                    m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_FILECFG, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
                 // Late bind before usage
                 LateBindCallback(CBSDKCALLBACK_FILECFG);
-                if (m_pLateCallback[CBSDKCALLBACK_FILECFG].function)
-                    m_pLateCallback[CBSDKCALLBACK_FILECFG].function(m_nInstance, cbSdkPkt_FILECFG, pPkt, m_pLateCallback[CBSDKCALLBACK_COMMENT].params);
+                if (m_pLateCallback[CBSDKCALLBACK_FILECFG])
+                    m_pLateCallback[CBSDKCALLBACK_FILECFG](m_nInstance, cbSdkPkt_FILECFG, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_COMMENT]);
             }
             else if (pPkt->type == cbPKTTYPE_REPPOLL)
             {
                 // The callee should check flags to find if it is a response to poll, and do accordingly
-                if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-                    m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_POLL, pPkt, m_pLateCallback[CBSDKCALLBACK_ALL].params);
+                if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                    m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_POLL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
                 // Late bind before usage
                 LateBindCallback(CBSDKCALLBACK_POLL);
-                if (m_pLateCallback[CBSDKCALLBACK_POLL].function)
-                    m_pLateCallback[CBSDKCALLBACK_POLL].function(m_nInstance, cbSdkPkt_POLL, pPkt, m_pLateCallback[CBSDKCALLBACK_POLL].params);
+                if (m_pLateCallback[CBSDKCALLBACK_POLL])
+                    m_pLateCallback[CBSDKCALLBACK_POLL](m_nInstance, cbSdkPkt_POLL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_POLL]);
             }
             else if (pPkt->type == cbPKTTYPE_VIDEOTRACKREP)
             {
-                if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-                    m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_TRACKING, pPkt, m_pLateCallback[CBSDKCALLBACK_ALL].params);
+                if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                    m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_TRACKING, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
                 // Late bind before usage
                 LateBindCallback(CBSDKCALLBACK_TRACKING);
-                if (m_pLateCallback[CBSDKCALLBACK_TRACKING].function)
-                    m_pLateCallback[CBSDKCALLBACK_TRACKING].function(m_nInstance, cbSdkPkt_TRACKING, pPkt, m_pLateCallback[CBSDKCALLBACK_TRACKING].params);
+                if (m_pLateCallback[CBSDKCALLBACK_TRACKING])
+                    m_pLateCallback[CBSDKCALLBACK_TRACKING](m_nInstance, cbSdkPkt_TRACKING, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_TRACKING]);
                 // Fillout trial if setup
                 OnPktTrack(reinterpret_cast<const cbPKT_VIDEOTRACK*>(pPkt));
             }
             else if (pPkt->type == cbPKTTYPE_VIDEOSYNCHREP)
             {
                 m_lastPktVideoSynch = *reinterpret_cast<const cbPKT_VIDEOSYNCH*>(pPkt);
-                if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-                    m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_SYNCH, pPkt, m_pLateCallback[CBSDKCALLBACK_ALL].params);
+                if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                    m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_SYNCH, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
                 // Late bind before usage
                 LateBindCallback(CBSDKCALLBACK_SYNCH);
-                if (m_pLateCallback[CBSDKCALLBACK_SYNCH].function)
-                    m_pLateCallback[CBSDKCALLBACK_SYNCH].function(m_nInstance, cbSdkPkt_SYNCH, pPkt, m_pLateCallback[CBSDKCALLBACK_SYNCH].params);
+                if (m_pLateCallback[CBSDKCALLBACK_SYNCH])
+                    m_pLateCallback[CBSDKCALLBACK_SYNCH](m_nInstance, cbSdkPkt_SYNCH, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_SYNCH]);
             }
         } // end if (pPkt->chid==0x8000
     } // end if (pPkt->chid & 0x8000
@@ -3353,16 +3333,15 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
     {
         // No mask applied here
         // Inside the callback cbPKT_GROUP.type can be used to find the sample group number
-        // TODO: BUFFER SAMPLES HERE (or make a new function)
         UINT8 smpgroup = ((cbPKT_GROUP *)pPkt)->type; // smaple group
         if (smpgroup > 0 && smpgroup <= cbMAXGROUPS)
         {
-            if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-                m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_CONTINUOUS, pPkt, m_pLateCallback[CBSDKCALLBACK_ALL].params);
+            if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_CONTINUOUS, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
             // Late bind before usage
             LateBindCallback(CBSDKCALLBACK_CONTINUOUS);
-            if (m_pLateCallback[CBSDKCALLBACK_CONTINUOUS].function)
-                m_pLateCallback[CBSDKCALLBACK_CONTINUOUS].function(m_nInstance, cbSdkPkt_CONTINUOUS, pPkt, m_pLateCallback[CBSDKCALLBACK_CONTINUOUS].params);
+            if (m_pLateCallback[CBSDKCALLBACK_CONTINUOUS])
+                m_pLateCallback[CBSDKCALLBACK_CONTINUOUS](m_nInstance, cbSdkPkt_CONTINUOUS, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_CONTINUOUS]);
         }
     }
     // check for channel event packets cerebus channels 1-144
@@ -3370,12 +3349,12 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
     {
         if (pPkt->chid > 0 && m_bChannelMask[pPkt->chid - 1])
         {
-            if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-                m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_SPIKE, pPkt, m_pLateCallback[CBSDKCALLBACK_ALL].params);
+            if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_SPIKE, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
             // Late bind before usage
             LateBindCallback(CBSDKCALLBACK_SPIKE);
-            if (m_pLateCallback[CBSDKCALLBACK_SPIKE].function)
-                m_pLateCallback[CBSDKCALLBACK_SPIKE].function(m_nInstance, cbSdkPkt_SPIKE, pPkt, m_pLateCallback[CBSDKCALLBACK_SPIKE].params);
+            if (m_pLateCallback[CBSDKCALLBACK_SPIKE])
+                m_pLateCallback[CBSDKCALLBACK_SPIKE](m_nInstance, cbSdkPkt_SPIKE, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_SPIKE]);
         }
     }
     // catch digital input port events and save them as NSAS experiment event packets
@@ -3383,12 +3362,12 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
     {
         if (m_bChannelMask[pPkt->chid - 1])
         {
-            if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-                m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_DIGITAL, pPkt, m_pLateCallback[CBSDKCALLBACK_ALL].params);
+            if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_DIGITAL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
             // Late bind before usage
             LateBindCallback(CBSDKCALLBACK_DIGITAL);
-            if (m_pLateCallback[CBSDKCALLBACK_DIGITAL].function)
-                m_pLateCallback[CBSDKCALLBACK_DIGITAL].function(m_nInstance, cbSdkPkt_DIGITAL, pPkt, m_pLateCallback[CBSDKCALLBACK_DIGITAL].params);
+            if (m_pLateCallback[CBSDKCALLBACK_DIGITAL])
+                m_pLateCallback[CBSDKCALLBACK_DIGITAL](m_nInstance, cbSdkPkt_DIGITAL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_DIGITAL]);
         }
     }
     // catch serial input port events and save them as NSAS experiment event packets
@@ -3396,12 +3375,12 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
     {
         if (m_bChannelMask[pPkt->chid - 1])
         {
-            if (m_pLateCallback[CBSDKCALLBACK_ALL].function)
-                m_pLateCallback[CBSDKCALLBACK_ALL].function(m_nInstance, cbSdkPkt_SERIAL, pPkt, m_pLateCallback[CBSDKCALLBACK_ALL].params);
+            if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_SERIAL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
             // Late bind before usage
             LateBindCallback(CBSDKCALLBACK_SERIAL);
-            if (m_pLateCallback[CBSDKCALLBACK_SERIAL].function)
-                m_pLateCallback[CBSDKCALLBACK_SERIAL].function(m_nInstance, cbSdkPkt_SERIAL, pPkt, m_pLateCallback[CBSDKCALLBACK_SERIAL].params);
+            if (m_pLateCallback[CBSDKCALLBACK_SERIAL])
+                m_pLateCallback[CBSDKCALLBACK_SERIAL](m_nInstance, cbSdkPkt_SERIAL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_SERIAL]);
         }
     }
 

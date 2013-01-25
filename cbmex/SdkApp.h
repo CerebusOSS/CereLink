@@ -94,7 +94,6 @@ public:
     cbSdkResult SdkSetSpikeConfig(UINT32 spklength, UINT32 spkpretrig);
     cbSdkResult SdkGetSysConfig(UINT32 * spklength, UINT32 * spkpretrig, UINT32 * sysfreq);
     cbSdkResult SdkSystem(cbSdkSystemType cmd);
-    cbSdkResult SdkSetupCallback(cbSdkCallbackType callbacktype, UINT32 samplebuffersize, UINT32 expirationperiod);
     cbSdkResult SdkRegisterCallback(cbSdkCallbackType callbacktype, cbSdkCallback pCallbackFn, void * pCallbackData);
     cbSdkResult SdkUnRegisterCallback(cbSdkCallbackType callbacktype);
 
@@ -117,26 +116,11 @@ private:
     // Lock for accessing the callbacks
     QMutex m_lockCallback;
     // Actual registered callbacks
-    struct cbCallback
-    {
-        cbSdkCallback function;
-        void * params;
-        UINT32 buffersize;
-        UINT32 expiration;
-
-        cbCallback() { clear(); }
-
-        void clear()
-        {
-            function = NULL;
-            params = NULL;
-            buffersize = 0;
-            expiration = 0;
-            // TODO: Clear Buffers Here!
-        }
-    } m_pCallback[CBSDKCALLBACK_COUNT],
-      m_pLateCallback[CBSDKCALLBACK_COUNT];  // Late bound versions are internal
-
+    cbSdkCallback m_pCallback[CBSDKCALLBACK_COUNT];
+    void * m_pCallbackParams[CBSDKCALLBACK_COUNT];
+    // Late bound versions are internal
+    cbSdkCallback m_pLateCallback[CBSDKCALLBACK_COUNT];
+    void * m_pLateCallbackParams[CBSDKCALLBACK_COUNT];
 
     /////////////////////////////////////////////////////////////////////////////
     // Declarations for tracking the beginning and end of trials
