@@ -1378,7 +1378,7 @@ cbSdkResult SdkApp::SdkSetTrialConfig(UINT32 bActive, UINT16 begchan, UINT32 beg
             m_CMT->timestamps = new UINT32[m_CMT->size];
             m_CMT->rgba = new UINT32[m_CMT->size];
             m_CMT->charset = new UINT8[m_CMT->size];
-            m_CMT->comments = new (UINT8 * [m_CMT->size]); // UINT8 * array[m_CMT->size]
+            m_CMT->comments = new UINT8 * [m_CMT->size]; // UINT8 * array[m_CMT->size]
             if (m_CMT->timestamps == NULL || m_CMT->rgba == NULL || m_CMT->charset == NULL || m_CMT->comments == NULL)
                 bErr = true;
             try {
@@ -1426,7 +1426,7 @@ cbSdkResult SdkApp::SdkSetTrialConfig(UINT32 bActive, UINT16 begchan, UINT32 beg
                     m_TR->synch_timestamps[i] = new UINT32[m_TR->size];
                     m_TR->synch_frame_numbers[i] = new UINT32[m_TR->size];
                     m_TR->point_counts[i] = new UINT16[m_TR->size];
-                    m_TR->coords[i] = new (void * [m_TR->size]);
+                    m_TR->coords[i] = new void * [m_TR->size];
 
                     if (m_TR->timestamps[i] == NULL || m_TR->synch_timestamps[i] == NULL || m_TR->synch_frame_numbers[i] == NULL ||
                             m_TR->point_counts[i]== NULL || m_TR->coords[i] == NULL)
