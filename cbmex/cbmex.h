@@ -233,6 +233,10 @@ void OnSystem        (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]
         " from left to right parameters will override previous ones or combine with them if possible.\n" \
         "<parameter>[, value] can be any of:\n" \
         "'instance', value: value is the library instance to use (default is 0)\n" \
+        "'option', value: value is can be any of the 'open', 'close', 'none' (default)\n" \
+        "         'close' - closes the File dialog if open\n" \
+        "         'open'  - opens the File dialog if closed, ignoring other parameters\n" \
+        "         'none'  - opens the File dialog if closed, sets parameters given, starts or stops recording\n" \
 
 #define CBMEX_USAGE_DIGITALOUT \
         "Set digital output properties for given channel\n" \

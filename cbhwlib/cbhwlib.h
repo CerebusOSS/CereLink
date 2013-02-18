@@ -1414,6 +1414,9 @@ cbRESULT cbSetSpikeLength(UINT32 length, UINT32 pretrig, UINT32 nInstance = 0);
 #define cbRUNLEVEL_ERROR        70
 #define cbRUNLEVEL_SHUTDOWN     80
 
+#define cbRUNFLAGS_NONE          0
+#define cbRUNFLAGS_LOCK          1 // Lock recording after reset
+
 #ifdef __cplusplus
 cbRESULT cbGetSystemRunLevel(UINT32 *runlevel, UINT32 *locked, UINT32 *resetque, UINT32 nInstance = 0);
 cbRESULT cbSetSystemRunLevel(UINT32 runlevel, UINT32 locked, UINT32 resetque, UINT32 nInstance = 0);
@@ -2055,13 +2058,14 @@ cbRESULT cbGetChannelSelection(cbPKT_UNIT_SELECTION * pPktUnitSel, UINT32 nInsta
 
 
 // file config options
-#define cbFILECFG_OPT_NONE         0x00000000  // Launch File dialog, start or stop recording
+#define cbFILECFG_OPT_NONE         0x00000000  // Launch File dialog, set filew info, start or stop recording
 #define cbFILECFG_OPT_KEEPALIVE    0x00000001  // Keep-alive message
 #define cbFILECFG_OPT_REC          0x00000002  // Recording is in progress
 #define cbFILECFG_OPT_STOP         0x00000003  // Recording stopped
 #define cbFILECFG_OPT_NMREC        0x00000004  // NeuroMotive recording status
-#define cbFILECFG_OPT_CLOSE        0x00000005  // Close file.exe
+#define cbFILECFG_OPT_CLOSE        0x00000005  // Close file application
 #define cbFILECFG_OPT_SYNCH        0x00000006  // Recording datetime
+#define cbFILECFG_OPT_OPEN         0x00000007  // Launch File dialog, do not set or do anything
 
 // file save configuration packet
 #define cbPKTTYPE_REPFILECFG 0x61

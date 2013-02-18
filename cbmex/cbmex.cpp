@@ -1596,11 +1596,13 @@ void OnFileConfig(
         PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Invalid action parameter");
 
     UINT32 bStart = (UINT32) mxGetScalar(prhs[3]);
+    UINT32 options = cbFILECFG_OPT_NONE;
 
     enum
     {
         PARAM_NONE,
         PARAM_INSTANCE,
+        PARAM_OPTION,
     } param = PARAM_NONE;
 
     // Process remaining input arguments if available
@@ -1618,6 +1620,10 @@ void OnFileConfig(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
+            }
+            else if (_strcmpi(cmdstr, "option") == 0)
+            {
+                param = PARAM_OPTION;
             } else {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
@@ -1631,6 +1637,28 @@ void OnFileConfig(
                     PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Invalid instance number");
                 nInstance = (UINT32)mxGetScalar(prhs[i]);
                 break;
+            case PARAM_OPTION:
+                {
+                    char cmdstr[128];
+                    // check for proper data structure
+                    if (mxGetClassID(prhs[i]) != mxCHAR_CLASS || mxGetString(prhs[i], cmdstr, 10))
+                        PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Invalid option parameter");
+                    if (_strcmpi(cmdstr, "none") == 0)
+                    {
+                        options = cbFILECFG_OPT_NONE;
+                    }
+                    else if (_strcmpi(cmdstr, "close") == 0)
+                    {
+                        options = cbFILECFG_OPT_CLOSE;
+                    }
+                    else if (_strcmpi(cmdstr, "open") == 0)
+                    {
+                        options = cbFILECFG_OPT_OPEN;
+                    } else {
+                        PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Invalid option parameter");
+                    }
+                }
+                break;
             default:
                 break;
             }
@@ -1643,7 +1671,7 @@ void OnFileConfig(
         PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Last parameter requires value");
     }
 
-    cbSdkResult res = cbSdkSetFileConfig(nInstance, fcpkt.filename, fcpkt.comment, bStart);
+    cbSdkResult res = cbSdkSetFileConfig(nInstance, fcpkt.filename, fcpkt.comment, bStart, options);
     PrintErrorSDK(res, "cbSdkSetFileConfig()");
 }
 
