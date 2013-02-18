@@ -1784,7 +1784,7 @@ typedef struct {
         type = cbPKTTYPE_SETNTRODEINFO;
         dlen = ((sizeof(*this) / 4) - 2);
         this->ntrode = ntrode;
-        memcpy(this->label, label, sizeof(label));
+        memcpy(this->label, label, sizeof(this->label));
         memset(this->ellipses, 0, sizeof(ellipses));
     }
 #endif

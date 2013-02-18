@@ -159,10 +159,14 @@ cbRESULT UDPSocket::Open(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bool 
 
     // Attempt to bind Data Stream Socket to lowest address in range 192.168.137.1 to XXX.16
     BOOL socketbound = FALSE;
-    SOCKADDR_IN inst_sockaddr = {0};
+    SOCKADDR_IN inst_sockaddr;
+    memset(&inst_sockaddr, 0, sizeof(inst_sockaddr));
 
     inst_sockaddr.sin_family      = AF_INET;
     inst_sockaddr.sin_port        = htons(nInPort);    // Neuroflow Data Port
+#ifdef __APPLE__
+	inst_sockaddr.sin_len = sizeof(inst_sockaddr);
+#endif
     if (szInIP == 0)
         inst_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     else

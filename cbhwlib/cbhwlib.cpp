@@ -2897,7 +2897,30 @@ cbRESULT cbCheckforData(cbLevelOfConcern & nLevelOfConcern, UINT32 *pktstogo /* 
     return cbRESULT_OK;
 }
 
+#if defined __APPLE__
+// Author & Date:   Ehsan Azar     16 Feb 2013
+// Purpose: OSX compatibility wrapper
+// Inputs:
+//   sem    - buffer name
+//   ms     - milliseconds to try semaphore
+int sem_timedwait(sem_t * sem, int ms)
+{
+	int err = 1;
+	while (ms > 0)
+	{
+		if (sem_trywait(sem) == 0)
+		{
+			err = 0;
+			break;
+		}
+		usleep(1000);
+		ms--;
+	}
+	return err;
+}
+#endif
 
+// Purpose: Wait for master application (usually Central) to fill buffers
 cbRESULT cbWaitforData(UINT32 nInstance)
 {
     UINT32 nIdx = cb_library_index[nInstance];
@@ -2905,10 +2928,15 @@ cbRESULT cbWaitforData(UINT32 nInstance)
 #ifdef WIN32
     if (WaitForSingleObject(cb_sig_event_hnd[nIdx], 250) == WAIT_OBJECT_0)
         return cbRESULT_OK;
+#elif defined __APPLE__
+    if (sem_timedwait((sem_t *)cb_sig_event_hnd[nIdx], 250) == 0)
+        return cbRESULT_OK;
 #else
     timespec ts;
+    long ns = 250000000;
     clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_nsec += 250000000;
+    ts.tv_nsec = (ts.tv_nsec + ns) % NSEC_PER_SEC;
+    ts.tv_sec += (ts.tv_nsec + ns) / NSEC_PER_SEC;
     if (sem_timedwait((sem_t *)cb_sig_event_hnd[nIdx], &ts) == 0)
         return cbRESULT_OK;
 #endif

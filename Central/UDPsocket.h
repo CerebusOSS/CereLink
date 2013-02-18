@@ -25,7 +25,9 @@
 #include <winsock2.h>
 #include <windows.h>
 #else
+#ifndef __APPLE__
 #include <linux/sockios.h>
+#endif
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/ioctl.h>
