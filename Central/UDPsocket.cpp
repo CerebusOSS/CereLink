@@ -165,7 +165,7 @@ cbRESULT UDPSocket::Open(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bool 
     inst_sockaddr.sin_family      = AF_INET;
     inst_sockaddr.sin_port        = htons(nInPort);    // Neuroflow Data Port
 #ifdef __APPLE__
-	inst_sockaddr.sin_len = sizeof(inst_sockaddr);
+    inst_sockaddr.sin_len = sizeof(inst_sockaddr);
 #endif
     if (szInIP == 0)
         inst_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);

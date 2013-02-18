@@ -2905,18 +2905,18 @@ cbRESULT cbCheckforData(cbLevelOfConcern & nLevelOfConcern, UINT32 *pktstogo /* 
 //   ms     - milliseconds to try semaphore
 int sem_timedwait(sem_t * sem, int ms)
 {
-	int err = 1;
-	while (ms > 0)
-	{
-		if (sem_trywait(sem) == 0)
-		{
-			err = 0;
-			break;
-		}
-		usleep(1000);
-		ms--;
-	}
-	return err;
+    int err = 1;
+    while (ms > 0)
+    {
+        if (sem_trywait(sem) == 0)
+        {
+            err = 0;
+            break;
+        }
+        usleep(1000);
+        ms--;
+    }
+    return err;
 }
 #endif
 
@@ -2935,8 +2935,9 @@ cbRESULT cbWaitforData(UINT32 nInstance)
     timespec ts;
     long ns = 250000000;
     clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_nsec = (ts.tv_nsec + ns) % NSEC_PER_SEC;
-    ts.tv_sec += (ts.tv_nsec + ns) / NSEC_PER_SEC;
+#define NANOSECONDS_PER_SEC    1000000000L
+    ts.tv_nsec = (ts.tv_nsec + ns) % NANOSECONDS_PER_SEC;
+    ts.tv_sec += (ts.tv_nsec + ns) / NANOSECONDS_PER_SEC;
     if (sem_timedwait((sem_t *)cb_sig_event_hnd[nIdx], &ts) == 0)
         return cbRESULT_OK;
 #endif

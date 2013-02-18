@@ -67,7 +67,8 @@ void WriteCCFHelper(QString strFileName, cbCCF ccf, cbCCFCallback pCallbackFn, U
 {
     // make sure byte array is constructed, thus we can use the internal pointer to character data
     const QByteArray tmp = strFileName.toAscii();
-    LPCSTR szFileName = tmp; 
+    LPCSTR szFileName = tmp;
+    QThread::currentThread()->setPriority(QThread::LowestPriority);
     if (pCallbackFn)
         pCallbackFn(nInstance, CCFRESULT_SUCCESS, szFileName, CCFSTATE_THREADWRITE, 0);
     // If valid ccf is passed, use it as initial data, otherwise use NULL to have it read from NSP
