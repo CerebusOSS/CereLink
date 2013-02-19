@@ -1601,6 +1601,30 @@ cbRESULT cbSetChanAmplitudeReject(UINT32 chan, const cbAMPLITUDEREJECT Amplitude
     return cbSendPacket(&chaninfo, nInstance);
 }
 
+// Author & Date:   Ehsan Azar     22 Jan 2013
+// Purpose: Get full channel config
+// Inputs:
+//   chan - channel number (1-based)
+// Outputs:
+//   chaninfo   - shared segment size to create
+//   Returns the error code
+cbRESULT cbGetChanInfo(UINT32 chan, cbPKT_CHANINFO *chaninfo, UINT32 nInstance)
+{
+    UINT32 nIdx = cb_library_index[nInstance];
+
+    // Test for prior library initialization
+    if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
+
+    // Test that the channel address is valid and initialized
+    if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+
+    // Return the requested data from the rec buffer
+    if (chaninfo) memcpy(chaninfo, &(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1]), sizeof(cbPKT_CHANINFO));
+
+    return cbRESULT_OK;
+}
+
 cbRESULT cbGetChanAutoThreshold(UINT32 chan, UINT32 *bEnabled, UINT32 nInstance)
 {
     UINT32 nIdx = cb_library_index[nInstance];

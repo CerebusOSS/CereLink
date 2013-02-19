@@ -1932,6 +1932,12 @@ typedef struct {
 } cbPKT_CHANINFO;
 
 #ifdef __cplusplus
+cbRESULT cbGetChanInfo(UINT32 chan, cbPKT_CHANINFO *pChanInfo, UINT32 nInstance = 0);
+// Get the full channel config.
+//
+// Returns: cbRESULT_OK if data successfully retreived or packet successfully queued to be sent.
+//          cbRESULT_INVALIDCHANNEL if the specified channel is not mapped or does not exist.
+//          cbRESULT_NOLIBRARY if the library was not properly initialized.
 cbRESULT cbGetChanAmplitudeReject(UINT32 chan, cbAMPLITUDEREJECT *AmplitudeReject, UINT32 nInstance = 0);
 cbRESULT cbSetChanAmplitudeReject(UINT32 chan, const cbAMPLITUDEREJECT AmplitudeReject, UINT32 nInstance = 0);
 // Get and Set the user-assigned amplitude reject values.

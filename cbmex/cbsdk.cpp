@@ -2230,7 +2230,7 @@ cbSdkResult SdkApp::SdkSetFileConfig(const char * filename, const char * comment
     fcpkt.recording = bStart ? 1 : 0;
 
     // send the packet
-    cbRESULT cbres = cbSendPacket(&fcpkt);
+    cbRESULT cbres = cbSendPacket(&fcpkt, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
 
@@ -2293,7 +2293,7 @@ cbSdkResult SdkApp::SdkSetPatientInfo(const char * ID, const char * firstname, c
     fcpkt.DOBYear = DOBYear;
 
     // send the packet
-    cbRESULT cbres = cbSendPacket(&fcpkt);
+    cbRESULT cbres = cbSendPacket(&fcpkt, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
 
@@ -2345,7 +2345,7 @@ cbSdkResult SdkApp::SdkInitiateImpedance()
 
     iipkt.initiate = 1;        // start autoimpedance
     // send the packet
-    cbRESULT cbres = cbSendPacket(&iipkt);
+    cbRESULT cbres = cbSendPacket(&iipkt, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
 
@@ -2397,7 +2397,7 @@ cbSdkResult SdkApp::SdkSendPoll(const char* appname, UINT32 mode, UINT32 flags, 
     polepkt.username[sizeof(polepkt.username) - 1] = 0;
 
     // send the packet
-    cbRESULT cbres = cbSendPacket(&polepkt);
+    cbRESULT cbres = cbSendPacket(&polepkt, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
 
@@ -2432,7 +2432,7 @@ cbSdkResult SdkApp::SdkSendPacket(void * ppckt)
         return CBSDKRESULT_CLOSED;
 
     // send the packet
-    cbRESULT cbres = cbSendPacket(ppckt);
+    cbRESULT cbres = cbSendPacket(ppckt, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
 
@@ -2475,7 +2475,7 @@ cbSdkResult SdkApp::SdkSetSystemRunLevel(UINT32 runlevel, UINT32 locked, UINT32 
     sysinfo.runflags = locked;
 
     // Enter the packet into the XMT buffer queue
-    cbRESULT cbres = cbSendPacket(&sysinfo);
+    cbRESULT cbres = cbSendPacket(&sysinfo, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
 
@@ -2519,7 +2519,7 @@ cbSdkResult SdkApp::SdkSetDigitalOutput(UINT16 channel, UINT16 value)
     dopkt.value = value;
 
     // send the packet
-    cbRESULT cbres = cbSendPacket(&dopkt);
+    cbRESULT cbres = cbSendPacket(&dopkt, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
 
@@ -2615,7 +2615,7 @@ cbSdkResult SdkApp::SdkSetAnalogOutput(UINT16 channel, cbSdkWaveformData * wf, c
         if (wfPkt.trig == cbWAVEFORM_TRIGGER_NONE)
             wfPkt.active = 1;
         // send the waveform packet
-        cbSendPacket(&wfPkt);
+        cbSendPacket(&wfPkt, m_nInstance);
         // Also make sure channel is to output waveform
         dwOptions &= ~(cbAOUT_MONITORSMP | cbAOUT_MONITORSPK);
         dwOptions |= cbAOUT_WAVEFORM;
@@ -2754,7 +2754,7 @@ cbSdkResult SdkApp::SdkSetChannelConfig(UINT16 channel, cbPKT_CHANINFO * chaninf
 
     chaninfo->type = cbPKTTYPE_CHANSET;
     chaninfo->dlen = cbPKTDLEN_CHANINFO;
-    cbRESULT cbres = cbSendPacket(chaninfo);
+    cbRESULT cbres = cbSendPacket(chaninfo, m_nInstance);
     if (cbres == cbRESULT_NOLIBRARY)
         return CBSDKRESULT_CLOSED;
     if (cbres)
@@ -2799,11 +2799,12 @@ cbSdkResult SdkApp::SdkGetChannelConfig(UINT16 channel, cbPKT_CHANINFO * chaninf
         return CBSDKRESULT_CLOSED;
     if (!cb_library_initialized[m_nIdx])
         return CBSDKRESULT_CLOSED;
-    if (cb_cfg_buffer_ptr[m_nIdx]->chaninfo[channel - 1].chid == 0)
+
+    cbRESULT cbres = cbGetChanInfo(channel, chaninfo, m_nInstance);
+    if (cbres == cbRESULT_INVALIDCHANNEL)
         return CBSDKRESULT_INVALIDCHANNEL;
-
-    memcpy(chaninfo, &(cb_cfg_buffer_ptr[m_nIdx]->chaninfo[channel - 1]), sizeof(cbPKT_CHANINFO));
-
+    if (cbres)
+        return CBSDKRESULT_UNKNOWN;
     return CBSDKRESULT_SUCCESS;
 }
 
