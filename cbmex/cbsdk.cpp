@@ -3054,7 +3054,7 @@ cbSdkResult SdkApp::SdkSystem(cbSdkSystemType cmd)
     default:
         return CBSDKRESULT_NOTIMPLEMENTED;
     }
-    cbRESULT cbres = cbSendPacket(&pktsysinfo);
+    cbRESULT cbres = cbSendPacket(&pktsysinfo, m_nInstance);
     if (cbres == cbRESULT_NOLIBRARY)
         return CBSDKRESULT_CLOSED;
     if (cbres)
