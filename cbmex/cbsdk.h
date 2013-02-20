@@ -34,6 +34,10 @@
 
 #include "cbhwlib.h"
 
+#ifdef STATIC_CBSDK_LINK
+#undef CBSDK_EXPORTS
+#endif
+
 #ifdef WIN32
 // Windows shared library
 #ifdef CBSDK_EXPORTS

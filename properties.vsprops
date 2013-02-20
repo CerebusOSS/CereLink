@@ -14,4 +14,9 @@
 		Value="C:\Program Files (x86)\HDF Group\HDF5\1.8.9"
 		PerformEnvironmentSet="true"
 	/>
+	<UserMacro
+		Name="PYTHONDIR"
+		Value="C:\Python27"
+		PerformEnvironmentSet="true"
+	/>
 </VisualStudioPropertySheet>
