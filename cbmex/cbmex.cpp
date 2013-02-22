@@ -2506,7 +2506,7 @@ void OnConfig(
                 break;
             case PARAM_SMPFILTER:
                 if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid smpfiler number");
+                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid smpfilter number");
                 chaninfo.smpfilter = (UINT32)mxGetScalar(prhs[i]);
                 if (chaninfo.smpfilter >= (cbFIRST_DIGITAL_FILTER + cbNUM_DIGITAL_FILTERS))
                     mexErrMsgTxt("Invalid continuous filter number");
@@ -2642,19 +2642,19 @@ void OnConfig(
         mxSetCell(pca, count + 8, mxCreateScalarDouble(chaninfo.refelecchan));
 
         mxSetCell(pca, 9, mxCreateString("analog_unit"));
-        mxSetCell(pca, count + 9, mxCreateString(chaninfo.physcalout.anaunit));
+        mxSetCell(pca, count + 9, mxCreateString(chaninfo.physcalin.anaunit));
 
         mxSetCell(pca, 10, mxCreateString("max_analog"));
-        mxSetCell(pca, count + 10, mxCreateScalarDouble(chaninfo.physcalout.anamax));
+        mxSetCell(pca, count + 10, mxCreateScalarDouble(chaninfo.physcalin.anamax));
 
         mxSetCell(pca, 11, mxCreateString("max_digital"));
-        mxSetCell(pca, count + 11, mxCreateScalarDouble(chaninfo.physcalout.digmax));
+        mxSetCell(pca, count + 11, mxCreateScalarDouble(chaninfo.physcalin.digmax));
 
         mxSetCell(pca, 12, mxCreateString("min_analog"));
-        mxSetCell(pca, count + 12, mxCreateScalarDouble(chaninfo.physcalout.anamin));
+        mxSetCell(pca, count + 12, mxCreateScalarDouble(chaninfo.physcalin.anamin));
 
         mxSetCell(pca, 13, mxCreateString("min_digital"));
-        mxSetCell(pca, count + 13, mxCreateScalarDouble(chaninfo.physcalout.digmin));
+        mxSetCell(pca, count + 13, mxCreateScalarDouble(chaninfo.physcalin.digmin));
     }
 
     // if new configuration to send
