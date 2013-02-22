@@ -336,18 +336,13 @@ void OnSystem        (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]
         "<parameter>[, value] can be any of:\n" \
         "'instance', value: value is the library instance to use (default is 0)\n" \
         "'userflags', value: a user-defind value for the channel\n" \
-        "'doutopts', value: bit-field for digital output options\n" \
-        "'dinpopts', value: bit-field for digital input options\n" \
-        "'aoutopts', value: bit-field for analog output options\n" \
-        "'ainpopts', value: bit-field for analog input options\n" \
         "'smpfilter', value: continuous filter number\n" \
-        "'smpgroup', value: continuous sampling group\n" \
+        "'smpgroup', value: continuous sampling group number\n" \
         "'spkfilter', value: spike filter number\n" \
-        "'spkopts', value: bit-field for spike options\n" \
-        "'spkthrlevel', value: spike threshold level\n" \
         "'spkgroup', value: NTrode group number\n" \
-        "'amplrejpos', value: amplitude rejection positive range\n" \
-        "'amplrejneg', value: amplitude rejection negative range\n" \
+        "'spkthrlevel', value: spike threshold level (can be raw integer, or string such as '-65mV')\n" \
+        "'amplrejpos', value: amplitude rejection positive range (can be raw integer, or string such as '5V')\n" \
+        "'amplrejneg', value: amplitude rejection negative range (can be raw integer, or string such as '-5V')\n" \
         "'refelecchan', value: reference electrode number\n" \
         "\n" \
         "Outputs:\n" \
@@ -357,23 +352,23 @@ void OnSystem        (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]
         " <parameter> can be anything that is also specified in the Inputs section (plus the additional parameters below)\n" \
         " <value> will be the configuration value for the channel\n" \
         " additional <parameter>\n" \
-        "'analogUnit': unit of analog value\n" \
-        "'maxAnalog': maximum analog value\n" \
-        "'maxDigital': maximum digital value\n" \
-        "'minAnalog': minimum analog value\n" \
-        "'minDigital': minimum digital value\n" \
+        "'analog_unit': unit of analog value\n" \
+        "'max_analog': maximum analog value\n" \
+        "'max_digital': maximum digital value\n" \
+        "'min_analog': minimum analog value\n" \
+        "'min_digital': minimum digital value\n" \
 
 #define CBMEX_USAGE_CCF \
         "Read, write and send CCF configuration file\n" \
-        "Format: cbmex('ccf', filename, [<parameter>[, value]])\n" \
+        "Format: cbmex('ccf', [<parameter>[, value]])\n" \
         "Inputs:\n" \
-        "filename: CCF filename to read\n" \
-        "         Read from NSP if it is zero length string (i.e. '')\n" \
         "<parameter>[, value] pairs are optional, some parameters do not have values.\n" \
         " from left to right parameters will override previous ones or combine with them if possible.\n" \
         "<parameter>[, value] can be any of:\n" \
-        "'send': read and send CCF file to NSP (default if no other parameter is specified)\n" \
-        "'convert', newfilename: write what is read to new CCF file (in latest format)\n" \
+        "'threaded': Use threaded operation when possible\n" \
+        "'send', filename: read CCF file and send it to NSP\n" \
+        "'save', destination_file: Save active configuration to CCF file\n" \
+        "'load', source_file, 'convert', destination_file: convert source file to new CCF file (in latest format)\n" \
         "'instance', value: value is the library instance to use (default is 0)\n" \
     
 #define CBMEX_USAGE_SYSTEM \

@@ -29,6 +29,7 @@
 #include "../CentralCommon/BmiVersion.h"
 #include "cbHwlibHi.h"
 #include "debugmacs.h"
+#include <math.h>
 #include <QCoreApplication>
 
 // Keep this after all headers
@@ -2255,6 +2256,51 @@ CBSDKAPI    cbSdkResult cbSdkSetFileConfig(UINT32 nInstance,
     return g_app[nInstance]->SdkSetFileConfig(filename, comment, bStart, options);
 }
 
+// Author & Date:   Ehsan Azar     20 Feb 2013
+// Purpose: Get file recording information
+// Outputs:
+//   filename      - file name being recorded
+//   username      - user name recording the file
+//   pbRecording   - If recordign is in progress (depends on keep-alive mechanism)
+//   returns the error code
+cbSdkResult SdkApp::SdkGetFileConfig(char * filename, char * username, bool * pbRecording)
+{
+    return CBSDKRESULT_NOTIMPLEMENTED;
+#if 0
+    if (m_instInfo == 0)
+        return CBSDKRESULT_CLOSED;
+
+    // declare the packet that will be sent
+    cbPKT_FILECFG filecfg;
+    cbRESULT cbres = cbGetFileInfo(&filecfg, m_nInstance);
+    if (cbres)
+        return CBSDKRESULT_UNKNOWN;
+
+    if (filename)
+        strncpy(filename, filecfg.filename, sizeof(filecfg.filename));
+    if (username)
+        strncpy(username, filecfg.username, sizeof(filecfg.username));
+    if (pbRecording)
+        *pbRecording = (filecfg.options == cbFILECFG_OPT_REC);
+
+    return CBSDKRESULT_SUCCESS;
+#endif
+}
+
+// Purpose: sdk stub for SdkApp::SdkGetFileConfig
+CBSDKAPI    cbSdkResult cbSdkGetFileConfig(UINT32 nInstance,
+                                           char * filename, char * username, bool * pbRecording)
+{
+    if (filename == NULL && username == NULL && pbRecording == NULL)
+        return CBSDKRESULT_NULLPTR;
+    if (nInstance >= cbMAXOPEN)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (g_app[nInstance] == NULL)
+        return CBSDKRESULT_CLOSED;
+
+    return g_app[nInstance]->SdkGetFileConfig(filename, username, pbRecording);
+}
+
 // Author & Date:   Tom Richins     31 Mar 2011
 // Purpose: Share Patient demographics for recording
 //    Inputs:
@@ -3143,6 +3189,106 @@ CBSDKAPI    cbSdkResult cbSdkUnRegisterCallback(UINT32 nInstance, cbSdkCallbackT
         return CBSDKRESULT_CLOSED;
 
     return g_app[nInstance]->SdkUnRegisterCallback(callbacktype);
+}
+
+// Author & Date:   Ehsan Azar     21 Feb 2013
+// Purpose: Convert volts string (e.g. '5V', '-65mV', ...) to its raw digital value equivalent for given channel
+// Inputs:
+//   channel           - the channel number (1-based)
+//   szVoltsUnitString - the volts string
+// Outputs:
+//   digital - the raw digital value
+//   returns the error code
+cbSdkResult SdkApp::SdkAnalogToDigital(UINT16 channel, const char * szVoltsUnitString, INT32 * digital)
+{
+    if (m_instInfo == 0)
+        return CBSDKRESULT_CLOSED;
+    if (!cb_library_initialized[m_nIdx])
+        return CBSDKRESULT_CLOSED;
+    int len = (int)strlen(szVoltsUnitString);
+    if (len > 16)
+        return CBSDKRESULT_INVALIDPARAM;
+    INT32 nFactor = 0;
+    std::string strVolts = szVoltsUnitString;
+    std::string strUnit = "";
+    if (strVolts.rfind("V") != std::string::npos)
+    {
+        nFactor = 1;
+        strUnit = "V";
+    }
+    else if (strVolts.rfind("mV") != std::string::npos)
+    {
+        nFactor = 1000;
+        strUnit = "mV";
+    }
+    else if (strVolts.rfind("uV") != std::string::npos)
+    {
+        nFactor = 1000000;
+        strUnit = "uV";
+    }
+    else if (strVolts.rfind("nV") != std::string::npos)
+    {
+        nFactor = 1000000000;
+        strUnit = "nV";
+    }
+    char * pEnd = NULL;
+    double dValue = 0;
+    long nValue = 0;
+    // If no units specified, assume raw integer passed as string
+    if (nFactor == 0)
+    {
+        nValue = strtol(szVoltsUnitString, &pEnd, 0);
+    } else {
+        dValue = strtod(szVoltsUnitString, &pEnd);
+    }
+    if (pEnd == szVoltsUnitString)
+        return CBSDKRESULT_INVALIDPARAM;
+    // What remains should be just the unit string
+    std::string strRest = pEnd;
+    // Remove all spaces
+    std::string::iterator end_pos = std::remove(strRest.begin(), strRest.end(), ' ');
+    strRest.erase(end_pos, strRest.end());
+    if (strRest != strUnit)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (nFactor == 0)
+    {
+        *digital = (INT32)nValue;
+        return CBSDKRESULT_SUCCESS;
+    }
+    cbSCALING scale;
+    cbRESULT cbres;
+    if (IsChanAnalogIn(channel))
+        cbres = cbGetAinpScaling(channel, &scale, m_nInstance);
+    else
+        cbres = cbGetAoutScaling(channel, &scale, m_nInstance);
+    if (cbres == cbRESULT_NOLIBRARY)
+        return CBSDKRESULT_CLOSED;
+    if (cbres)
+        return CBSDKRESULT_UNKNOWN;
+    strUnit = scale.anaunit;
+    double chan_factor = 1;
+    if (strUnit.compare("mV") == 0)
+        chan_factor = 1000;
+    else if (strUnit.compare("uV") == 0)
+        chan_factor = 1000000;
+    // TODO: see if anagain needs to be used
+    *digital = (INT32)floor(((dValue * scale.digmax) * chan_factor) / ((double)nFactor * scale.anamax));
+    return CBSDKRESULT_SUCCESS;
+}
+
+// Purpose: sdk stub for SdkApp::SdkAnalogToDigital
+CBSDKAPI    cbSdkResult cbSdkAnalogToDigital(UINT32 nInstance, UINT16 channel, const char * szVoltsUnitString, INT32 * digital)
+{
+    if (channel == 0 || channel > cbMAXCHANS)
+        return CBSDKRESULT_INVALIDCHANNEL;
+    if (nInstance >= cbMAXOPEN)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (g_app[nInstance] == NULL)
+        return CBSDKRESULT_CLOSED;
+    if (szVoltsUnitString == NULL || digital == NULL)
+        return CBSDKRESULT_NULLPTR;
+
+    return g_app[nInstance]->SdkAnalogToDigital(channel, szVoltsUnitString, digital);
 }
 
 // Author & Date: Ehsan Azar       29 April 2012
