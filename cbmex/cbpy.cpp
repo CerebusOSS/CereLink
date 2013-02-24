@@ -20,7 +20,8 @@
 
 #include "StdAfx.h"
 #include "cbpy.h"
-#include "arrayobject.h"
+#define NPY_NO_DEPRECATED_API  NPY_1_7_API_VERSION
+#include "numpy/arrayobject.h"
 #include <vector>
 #include <string>
 #include <map>
@@ -156,7 +157,7 @@ static PyObject * cbpy_Version(PyObject *self, PyObject *args, PyObject *keywds)
     PyObject * res = NULL;
     int nInstance = 0;
     cbSdkVersion ver;
-    static char kw[][16] = {"instance"};
+    static char kw[][32] = {"instance"};
     static char * kwlist[] = {kw[0], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "|i", kwlist, &nInstance))
         return NULL;
@@ -188,7 +189,7 @@ static PyObject * cbpy_Register(PyObject *self, PyObject *args, PyObject *keywds
     PyObject *pCallback = NULL;
     char * pSzType = NULL;
     int nInstance = 0;
-    static char kw[][16] = {"type", "callback", "instance"};
+    static char kw[][32] = {"type", "callback", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "sO|i:Register", kwlist, &pSzType, &pCallback, &nInstance))
         return NULL;
@@ -242,7 +243,7 @@ static PyObject * cbpy_Open(PyObject *self, PyObject *args, PyObject *keywds)
     int nInstance = 0;
     PyObject * pConParam = NULL;
 
-    static char kw[][16] = {"connection", "instance", "parameter"};
+    static char kw[][32] = {"connection", "instance", "parameter"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "|siO!", kwlist,
                                      &pSzConnection, &nInstance, &PyDict_Type, &pConParam))
@@ -315,7 +316,7 @@ static PyObject * cbpy_Close(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     int nInstance = 0;
-    static char kw[][16] = {"instance"};
+    static char kw[][32] = {"instance"};
     static char * kwlist[] = {kw[0], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "|i", kwlist, &nInstance))
         return NULL;
@@ -338,7 +339,7 @@ static PyObject * cbpy_Time(PyObject *self, PyObject *args, PyObject *keywds)
     char * pSzUnit = NULL;
     int nInstance = 0;
     PyObject * res = NULL;
-    static char kw[][16] = {"unit", "instance"};
+    static char kw[][32] = {"unit", "instance"};
     static char * kwlist[] = {kw[0], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "|si", kwlist, &pSzUnit, &nInstance))
         return NULL;
@@ -393,7 +394,7 @@ static PyObject * cbpy_ChanLabel(PyObject *self, PyObject *args, PyObject *keywd
     PyObject * pChansParam = NULL;
     PyObject * pLabelsParam = NULL;
     PyObject * pOutputsParam = NULL; // List of strings to specify the optional outputs
-    static char kw[][16] = {"channels", "labels", "outputs", "instance"};
+    static char kw[][32] = {"channels", "labels", "outputs", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "O|OOi", kwlist, &pChansParam, &pLabelsParam, &pOutputsParam, &nInstance))
         return NULL;
@@ -617,7 +618,7 @@ static PyObject * cbpy_TrialConfig(PyObject *self, PyObject *args, PyObject *key
     PyObject * pBufferParam = NULL;
     PyObject * pRangeParam = NULL;
 
-    static char kw[][16] = {"reset", "instance", "buffer_parameter", "range_parameter"};
+    static char kw[][32] = {"reset", "instance", "buffer_parameter", "range_parameter"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "O!|iO!O!", kwlist,
                                      &PyBool_Type, &pbActive, &nInstance, &PyDict_Type, &pBufferParam, &PyDict_Type, &pRangeParam))
@@ -749,7 +750,7 @@ static PyObject * cbpy_TrialCont(PyObject *self, PyObject *args, PyObject *keywd
     PyObject * pbActive = NULL;
     int nInstance = 0;
 
-    static char kw[][16] = {"reset", "instance"};
+    static char kw[][32] = {"reset", "instance"};
     static char * kwlist[] = {kw[0], kw[1], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "|O!i", kwlist,
                                      &PyBool_Type, &pbActive, &nInstance))
@@ -840,7 +841,7 @@ static PyObject * cbpy_TrialEvent(PyObject *self, PyObject *args, PyObject *keyw
     PyObject * pbActive = NULL;
     int nInstance = 0;
 
-    static char kw[][16] = {"reset", "instance"};
+    static char kw[][32] = {"reset", "instance"};
     static char * kwlist[] = {kw[0], kw[1], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "|O!i", kwlist,
                                      &PyBool_Type, &pbActive, &nInstance))
@@ -962,7 +963,7 @@ static PyObject * cbpy_TrialComment(PyObject *self, PyObject *args, PyObject *ke
     bool bCharsets = true, bTimestamps = true, bRgbas = true, bComments = true;
     int nInstance = 0;
 
-    static char kw[][16] = {"reset", "charsets", "timestamps", "data", "comments", "instance"};
+    static char kw[][32] = {"reset", "charsets", "timestamps", "data", "comments", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], kw[4], kw[5], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "|O!O!O!O!O!i", kwlist,
                                      &PyBool_Type, &pbActive,
@@ -1109,7 +1110,7 @@ static PyObject * cbpy_TrialComment(PyObject *self, PyObject *args, PyObject *ke
                 return PyErr_Format(PyExc_MemoryError, "Could not create output comment");
             }
             if (num_samples)
-                trialcomment.comments[i] = PyString_AsString(pVal);
+                trialcomment.comments[i] = (UINT8 *)PyString_AsString(pVal);
             // Add comment to the list
             PyList_SET_ITEM(pList, i, pVal);
         }
@@ -1141,7 +1142,7 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
     bool bTimestamps = true, bSynchTimestamps = true, bSynchFrameNumbers = true, bCoordinates = true;
     int nInstance = 0;
 
-    static char kw[][16] = {"reset", "timestamps", "synch_timestamps", "synch_frame_numbers", "coordinates", "instance"};
+    static char kw[][32] = {"reset", "timestamps", "synch_timestamps", "synch_frame_numbers", "coordinates", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], kw[4], kw[5], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "|O!O!O!O!O!i", kwlist,
                                      &PyBool_Type, &pbActive,
@@ -1173,7 +1174,7 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
         int nVal = PyObject_IsTrue(pbActive);
         if (nVal == -1)
             return PyErr_Format(PyExc_TypeError, "Invalid synch_timestamps parameter; should be boolean");
-        pbSynchTimestamps = (nVal != 0);
+        bSynchTimestamps = (nVal != 0);
         if (bSynchTimestamps)
             nTupleCount++;
     }
@@ -1212,7 +1213,7 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
     if (trialtracking.count == 0)
         return res;
 
-    PyObject * pCoordsList[cbMAXTRACKOBJ] = NULL;
+    PyObject * pCoordsList[cbMAXTRACKOBJ] = {NULL};
     for (UINT32 id = 0; id < trialtracking.count; id++)
     {
         UINT16 trackable_id = trialtracking.ids[id]; // Actual tracking id
@@ -1369,7 +1370,7 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
                     }
                     trialtracking.coords[id][j] = (UINT16 *)PyArray_DATA(pArr);
                 }
-            	PyList_SET_ITEM(pCoordsList[id], j, pArr);
+            	PyList_SET_ITEM(pCoordsList[id], j, (PyObject *)pArr);
             } // end for (int j =
             PyTuple_SET_ITEM(pTuple, nTupleIdx++, (PyObject *)pCoordsList[id]);
         } // end if (bCoordinates
@@ -1396,12 +1397,12 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
             UINT16 count = trialtracking.point_counts[id][j];
             if (count < trialtracking.max_point_counts[id])
             {
-                PyArrayObject * pArr = PyList_GET_ITEM(pCoordsList[id], j);
-                npy_int new_size[2] = {count, 1};
+                PyArrayObject * pArr = (PyArrayObject *)PyList_GET_ITEM(pCoordsList[id], j);
+                Py_ssize_t new_size[2] = {count, 1};
                 PyArray_Dims dims;
                 dims.len = 1;
-                dims.ptr = new_size;
-                PyObject * ref  = PyArray_Resize(pArr, &dims, 1, PyArray_CORDER);
+                dims.ptr = &new_size[0];
+                PyObject * ref  = PyArray_Resize(pArr, &dims, 1, NPY_CORDER);
                 Py_XDECREF(ref);
             } //end if (count <
         } // end for (int j =
@@ -1425,7 +1426,7 @@ static PyObject * cbpy_FileConfig(PyObject *self, PyObject *args, PyObject *keyw
     char * pSzComment = NULL;
     int nInstance = 0;
 
-    static char kw[][16] = {"command", "filename", "comment", "instance"};
+    static char kw[][32] = {"command", "filename", "comment", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "s|ssi", kwlist,
                                      &pSzCmd, &pSzFileName, &pSzComment, &nInstance))
@@ -1503,7 +1504,7 @@ static PyObject * cbpy_FileConfig(PyObject *self, PyObject *args, PyObject *keyw
     }
     if (pSzFileName == NULL)
         pSzFileName = "";
-    if (pSzFileName == NULL)
+    if (pSzComment == NULL)
         pSzComment = "";
     sdkres = cbSdkSetFileConfig(nInstance, pSzFileName, pSzComment, nStart, options);
     if (sdkres != CBSDKRESULT_SUCCESS)
@@ -1528,7 +1529,7 @@ static PyObject * cbpy_DigitalOut(PyObject *self, PyObject *args, PyObject *keyw
     int nInstance = 0;
     UINT16 nValue = 0;
 
-    static char kw[][16] = {"channel", "command", "value", "instance"};
+    static char kw[][32] = {"channel", "command", "value", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "is|Oi", kwlist,
                                      &nChannel, &pSzCmd, &pCmdValue, &nInstance))
@@ -1538,7 +1539,7 @@ static PyObject * cbpy_DigitalOut(PyObject *self, PyObject *args, PyObject *keyw
     if (it == g_lutDigOutCmd.end())
         return PyErr_Format(PyExc_ValueError, "Invalid command (%s); should be set_value", pSzCmd);
 
-    FILECFG_CMD cmd = it->second;
+    DIGOUT_CMD cmd = it->second;
     switch (cmd)
     {
     case DIGOUT_CMD_SETVALUE:
@@ -1590,7 +1591,7 @@ static PyObject * cbpy_Mask(PyObject *self, PyObject *args, PyObject *keywds)
     int nInstance = 0;
     UINT32 nActive = 1;
 
-    static char kw[][16] = {"channel", "command", "instance"};
+    static char kw[][32] = {"channel", "command", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "is|i", kwlist,
                                      &nChannel, &pSzCmd, &nInstance))
@@ -1633,13 +1634,13 @@ static PyObject * cbpy_Comment(PyObject *self, PyObject *args, PyObject *keywds)
     UINT32 rgba = 0;
     UINT8 charset = 0;
 
-    static char kw[][16] = {"comment", "rgba", "charset", "instance"};
+    static char kw[][32] = {"comment", "rgba", "charset", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "s|Iii", kwlist,
                                      &pSzComment, &rgba, &charset, &nInstance))
         return NULL;
 
-    cbSdkResult sdkres = cbSdkSetComment(nInstance, rgba, charset, pSzComment);
+    sdkres = cbSdkSetComment(nInstance, rgba, charset, pSzComment);
     if (sdkres != CBSDKRESULT_SUCCESS)
         cbPySetErrorFromSdkError(sdkres);
     if (sdkres >= CBSDKRESULT_SUCCESS)
@@ -1659,7 +1660,7 @@ static PyObject * cbpy_Config(PyObject *self, PyObject *args, PyObject *keywds)
     UINT16 nChannel = 0;
     PyObject * pNewConfig = NULL;
     PyObject * pOutputsParam = NULL; // List of strings to specify the optional outputs
-    static char kw[][16] = {"channel", "config", "outputs", "instance"};
+    static char kw[][32] = {"channel", "config", "outputs", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "i|O!Oi", kwlist, &nChannel, &PyDict_Type, &pNewConfig, &pOutputsParam, &nInstance))
         return NULL;
@@ -1677,7 +1678,7 @@ static PyObject * cbpy_Config(PyObject *self, PyObject *args, PyObject *keywds)
             if (pszLabel == NULL)
                 return NULL;
             LUT_CONFIG_OUTPUTS_CMD::iterator it = g_lutConfigOutputsCmd.find(pszLabel);
-            if (it == g_lutChanLabelOutputs.end())
+            if (it == g_lutConfigOutputsCmd.end())
                 return PyErr_Format(PyExc_ValueError, "Invalid outputs item (%s); requested output not recognized", pszLabel);
             nOutputs |= it->second;
         }
@@ -1693,7 +1694,7 @@ static PyObject * cbpy_Config(PyObject *self, PyObject *args, PyObject *keywds)
                 if (pszLabel == NULL)
                     return PyErr_Format(PyExc_TypeError, "Invalid outputs item; should be string");
                 LUT_CONFIG_OUTPUTS_CMD::iterator it = g_lutConfigOutputsCmd.find(pszLabel);
-                if (it == g_lutChanLabelOutputs.end())
+                if (it == g_lutConfigOutputsCmd.end())
                     return PyErr_Format(PyExc_ValueError, "Invalid outputs item (%s); requested output not recognized", pszLabel);
                 nOutputs |= it->second;
             }
@@ -1968,7 +1969,7 @@ static PyObject * cbpy_CCF(PyObject *self, PyObject *args, PyObject *keywds)
     bool bThreaded = false;
     int nInstance = 0;
 
-    static char kw[][16] = {"command", "source", "destination", "threaded", "instance"};
+    static char kw[][32] = {"command", "source", "destination", "threaded", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], kw[4], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "s|ssO!i", kwlist,
                                      &pSzCmd, &pSzSrc, &pSzDst, &PyBool_Type, &pbThreaded, &nInstance))
@@ -2036,7 +2037,7 @@ static PyObject * cbpy_CCF(PyObject *self, PyObject *args, PyObject *keywds)
 static PyObject * cbpy_System(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
-    static char kw[][16] = {"command", "instance"};
+    static char kw[][32] = {"command", "instance"};
     static char * kwlist[] = {kw[0], NULL};
     char * pSzCmd = NULL;
     int nInstance = 0;

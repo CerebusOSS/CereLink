@@ -38,7 +38,7 @@
 									<listOptionValue builtIn="false" value="/usr/include/python2.7"/>
 									<listOptionValue builtIn="false" value="/usr/include/QtXml"/>
 									<listOptionValue builtIn="false" value="/usr/include/QtCore"/>
-									<listOptionValue builtIn="false" value="/usr/local/lib/python2.7/site-packages/numpy/core/include/numpy"/>
+									<listOptionValue builtIn="false" value="/usr/local/lib/python2.7/site-packages/numpy/core/include/"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1817976239" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
@@ -54,7 +54,7 @@
 									<listOptionValue builtIn="false" value="/usr/include/QtXml"/>
 									<listOptionValue builtIn="false" value="/usr/include/QtCore"/>
 									<listOptionValue builtIn="false" value="/usr/include/python2.7"/>
-									<listOptionValue builtIn="false" value="/usr/local/lib/python2.7/site-packages/numpy/core/include/numpy/"/>
+									<listOptionValue builtIn="false" value="/usr/local/lib/python2.7/site-packages/numpy/core/include/"/>
 								</option>
 								<option id="gnu.c.compiler.option.preprocessor.undef.symbol.689281578" name="Undefined symbols (-U)" superClass="gnu.c.compiler.option.preprocessor.undef.symbol"/>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1743872822" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>

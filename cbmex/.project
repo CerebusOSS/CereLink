@@ -87,6 +87,11 @@
 			<locationURI>PARENT-1-PROJECT_LOC/CentralCommon/BmiVersion.h</locationURI>
 		</link>
 		<link>
+			<name>CMakeLists.txt</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/build/CMakeLists.txt</locationURI>
+		</link>
+		<link>
 			<name>Central</name>
 			<type>2</type>
 			<locationURI>PARENT-1-PROJECT_LOC/Central</locationURI>
