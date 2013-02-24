@@ -32,7 +32,7 @@ static PyGILState_STATE g_gilState; // Python global interpreter lock state
 
 typedef enum {
     CHANLABEL_OUTPUTS_NONE          = 0,
-    CHANLABEL_OUTPUTS_LABELS        = 1,
+    CHANLABEL_OUTPUTS_LABEL         = 1,
     CHANLABEL_OUTPUTS_UNIT_VALID    = 2,
     CHANLABEL_OUTPUTS_ENABLED       = 4,
 } CHANLABEL_OUTPUTS;
@@ -87,12 +87,22 @@ typedef enum {
     CONFIG_CMD_REFELECCHAN     = 0x0100,
     CONFIG_CMD_SACLE           = 0x0200,
 
-    CONFIG_ALL             = 0xFFFF,
+    CONFIG_CMD_ALL             = 0xFFFF,
 } CONFIG_CMD;
 typedef std::map<std::string, CONFIG_CMD> LUT_CONFIG_INPUTS_CMD;
 LUT_CONFIG_INPUTS_CMD g_lutConfigInputsCmd;
 typedef std::map<std::string, CONFIG_CMD> LUT_CONFIG_OUTPUTS_CMD;
 LUT_CONFIG_OUTPUTS_CMD g_lutConfigOutputsCmd;
+
+
+typedef enum {
+	CONNECTION_PARAM_INST_ADDR      = 0,
+	CONNECTION_PARAM_INST_PORT      = 1,
+	CONNECTION_PARAM_CLIENT_ADDR    = 2,
+	CONNECTION_PARAM_CLIENT_PORT    = 3,
+} CONNECTION_PARAM;
+typedef std::map<std::string, CONNECTION_PARAM> LUT_CONNECTION_PARAM;
+LUT_CONNECTION_PARAM g_lutConnectionParam;
 
 // Author & Date: Ehsan Azar       4 July 2012
 // Purpose: Create all lookup tables
@@ -104,7 +114,7 @@ static int CreateLUTs()
 {
     // Create ChanLabel outputs LUT
     g_lutChanLabelOutputs["none"         ] = CHANLABEL_OUTPUTS_NONE;
-    g_lutChanLabelOutputs["label"        ] = CHANLABEL_OUTPUTS_LABELS;
+    g_lutChanLabelOutputs["label"        ] = CHANLABEL_OUTPUTS_LABEL;
     g_lutChanLabelOutputs["enabled"      ] = CHANLABEL_OUTPUTS_ENABLED;
     g_lutChanLabelOutputs["valid_unit"   ] = CHANLABEL_OUTPUTS_UNIT_VALID;
     // Create System commands LUT
@@ -147,6 +157,11 @@ static int CreateLUTs()
     g_lutConfigOutputsCmd["amplrejneg"    ] = CONFIG_CMD_AMPLREJNEG;
     g_lutConfigOutputsCmd["refelecchan"   ] = CONFIG_CMD_REFELECCHAN;
     g_lutConfigOutputsCmd["scale"         ] = CONFIG_CMD_SACLE;
+    // Create Connection parameter LUT
+    g_lutConnectionParam["inst-addr"      ] = CONNECTION_PARAM_INST_ADDR;
+    g_lutConnectionParam["inst-port"      ] = CONNECTION_PARAM_INST_PORT;
+    g_lutConnectionParam["client-addr"    ] = CONNECTION_PARAM_CLIENT_ADDR;
+    g_lutConnectionParam["client-port"    ] = CONNECTION_PARAM_CLIENT_PORT;
     return 0;
 }
 
@@ -243,10 +258,10 @@ static PyObject * cbpy_Open(PyObject *self, PyObject *args, PyObject *keywds)
     int nInstance = 0;
     PyObject * pConParam = NULL;
 
-    static char kw[][32] = {"connection", "instance", "parameter"};
+    static char kw[][32] = {"connection", "parameter", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], NULL};
-    if (!PyArg_ParseTupleAndKeywords(args, keywds, "|siO!", kwlist,
-                                     &pSzConnection, &nInstance, &PyDict_Type, &pConParam))
+    if (!PyArg_ParseTupleAndKeywords(args, keywds, "|sO!i", kwlist,
+                                     &pSzConnection, &PyDict_Type, &pConParam, &nInstance))
         return NULL;
 
     cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
@@ -263,29 +278,50 @@ static PyObject * cbpy_Open(PyObject *self, PyObject *args, PyObject *keywds)
     cbSdkConnection con;
     if (pConParam)
     {
+        PyObject *pKey, *pValue;
+        Py_ssize_t pos = 0;
         // all optional parameters
-        PyObject * pParam = PyDict_GetItemString(pConParam, "inst-addr");
-        if (PyUnicode_Check(pParam))
-            return PyErr_Format(PyExc_TypeError, "Invalid instrument IP address; unicode not supported yet");
-        con.szInIP = PyString_AsString(pParam);
-        if (con.szInIP == NULL)
-            return PyErr_Format(PyExc_TypeError, "Invalid instrument IP address; should be string");
-        pParam = PyDict_GetItemString(pConParam, "inst-port");
-        if (PyInt_Check(pParam))
-            con.nInPort = PyInt_AsLong(pParam);
-        else
-            return PyErr_Format(PyExc_TypeError, "Invalid instrument port number; should be integer");
-        pParam = PyDict_GetItemString(pConParam, "client-addr");
-        if (PyUnicode_Check(pParam))
-            return PyErr_Format(PyExc_TypeError, "Invalid client IP address; unicode not supported yet");
-        con.szOutIP = PyString_AsString(pParam);
-        if (con.szOutIP == NULL)
-            return PyErr_Format(PyExc_TypeError, "Invalid client IP address; should be string");
-        pParam = PyDict_GetItemString(pConParam, "client-port");
-        if (PyInt_Check(pParam))
-            con.nOutPort = PyInt_AsLong(pParam);
-        else
-            return PyErr_Format(PyExc_TypeError, "Invalid client port number; should be integer");
+        while (PyDict_Next(pConParam, &pos, &pKey, &pValue))
+        {
+            if (PyUnicode_Check(pKey))
+                return PyErr_Format(PyExc_TypeError, "Invalid connection parameter key; unicode not supported yet");
+            const char * pszKey = PyString_AsString(pKey);
+            if (pszKey == NULL)
+                return PyErr_Format(PyExc_TypeError, "Invalid connection parameter key; should be string");
+            LUT_CONNECTION_PARAM::iterator it = g_lutConnectionParam.find(pszKey);
+            if (it == g_lutConnectionParam.end())
+                return PyErr_Format(PyExc_ValueError, "Invalid connection parameter key (%s)", pszKey);
+            CONNECTION_PARAM cmd = it->second;
+            switch (cmd)
+            {
+            case CONNECTION_PARAM_INST_ADDR:
+                if (PyUnicode_Check(pValue))
+                    return PyErr_Format(PyExc_TypeError, "Invalid instrument IP address; unicode not supported yet");
+                con.szInIP = PyString_AsString(pValue);
+                if (con.szInIP == NULL)
+                    return PyErr_Format(PyExc_TypeError, "Invalid instrument IP address; should be string");
+            	break;
+            case CONNECTION_PARAM_INST_PORT:
+                if (PyInt_Check(pValue))
+                    con.nInPort = PyInt_AsLong(pValue);
+                else
+                    return PyErr_Format(PyExc_TypeError, "Invalid instrument port number; should be integer");
+            	break;
+            case CONNECTION_PARAM_CLIENT_ADDR:
+                if (PyUnicode_Check(pValue))
+                    return PyErr_Format(PyExc_TypeError, "Invalid client IP address; unicode not supported yet");
+                con.szOutIP = PyString_AsString(pValue);
+                if (con.szOutIP == NULL)
+                    return PyErr_Format(PyExc_TypeError, "Invalid client IP address; should be string");
+            	break;
+            case CONNECTION_PARAM_CLIENT_PORT:
+                if (PyInt_Check(pValue))
+                    con.nOutPort = PyInt_AsLong(pValue);
+                else
+                    return PyErr_Format(PyExc_TypeError, "Invalid client port number; should be integer");
+            	break;
+            }
+        }
     }
     cbSdkResult sdkres = cbSdkOpen(nInstance, conType, con);
     if (sdkres != CBSDKRESULT_SUCCESS)
@@ -385,48 +421,25 @@ static PyObject * cbpy_Time(PyObject *self, PyObject *args, PyObject *keywds)
 }
 
 // Author & Date: Ehsan Azar       6 May 2012
-// Purpose: Get or set channel labels
+// Purpose: Get or set channel label
 //           Optionally get channel validity and unit validity
 static PyObject * cbpy_ChanLabel(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     int nInstance = 0;
-    PyObject * pChansParam = NULL;
-    PyObject * pLabelsParam = NULL;
+    UINT16 nChannel = 0;
+    PyObject * pNewLabel = NULL;
     PyObject * pOutputsParam = NULL; // List of strings to specify the optional outputs
-    static char kw[][32] = {"channels", "labels", "outputs", "instance"};
+    static char kw[][32] = {"channel", "new_label", "outputs", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], NULL};
-    if (!PyArg_ParseTupleAndKeywords(args, keywds, "O|OOi", kwlist, &pChansParam, &pLabelsParam, &pOutputsParam, &nInstance))
+    if (!PyArg_ParseTupleAndKeywords(args, keywds, "i|OOi", kwlist, &nChannel, &pNewLabel, &pOutputsParam, &nInstance))
         return NULL;
-    UINT32 count = 1;
-    if (PyList_Check(pChansParam))
-        count = PyList_GET_SIZE(pChansParam);
-    if (count == 0)
-        return PyErr_Format(PyExc_ValueError, "Invalid channels list size");
-    std::vector<UINT16> vnChans(count);
-    if (PyInt_Check(pChansParam))
-    {
-        UINT16 chan = PyInt_AsLong(pChansParam);
-        vnChans.push_back(chan);
-    }
-    else if (PyList_Check(pChansParam))
-    {
-        for (UINT32 i = 0; i < count; ++i)
-        {
-            PyObject * pParam = PyList_GET_ITEM(pChansParam, i);
-            if (!PyInt_Check(pParam))
-                return PyErr_Format(PyExc_TypeError, "Invalid channel number; should be integer");
-            UINT16 chan = PyInt_AsLong(pParam);
-            if (chan == 0 || chan > cbMAXCHANS)
-                return PyErr_Format(PyExc_ValueError, "Channel number out of range");
-            vnChans.push_back(chan);
-        }
-    } else {
-        return PyErr_Format(PyExc_TypeError, "Invalid channels parameter; should be integer or list of integers");
-    }
-    // If neither new labels nor outputs is specified, old labels are returned
+    if (nChannel == 0 || nChannel > cbMAXCHANS)
+        return PyErr_Format(PyExc_ValueError, "Channel number out of range");
+
+    // If neither new label nor outputs is specified, old label is returned
     // If new labels are specified, old labels are not returned by default unless listed in outputs
-    UINT32 nOutputs = (pLabelsParam == NULL && pOutputsParam == NULL) ? CHANLABEL_OUTPUTS_LABELS : CHANLABEL_OUTPUTS_NONE;
+    UINT32 nOutputs = (pNewLabel == NULL && pOutputsParam == NULL) ? CHANLABEL_OUTPUTS_LABEL : CHANLABEL_OUTPUTS_NONE;
     if (pOutputsParam != NULL)
     {
         if (PyUnicode_Check(pOutputsParam))
@@ -463,133 +476,88 @@ static PyObject * cbpy_ChanLabel(PyObject *self, PyObject *args, PyObject *keywd
     } // if (pOutputsParam != NULL
 
     // Read old channel labels before changing them
-    std::vector<std::string> vstrOldLabels(count);
-    if (nOutputs & CHANLABEL_OUTPUTS_LABELS)
+	char   old_label[32] = {'\0'};
+    if (nOutputs & CHANLABEL_OUTPUTS_LABEL)
     {
-        // Get channel labels specified
-        for (UINT32 i = 0; i < count; ++i)
-        {
-            char   label[32];
-            cbSdkResult sdkres = cbSdkGetChannelLabel(nInstance, vnChans[i], NULL, label, NULL, NULL);
-            vstrOldLabels[i] = label;
-            if (sdkres != CBSDKRESULT_SUCCESS)
-                cbPySetErrorFromSdkError(sdkres);
-            if (sdkres < CBSDKRESULT_SUCCESS)
-                return NULL;
-        }
+        // Get channel label specified
+		cbSdkResult sdkres = cbSdkGetChannelLabel(nInstance, nChannel, NULL, old_label, NULL, NULL);
+		if (sdkres != CBSDKRESULT_SUCCESS)
+			cbPySetErrorFromSdkError(sdkres);
+		if (sdkres < CBSDKRESULT_SUCCESS)
+			return NULL;
     }
-    std::vector<const char *> vszLabels(count);
     // New labels to assign
-    if (pLabelsParam != NULL)
+    if (pNewLabel != NULL)
     {
-        if (PyUnicode_Check(pLabelsParam))
+        if (PyUnicode_Check(pNewLabel))
             return PyErr_Format(PyExc_TypeError, "Invalid label; unicode not supported yet");
-        if (PyString_Check(pLabelsParam))
-        {
-            const char * pszLabel = PyString_AsString(pLabelsParam);
-            if (pszLabel == NULL)
-                return NULL;
-            if (count != 1)
-                return PyErr_Format(PyExc_ValueError, "Number of channels and labels do not match");
-            vszLabels.push_back(pszLabel);
-        }
-        else if (PyList_Check(pLabelsParam))
-        {
-            if (count != (UINT32)PyList_GET_SIZE(pLabelsParam))
-                return PyErr_Format(PyExc_ValueError, "Number of channels and labels do not match");
-            for (UINT32 i = 0; i < count; ++i)
-            {
-                PyObject * pParam = PyList_GET_ITEM(pLabelsParam, i);
-                if (PyUnicode_Check(pParam))
-                    return PyErr_Format(PyExc_TypeError, "Invalid label; unicode not supported yet");
-                const char * pszLabel = PyString_AsString(pParam);
-                if (pszLabel == NULL)
-                    return PyErr_Format(PyExc_TypeError, "Invalid label item; should be string");
-                vszLabels.push_back(pszLabel);
-            }
-        } else {
-            return PyErr_Format(PyExc_TypeError, "Invalid label; should be string or list of strings");
-        }
-        // Set new channel labels
-        for (UINT32 i = 0; i < count; ++i)
-        {
-            cbSdkResult sdkres = cbSdkSetChannelLabel(nInstance, vnChans[i], vszLabels[i], 0, NULL);
-            if (sdkres != CBSDKRESULT_SUCCESS)
-                cbPySetErrorFromSdkError(sdkres);
-            if (sdkres < CBSDKRESULT_SUCCESS)
-                return NULL;
-        }
-    }
+        const char * pszLabel = PyString_AsString(pNewLabel);
+        if (pszLabel == NULL)
+        	return PyErr_Format(PyExc_TypeError, "Invalid label; should be string");
+        // Set new channel label
+		cbSdkResult sdkres = cbSdkSetChannelLabel(nInstance, nChannel, pszLabel, 0, NULL);
+		if (sdkres != CBSDKRESULT_SUCCESS)
+			cbPySetErrorFromSdkError(sdkres);
+		if (sdkres < CBSDKRESULT_SUCCESS)
+			return NULL;
+    } // end if (pNewLabel != NULL
     if (nOutputs == CHANLABEL_OUTPUTS_NONE)
     {
         Py_INCREF(Py_None);
         res = Py_None;
-    } else {
-        res = PyList_New(count);
-        if (res == NULL)
-            return PyErr_Format(PyExc_MemoryError, "Could not create output list");
-        UINT32 nCountOut = 0;
-        if (nOutputs & CHANLABEL_OUTPUTS_LABELS)
-            nCountOut++;
-        if (nOutputs & CHANLABEL_OUTPUTS_ENABLED)
-            nCountOut++;
-        if (nOutputs & CHANLABEL_OUTPUTS_UNIT_VALID)
-            nCountOut++;
-        // Set specified outputs
-        for (UINT32 i = 0; i < count; ++i)
-        {
-            PyObject * pTuple = PyTuple_New(nCountOut);
-            if (pTuple == NULL)
-            {
-                Py_DECREF(pTuple);
-                Py_DECREF(res);
-                return PyErr_Format(PyExc_MemoryError, "Could not create output tuple");
-            }
-            int cnt = 0;
-            if (nOutputs & CHANLABEL_OUTPUTS_LABELS)
-            {
-                PyObject * pLabel = PyString_FromString(vstrOldLabels[i].c_str());
-                if (pLabel == NULL)
-                {
-                    Py_DECREF(pTuple);
-                    Py_DECREF(res);
-                    return PyErr_Format(PyExc_ValueError, "Invalid output label");
-                }
-                PyTuple_SET_ITEM(pTuple, cnt, pLabel);
-                cnt++;
-            }
-            UINT32 bValid[cbMAXUNITS + 1];
-            if (nOutputs & (CHANLABEL_OUTPUTS_ENABLED | CHANLABEL_OUTPUTS_UNIT_VALID))
-            {
-                cbSdkResult sdkres = cbSdkGetChannelLabel(nInstance, vnChans[i], bValid);
-                if (sdkres != CBSDKRESULT_SUCCESS)
-                    cbPySetErrorFromSdkError(sdkres);
-                if (sdkres < CBSDKRESULT_SUCCESS)
-                    return NULL;
-            }
-            if (nOutputs & CHANLABEL_OUTPUTS_ENABLED)
-            {
-                PyObject * pVal = PyBool_FromLong(bValid[0]);
-                PyTuple_SET_ITEM(pTuple, cnt, pVal);
-                cnt++;
-            }
-            if (nOutputs & CHANLABEL_OUTPUTS_UNIT_VALID)
-            {
-                // Only input channel have valid units
-                if (vnChans[i] <= cbNUM_ANALOG_CHANS)
-                {
-                    for (int nUnit = 0; nUnit < cbMAXUNITS; ++nUnit)
-                    {
-                        PyObject * pVal = PyBool_FromLong(bValid[nUnit + 1]);
-                        PyTuple_SET_ITEM(pTuple, cnt, pVal);
-                        cnt++;
-                    }
-                }
-            }
-            // Add tuple to the list
-            PyList_SET_ITEM(res, i, pTuple);
-        } // end for (UINT32 i = 0;
+        return res;
     }
+
+	res = PyDict_New();
+	if (res == NULL)
+		return PyErr_Format(PyExc_MemoryError, "Could not create output dictionary");
+	if (nOutputs & CHANLABEL_OUTPUTS_LABEL)
+	{
+		PyObject * pVal = PyString_FromString(old_label);
+		if (pVal == NULL || PyDict_SetItemString(res, "label", pVal) != 0)
+		{
+			Py_DECREF(res);
+			return PyErr_Format(PyExc_ValueError, "Error in returning label");
+		}
+	}
+	UINT32 bValid[cbMAXUNITS + 1] = {0};
+	if (nOutputs & (CHANLABEL_OUTPUTS_ENABLED | CHANLABEL_OUTPUTS_UNIT_VALID))
+	{
+		cbSdkResult sdkres = cbSdkGetChannelLabel(nInstance, nChannel, bValid);
+		if (sdkres != CBSDKRESULT_SUCCESS)
+			cbPySetErrorFromSdkError(sdkres);
+		if (sdkres < CBSDKRESULT_SUCCESS)
+			return NULL;
+	}
+	if (nOutputs & CHANLABEL_OUTPUTS_ENABLED)
+	{
+		PyObject * pVal = PyBool_FromLong(bValid[0]);
+		if (pVal == NULL || PyDict_SetItemString(res, "enabled", pVal) != 0)
+		{
+			Py_DECREF(res);
+			return PyErr_Format(PyExc_ValueError, "Error in returning enabled");
+		}
+	}
+	if (nOutputs & CHANLABEL_OUTPUTS_UNIT_VALID)
+	{
+		// Only input channel have valid units
+		if (nChannel <= cbNUM_ANALOG_CHANS)
+		{
+	        int dims[2] = {cbMAXUNITS, 1};
+	        PyArrayObject * pArr = (PyArrayObject *)PyArray_FromDims(1, dims, NPY_UINT32);
+	        if (pArr == NULL || PyDict_SetItemString(res, "valid_unit", (PyObject * )pArr) != 0)
+	        {
+	            Py_DECREF(res);
+	            return PyErr_Format(PyExc_MemoryError, "Error in returning valid_unit array");
+	        }
+	        UINT32 * pValid = (UINT32 *)PyArray_DATA(pArr);
+			for (int nUnit = 0; nUnit < cbMAXUNITS; ++nUnit)
+			{
+				pValid[nUnit] = bValid[nUnit + 1];
+			}
+		}
+	}
+
     return res;
 }
 
@@ -618,10 +586,10 @@ static PyObject * cbpy_TrialConfig(PyObject *self, PyObject *args, PyObject *key
     PyObject * pBufferParam = NULL;
     PyObject * pRangeParam = NULL;
 
-    static char kw[][32] = {"reset", "instance", "buffer_parameter", "range_parameter"};
+    static char kw[][32] = {"reset", "buffer_parameter", "range_parameter", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], NULL};
-    if (!PyArg_ParseTupleAndKeywords(args, keywds, "O!|iO!O!", kwlist,
-                                     &PyBool_Type, &pbActive, &nInstance, &PyDict_Type, &pBufferParam, &PyDict_Type, &pRangeParam))
+    if (!PyArg_ParseTupleAndKeywords(args, keywds, "O!|O!O!i", kwlist,
+                                     &PyBool_Type, &pbActive, &PyDict_Type, &pBufferParam, &PyDict_Type, &pRangeParam, &nInstance))
         return NULL;
 
     // Boolean check
@@ -1665,7 +1633,7 @@ static PyObject * cbpy_Config(PyObject *self, PyObject *args, PyObject *keywds)
 
     // If neither new config nor outputs is specified, all old config is returned
     // If new labels are specified, old labels are not returned by default unless listed in outputs
-    UINT32 nOutputs = (pNewConfig == NULL && pOutputsParam == NULL) ? CONFIG_ALL : CONFIG_CMD_NONE;
+    UINT32 nOutputs = (pNewConfig == NULL && pOutputsParam == NULL) ? CONFIG_CMD_ALL : CONFIG_CMD_NONE;
     if (pOutputsParam != NULL)
     {
         if (PyUnicode_Check(pOutputsParam))
