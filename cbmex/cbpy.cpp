@@ -1502,11 +1502,9 @@ static PyObject * cbpy_FileConfig(PyObject *self, PyObject *args, PyObject *keyw
             return PyErr_Format(PyExc_ValueError, "Filename and comment must be specified for 'stop' command");
         break;
     }
-    if (pSzFileName == NULL)
-        pSzFileName = "";
-    if (pSzComment == NULL)
-        pSzComment = "";
-    sdkres = cbSdkSetFileConfig(nInstance, pSzFileName, pSzComment, nStart, options);
+    sdkres = cbSdkSetFileConfig(nInstance,
+    		pSzFileName == NULL ? "" : pSzFileName,
+    		pSzComment == NULL ? "" : pSzComment, nStart, options);
     if (sdkres != CBSDKRESULT_SUCCESS)
         cbPySetErrorFromSdkError(sdkres);
     if (sdkres >= CBSDKRESULT_SUCCESS)
@@ -1816,6 +1814,9 @@ static PyObject * cbpy_Config(PyObject *self, PyObject *args, PyObject *keywds)
                 return PyErr_Format(PyExc_ValueError, "Invalid refelecchan number");
             chaninfo.refelecchan = PyInt_AsLong(pValue);
             break;
+        default:
+        	// Ignore the rest
+        	break;
         } //end switch (cmd
     } //end while (PyDict_Next
 
@@ -2254,7 +2255,8 @@ extern "C" CBPY_EXPORT MOD_INIT(cbpy)
 
     // Add cbpy exception
     char szcbpyerr[] = "cbpy.error";
-    g_cbpyError = PyErr_NewExceptionWithDoc(szcbpyerr, "cerebus python exception", NULL, NULL);
+    char szcbpyerrdoc[] = "cerebus python exception";
+    g_cbpyError = PyErr_NewExceptionWithDoc(szcbpyerr, szcbpyerrdoc, NULL, NULL);
     Py_INCREF(g_cbpyError);
     PyModule_AddObject(m, "error", g_cbpyError);
 
