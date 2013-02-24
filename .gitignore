@@ -6,6 +6,7 @@ dist/
 *.old
 *.ncb
 *.suo
+*.DS_Store
 UpgradeLog.XML
 _UpgradeReport_Files/
 
@@ -18,3 +19,4 @@ x64/
 Win32/
 Debug/
 Release/
+.settings/

@@ -620,28 +620,28 @@ static PyObject * cbpy_TrialConfig(PyObject *self, PyObject *args, PyObject *key
                 return PyErr_Format(PyExc_TypeError, "Invalid absolute parameter; should be boolean");
             bAbsolute = nAbsolute;
         }
-        pParam = PyDict_GetItemString(pBufferParam, "continuous");
+        pParam = PyDict_GetItemString(pBufferParam, "continuous_length");
         if (pParam != NULL)
         {
             if (!PyInt_Check(pParam))
                 return PyErr_Format(PyExc_TypeError, "Invalid continuous buffer length; should be integer");
             uConts = PyInt_AsLong(pParam);
         }
-        pParam = PyDict_GetItemString(pBufferParam, "event");
+        pParam = PyDict_GetItemString(pBufferParam, "event_length");
         if (pParam != NULL)
         {
             if (!PyInt_Check(pParam))
                 return PyErr_Format(PyExc_TypeError, "Invalid event buffer length; should be integer");
             uEvents = PyInt_AsLong(pParam);
         }
-        pParam = PyDict_GetItemString(pBufferParam, "comment");
+        pParam = PyDict_GetItemString(pBufferParam, "comment_length");
         if (pParam != NULL)
         {
             if (!PyInt_Check(pParam))
                 return PyErr_Format(PyExc_TypeError, "Invalid comment buffer length; should be integer");
             uComments = PyInt_AsLong(pParam);
         }
-        pParam = PyDict_GetItemString(pBufferParam, "tracking");
+        pParam = PyDict_GetItemString(pBufferParam, "tracking_length");
         if (pParam != NULL)
         {
             if (!PyInt_Check(pParam))
