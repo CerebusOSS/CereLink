@@ -2150,11 +2150,11 @@ void cbPySetErrorFromSdkError(cbSdkResult sdkres, const char * szErr)
 // All function names start with Capital letter and follow camel notation
 static PyMethodDef g_cbpyMethods[] =
 {
-    {"Version",  (PyCFunction)cbpy_Version, METH_NOARGS | METH_KEYWORDS, "Library and instrument version."},
+    {"Version",  (PyCFunction)cbpy_Version, METH_VARARGS | METH_KEYWORDS, "Library and instrument version."},
     {"Register",  (PyCFunction)cbpy_Register, METH_VARARGS | METH_KEYWORDS, "Register a callback function."},
     {"Unregister",  (PyCFunction)cbpy_Unregister, METH_VARARGS | METH_KEYWORDS, "Unregister a callback function."},
     {"Open",  (PyCFunction)cbpy_Open, METH_VARARGS | METH_KEYWORDS, "Open library."},
-    {"Close",  (PyCFunction)cbpy_Close, METH_NOARGS | METH_KEYWORDS, "Close library."},
+    {"Close",  (PyCFunction)cbpy_Close, METH_VARARGS | METH_KEYWORDS, "Close library."},
     {"Time",  (PyCFunction)cbpy_Time, METH_VARARGS | METH_KEYWORDS, "Instrument time."},
     {"ChanLabel",  (PyCFunction)cbpy_ChanLabel, METH_VARARGS | METH_KEYWORDS, "Get or set channel label."},
     {"TrialConfig",  (PyCFunction)cbpy_TrialConfig, METH_VARARGS | METH_KEYWORDS, "Configure trial settings."},
