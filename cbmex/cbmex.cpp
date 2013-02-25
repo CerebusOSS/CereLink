@@ -223,7 +223,7 @@ void PrintErrorSDK(cbSdkResult res, const char * szCustom = NULL)
         mexErrMsgTxt("Invalid range or instrument address");
         break;
     case CBSDKRESULT_ERRMEMORY:
-        mexErrMsgTxt("Memory allocation error");
+        mexErrMsgTxt("Memory allocation error trying to establish master connection");
         break;
     case CBSDKRESULT_ERRINIT:
         mexErrMsgTxt("Initialization error");

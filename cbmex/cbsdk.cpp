@@ -715,10 +715,6 @@ cbSdkResult SdkApp::SdkOpen(UINT32 nInstance, cbSdkConnectionType conType, cbSdk
     }
     else if (conType == CBSDKCONNECTION_CENTRAL)
     {
-        // Complain for non-default values
-        if (con.nInPort != cbNET_UDP_PORT_BCAST || con.nOutPort != cbNET_UDP_PORT_CNT ||
-            strcmp(con.szInIP, cbNET_UDP_ADDR_INST) != 0|| strcmp(con.szOutIP, cbNET_UDP_ADDR_CNT) != 0)
-            return CBSDKRESULT_INVALIDINST;
         m_connectLock.lock();
         Open(nInstance);
     }

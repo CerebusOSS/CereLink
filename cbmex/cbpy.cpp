@@ -2127,7 +2127,7 @@ void cbPySetErrorFromSdkError(cbSdkResult sdkres, const char * szErr)
             PyErr_SetString(g_cbpyError, "Unknown SDK error!");
         break;
     case CBSDKRESULT_ERRMEMORY:
-    	PyErr_SetString(g_cbpyError, "Memory allocation error");
+    	PyErr_SetString(g_cbpyError, "Memory allocation error trying to establish master connection");
         break;
     case CBSDKRESULT_ERRINIT:
     	PyErr_SetString(g_cbpyError, "Initialization error");

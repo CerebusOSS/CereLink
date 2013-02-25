@@ -311,6 +311,8 @@ cbRESULT cbOpen(BOOL bStandAlone, UINT32 nInstance)
         if (cbRet == cbRESULT_OK)
         {
             cb_library_initialized[nIdx] = TRUE;      // We are in the library, so it is initialized
+        } else {
+        	cbReleaseSystemLock(szLockName, cb_sys_lock_hnd[nInstance]);
         }
         return cbRet;
     } else {
@@ -417,7 +419,7 @@ cbRESULT cbCheckApp(const char * lpName)
         cbRet = cbRESULT_NOCENTRALAPP;
 #else
     {
-        char szLockName[64] = {0};
+        char szLockName[256] = {0};
         char * szTmpDir = getenv("TMPDIR");
         _snprintf(szLockName, sizeof(szLockName), "%s/%s.lock", szTmpDir == NULL ? "/tmp" : szTmpDir, lpName);
         FILE * pflock = fopen(szLockName, "w+");
@@ -456,7 +458,7 @@ cbRESULT cbAquireSystemLock(const char * lpName, HANDLE & hLock)
 #else
     // There are other methods such as sharedmemory but they break if application crash
     //  only a file lock seems resilient to crash, also with tmp mounted as tmpfs this is as fast as it could be
-    char szLockName[64] = {0};
+    char szLockName[256] = {0};
     char * szTmpDir = getenv("TMPDIR");
     _snprintf(szLockName, sizeof(szLockName), "%s/%s.lock", szTmpDir == NULL ? "/tmp" : szTmpDir, lpName);
     FILE * pflock = fopen(szLockName, "w+");
@@ -626,7 +628,7 @@ cbRESULT cbClose(BOOL bStandAlone, UINT32 nInstance)
     // If it is stand alone application
     if (bStandAlone)
     {
-        char buf[64] = {0};
+        char buf[256] = {0};
         if (nInstance == 0)
             _snprintf(buf, sizeof(buf), "cbCentralAppMutex");
         else
