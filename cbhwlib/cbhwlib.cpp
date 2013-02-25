@@ -312,7 +312,7 @@ cbRESULT cbOpen(BOOL bStandAlone, UINT32 nInstance)
         {
             cb_library_initialized[nIdx] = TRUE;      // We are in the library, so it is initialized
         } else {
-        	cbReleaseSystemLock(szLockName, cb_sys_lock_hnd[nInstance]);
+            cbReleaseSystemLock(szLockName, cb_sys_lock_hnd[nInstance]);
         }
         return cbRet;
     } else {

@@ -60,8 +60,8 @@ LUT_DIGOUT_CMD g_lutDigOutCmd;
 
 
 typedef enum {
-	MASK_CMD_OFF  = 0,
-	MASK_CMD_ON   = 1,
+    MASK_CMD_OFF  = 0,
+    MASK_CMD_ON   = 1,
 } MASK_CMD;
 typedef std::map<std::string, MASK_CMD> LUT_MASK_CMD;
 LUT_MASK_CMD g_lutMaskCmd;
@@ -96,10 +96,10 @@ LUT_CONFIG_OUTPUTS_CMD g_lutConfigOutputsCmd;
 
 
 typedef enum {
-	CONNECTION_PARAM_INST_ADDR      = 0,
-	CONNECTION_PARAM_INST_PORT      = 1,
-	CONNECTION_PARAM_CLIENT_ADDR    = 2,
-	CONNECTION_PARAM_CLIENT_PORT    = 3,
+    CONNECTION_PARAM_INST_ADDR      = 0,
+    CONNECTION_PARAM_INST_PORT      = 1,
+    CONNECTION_PARAM_CLIENT_ADDR    = 2,
+    CONNECTION_PARAM_CLIENT_PORT    = 3,
 } CONNECTION_PARAM;
 typedef std::map<std::string, CONNECTION_PARAM> LUT_CONNECTION_PARAM;
 LUT_CONNECTION_PARAM g_lutConnectionParam;
@@ -211,11 +211,11 @@ static PyObject * cbpy_Register(PyObject *self, PyObject *args, PyObject *keywds
     if (!PyCallable_Check(pCallback))
         return PyErr_Format(PyExc_TypeError, "callback parameter should be callable");
     Py_XINCREF(pCallback);
-	//Py_XDECREF(my_callback);
-	//my_callback = pCallback;
+    //Py_XDECREF(my_callback);
+    //my_callback = pCallback;
 
-	Py_INCREF(Py_None);
-	res = Py_None;
+    Py_INCREF(Py_None);
+    res = Py_None;
     return res;
 }
 
@@ -224,8 +224,8 @@ static PyObject * cbpy_Register(PyObject *self, PyObject *args, PyObject *keywds
 static PyObject * cbpy_Unregister(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
-	Py_INCREF(Py_None);
-	res = Py_None;
+    Py_INCREF(Py_None);
+    res = Py_None;
     return res;
 }
 
@@ -300,26 +300,26 @@ static PyObject * cbpy_Open(PyObject *self, PyObject *args, PyObject *keywds)
                 con.szInIP = PyString_AsString(pValue);
                 if (con.szInIP == NULL)
                     return PyErr_Format(PyExc_TypeError, "Invalid instrument IP address; should be string");
-            	break;
+                break;
             case CONNECTION_PARAM_INST_PORT:
                 if (PyInt_Check(pValue))
                     con.nInPort = PyInt_AsLong(pValue);
                 else
                     return PyErr_Format(PyExc_TypeError, "Invalid instrument port number; should be integer");
-            	break;
+                break;
             case CONNECTION_PARAM_CLIENT_ADDR:
                 if (PyUnicode_Check(pValue))
                     return PyErr_Format(PyExc_TypeError, "Invalid client IP address; unicode not supported yet");
                 con.szOutIP = PyString_AsString(pValue);
                 if (con.szOutIP == NULL)
                     return PyErr_Format(PyExc_TypeError, "Invalid client IP address; should be string");
-            	break;
+                break;
             case CONNECTION_PARAM_CLIENT_PORT:
                 if (PyInt_Check(pValue))
                     con.nOutPort = PyInt_AsLong(pValue);
                 else
                     return PyErr_Format(PyExc_TypeError, "Invalid client port number; should be integer");
-            	break;
+                break;
             }
         }
     }
@@ -476,15 +476,15 @@ static PyObject * cbpy_ChanLabel(PyObject *self, PyObject *args, PyObject *keywd
     } // if (pOutputsParam != NULL
 
     // Read old channel labels before changing them
-	char   old_label[32] = {'\0'};
+    char   old_label[32] = {'\0'};
     if (nOutputs & CHANLABEL_OUTPUTS_LABEL)
     {
         // Get channel label specified
-		cbSdkResult sdkres = cbSdkGetChannelLabel(nInstance, nChannel, NULL, old_label, NULL, NULL);
-		if (sdkres != CBSDKRESULT_SUCCESS)
-			cbPySetErrorFromSdkError(sdkres);
-		if (sdkres < CBSDKRESULT_SUCCESS)
-			return NULL;
+        cbSdkResult sdkres = cbSdkGetChannelLabel(nInstance, nChannel, NULL, old_label, NULL, NULL);
+        if (sdkres != CBSDKRESULT_SUCCESS)
+            cbPySetErrorFromSdkError(sdkres);
+        if (sdkres < CBSDKRESULT_SUCCESS)
+            return NULL;
     }
     // New labels to assign
     if (pNewLabel != NULL)
@@ -493,13 +493,13 @@ static PyObject * cbpy_ChanLabel(PyObject *self, PyObject *args, PyObject *keywd
             return PyErr_Format(PyExc_TypeError, "Invalid label; unicode not supported yet");
         const char * pszLabel = PyString_AsString(pNewLabel);
         if (pszLabel == NULL)
-        	return PyErr_Format(PyExc_TypeError, "Invalid label; should be string");
+            return PyErr_Format(PyExc_TypeError, "Invalid label; should be string");
         // Set new channel label
-		cbSdkResult sdkres = cbSdkSetChannelLabel(nInstance, nChannel, pszLabel, 0, NULL);
-		if (sdkres != CBSDKRESULT_SUCCESS)
-			cbPySetErrorFromSdkError(sdkres);
-		if (sdkres < CBSDKRESULT_SUCCESS)
-			return NULL;
+        cbSdkResult sdkres = cbSdkSetChannelLabel(nInstance, nChannel, pszLabel, 0, NULL);
+        if (sdkres != CBSDKRESULT_SUCCESS)
+            cbPySetErrorFromSdkError(sdkres);
+        if (sdkres < CBSDKRESULT_SUCCESS)
+            return NULL;
     } // end if (pNewLabel != NULL
     if (nOutputs == CHANLABEL_OUTPUTS_NONE)
     {
@@ -508,55 +508,55 @@ static PyObject * cbpy_ChanLabel(PyObject *self, PyObject *args, PyObject *keywd
         return res;
     }
 
-	res = PyDict_New();
-	if (res == NULL)
-		return PyErr_Format(PyExc_MemoryError, "Could not create output dictionary");
-	if (nOutputs & CHANLABEL_OUTPUTS_LABEL)
-	{
-		PyObject * pVal = PyString_FromString(old_label);
-		if (pVal == NULL || PyDict_SetItemString(res, "label", pVal) != 0)
-		{
-			Py_DECREF(res);
-			return PyErr_Format(PyExc_ValueError, "Error in returning label");
-		}
-	}
-	UINT32 bValid[cbMAXUNITS + 1] = {0};
-	if (nOutputs & (CHANLABEL_OUTPUTS_ENABLED | CHANLABEL_OUTPUTS_UNIT_VALID))
-	{
-		cbSdkResult sdkres = cbSdkGetChannelLabel(nInstance, nChannel, bValid);
-		if (sdkres != CBSDKRESULT_SUCCESS)
-			cbPySetErrorFromSdkError(sdkres);
-		if (sdkres < CBSDKRESULT_SUCCESS)
-			return NULL;
-	}
-	if (nOutputs & CHANLABEL_OUTPUTS_ENABLED)
-	{
-		PyObject * pVal = PyBool_FromLong(bValid[0]);
-		if (pVal == NULL || PyDict_SetItemString(res, "enabled", pVal) != 0)
-		{
-			Py_DECREF(res);
-			return PyErr_Format(PyExc_ValueError, "Error in returning enabled");
-		}
-	}
-	if (nOutputs & CHANLABEL_OUTPUTS_UNIT_VALID)
-	{
-		// Only input channel have valid units
-		if (nChannel <= cbNUM_ANALOG_CHANS)
-		{
-	        int dims[2] = {cbMAXUNITS, 1};
-	        PyArrayObject * pArr = (PyArrayObject *)PyArray_FromDims(1, dims, NPY_UINT32);
-	        if (pArr == NULL || PyDict_SetItemString(res, "valid_unit", (PyObject * )pArr) != 0)
-	        {
-	            Py_DECREF(res);
-	            return PyErr_Format(PyExc_MemoryError, "Error in returning valid_unit array");
-	        }
-	        UINT32 * pValid = (UINT32 *)PyArray_DATA(pArr);
-			for (int nUnit = 0; nUnit < cbMAXUNITS; ++nUnit)
-			{
-				pValid[nUnit] = bValid[nUnit + 1];
-			}
-		}
-	}
+    res = PyDict_New();
+    if (res == NULL)
+        return PyErr_Format(PyExc_MemoryError, "Could not create output dictionary");
+    if (nOutputs & CHANLABEL_OUTPUTS_LABEL)
+    {
+        PyObject * pVal = PyString_FromString(old_label);
+        if (pVal == NULL || PyDict_SetItemString(res, "label", pVal) != 0)
+        {
+            Py_DECREF(res);
+            return PyErr_Format(PyExc_ValueError, "Error in returning label");
+        }
+    }
+    UINT32 bValid[cbMAXUNITS + 1] = {0};
+    if (nOutputs & (CHANLABEL_OUTPUTS_ENABLED | CHANLABEL_OUTPUTS_UNIT_VALID))
+    {
+        cbSdkResult sdkres = cbSdkGetChannelLabel(nInstance, nChannel, bValid);
+        if (sdkres != CBSDKRESULT_SUCCESS)
+            cbPySetErrorFromSdkError(sdkres);
+        if (sdkres < CBSDKRESULT_SUCCESS)
+            return NULL;
+    }
+    if (nOutputs & CHANLABEL_OUTPUTS_ENABLED)
+    {
+        PyObject * pVal = PyBool_FromLong(bValid[0]);
+        if (pVal == NULL || PyDict_SetItemString(res, "enabled", pVal) != 0)
+        {
+            Py_DECREF(res);
+            return PyErr_Format(PyExc_ValueError, "Error in returning enabled");
+        }
+    }
+    if (nOutputs & CHANLABEL_OUTPUTS_UNIT_VALID)
+    {
+        // Only input channel have valid units
+        if (nChannel <= cbNUM_ANALOG_CHANS)
+        {
+            int dims[2] = {cbMAXUNITS, 1};
+            PyArrayObject * pArr = (PyArrayObject *)PyArray_FromDims(1, dims, NPY_UINT32);
+            if (pArr == NULL || PyDict_SetItemString(res, "valid_unit", (PyObject * )pArr) != 0)
+            {
+                Py_DECREF(res);
+                return PyErr_Format(PyExc_MemoryError, "Error in returning valid_unit array");
+            }
+            UINT32 * pValid = (UINT32 *)PyArray_DATA(pArr);
+            for (int nUnit = 0; nUnit < cbMAXUNITS; ++nUnit)
+            {
+                pValid[nUnit] = bValid[nUnit + 1];
+            }
+        }
+    }
 
     return res;
 }
@@ -698,13 +698,13 @@ static PyObject * cbpy_TrialConfig(PyObject *self, PyObject *args, PyObject *key
     }
 
     sdkres = cbSdkSetTrialConfig(nInstance,
-    		bActive, uBegChan, uBegMask, uBegVal, uEndChan, uEndMask, uEndVal,
+            bActive, uBegChan, uBegMask, uBegVal, uEndChan, uEndMask, uEndVal,
             bDouble, uWaveforms, uConts, uEvents, uComments, uTrackings, bAbsolute);
 
     if (sdkres != CBSDKRESULT_SUCCESS)
         cbPySetErrorFromSdkError(sdkres);
     if (sdkres >= CBSDKRESULT_SUCCESS)
-		res = PyBool_FromLong(bActive);
+        res = PyBool_FromLong(bActive);
     return res;
 }
 
@@ -1226,7 +1226,7 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
                 return PyErr_Format(PyExc_MemoryError, "Could not create output timestamps array");
             }
             if (num_samples)
-            	trialtracking.timestamps[id] = (UINT32 *)PyArray_DATA(pArr);
+                trialtracking.timestamps[id] = (UINT32 *)PyArray_DATA(pArr);
             PyTuple_SET_ITEM(pTuple, nTupleIdx++, (PyObject *)pArr);
         }
 
@@ -1241,7 +1241,7 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
                 return PyErr_Format(PyExc_MemoryError, "Could not create output synch_timestamps array");
             }
             if (num_samples)
-            	trialtracking.synch_timestamps[id] = (UINT32 *)PyArray_DATA(pArr);
+                trialtracking.synch_timestamps[id] = (UINT32 *)PyArray_DATA(pArr);
             PyTuple_SET_ITEM(pTuple, nTupleIdx++, (PyObject *)pArr);
         }
 
@@ -1256,14 +1256,14 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
                 return PyErr_Format(PyExc_MemoryError, "Could not create output synch_frame_numbers array");
             }
             if (num_samples)
-            	trialtracking.synch_frame_numbers[id] = (UINT32 *)PyArray_DATA(pArr);
+                trialtracking.synch_frame_numbers[id] = (UINT32 *)PyArray_DATA(pArr);
             PyTuple_SET_ITEM(pTuple, nTupleIdx++, (PyObject *)pArr);
         }
 
         trialtracking.point_counts[id] = NULL;
         if (bCoordinates)
         {
-        	trialtracking.point_counts[id] = (UINT16 *) PyMem_Malloc(num_samples * sizeof(UINT16));
+            trialtracking.point_counts[id] = (UINT16 *) PyMem_Malloc(num_samples * sizeof(UINT16));
             if (trialtracking.point_counts[id] == NULL)
             {
                 Py_DECREF(pTuple);
@@ -1290,9 +1290,9 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
             }
 
             if (bWordData)
-            	trialtracking.coords[id] = (void * *) PyMem_Malloc(num_samples * sizeof(UINT32 *));
+                trialtracking.coords[id] = (void * *) PyMem_Malloc(num_samples * sizeof(UINT32 *));
             else
-            	trialtracking.coords[id] = (void * *) PyMem_Malloc(num_samples * sizeof(UINT16 *));
+                trialtracking.coords[id] = (void * *) PyMem_Malloc(num_samples * sizeof(UINT16 *));
 
             if (trialtracking.coords[id] == NULL)
             {
@@ -1305,7 +1305,7 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
             pCoordsList[id] = PyList_New(num_samples);
             if (pCoordsList[id] == NULL)
             {
-            	Py_DECREF(pTuple);
+                Py_DECREF(pTuple);
                 Py_DECREF(res);
                 return PyErr_Format(PyExc_MemoryError, "Could not create output coords list");
             }
@@ -1313,10 +1313,10 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
             for (int j = 0; j < num_samples; ++j)
             {
                 PyArrayObject * pArr = NULL;
-            	int dims[2] = {trialtracking.max_point_counts[id], 1};
+                int dims[2] = {trialtracking.max_point_counts[id], 1};
                 if (bWordData)
                 {
-                	pArr = (PyArrayObject *)PyArray_FromDims(1, dims, NPY_UINT32);
+                    pArr = (PyArrayObject *)PyArray_FromDims(1, dims, NPY_UINT32);
                     if (pArr == NULL)
                     {
                         Py_DECREF(pTuple);
@@ -1327,7 +1327,7 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
                     }
                     trialtracking.coords[id][j] = (UINT32 *)PyArray_DATA(pArr);
                 } else {
-                	pArr = (PyArrayObject *)PyArray_FromDims(1, dims, NPY_UINT16);
+                    pArr = (PyArrayObject *)PyArray_FromDims(1, dims, NPY_UINT16);
                     if (pArr == NULL)
                     {
                         Py_DECREF(pTuple);
@@ -1338,7 +1338,7 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
                     }
                     trialtracking.coords[id][j] = (UINT16 *)PyArray_DATA(pArr);
                 }
-            	PyList_SET_ITEM(pCoordsList[id], j, (PyObject *)pArr);
+                PyList_SET_ITEM(pCoordsList[id], j, (PyObject *)pArr);
             } // end for (int j =
             PyTuple_SET_ITEM(pTuple, nTupleIdx++, (PyObject *)pCoordsList[id]);
         } // end if (bCoordinates
@@ -1471,8 +1471,8 @@ static PyObject * cbpy_FileConfig(PyObject *self, PyObject *args, PyObject *keyw
         break;
     }
     sdkres = cbSdkSetFileConfig(nInstance,
-    		pSzFileName == NULL ? "" : pSzFileName,
-    		pSzComment == NULL ? "" : pSzComment, nStart, options);
+            pSzFileName == NULL ? "" : pSzFileName,
+            pSzComment == NULL ? "" : pSzComment, nStart, options);
     if (sdkres != CBSDKRESULT_SUCCESS)
         cbPySetErrorFromSdkError(sdkres);
     if (sdkres >= CBSDKRESULT_SUCCESS)
@@ -1571,11 +1571,11 @@ static PyObject * cbpy_Mask(PyObject *self, PyObject *args, PyObject *keywds)
     switch (cmd)
     {
     case MASK_CMD_OFF:
-    	nActive = 0;
+        nActive = 0;
         break;
     case MASK_CMD_ON:
-    	nActive = 1;
-    	break;
+        nActive = 1;
+        break;
     }
     sdkres = cbSdkSetChannelMask(nInstance, nChannel, nActive);
     if (sdkres != CBSDKRESULT_SUCCESS)
@@ -1783,8 +1783,8 @@ static PyObject * cbpy_Config(PyObject *self, PyObject *args, PyObject *keywds)
             chaninfo.refelecchan = PyInt_AsLong(pValue);
             break;
         default:
-        	// Ignore the rest
-        	break;
+            // Ignore the rest
+            break;
         } //end switch (cmd
     } //end while (PyDict_Next
 
@@ -2128,24 +2128,24 @@ void cbPySetErrorFromSdkError(cbSdkResult sdkres, const char * szErr)
         break;
     case CBSDKRESULT_ERRMEMORY:
 #ifdef __APPLE__
-    	PyErr_SetString(g_cbpyError, "Memory allocation error trying to establish master connection\n"
-    			"Consider 'sysctl -w kern.sysv.shmmax=16777216'  and 'sysctl -w kern.sysv.shmall=4194304'");
+        PyErr_SetString(g_cbpyError, "Memory allocation error trying to establish master connection\n"
+                "Consider 'sysctl -w kern.sysv.shmmax=16777216'  and 'sysctl -w kern.sysv.shmall=4194304'");
 
 #else
-    	PyErr_SetString(g_cbpyError, "Memory allocation error trying to establish master connection");
+        PyErr_SetString(g_cbpyError, "Memory allocation error trying to establish master connection");
 #endif
         break;
     case CBSDKRESULT_ERRINIT:
-    	PyErr_SetString(g_cbpyError, "Initialization error");
+        PyErr_SetString(g_cbpyError, "Initialization error");
         break;
     case CBSDKRESULT_TIMEOUT:
-    	PyErr_SetString(g_cbpyError, "Connection timeout error");
+        PyErr_SetString(g_cbpyError, "Connection timeout error");
         break;
     case CBSDKRESULT_BUSY:
-    	PyErr_SetString(g_cbpyError, "Resource is busy");
+        PyErr_SetString(g_cbpyError, "Resource is busy");
         break;
     case CBSDKRESULT_ERROFFLINE:
-    	PyErr_SetString(g_cbpyError, "Instrument is offline");
+        PyErr_SetString(g_cbpyError, "Instrument is offline");
         break;
     default:
         PyErr_SetString(g_cbpyError, "Unhandled SDK error!");
