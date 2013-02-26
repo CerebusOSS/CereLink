@@ -132,6 +132,8 @@ IF( WIN32 )
     SET ( LIB_SOURCE ${LIB_SOURCE} ../cbmex/cbMex.rc )
 ENDIF( WIN32 )
 
+#########################################################################################
+# Build cbsdk and cbsdk_static
 ADD_LIBRARY( ${LIB_NAME} SHARED ${LIB_SOURCE} ${LIB_HEADERS_MOC} )
 ADD_LIBRARY( ${LIB_NAME_STATIC} STATIC ${LIB_SOURCE} ${LIB_HEADERS_MOC} )
 # Add static library creation
@@ -139,27 +141,28 @@ SET_TARGET_PROPERTIES( ${LIB_NAME_STATIC} PROPERTIES COMPILE_FLAGS "-DSTATIC_CBS
 TARGET_LINK_LIBRARIES( ${LIB_NAME} ${QT_LIBRARIES} )
 TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} ${QT_LIBRARIES} )
 
+#########################################################################################
 # Build cbpy only if both NumPy and Python libraries are found 
 IF( NUMPY_FOUND AND PYTHONLIBS_FOUND )
     MESSAGE ( STATUS "Add cbpy build target using PythonLibs at " ${PYTHON_LIBRARIES})
     INCLUDE_DIRECTORIES( ${PYTHON_INCLUDE_DIRS} ${NUMPY_INCLUDE_DIRS} )
-IF( WIN32 )
-    SET ( LIB_SOURCE_CBPY ${LIB_SOURCE_CBPY} ../cbmex/cbMex.rc )
-ENDIF( WIN32 )
+    IF( WIN32 )
+        SET ( LIB_SOURCE_CBPY ${LIB_SOURCE_CBPY} ../cbmex/cbMex.rc )
+    ENDIF( WIN32 )
     ADD_LIBRARY( ${LIB_NAME_CBPY} SHARED MODULE ${LIB_SOURCE_CBPY} )
     SET( CBPY_PACKAGE_PATH ${PROJECT_BINARY_DIR}/../dist/lib${LIB_SUFFIX}/CereLink )
     
     # Want package name to be cbpy without prefix
-IF( WIN32 )
-    # Do not output to Debug/Release directories on Windows
-    SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES PREFIX "../" )
-    # cbpy needs special care
-    SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES COMPILE_FLAGS "-DCBPYSDK" )
-ELSE( WIN32 )
-    SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES PREFIX "" )
-    # cbpy needs special care and hide unexported symbols
-    SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES COMPILE_FLAGS "-DCBPYSDK -fvisibility=hidden" )
-ENDIF( WIN32 )
+    IF( WIN32 )
+        # Do not output to Debug/Release directories on Windows
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES PREFIX "../" )
+        # cbpy needs special care
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES COMPILE_FLAGS "-DCBPYSDK" )
+    ELSE( WIN32 )
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES PREFIX "" )
+        # cbpy needs special care and hide unexported symbols
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES COMPILE_FLAGS "-DCBPYSDK -fvisibility=hidden" )
+    ENDIF( WIN32 )
 
     SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CBPY_PACKAGE_PATH} )
     # Use static library to build cbpy
@@ -172,26 +175,26 @@ ENDIF( WIN32 )
     )
 ENDIF( NUMPY_FOUND AND PYTHONLIBS_FOUND )
 
+#########################################################################################
 # Build cbmex only if MATLAB found 
 IF( MATLAB_FOUND )
     MESSAGE ( STATUS "Add cbmex build target using MATLAB libs at " ${MATLAB_ROOT})
     INCLUDE_DIRECTORIES( ${MATLAB_INCLUDE_DIR} )
-IF( WIN32 )
-    SET ( LIB_SOURCE_CBMEX ${LIB_SOURCE_CBMEX} ../cbmex/cbMex.rc )
-ENDIF( WIN32 )
+    IF( WIN32 )
+        SET ( LIB_SOURCE_CBMEX ${LIB_SOURCE_CBMEX} ../cbmex/cbMex.rc )
+    ENDIF( WIN32 )
     ADD_LIBRARY( ${LIB_NAME_CBMEX} SHARED ${LIB_SOURCE_CBMEX} )
     
     # Want package name to be cbmex without prefix
-IF( WIN32 )
-    # Do not output to Debug/Release directories on Windows
-    SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "../" )
-    # Manually export mexFunction because __declspec(dllexport) conflicts with its definition in mex.h
-    SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES LINK_FLAGS "/EXPORT:mexFunction" )
-ELSE( WIN32 )
-    SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "" )
-    SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden" )
-ENDIF( WIN32 )
-
+    IF( WIN32 )
+        # Do not output to Debug/Release directories on Windows
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "../" )
+        # Manually export mexFunction because __declspec(dllexport) conflicts with its definition in mex.h
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES LINK_FLAGS "/EXPORT:mexFunction" )
+    ELSE( WIN32 )
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "" )
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden" )
+    ENDIF( WIN32 )
     # Use static library to build cbmex
     ADD_DEPENDENCIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${MATLAB_LIBRARIES} )
