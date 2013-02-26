@@ -33,7 +33,10 @@ InstNetwork::InstNetwork(STARTUP_OPTIONS startupOption) :
             m_timerTicks(0), m_timerId(0), m_bDone(false),
             m_nRecentPacketCount(0), m_dataCounter(0), m_nLastNumberOfPacketsReceived(0),
             m_runlevel(cbRUNLEVEL_SHUTDOWN), m_nIdx(0), m_instInfo(0),
-            m_nInstance(0), m_nInPort(NSP_IN_PORT), m_nOutPort(NSP_OUT_PORT), m_strInIP(NSP_IN_ADDRESS), m_strOutIP(NSP_OUT_ADDRESS)
+            m_nInstance(0), m_nInPort(NSP_IN_PORT), m_nOutPort(NSP_OUT_PORT),
+            m_bBroadcast(false), m_bDontRoute(true), m_bNonBlocking(true),
+            m_nRecBufSize(NSP_REC_BUF_SIZE),
+            m_strInIP(NSP_IN_ADDRESS), m_strOutIP(NSP_OUT_ADDRESS)
 {
 
     qRegisterMetaType<NetEventType>("NetEventType"); // For QT connect to recognize this type
@@ -697,7 +700,7 @@ void InstNetwork::run()
         const QByteArray outIP = m_strOutIP.toAscii();
         m_icInstrument.SetNetwork(m_nInPort, m_nOutPort, inIP, outIP);
         // Open UDP
-        cbRESULT cbres = m_icInstrument.Open(startupOption);
+        cbRESULT cbres = m_icInstrument.Open(startupOption, m_bBroadcast, m_bDontRoute, m_bNonBlocking, m_nRecBufSize);
         if (cbres)
         {
             // if we can't open NSP, say so

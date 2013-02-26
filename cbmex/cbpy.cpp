@@ -100,6 +100,7 @@ typedef enum {
     CONNECTION_PARAM_INST_PORT      = 1,
     CONNECTION_PARAM_CLIENT_ADDR    = 2,
     CONNECTION_PARAM_CLIENT_PORT    = 3,
+    CONNECTION_PARAM_RECBUFSIZE     = 4,
 } CONNECTION_PARAM;
 typedef std::map<std::string, CONNECTION_PARAM> LUT_CONNECTION_PARAM;
 LUT_CONNECTION_PARAM g_lutConnectionParam;
@@ -158,10 +159,11 @@ static int CreateLUTs()
     g_lutConfigOutputsCmd["refelecchan"   ] = CONFIG_CMD_REFELECCHAN;
     g_lutConfigOutputsCmd["scale"         ] = CONFIG_CMD_SACLE;
     // Create Connection parameter LUT
-    g_lutConnectionParam["inst-addr"      ] = CONNECTION_PARAM_INST_ADDR;
-    g_lutConnectionParam["inst-port"      ] = CONNECTION_PARAM_INST_PORT;
-    g_lutConnectionParam["client-addr"    ] = CONNECTION_PARAM_CLIENT_ADDR;
-    g_lutConnectionParam["client-port"    ] = CONNECTION_PARAM_CLIENT_PORT;
+    g_lutConnectionParam["inst-addr"           ] = CONNECTION_PARAM_INST_ADDR;
+    g_lutConnectionParam["inst-port"           ] = CONNECTION_PARAM_INST_PORT;
+    g_lutConnectionParam["client-addr"         ] = CONNECTION_PARAM_CLIENT_ADDR;
+    g_lutConnectionParam["client-port"         ] = CONNECTION_PARAM_CLIENT_PORT;
+    g_lutConnectionParam["receive-buffer-size" ] = CONNECTION_PARAM_RECBUFSIZE;
     return 0;
 }
 
@@ -319,6 +321,12 @@ static PyObject * cbpy_Open(PyObject *self, PyObject *args, PyObject *keywds)
                     con.nOutPort = PyInt_AsLong(pValue);
                 else
                     return PyErr_Format(PyExc_TypeError, "Invalid client port number; should be integer");
+                break;
+            case CONNECTION_PARAM_RECBUFSIZE:
+                if (PyInt_Check(pValue))
+                    con.nRecBufSize = PyInt_AsLong(pValue);
+                else
+                    return PyErr_Format(PyExc_TypeError, "Invalid receive buffer size number; should be integer");
                 break;
             }
         }
@@ -2115,7 +2123,7 @@ void cbPySetErrorFromSdkError(cbSdkResult sdkres, const char * szErr)
         PyErr_SetString(g_cbpyError, "Socket option error (possibly permission problem)");
         break;
     case CBSDKRESULT_MEMERRUDP:
-        PyErr_SetString(g_cbpyError, "Socket memory assignment error (net.core.rmem or kern.ipc.maxsockbuf should be 8388608)");
+    	PyErr_SetString(g_cbpyError, ERR_UDP_MESSAGE);
         break;
     case CBSDKRESULT_INVALIDINST:
         PyErr_SetString(g_cbpyError, "Invalid range or instrument address");

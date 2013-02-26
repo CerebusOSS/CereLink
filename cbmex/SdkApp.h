@@ -33,7 +33,7 @@ public:
     UINT32 GetInstInfo() {return m_instInfo;}
     cbRESULT GetLastCbErr() {return m_lastCbErr;}
     void Open(UINT32 id, int nInPort = cbNET_UDP_PORT_BCAST, int nOutPort = cbNET_UDP_PORT_CNT, 
-        LPCSTR szInIP = cbNET_UDP_ADDR_INST, LPCSTR szOutIP = cbNET_UDP_ADDR_CNT);
+        LPCSTR szInIP = cbNET_UDP_ADDR_INST, LPCSTR szOutIP = cbNET_UDP_ADDR_CNT, int nRecBufSize = NSP_REC_BUF_SIZE);
 private:
     void OnPktGroup(const cbPKT_GROUP * const pkt);
     void OnPktEvent(const cbPKT_GENERIC * const pPkt);

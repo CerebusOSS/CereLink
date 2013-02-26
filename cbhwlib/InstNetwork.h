@@ -114,6 +114,10 @@ protected:
     UINT32 m_nIdx;  // library instance index
     int m_nInPort;  // Client port number
     int m_nOutPort; // Instrument port number
+    bool m_bBroadcast;
+    bool m_bDontRoute;
+    bool m_bNonBlocking;
+    int m_nRecBufSize;
     QString m_strInIP;  // Client IPv4 address
     QString m_strOutIP; // Instrument IPv4 address
 

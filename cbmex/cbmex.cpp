@@ -215,9 +215,7 @@ void PrintErrorSDK(cbSdkResult res, const char * szCustom = NULL)
         mexErrMsgTxt("Socket option error (possibly permission issue)");
         break;
     case CBSDKRESULT_MEMERRUDP:
-        mexErrMsgTxt("Unable to assign UDP interface memory\n"
-            " Consider using sysctl -w net.core.rmem_max=8388608\n"
-            " or sysctl -w kern.ipc.maxsockbuf=8388608");
+        mexErrMsgTxt(ERR_UDP_MESSAGE);
         break;
     case CBSDKRESULT_INVALIDINST:
         mexErrMsgTxt("Invalid range or instrument address");
@@ -359,6 +357,7 @@ void OnOpen(
     {
         PARAM_NONE,
         PARAM_INSTANCE,
+        PARAM_RECBUFSIZE,
         PARAM_INST_IP,
         PARAM_INST_PORT,
         PARAM_CENTRAL_IP,
@@ -371,7 +370,7 @@ void OnOpen(
         if (param == PARAM_NONE)
         {
             char cmdstr[128];
-            if (mxGetString(prhs[i], cmdstr, 16))
+            if (mxGetString(prhs[i], cmdstr, 32))
             {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d is invalid", i);
@@ -380,6 +379,10 @@ void OnOpen(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
+            }
+            else if (_strcmpi(cmdstr, "receive-buffer-size") == 0)
+            {
+            	param = PARAM_RECBUFSIZE;
             }
             else if (_strcmpi(cmdstr, "inst-addr") == 0)
             {
@@ -408,6 +411,11 @@ void OnOpen(
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_OPEN, true, "Invalid instance number");
                 nInstance = (UINT32)mxGetScalar(prhs[i]);
+                break;
+            case PARAM_RECBUFSIZE:
+            	if (!mxIsNumeric(prhs[i]))
+                    PrintHelp(CBMEX_FUNCTION_OPEN, true, "Invalid receive buffer size");
+                con.nRecBufSize = (int)mxGetScalar(prhs[i]);
                 break;
             case PARAM_INST_IP:
                 if (mxGetString(prhs[i], szInstIp, 16))

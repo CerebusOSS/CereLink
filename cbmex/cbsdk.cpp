@@ -711,7 +711,7 @@ cbSdkResult SdkApp::SdkOpen(UINT32 nInstance, cbSdkConnectionType conType, cbSdk
     if (conType == CBSDKCONNECTION_UDP)
     {
         m_connectLock.lock();
-        Open(nInstance, con.nInPort, con.nOutPort, con.szInIP, con.szOutIP);
+        Open(nInstance, con.nInPort, con.nOutPort, con.szInIP, con.szOutIP, con.nRecBufSize);
     }
     else if (conType == CBSDKCONNECTION_CENTRAL)
     {
@@ -3327,7 +3327,7 @@ SdkApp::~SdkApp()
 //   nOutPort  - Instrument port number
 //   szInIP;   - Client IPv4 address
 //   szOutIP   - Instrument IPv4 address
-void SdkApp::Open(UINT32 nInstance, int nInPort, int nOutPort, LPCSTR szInIP, LPCSTR szOutIP)
+void SdkApp::Open(UINT32 nInstance, int nInPort, int nOutPort, LPCSTR szInIP, LPCSTR szOutIP, int nRecBufSize)
 {
     // clear las library error
     m_lastCbErr = cbRESULT_OK;
@@ -3347,6 +3347,7 @@ void SdkApp::Open(UINT32 nInstance, int nInPort, int nOutPort, LPCSTR szInIP, LP
     m_nInstance = nInstance;
     m_nInPort = nInPort;
     m_nOutPort = nOutPort;
+    m_nRecBufSize = nRecBufSize;
     m_strInIP = szInIP;
     m_strOutIP = szOutIP;
 

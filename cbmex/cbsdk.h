@@ -244,11 +244,13 @@ typedef struct _cbSdkConnection
     {
         nInPort = cbNET_UDP_PORT_BCAST;
         nOutPort = cbNET_UDP_PORT_CNT;
+        nRecBufSize = (4096 * 2048); // 8MB default needed for best performance
         szInIP = "";
         szOutIP = "";
     }
     int nInPort;  // Client port number
     int nOutPort; // Instrument port number
+    int nRecBufSize; // Receive buffer size (0 to ignore altogether)
     LPCSTR szInIP;  // Client IPv4 address
     LPCSTR szOutIP; // Instrument IPv4 address
 } cbSdkConnection;
