@@ -2219,7 +2219,7 @@ static PyMethodDef g_cbpyMethods[] =
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Module initialization
-extern "C" CBPY_EXPORT MOD_INIT(cbpy)
+extern "C" CBSDKAPI MOD_INIT(cbpy)
 {
     PyObject * m;
 

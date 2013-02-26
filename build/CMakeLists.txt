@@ -179,10 +179,12 @@ IF( WIN32 )
 ENDIF( WIN32 )
     ADD_LIBRARY( ${LIB_NAME_CBMEX} SHARED ${LIB_SOURCE_CBMEX} )
     
-    # Want package name to be cbpy without prefix
+    # Want package name to be cbmex without prefix
 IF( WIN32 )
     # Do not output to Debug/Release directories on Windows
     SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "../" )
+    # Manually export mexFunction because __declspec(dllexport) conflicts with its definition in mex.h
+    SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES LINK_FLAGS "/EXPORT:mexFunction" )
 ELSE( WIN32 )
     SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "" )
 ENDIF( WIN32 )
