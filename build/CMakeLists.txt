@@ -62,6 +62,7 @@ SET( LIB_NAME cbsdk )
 SET( LIB_NAME_STATIC cbsdk_static )
 SET( LIB_NAME_CBPY cbpy )
 SET( LIB_NAME_CBMEX cbmex )
+SET( TEST_NAME testcbsdk )
 
 # Make sure debug builds are recognized
 SET(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
@@ -141,6 +142,23 @@ SET_TARGET_PROPERTIES( ${LIB_NAME_STATIC} PROPERTIES COMPILE_FLAGS "-DSTATIC_CBS
 TARGET_LINK_LIBRARIES( ${LIB_NAME} ${QT_LIBRARIES} )
 TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} ${QT_LIBRARIES} )
 
+IF( WIN32 )
+    # Do not output to Debug/Release directories on Windows
+    SET_TARGET_PROPERTIES (${LIB_NAME} PROPERTIES PREFIX "../")
+    SET_TARGET_PROPERTIES( ${LIB_NAME} PROPERTIES IMPORT_PREFIX "../")
+    SET_TARGET_PROPERTIES (${LIB_NAME_STATIC} PROPERTIES PREFIX "../")
+
+	TARGET_LINK_LIBRARIES( ${LIB_NAME} ws2_32 winmm )
+    TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} ws2_32 winmm )
+ENDIF( WIN32 )
+
+ADD_CUSTOM_COMMAND(
+	TARGET "${LIB_NAME}"
+	POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_BINARY_DIR}/../cbmex/cbsdk.h" "${PROJECT_BINARY_DIR}/../dist/include/cbsdk.h"
+	COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_BINARY_DIR}/../cbhwlib/cbhwlib.h" "${PROJECT_BINARY_DIR}/../dist/include/cbhwlib.h"
+)
+
 #########################################################################################
 # Build cbpy only if both NumPy and Python libraries are found 
 IF( NUMPY_FOUND AND PYTHONLIBS_FOUND )
@@ -191,9 +209,12 @@ IF( MATLAB_FOUND )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "../" )
         # Manually export mexFunction because __declspec(dllexport) conflicts with its definition in mex.h
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES LINK_FLAGS "/EXPORT:mexFunction" )
+    ELSEIF( APPLE )
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "" )
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden -Wl,-rpath,@loader_path/." )
     ELSE( WIN32 )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "" )
-        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden" )
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden -Wl,-rpath=$ORIGIN" )
     ENDIF( WIN32 )
     # Use static library to build cbmex
     ADD_DEPENDENCIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} )
@@ -206,25 +227,9 @@ IF( MATLAB_FOUND )
     )
 ENDIF( MATLAB_FOUND )
 
-IF( WIN32 )
-    # Do not output to Debug/Release directories on Windows
-    SET_TARGET_PROPERTIES (${LIB_NAME} PROPERTIES PREFIX "../")
-    SET_TARGET_PROPERTIES( ${LIB_NAME} PROPERTIES IMPORT_PREFIX "../")
-    SET_TARGET_PROPERTIES (${LIB_NAME_STATIC} PROPERTIES PREFIX "../")
 
-	TARGET_LINK_LIBRARIES( ${LIB_NAME} ws2_32 winmm )
-    TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} ws2_32 winmm )
-ENDIF( WIN32 )
-
-ADD_CUSTOM_COMMAND(
-	TARGET "${LIB_NAME}"
-	POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_BINARY_DIR}/../cbmex/cbsdk.h" "${PROJECT_BINARY_DIR}/../dist/include/cbsdk.h"
-	COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_BINARY_DIR}/../cbhwlib/cbhwlib.h" "${PROJECT_BINARY_DIR}/../dist/include/cbhwlib.h"
-)
-
-# Test executable
-SET( TEST_NAME testcbsdk )
+#########################################################################################
+# Build Test executable
 ADD_EXECUTABLE( ${TEST_NAME} ../cbmex/testcbsdk.cpp )
 TARGET_LINK_LIBRARIES( ${TEST_NAME} ${LIB_NAME} )
 
