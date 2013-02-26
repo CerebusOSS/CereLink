@@ -6,6 +6,7 @@ dist/
 *.old
 *.ncb
 *.suo
+*.aps
 *.DS_Store
 UpgradeLog.XML
 _UpgradeReport_Files/
