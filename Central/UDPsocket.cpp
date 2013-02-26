@@ -140,7 +140,7 @@ cbRESULT UDPSocket::Open(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bool 
             // to increase buffer
             // sysctl -w net.core.rmem_max=8388608
             //  or
-        	// nvram boot-args="ncl=65536"
+            // nvram boot-args="ncl=65536"
             // sysctl -w kern.ipc.maxsockbuf=8388608
             Close();
             return cbRESULT_SOCKMEMERR;

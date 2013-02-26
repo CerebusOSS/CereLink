@@ -413,7 +413,7 @@ void OnOpen(
                 nInstance = (UINT32)mxGetScalar(prhs[i]);
                 break;
             case PARAM_RECBUFSIZE:
-            	if (!mxIsNumeric(prhs[i]))
+                if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_OPEN, true, "Invalid receive buffer size");
                 con.nRecBufSize = (int)mxGetScalar(prhs[i]);
                 break;

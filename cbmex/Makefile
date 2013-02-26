@@ -175,7 +175,7 @@ MEX_OBJS    := $(patsubst %.cpp, $(ObjDir)/%$(ARCH)$(DEBUG).o, $(notdir $(MEX_SR
 PY_OBJS     := $(patsubst %.cpp, $(ObjDir)/$(PySdkDir)/%$(ARCH)$(DEBUG).o, $(notdir $(PY_SRC)))
 
 #### This tag must be the first build tag
-all: sdk mex
+all: sdk mex pysdk
 
 sdk: prepare $(BinDir)/$(CBSDKSO)
 	@echo shared library done. 

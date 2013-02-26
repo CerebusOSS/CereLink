@@ -73,6 +73,7 @@ void OnSystem        (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]
         "'inst-port', value: value is the instrument port number\n" \
         "'central-addr', value: value is string containing central ipv4 address\n" \
         "'central-port', value: value is the central port number\n" \
+        "'receive-buffer-size', value: override default network buffer size (low value may result in drops)\n" \
         "\n" \
         "Outputs:\n" \
         " connection (optional): 1 (Central), 2 (UDP)\n" \
