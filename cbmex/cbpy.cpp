@@ -395,7 +395,7 @@ static PyObject * cbpy_Time(PyObject *self, PyObject *args, PyObject *keywds)
     else if (_strcmpi(pSzUnit, "seconds") == 0 || _strcmpi(pSzUnit, "s") == 0)
     {
         UINT32 sysfreq;
-        sdkres = cbSdkGetSysConfig(NULL, NULL, &sysfreq);
+        sdkres = cbSdkGetSysConfig(nInstance, NULL, NULL, &sysfreq);
         if (sdkres != CBSDKRESULT_SUCCESS)
             cbPySetErrorFromSdkError(sdkres, "error cbSdkGetSysConfig");
         if (sdkres < CBSDKRESULT_SUCCESS)
@@ -405,7 +405,7 @@ static PyObject * cbpy_Time(PyObject *self, PyObject *args, PyObject *keywds)
     else if (_strcmpi(pSzUnit, "milliseconds") == 0 || _strcmpi(pSzUnit, "ms") == 0)
     {
         UINT32 sysfreq;
-        sdkres = cbSdkGetSysConfig(NULL, NULL, &sysfreq);
+        sdkres = cbSdkGetSysConfig(nInstance, NULL, NULL, &sysfreq);
         if (sdkres != CBSDKRESULT_SUCCESS)
             cbPySetErrorFromSdkError(sdkres, "error cbSdkGetSysConfig");
         if (sdkres < CBSDKRESULT_SUCCESS)
@@ -2199,12 +2199,6 @@ static PyMethodDef g_cbpyMethods[] =
         NULL,                /* m_clear */
         NULL,                /* m_free */
     };
-#endif
-
-#ifdef WIN32
-#define CBPY_EXPORT
-#else
-#define CBPY_EXPORT CBSDKAPI
 #endif
 
 #if PY_MAJOR_VERSION >= 3
