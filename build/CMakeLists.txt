@@ -168,7 +168,7 @@ IF( NUMPY_FOUND AND PYTHONLIBS_FOUND )
         SET ( LIB_SOURCE_CBPY ${LIB_SOURCE_CBPY} ../cbmex/cbMex.rc )
     ENDIF( WIN32 )
     ADD_LIBRARY( ${LIB_NAME_CBPY} SHARED MODULE ${LIB_SOURCE_CBPY} )
-    SET( CBPY_PACKAGE_PATH ${PROJECT_BINARY_DIR}/../dist/lib${LIB_SUFFIX}/CereLink )
+    SET( CBPY_PACKAGE_PATH lib${LIB_SUFFIX}/CereLink )
     
     # Want package name to be cbpy without prefix
     IF( WIN32 )
@@ -176,21 +176,25 @@ IF( NUMPY_FOUND AND PYTHONLIBS_FOUND )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES PREFIX "../" )
         # cbpy needs special care
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES COMPILE_FLAGS "-DCBPYSDK" )
+        # Target is cbpy.pyd
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES SUFFIX pyd)
     ELSE( WIN32 )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES PREFIX "" )
         # cbpy needs special care and hide unexported symbols
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES COMPILE_FLAGS "-DCBPYSDK -fvisibility=hidden" )
     ENDIF( WIN32 )
-
-    SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CBPY_PACKAGE_PATH} )
+    
+    
     # Use static library to build cbpy
     ADD_DEPENDENCIES( ${LIB_NAME_CBPY} ${LIB_NAME_STATIC} )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_CBPY} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${PYTHON_LIBRARIES} )
-    ADD_CUSTOM_COMMAND(
-        TARGET "${LIB_NAME_CBPY}"
-        POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_BINARY_DIR}/../cbmex/__init__.py" "${CBPY_PACKAGE_PATH}/__init__.py"
+    
+    INSTALL( TARGETS ${LIB_NAME_CBPY}
+        RUNTIME DESTINATION ${CBPY_PACKAGE_PATH} 
+        LIBRARY DESTINATION ${CBPY_PACKAGE_PATH} 
+        ARCHIVE DESTINATION ${CBPY_PACKAGE_PATH} 
     )
+    INSTALL( FILES ../cbmex/__init__.py DESTINATION ${CBPY_PACKAGE_PATH}  )
 ENDIF( NUMPY_FOUND AND PYTHONLIBS_FOUND )
 
 #########################################################################################
@@ -210,20 +214,25 @@ IF( MATLAB_FOUND )
         # Manually export mexFunction because __declspec(dllexport) conflicts with its definition in mex.h
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES LINK_FLAGS "/EXPORT:mexFunction" )
     ELSEIF( APPLE )
+        #-Wl,-rpath,@loader_path/.
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "" )
-        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden -Wl,-rpath,@loader_path/." )
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden" )
+        # This is for normal OSX users of MATLAB without homebrew 
+        #  so we try to use relative paths to be able to bundle shared libraries 
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES BUILD_WITH_INSTALL_RPATH 1 INSTALL_NAME_DIR "@rpath")
     ELSE( WIN32 )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "" )
-        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden -Wl,-rpath=$ORIGIN" )
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden" )
     ENDIF( WIN32 )
+    
+    SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES SUFFIX .${MEXTENSION})
     # Use static library to build cbmex
     ADD_DEPENDENCIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${MATLAB_LIBRARIES} )
-    GET_TARGET_PROPERTY( MEX_FILE ${LIB_NAME_CBMEX} LOCATION)
-    ADD_CUSTOM_COMMAND(
-        TARGET "${LIB_NAME_CBMEX}"
-        POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy "${MEX_FILE}" "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${LIB_NAME_CBMEX}.${MEXTENSION}"
+    INSTALL( TARGETS ${LIB_NAME_CBMEX}
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION lib${LIB_SUFFIX}
+        ARCHIVE DESTINATION lib${LIB_SUFFIX}
     )
 ENDIF( MATLAB_FOUND )
 
