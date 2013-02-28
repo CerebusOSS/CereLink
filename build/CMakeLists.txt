@@ -68,7 +68,7 @@ SET( TEST_NAME testcbsdk )
 SET(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
 
 FIND_PACKAGE( Qt4 REQUIRED )
-FIND_PACKAGE( PythonLibs )
+FIND_PACKAGE( PythonLibrary )
 FIND_PACKAGE( NumPy )
 
 # Try MATLAB locally first, then on MATLAB install
@@ -144,7 +144,9 @@ ELSE( WIN32 )
     # Need relocatable static library
     SET_TARGET_PROPERTIES( ${LIB_NAME_STATIC} PROPERTIES COMPILE_FLAGS "-DSTATIC_CBSDK_LINK -fPIC")
     # Hide unexported symbols
-    SET_TARGET_PROPERTIES( ${LIB_NAME} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
+    IF( NOT APPLE )
+        SET_TARGET_PROPERTIES( ${LIB_NAME} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
+    ENDIF( NOT APPLE )
     SET_TARGET_PROPERTIES( ${LIB_NAME} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden" )
 ENDIF( WIN32)
 
@@ -170,15 +172,14 @@ ADD_CUSTOM_COMMAND(
 
 #########################################################################################
 # Build cbpy only if both NumPy and Python libraries are found 
-IF( NUMPY_FOUND AND PYTHONLIBS_FOUND )
-    MESSAGE ( STATUS "Add cbpy build target using PythonLibs at " ${PYTHON_LIBRARIES})
-    INCLUDE_DIRECTORIES( ${PYTHON_INCLUDE_DIRS} ${NUMPY_INCLUDE_DIRS} )
+IF( NUMPY_FOUND AND PYTHONLIBRARY_FOUND )
+    MESSAGE ( STATUS "Add cbpy build target using Python found at " ${PYTHON_EXECUTABLE})
+    INCLUDE_DIRECTORIES( ${PYTHON_INCLUDE_PATH} ${NUMPY_INCLUDE_DIRS} )
     IF( WIN32 )
         SET ( LIB_SOURCE_CBPY ${LIB_SOURCE_CBPY} ../cbmex/cbMex.rc )
     ENDIF( WIN32 )
     ADD_LIBRARY( ${LIB_NAME_CBPY} SHARED MODULE ${LIB_SOURCE_CBPY} )
-    SET( CBPY_PACKAGE_PATH lib${LIB_SUFFIX}/CereLink )
-    
+        
     # Want package name to be cbpy without prefix
     IF( WIN32 )
         # Do not output to Debug/Release directories on Windows
@@ -190,22 +191,23 @@ IF( NUMPY_FOUND AND PYTHONLIBS_FOUND )
     ELSE( WIN32 )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES PREFIX "" )
         # cbpy needs special care and hide unexported symbols
-        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
+        IF( NOT APPLE )
+            SET_TARGET_PROPERTIES( ${LIB_NAME} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
+        ENDIF( NOT APPLE )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES COMPILE_FLAGS "-DCBPYSDK -fvisibility=hidden" )
     ENDIF( WIN32 )
-    
     
     # Use static library to build cbpy
     ADD_DEPENDENCIES( ${LIB_NAME_CBPY} ${LIB_NAME_STATIC} )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_CBPY} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${PYTHON_LIBRARIES} )
     
     INSTALL( TARGETS ${LIB_NAME_CBPY}
-        RUNTIME DESTINATION ${CBPY_PACKAGE_PATH} 
-        LIBRARY DESTINATION ${CBPY_PACKAGE_PATH} 
-        ARCHIVE DESTINATION ${CBPY_PACKAGE_PATH} 
+        RUNTIME DESTINATION ${PYTHON_SITE_PACKAGES_INSTALL_DIR}/CereLink 
+        LIBRARY DESTINATION ${PYTHON_SITE_PACKAGES_INSTALL_DIR}/CereLink 
+        ARCHIVE DESTINATION ${PYTHON_SITE_PACKAGES_INSTALL_DIR}/CereLink 
     )
-    INSTALL( FILES ../cbmex/__init__.py DESTINATION ${CBPY_PACKAGE_PATH}  )
-ENDIF( NUMPY_FOUND AND PYTHONLIBS_FOUND )
+    INSTALL( FILES ../cbmex/__init__.py DESTINATION ${PYTHON_SITE_PACKAGES_INSTALL_DIR}/CereLink  )
+ENDIF( NUMPY_FOUND AND PYTHONLIBRARY_FOUND )
 
 #########################################################################################
 # Build cbmex only if MATLAB found 
@@ -225,7 +227,6 @@ IF( MATLAB_FOUND )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES LINK_FLAGS "/EXPORT:mexFunction" )
     ELSEIF( APPLE )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "" )
-        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden" )
         # This is for normal OSX users of MATLAB without homebrew 
         #  so we try to use relative paths to be able to bundle shared libraries 
@@ -241,9 +242,9 @@ IF( MATLAB_FOUND )
     ADD_DEPENDENCIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${MATLAB_LIBRARIES} )
     INSTALL( TARGETS ${LIB_NAME_CBMEX}
-        RUNTIME DESTINATION bin
-        LIBRARY DESTINATION lib${LIB_SUFFIX}
-        ARCHIVE DESTINATION lib${LIB_SUFFIX}
+        RUNTIME DESTINATION ./CereLink
+        LIBRARY DESTINATION ./CereLink
+        ARCHIVE DESTINATION ./CereLink
     )
 ENDIF( MATLAB_FOUND )
 
