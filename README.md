@@ -12,3 +12,9 @@ MATLAB wrapper (cbmex): MATLAB executable (mex) to configure and pull data using
 Python wrapper (cbpy): Python binding for cbsdk to configure, pull data, and receive callbacks
 
 File conversion utility (n2h5): Converts nsx and nev files to hdf5 format
+
+Wiki
+
+# Project wiki
+
+https://github.com/dashesy/CereLink/wiki
