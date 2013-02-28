@@ -11,6 +11,7 @@
 #
 #  MATLAB: First ../Matlab  is looked if mex.h is not found FindMatlab.cmake looks at usual places, 
 #   use -DMATLAB_ROOT if installed in unknown location (or copy to ../Matlab)
+#  If -DCBMEX_INSTALL_PREFIX can be used to install cbmex to given directory
 #
 
 CMAKE_MINIMUM_REQUIRED( VERSION 2.8 )
@@ -238,13 +239,16 @@ IF( MATLAB_FOUND )
     ENDIF( WIN32 )
     
     SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES SUFFIX .${MEXTENSION})
+    IF( NOT CBMEX_INSTALL_PREFIX )
+        SET( CBMEX_INSTALL_PREFIX .)
+    ENDIF( NOT CBMEX_INSTALL_PREFIX )
     # Use static library to build cbmex
     ADD_DEPENDENCIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${MATLAB_LIBRARIES} )
     INSTALL( TARGETS ${LIB_NAME_CBMEX}
-        RUNTIME DESTINATION ./CereLink
-        LIBRARY DESTINATION ./CereLink
-        ARCHIVE DESTINATION ./CereLink
+        RUNTIME DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
+        LIBRARY DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
+        ARCHIVE DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
     )
 ENDIF( MATLAB_FOUND )
 
