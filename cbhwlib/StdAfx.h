@@ -29,7 +29,7 @@
 #define ERR_UDP_MESSAGE \
             "Unable to assign UDP interface memory\n" \
             " Consider nvram boot-args=\"ncl=65536\"\n" \
-            "          sysctl -w net.core.rmem_max=8388608 and\n" \
+            "          sysctl -w kern.ipc.maxsockbuf=8388608 and\n" \
             " Requirement of the first command depends on system memory\n" \
             " That may need to change boot parameters on OSX (and needs to reboot before the sysctl command) \n" \
             " It is possible to use 'receive-buffer-size' parameter when opening the library to override this\n" \
