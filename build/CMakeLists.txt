@@ -229,7 +229,7 @@ IF( MATLAB_FOUND )
     ELSEIF( APPLE )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "" )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden" )
-        # This is for normal OSX users of MATLAB without homebrew 
+        # This is for normal users of MATLAB on OSX without homebrew 
         #  so we try to use relative paths to be able to bundle shared libraries 
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES BUILD_WITH_INSTALL_RPATH 1 INSTALL_NAME_DIR "@rpath")
     ELSE( WIN32 )
