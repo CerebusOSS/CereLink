@@ -13,7 +13,6 @@ Python wrapper (cbpy): Python binding for cbsdk to configure, pull data, and rec
 
 File conversion utility (n2h5): Converts nsx and nev files to hdf5 format
 
-Wiki
 
 # Project wiki
 
