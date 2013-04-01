@@ -311,6 +311,8 @@ cbRESULT cbOpen(BOOL bStandAlone, UINT32 nInstance)
         if (cbRet == cbRESULT_OK)
         {
             cb_library_initialized[nIdx] = TRUE;      // We are in the library, so it is initialized
+        } else {
+            cbReleaseSystemLock(szLockName, cb_sys_lock_hnd[nInstance]);
         }
         return cbRet;
     } else {
@@ -417,7 +419,7 @@ cbRESULT cbCheckApp(const char * lpName)
         cbRet = cbRESULT_NOCENTRALAPP;
 #else
     {
-        char szLockName[64] = {0};
+        char szLockName[256] = {0};
         char * szTmpDir = getenv("TMPDIR");
         _snprintf(szLockName, sizeof(szLockName), "%s/%s.lock", szTmpDir == NULL ? "/tmp" : szTmpDir, lpName);
         FILE * pflock = fopen(szLockName, "w+");
@@ -456,7 +458,7 @@ cbRESULT cbAquireSystemLock(const char * lpName, HANDLE & hLock)
 #else
     // There are other methods such as sharedmemory but they break if application crash
     //  only a file lock seems resilient to crash, also with tmp mounted as tmpfs this is as fast as it could be
-    char szLockName[64] = {0};
+    char szLockName[256] = {0};
     char * szTmpDir = getenv("TMPDIR");
     _snprintf(szLockName, sizeof(szLockName), "%s/%s.lock", szTmpDir == NULL ? "/tmp" : szTmpDir, lpName);
     FILE * pflock = fopen(szLockName, "w+");
@@ -626,7 +628,7 @@ cbRESULT cbClose(BOOL bStandAlone, UINT32 nInstance)
     // If it is stand alone application
     if (bStandAlone)
     {
-        char buf[64] = {0};
+        char buf[256] = {0};
         if (nInstance == 0)
             _snprintf(buf, sizeof(buf), "cbCentralAppMutex");
         else
@@ -1599,6 +1601,30 @@ cbRESULT cbSetChanAmplitudeReject(UINT32 chan, const cbAMPLITUDEREJECT Amplitude
 
     // Enter the packet into the XMT buffer queue
     return cbSendPacket(&chaninfo, nInstance);
+}
+
+// Author & Date:   Ehsan Azar     22 Jan 2013
+// Purpose: Get full channel config
+// Inputs:
+//   chan - channel number (1-based)
+// Outputs:
+//   chaninfo   - shared segment size to create
+//   Returns the error code
+cbRESULT cbGetChanInfo(UINT32 chan, cbPKT_CHANINFO *chaninfo, UINT32 nInstance)
+{
+    UINT32 nIdx = cb_library_index[nInstance];
+
+    // Test for prior library initialization
+    if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
+
+    // Test that the channel address is valid and initialized
+    if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+
+    // Return the requested data from the rec buffer
+    if (chaninfo) memcpy(chaninfo, &(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1]), sizeof(cbPKT_CHANINFO));
+
+    return cbRESULT_OK;
 }
 
 cbRESULT cbGetChanAutoThreshold(UINT32 chan, UINT32 *bEnabled, UINT32 nInstance)
@@ -2897,7 +2923,30 @@ cbRESULT cbCheckforData(cbLevelOfConcern & nLevelOfConcern, UINT32 *pktstogo /* 
     return cbRESULT_OK;
 }
 
+#if defined __APPLE__
+// Author & Date:   Ehsan Azar     16 Feb 2013
+// Purpose: OSX compatibility wrapper
+// Inputs:
+//   sem    - buffer name
+//   ms     - milliseconds to try semaphore
+int sem_timedwait(sem_t * sem, int ms)
+{
+    int err = 1;
+    while (ms > 0)
+    {
+        if (sem_trywait(sem) == 0)
+        {
+            err = 0;
+            break;
+        }
+        usleep(1000);
+        ms--;
+    }
+    return err;
+}
+#endif
 
+// Purpose: Wait for master application (usually Central) to fill buffers
 cbRESULT cbWaitforData(UINT32 nInstance)
 {
     UINT32 nIdx = cb_library_index[nInstance];
@@ -2905,10 +2954,16 @@ cbRESULT cbWaitforData(UINT32 nInstance)
 #ifdef WIN32
     if (WaitForSingleObject(cb_sig_event_hnd[nIdx], 250) == WAIT_OBJECT_0)
         return cbRESULT_OK;
+#elif defined __APPLE__
+    if (sem_timedwait((sem_t *)cb_sig_event_hnd[nIdx], 250) == 0)
+        return cbRESULT_OK;
 #else
     timespec ts;
+    long ns = 250000000;
     clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_nsec += 250000000;
+#define NANOSECONDS_PER_SEC    1000000000L
+    ts.tv_nsec = (ts.tv_nsec + ns) % NANOSECONDS_PER_SEC;
+    ts.tv_sec += (ts.tv_nsec + ns) / NANOSECONDS_PER_SEC;
     if (sem_timedwait((sem_t *)cb_sig_event_hnd[nIdx], &ts) == 0)
         return cbRESULT_OK;
 #endif

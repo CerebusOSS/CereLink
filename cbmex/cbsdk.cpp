@@ -29,6 +29,7 @@
 #include "../CentralCommon/BmiVersion.h"
 #include "cbHwlibHi.h"
 #include "debugmacs.h"
+#include <math.h>
 #include <QCoreApplication>
 
 // Keep this after all headers
@@ -710,14 +711,10 @@ cbSdkResult SdkApp::SdkOpen(UINT32 nInstance, cbSdkConnectionType conType, cbSdk
     if (conType == CBSDKCONNECTION_UDP)
     {
         m_connectLock.lock();
-        Open(nInstance, con.nInPort, con.nOutPort, con.szInIP, con.szOutIP);
+        Open(nInstance, con.nInPort, con.nOutPort, con.szInIP, con.szOutIP, con.nRecBufSize);
     }
     else if (conType == CBSDKCONNECTION_CENTRAL)
     {
-        // Complain for non-default values
-        if (con.nInPort != cbNET_UDP_PORT_BCAST || con.nOutPort != cbNET_UDP_PORT_CNT ||
-            strcmp(con.szInIP, cbNET_UDP_ADDR_INST) != 0|| strcmp(con.szOutIP, cbNET_UDP_ADDR_CNT) != 0)
-            return CBSDKRESULT_INVALIDINST;
         m_connectLock.lock();
         Open(nInstance);
     }
@@ -1378,7 +1375,7 @@ cbSdkResult SdkApp::SdkSetTrialConfig(UINT32 bActive, UINT16 begchan, UINT32 beg
             m_CMT->timestamps = new UINT32[m_CMT->size];
             m_CMT->rgba = new UINT32[m_CMT->size];
             m_CMT->charset = new UINT8[m_CMT->size];
-            m_CMT->comments = new (UINT8 * [m_CMT->size]); // UINT8 * array[m_CMT->size]
+            m_CMT->comments = new UINT8 * [m_CMT->size]; // UINT8 * array[m_CMT->size]
             if (m_CMT->timestamps == NULL || m_CMT->rgba == NULL || m_CMT->charset == NULL || m_CMT->comments == NULL)
                 bErr = true;
             try {
@@ -1426,7 +1423,7 @@ cbSdkResult SdkApp::SdkSetTrialConfig(UINT32 bActive, UINT16 begchan, UINT32 beg
                     m_TR->synch_timestamps[i] = new UINT32[m_TR->size];
                     m_TR->synch_frame_numbers[i] = new UINT32[m_TR->size];
                     m_TR->point_counts[i] = new UINT16[m_TR->size];
-                    m_TR->coords[i] = new (void * [m_TR->size]);
+                    m_TR->coords[i] = new void * [m_TR->size];
 
                     if (m_TR->timestamps[i] == NULL || m_TR->synch_timestamps[i] == NULL || m_TR->synch_frame_numbers[i] == NULL ||
                             m_TR->point_counts[i]== NULL || m_TR->coords[i] == NULL)
@@ -2230,7 +2227,7 @@ cbSdkResult SdkApp::SdkSetFileConfig(const char * filename, const char * comment
     fcpkt.recording = bStart ? 1 : 0;
 
     // send the packet
-    cbRESULT cbres = cbSendPacket(&fcpkt);
+    cbRESULT cbres = cbSendPacket(&fcpkt, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
 
@@ -2253,6 +2250,51 @@ CBSDKAPI    cbSdkResult cbSdkSetFileConfig(UINT32 nInstance,
         return CBSDKRESULT_CLOSED;
 
     return g_app[nInstance]->SdkSetFileConfig(filename, comment, bStart, options);
+}
+
+// Author & Date:   Ehsan Azar     20 Feb 2013
+// Purpose: Get file recording information
+// Outputs:
+//   filename      - file name being recorded
+//   username      - user name recording the file
+//   pbRecording   - If recordign is in progress (depends on keep-alive mechanism)
+//   returns the error code
+cbSdkResult SdkApp::SdkGetFileConfig(char * filename, char * username, bool * pbRecording)
+{
+    return CBSDKRESULT_NOTIMPLEMENTED;
+#if 0
+    if (m_instInfo == 0)
+        return CBSDKRESULT_CLOSED;
+
+    // declare the packet that will be sent
+    cbPKT_FILECFG filecfg;
+    cbRESULT cbres = cbGetFileInfo(&filecfg, m_nInstance);
+    if (cbres)
+        return CBSDKRESULT_UNKNOWN;
+
+    if (filename)
+        strncpy(filename, filecfg.filename, sizeof(filecfg.filename));
+    if (username)
+        strncpy(username, filecfg.username, sizeof(filecfg.username));
+    if (pbRecording)
+        *pbRecording = (filecfg.options == cbFILECFG_OPT_REC);
+
+    return CBSDKRESULT_SUCCESS;
+#endif
+}
+
+// Purpose: sdk stub for SdkApp::SdkGetFileConfig
+CBSDKAPI    cbSdkResult cbSdkGetFileConfig(UINT32 nInstance,
+                                           char * filename, char * username, bool * pbRecording)
+{
+    if (filename == NULL && username == NULL && pbRecording == NULL)
+        return CBSDKRESULT_NULLPTR;
+    if (nInstance >= cbMAXOPEN)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (g_app[nInstance] == NULL)
+        return CBSDKRESULT_CLOSED;
+
+    return g_app[nInstance]->SdkGetFileConfig(filename, username, pbRecording);
 }
 
 // Author & Date:   Tom Richins     31 Mar 2011
@@ -2293,7 +2335,7 @@ cbSdkResult SdkApp::SdkSetPatientInfo(const char * ID, const char * firstname, c
     fcpkt.DOBYear = DOBYear;
 
     // send the packet
-    cbRESULT cbres = cbSendPacket(&fcpkt);
+    cbRESULT cbres = cbSendPacket(&fcpkt, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
 
@@ -2345,7 +2387,7 @@ cbSdkResult SdkApp::SdkInitiateImpedance()
 
     iipkt.initiate = 1;        // start autoimpedance
     // send the packet
-    cbRESULT cbres = cbSendPacket(&iipkt);
+    cbRESULT cbres = cbSendPacket(&iipkt, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
 
@@ -2397,7 +2439,7 @@ cbSdkResult SdkApp::SdkSendPoll(const char* appname, UINT32 mode, UINT32 flags, 
     polepkt.username[sizeof(polepkt.username) - 1] = 0;
 
     // send the packet
-    cbRESULT cbres = cbSendPacket(&polepkt);
+    cbRESULT cbres = cbSendPacket(&polepkt, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
 
@@ -2432,7 +2474,7 @@ cbSdkResult SdkApp::SdkSendPacket(void * ppckt)
         return CBSDKRESULT_CLOSED;
 
     // send the packet
-    cbRESULT cbres = cbSendPacket(ppckt);
+    cbRESULT cbres = cbSendPacket(ppckt, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
 
@@ -2475,7 +2517,7 @@ cbSdkResult SdkApp::SdkSetSystemRunLevel(UINT32 runlevel, UINT32 locked, UINT32 
     sysinfo.runflags = locked;
 
     // Enter the packet into the XMT buffer queue
-    cbRESULT cbres = cbSendPacket(&sysinfo);
+    cbRESULT cbres = cbSendPacket(&sysinfo, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
 
@@ -2519,7 +2561,7 @@ cbSdkResult SdkApp::SdkSetDigitalOutput(UINT16 channel, UINT16 value)
     dopkt.value = value;
 
     // send the packet
-    cbRESULT cbres = cbSendPacket(&dopkt);
+    cbRESULT cbres = cbSendPacket(&dopkt, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
 
@@ -2615,7 +2657,7 @@ cbSdkResult SdkApp::SdkSetAnalogOutput(UINT16 channel, cbSdkWaveformData * wf, c
         if (wfPkt.trig == cbWAVEFORM_TRIGGER_NONE)
             wfPkt.active = 1;
         // send the waveform packet
-        cbSendPacket(&wfPkt);
+        cbSendPacket(&wfPkt, m_nInstance);
         // Also make sure channel is to output waveform
         dwOptions &= ~(cbAOUT_MONITORSMP | cbAOUT_MONITORSPK);
         dwOptions |= cbAOUT_WAVEFORM;
@@ -2754,7 +2796,7 @@ cbSdkResult SdkApp::SdkSetChannelConfig(UINT16 channel, cbPKT_CHANINFO * chaninf
 
     chaninfo->type = cbPKTTYPE_CHANSET;
     chaninfo->dlen = cbPKTDLEN_CHANINFO;
-    cbRESULT cbres = cbSendPacket(chaninfo);
+    cbRESULT cbres = cbSendPacket(chaninfo, m_nInstance);
     if (cbres == cbRESULT_NOLIBRARY)
         return CBSDKRESULT_CLOSED;
     if (cbres)
@@ -2799,11 +2841,12 @@ cbSdkResult SdkApp::SdkGetChannelConfig(UINT16 channel, cbPKT_CHANINFO * chaninf
         return CBSDKRESULT_CLOSED;
     if (!cb_library_initialized[m_nIdx])
         return CBSDKRESULT_CLOSED;
-    if (cb_cfg_buffer_ptr[m_nIdx]->chaninfo[channel - 1].chid == 0)
+
+    cbRESULT cbres = cbGetChanInfo(channel, chaninfo, m_nInstance);
+    if (cbres == cbRESULT_INVALIDCHANNEL)
         return CBSDKRESULT_INVALIDCHANNEL;
-
-    memcpy(chaninfo, &(cb_cfg_buffer_ptr[m_nIdx]->chaninfo[channel - 1]), sizeof(cbPKT_CHANINFO));
-
+    if (cbres)
+        return CBSDKRESULT_UNKNOWN;
     return CBSDKRESULT_SUCCESS;
 }
 
@@ -3054,7 +3097,7 @@ cbSdkResult SdkApp::SdkSystem(cbSdkSystemType cmd)
     default:
         return CBSDKRESULT_NOTIMPLEMENTED;
     }
-    cbRESULT cbres = cbSendPacket(&pktsysinfo);
+    cbRESULT cbres = cbSendPacket(&pktsysinfo, m_nInstance);
     if (cbres == cbRESULT_NOLIBRARY)
         return CBSDKRESULT_CLOSED;
     if (cbres)
@@ -3144,6 +3187,106 @@ CBSDKAPI    cbSdkResult cbSdkUnRegisterCallback(UINT32 nInstance, cbSdkCallbackT
     return g_app[nInstance]->SdkUnRegisterCallback(callbacktype);
 }
 
+// Author & Date:   Ehsan Azar     21 Feb 2013
+// Purpose: Convert volts string (e.g. '5V', '-65mV', ...) to its raw digital value equivalent for given channel
+// Inputs:
+//   channel           - the channel number (1-based)
+//   szVoltsUnitString - the volts string
+// Outputs:
+//   digital - the raw digital value
+//   returns the error code
+cbSdkResult SdkApp::SdkAnalogToDigital(UINT16 channel, const char * szVoltsUnitString, INT32 * digital)
+{
+    if (m_instInfo == 0)
+        return CBSDKRESULT_CLOSED;
+    if (!cb_library_initialized[m_nIdx])
+        return CBSDKRESULT_CLOSED;
+    int len = (int)strlen(szVoltsUnitString);
+    if (len > 16)
+        return CBSDKRESULT_INVALIDPARAM;
+    INT32 nFactor = 0;
+    std::string strVolts = szVoltsUnitString;
+    std::string strUnit = "";
+    if (strVolts.rfind("V") != std::string::npos)
+    {
+        nFactor = 1;
+        strUnit = "V";
+    }
+    else if (strVolts.rfind("mV") != std::string::npos)
+    {
+        nFactor = 1000;
+        strUnit = "mV";
+    }
+    else if (strVolts.rfind("uV") != std::string::npos)
+    {
+        nFactor = 1000000;
+        strUnit = "uV";
+    }
+    else if (strVolts.rfind("nV") != std::string::npos)
+    {
+        nFactor = 1000000000;
+        strUnit = "nV";
+    }
+    char * pEnd = NULL;
+    double dValue = 0;
+    long nValue = 0;
+    // If no units specified, assume raw integer passed as string
+    if (nFactor == 0)
+    {
+        nValue = strtol(szVoltsUnitString, &pEnd, 0);
+    } else {
+        dValue = strtod(szVoltsUnitString, &pEnd);
+    }
+    if (pEnd == szVoltsUnitString)
+        return CBSDKRESULT_INVALIDPARAM;
+    // What remains should be just the unit string
+    std::string strRest = pEnd;
+    // Remove all spaces
+    std::string::iterator end_pos = std::remove(strRest.begin(), strRest.end(), ' ');
+    strRest.erase(end_pos, strRest.end());
+    if (strRest != strUnit)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (nFactor == 0)
+    {
+        *digital = (INT32)nValue;
+        return CBSDKRESULT_SUCCESS;
+    }
+    cbSCALING scale;
+    cbRESULT cbres;
+    if (IsChanAnalogIn(channel))
+        cbres = cbGetAinpScaling(channel, &scale, m_nInstance);
+    else
+        cbres = cbGetAoutScaling(channel, &scale, m_nInstance);
+    if (cbres == cbRESULT_NOLIBRARY)
+        return CBSDKRESULT_CLOSED;
+    if (cbres)
+        return CBSDKRESULT_UNKNOWN;
+    strUnit = scale.anaunit;
+    double chan_factor = 1;
+    if (strUnit.compare("mV") == 0)
+        chan_factor = 1000;
+    else if (strUnit.compare("uV") == 0)
+        chan_factor = 1000000;
+    // TODO: see if anagain needs to be used
+    *digital = (INT32)floor(((dValue * scale.digmax) * chan_factor) / ((double)nFactor * scale.anamax));
+    return CBSDKRESULT_SUCCESS;
+}
+
+// Purpose: sdk stub for SdkApp::SdkAnalogToDigital
+CBSDKAPI    cbSdkResult cbSdkAnalogToDigital(UINT32 nInstance, UINT16 channel, const char * szVoltsUnitString, INT32 * digital)
+{
+    if (channel == 0 || channel > cbMAXCHANS)
+        return CBSDKRESULT_INVALIDCHANNEL;
+    if (nInstance >= cbMAXOPEN)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (g_app[nInstance] == NULL)
+        return CBSDKRESULT_CLOSED;
+    if (szVoltsUnitString == NULL || digital == NULL)
+        return CBSDKRESULT_NULLPTR;
+
+    return g_app[nInstance]->SdkAnalogToDigital(channel, szVoltsUnitString, digital);
+}
+
 // Author & Date: Ehsan Azar       29 April 2012
 // Purpose: Sdk app base constructor
 SdkApp::SdkApp() :
@@ -3184,7 +3327,7 @@ SdkApp::~SdkApp()
 //   nOutPort  - Instrument port number
 //   szInIP;   - Client IPv4 address
 //   szOutIP   - Instrument IPv4 address
-void SdkApp::Open(UINT32 nInstance, int nInPort, int nOutPort, LPCSTR szInIP, LPCSTR szOutIP)
+void SdkApp::Open(UINT32 nInstance, int nInPort, int nOutPort, LPCSTR szInIP, LPCSTR szOutIP, int nRecBufSize)
 {
     // clear las library error
     m_lastCbErr = cbRESULT_OK;
@@ -3204,6 +3347,7 @@ void SdkApp::Open(UINT32 nInstance, int nInPort, int nOutPort, LPCSTR szInIP, LP
     m_nInstance = nInstance;
     m_nInPort = nInPort;
     m_nOutPort = nOutPort;
+    m_nRecBufSize = nRecBufSize;
     m_strInIP = szInIP;
     m_strOutIP = szOutIP;
 

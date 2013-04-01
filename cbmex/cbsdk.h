@@ -34,6 +34,10 @@
 
 #include "cbhwlib.h"
 
+#ifdef STATIC_CBSDK_LINK
+#undef CBSDK_EXPORTS
+#endif
+
 #ifdef WIN32
 // Windows shared library
 #ifdef CBSDK_EXPORTS
@@ -240,11 +244,13 @@ typedef struct _cbSdkConnection
     {
         nInPort = cbNET_UDP_PORT_BCAST;
         nOutPort = cbNET_UDP_PORT_CNT;
+        nRecBufSize = (4096 * 2048); // 8MB default needed for best performance
         szInIP = "";
         szOutIP = "";
     }
     int nInPort;  // Client port number
     int nOutPort; // Instrument port number
+    int nRecBufSize; // Receive buffer size (0 to ignore altogether)
     LPCSTR szInIP;  // Client IPv4 address
     LPCSTR szOutIP; // Instrument IPv4 address
 } cbSdkConnection;
@@ -400,7 +406,11 @@ CBSDKAPI    cbSdkResult cbSdkInitTrialData(UINT32 nInstance,
                                            cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                            cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
 
-CBSDKAPI    cbSdkResult cbSdkSetFileConfig(UINT32 nInstance, const char * filename, const char * comment, UINT32 bStart, UINT32 options = cbFILECFG_OPT_NONE); // Start file recording
+// Start/stop/open/close file recording
+CBSDKAPI    cbSdkResult cbSdkSetFileConfig(UINT32 nInstance, const char * filename, const char * comment, UINT32 bStart, UINT32 options = cbFILECFG_OPT_NONE);
+
+// Get the state of file recording
+CBSDKAPI    cbSdkResult cbSdkGetFileConfig(UINT32 nInstance, char * filename, char * username, bool * pbRecording);
 
 CBSDKAPI    cbSdkResult cbSdkSetPatientInfo(UINT32 nInstance, const char * ID, const char * firstname, const char * lastname, UINT32 DOBMonth, UINT32 DOBDay, UINT32 DOBYear);
 
@@ -451,5 +461,8 @@ CBSDKAPI    cbSdkResult cbSdkSystem(UINT32 nInstance, cbSdkSystemType cmd); // P
 CBSDKAPI    cbSdkResult cbSdkRegisterCallback(UINT32 nInstance, cbSdkCallbackType callbacktype, cbSdkCallback pCallbackFn, void* pCallbackData);
 CBSDKAPI    cbSdkResult cbSdkUnRegisterCallback(UINT32 nInstance, cbSdkCallbackType callbacktype);
 // At most one callback per each callback type per each connection
+
+// Convert volts string (e.g. '5V', '-65mV', ...) to its raw digital value equivalent for given channel
+CBSDKAPI    cbSdkResult cbSdkAnalogToDigital(UINT32 nInstance, UINT16 channel, const char * szVoltsUnitString, INT32 * digital);
 
 #endif /* CBSDK_H_INCLUDED */

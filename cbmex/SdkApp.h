@@ -33,7 +33,7 @@ public:
     UINT32 GetInstInfo() {return m_instInfo;}
     cbRESULT GetLastCbErr() {return m_lastCbErr;}
     void Open(UINT32 id, int nInPort = cbNET_UDP_PORT_BCAST, int nOutPort = cbNET_UDP_PORT_CNT, 
-        LPCSTR szInIP = cbNET_UDP_ADDR_INST, LPCSTR szOutIP = cbNET_UDP_ADDR_CNT);
+        LPCSTR szInIP = cbNET_UDP_ADDR_INST, LPCSTR szOutIP = cbNET_UDP_ADDR_CNT, int nRecBufSize = NSP_REC_BUF_SIZE);
 private:
     void OnPktGroup(const cbPKT_GROUP * const pkt);
     void OnPktEvent(const cbPKT_GENERIC * const pPkt);
@@ -75,7 +75,8 @@ public:
     cbSdkResult SdkInitTrialData(cbSdkTrialEvent* trialevent, cbSdkTrialCont * trialcont,
                                  cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
     cbSdkResult SdkSetFileConfig(const char * filename, const char * comment, UINT32 bStart, UINT32 options);
-    cbSdkResult SdkSetPatientInfo(const char * ID, const char * firstname, const char * lastname, 
+    cbSdkResult SdkGetFileConfig(char * filename, char * username, bool * pbRecording);
+    cbSdkResult SdkSetPatientInfo(const char * ID, const char * firstname, const char * lastname,
                                   UINT32 DOBMonth, UINT32 DOBDay, UINT32 DOBYear);
     cbSdkResult SdkInitiateImpedance();
     cbSdkResult SdkSendPoll(const char* appname, UINT32 mode, UINT32 flags, UINT32 extra);
@@ -96,6 +97,8 @@ public:
     cbSdkResult SdkSystem(cbSdkSystemType cmd);
     cbSdkResult SdkRegisterCallback(cbSdkCallbackType callbacktype, cbSdkCallback pCallbackFn, void * pCallbackData);
     cbSdkResult SdkUnRegisterCallback(cbSdkCallbackType callbacktype);
+    cbSdkResult SdkAnalogToDigital(UINT16 channel, const char * szVoltsUnitString, INT32 * digital);
+
 
 private:
     void OnInstNetworkEvent(NetEventType type, unsigned int code); // Event from the instrument network

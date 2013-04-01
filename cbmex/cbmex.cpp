@@ -127,7 +127,10 @@ static void matexit()
 void PrintErrorSDK(cbSdkResult res, const char * szCustom = NULL)
 {
     if (szCustom != NULL && res != CBSDKRESULT_SUCCESS)
+    {
         mexPrintf(szCustom);
+        mexPrintf(":\n");
+    }
 
     switch(res)
     {
@@ -212,21 +215,26 @@ void PrintErrorSDK(cbSdkResult res, const char * szCustom = NULL)
         mexErrMsgTxt("Socket option error (possibly permission issue)");
         break;
     case CBSDKRESULT_MEMERRUDP:
-        mexErrMsgTxt("Unable to assign UDP interface memory\n"
-            " Consider using sysctl -w net.core.rmem_max=8388608\n"
-            " or sysctl -w kern.ipc.maxsockbuf=8388608");
+        mexErrMsgTxt(ERR_UDP_MESSAGE);
         break;
     case CBSDKRESULT_INVALIDINST:
         mexErrMsgTxt("Invalid range or instrument address");
         break;
     case CBSDKRESULT_ERRMEMORY:
-        mexErrMsgTxt("Memory allocation error");
+#ifdef __APPLE__
+        mexErrMsgTxt("Memory allocation error trying to establish master connection\n"
+                "Consider sysctl -w kern.sysv.shmmax=16777216\n"
+                "         sysctl -w kern.sysv.shmall=4194304");
+
+#else
+        mexErrMsgTxt("Memory allocation error trying to establish master connection");
+#endif
         break;
     case CBSDKRESULT_ERRINIT:
         mexErrMsgTxt("Initialization error");
         break;
     case CBSDKRESULT_TIMEOUT:
-        mexErrMsgTxt("Conection timeout error");
+        mexErrMsgTxt("Connection timeout error");
         break;
     case CBSDKRESULT_BUSY:
         mexErrMsgTxt("Resource is busy");
@@ -356,6 +364,7 @@ void OnOpen(
     {
         PARAM_NONE,
         PARAM_INSTANCE,
+        PARAM_RECBUFSIZE,
         PARAM_INST_IP,
         PARAM_INST_PORT,
         PARAM_CENTRAL_IP,
@@ -368,7 +377,7 @@ void OnOpen(
         if (param == PARAM_NONE)
         {
             char cmdstr[128];
-            if (mxGetString(prhs[i], cmdstr, 16))
+            if (mxGetString(prhs[i], cmdstr, 32))
             {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d is invalid", i);
@@ -377,6 +386,10 @@ void OnOpen(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
+            }
+            else if (_strcmpi(cmdstr, "receive-buffer-size") == 0)
+            {
+            	param = PARAM_RECBUFSIZE;
             }
             else if (_strcmpi(cmdstr, "inst-addr") == 0)
             {
@@ -405,6 +418,11 @@ void OnOpen(
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_OPEN, true, "Invalid instance number");
                 nInstance = (UINT32)mxGetScalar(prhs[i]);
+                break;
+            case PARAM_RECBUFSIZE:
+                if (!mxIsNumeric(prhs[i]))
+                    PrintHelp(CBMEX_FUNCTION_OPEN, true, "Invalid receive buffer size");
+                con.nRecBufSize = (int)mxGetScalar(prhs[i]);
                 break;
             case PARAM_INST_IP:
                 if (mxGetString(prhs[i], szInstIp, 16))
@@ -1468,7 +1486,7 @@ void OnTrialTracking(
             &bTrialDouble);
 
     // 2 - Allocate buffers
-    mxArray *pca_rb = NULL;
+    mxArray *pca_rb[cbMAXTRACKOBJ] = {NULL};
     mxArray *pca = mxCreateCellMatrix(trialtracking.count, 6);
     plhs[0] = pca;
     for (int i = 0; i < trialtracking.count; ++i)
@@ -1522,8 +1540,8 @@ void OnTrialTracking(
             trialtracking.coords[i] = (void * *)mxMalloc(trialtracking.num_samples[i] * sizeof(UINT16 *));
 
         // Rigid-body cell array
-        pca_rb = mxCreateCellMatrix(trialtracking.num_samples[i], 1);
-        mxSetCell(pca, i * 5 + 5, pca_rb);
+        pca_rb[i] = mxCreateCellMatrix(trialtracking.num_samples[i], 1);
+        mxSetCell(pca, i * 5 + 5, pca_rb[i]);
 
         // We allocate for the maximum number of points, later we reduce dimension
         for (int j = 0; j < trialtracking.num_samples[i]; ++j)
@@ -1536,9 +1554,9 @@ void OnTrialTracking(
                 mxa = mxCreateNumericMatrix(trialtracking.max_point_counts[i], dim_count, mxUINT16_CLASS, mxREAL);
                 trialtracking.coords[i][j] = (UINT16 *)mxGetData(mxa);
             }
-            mxSetCell(pca_rb, j, mxa);
-        }
-    }
+            mxSetCell(pca_rb[i], j, mxa);
+        } //end for (int j
+    } //end for (int i
 
     // 3 - Now get buffered data
     res = cbSdkGetTrialData(nInstance, bFlushBuffer, NULL, NULL, NULL, &trialtracking);
@@ -1546,18 +1564,15 @@ void OnTrialTracking(
 
     // Reduce dimensions if needed,
     //  and free memory
-    if (pca_rb)
+    for (int i = 0; i < trialtracking.count; ++i)
     {
-        for (int i = 0; i < trialtracking.count; ++i)
+        for (int j = 0; j < trialtracking.num_samples[i]; ++j)
         {
-            for (int j = 0; j < trialtracking.num_samples[i]; ++j)
-            {
-                mxArray *mxa = mxGetCell(pca_rb, j);
-                mxSetM(mxa, trialtracking.point_counts[i][j]);
-            }
-            mxFree(trialtracking.point_counts[i]);
-            mxFree(trialtracking.coords[i]);
+            mxArray *mxa = mxGetCell(pca_rb[i], j);
+            mxSetM(mxa, trialtracking.point_counts[i][j]);
         }
+        mxFree(trialtracking.point_counts[i]);
+        mxFree(trialtracking.coords[i]);
     }
 }
 
@@ -1596,11 +1611,13 @@ void OnFileConfig(
         PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Invalid action parameter");
 
     UINT32 bStart = (UINT32) mxGetScalar(prhs[3]);
+    UINT32 options = cbFILECFG_OPT_NONE;
 
     enum
     {
         PARAM_NONE,
         PARAM_INSTANCE,
+        PARAM_OPTION,
     } param = PARAM_NONE;
 
     // Process remaining input arguments if available
@@ -1618,6 +1635,10 @@ void OnFileConfig(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
+            }
+            else if (_strcmpi(cmdstr, "option") == 0)
+            {
+                param = PARAM_OPTION;
             } else {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
@@ -1631,6 +1652,28 @@ void OnFileConfig(
                     PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Invalid instance number");
                 nInstance = (UINT32)mxGetScalar(prhs[i]);
                 break;
+            case PARAM_OPTION:
+                {
+                    char cmdstr[128];
+                    // check for proper data structure
+                    if (mxGetClassID(prhs[i]) != mxCHAR_CLASS || mxGetString(prhs[i], cmdstr, 10))
+                        PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Invalid option parameter");
+                    if (_strcmpi(cmdstr, "none") == 0)
+                    {
+                        options = cbFILECFG_OPT_NONE;
+                    }
+                    else if (_strcmpi(cmdstr, "close") == 0)
+                    {
+                        options = cbFILECFG_OPT_CLOSE;
+                    }
+                    else if (_strcmpi(cmdstr, "open") == 0)
+                    {
+                        options = cbFILECFG_OPT_OPEN;
+                    } else {
+                        PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Invalid option parameter");
+                    }
+                }
+                break;
             default:
                 break;
             }
@@ -1643,7 +1686,7 @@ void OnFileConfig(
         PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Last parameter requires value");
     }
 
-    cbSdkResult res = cbSdkSetFileConfig(nInstance, fcpkt.filename, fcpkt.comment, bStart);
+    cbSdkResult res = cbSdkSetFileConfig(nInstance, fcpkt.filename, fcpkt.comment, bStart, options);
     PrintErrorSDK(res, "cbSdkSetFileConfig()");
 }
 
@@ -2356,16 +2399,11 @@ void OnConfig(
     {
         PARAM_NONE,
         PARAM_USERFLAGS,
-        PARAM_DOUTOPTS,
-        PARAM_DINPOPTS,
-        PARAM_AOUTOPTS,
-        PARAM_AINPOPTS,
         PARAM_SMPFILTER,
         PARAM_SMPGROUP,
         PARAM_SPKFILTER,
-        PARAM_SPKOPTS,
-        PARAM_SPKTHRLEVEL,
         PARAM_SPKGROUP,
+        PARAM_SPKTHRLEVEL,
         PARAM_AMPLREJPOS,
         PARAM_AMPLREJNEG,
         PARAM_REFELECCHAN,
@@ -2431,22 +2469,6 @@ void OnConfig(
             {
                 param = PARAM_USERFLAGS;
             }
-            else if (_strcmpi(cmdstr, "doutopts") == 0)
-            {
-                param = PARAM_DOUTOPTS;
-            }
-            else if (_strcmpi(cmdstr, "dinpopts") == 0)
-            {
-                param = PARAM_DINPOPTS;
-            }
-            else if (_strcmpi(cmdstr, "aoutopts") == 0)
-            {
-                param = PARAM_AOUTOPTS;
-            }
-            else if (_strcmpi(cmdstr, "ainpopts") == 0)
-            {
-                param = PARAM_AINPOPTS;
-            }
             else if (_strcmpi(cmdstr, "smpfilter") == 0)
             {
                 param = PARAM_SMPFILTER;
@@ -2458,10 +2480,6 @@ void OnConfig(
             else if (_strcmpi(cmdstr, "spkfilter") == 0)
             {
                 param = PARAM_SPKFILTER;
-            }
-            else if (_strcmpi(cmdstr, "spkopts") == 0)
-            {
-                param = PARAM_SPKOPTS;
             }
             else if (_strcmpi(cmdstr, "spkthrlevel") == 0)
             {
@@ -2492,6 +2510,7 @@ void OnConfig(
                 PrintHelp(CBMEX_FUNCTION_CONFIG, true, errstr);
             }
         } else {
+            char cmdstr[128];
             switch(param)
             {
             case PARAM_USERFLAGS:
@@ -2500,81 +2519,87 @@ void OnConfig(
                 chaninfo.userflags = (UINT32)mxGetScalar(prhs[i]);
                 bHasNewParams = true;
                 break;
-            case PARAM_DOUTOPTS:
-                if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid userflags number");
-                chaninfo.doutopts = (UINT32)mxGetScalar(prhs[i]);
-                bHasNewParams = true;
-                break;
-            case PARAM_DINPOPTS:
-                if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid userflags number");
-                chaninfo.dinpopts = (UINT32)mxGetScalar(prhs[i]);
-                bHasNewParams = true;
-                break;
-            case PARAM_AOUTOPTS:
-                if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid userflags number");
-                chaninfo.aoutopts = (UINT32)mxGetScalar(prhs[i]);
-                bHasNewParams = true;
-                break;
-            case PARAM_AINPOPTS:
-                if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid userflags number");
-                chaninfo.ainpopts = (UINT32)mxGetScalar(prhs[i]);
-                bHasNewParams = true;
-                break;
             case PARAM_SMPFILTER:
                 if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid userflags number");
+                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid smpfilter number");
                 chaninfo.smpfilter = (UINT32)mxGetScalar(prhs[i]);
+                if (chaninfo.smpfilter >= (cbFIRST_DIGITAL_FILTER + cbNUM_DIGITAL_FILTERS))
+                    mexErrMsgTxt("Invalid continuous filter number");
                 bHasNewParams = true;
                 break;
             case PARAM_SMPGROUP:
                 if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid userflags number");
+                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid smpgroup number");
                 chaninfo.smpgroup = (UINT32)mxGetScalar(prhs[i]);
+                if (chaninfo.smpgroup >= cbMAXGROUPS)
+                    mexErrMsgTxt("Invalid sampling group number");
                 bHasNewParams = true;
                 break;
             case PARAM_SPKFILTER:
                 if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid userflags number");
+                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid spkfilter number");
                 chaninfo.spkfilter = (UINT32)mxGetScalar(prhs[i]);
-                bHasNewParams = true;
-                break;
-            case PARAM_SPKOPTS:
-                if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid userflags number");
-                chaninfo.spkopts = (UINT32)mxGetScalar(prhs[i]);
+                if (chaninfo.spkfilter >= (cbFIRST_DIGITAL_FILTER + cbNUM_DIGITAL_FILTERS))
+                    mexErrMsgTxt("Invalid spike filter number");
                 bHasNewParams = true;
                 break;
             case PARAM_SPKTHRLEVEL:
-                if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid userflags number");
-                chaninfo.spkthrlevel = (UINT32)mxGetScalar(prhs[i]);
+                if (mxGetString(prhs[i], cmdstr, 16))
+                {
+                    INT32 nValue = 0;
+                    res = cbSdkAnalogToDigital(nInstance, channel, cmdstr, &nValue);
+                    PrintErrorSDK(res, "cbSdkAnalogToDigital()");
+                    chaninfo.spkthrlevel = nValue;
+                }
+                else if (mxIsNumeric(prhs[i]))
+                {
+                    chaninfo.spkthrlevel = (UINT32)mxGetScalar(prhs[i]);
+                } else {
+                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid spkthrlevel value");
+                }
                 bHasNewParams = true;
                 break;
             case PARAM_SPKGROUP:
                 if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid userflags number");
+                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid spkgroup number");
                 chaninfo.spkgroup = (UINT32)mxGetScalar(prhs[i]);
                 bHasNewParams = true;
                 break;
             case PARAM_AMPLREJPOS:
-                if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid userflags number");
-                chaninfo.amplrejpos = (UINT32)mxGetScalar(prhs[i]);
+                if (mxGetString(prhs[i], cmdstr, 16))
+                {
+                    INT32 nValue = 0;
+                    res = cbSdkAnalogToDigital(nInstance, channel, cmdstr, &nValue);
+                    PrintErrorSDK(res, "cbSdkAnalogToDigital()");
+                    chaninfo.amplrejpos = nValue;
+                }
+                else if (mxIsNumeric(prhs[i]))
+                {
+                    chaninfo.amplrejpos = (UINT32)mxGetScalar(prhs[i]);
+                } else {
+                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid amprejpos number");
+                }
                 bHasNewParams = true;
                 break;
             case PARAM_AMPLREJNEG:
-                if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid userflags number");
-                chaninfo.amplrejneg = (UINT32)mxGetScalar(prhs[i]);
+                if (mxGetString(prhs[i], cmdstr, 16))
+                {
+                    INT32 nValue = 0;
+                    res = cbSdkAnalogToDigital(nInstance, channel, cmdstr, &nValue);
+                    PrintErrorSDK(res, "cbSdkAnalogToDigital()");
+                    chaninfo.amplrejneg = nValue;
+                }
+                else if (mxIsNumeric(prhs[i]))
+                {
+                    chaninfo.amplrejneg = (UINT32)mxGetScalar(prhs[i]);
+                } else {
+                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid amprejneg number");
+                }
                 bHasNewParams = true;
                 break;
             case PARAM_REFELECCHAN:
                 if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid userflags number");
+                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid refelecchan number");
                 chaninfo.refelecchan = (UINT32)mxGetScalar(prhs[i]);
                 bHasNewParams = true;
                 break;
@@ -2601,65 +2626,50 @@ void OnConfig(
     // build the cell structure to get previous values
     if (nlhs > 0 || ! bHasNewParams)
     {
-        int count = 19; // number of parameters
+        int count = 14; // number of parameters
         mxArray *pca = mxCreateCellMatrix(count, 2);
         plhs[0] = pca;
         mxSetCell(pca, 0, mxCreateString("userflags"));
         mxSetCell(pca, count + 0, mxCreateScalarDouble(chaninfo.userflags));
 
-        mxSetCell(pca, 1, mxCreateString("doutopts"));
-        mxSetCell(pca, count + 1, mxCreateScalarDouble(chaninfo.doutopts));
+        mxSetCell(pca, 1, mxCreateString("smpfilter"));
+        mxSetCell(pca, count + 1, mxCreateScalarDouble(chaninfo.smpfilter));
 
-        mxSetCell(pca, 2, mxCreateString("dinpopts"));
-        mxSetCell(pca, count + 2, mxCreateScalarDouble(chaninfo.dinpopts));
+        mxSetCell(pca, 2, mxCreateString("smpgroup"));
+        mxSetCell(pca, count + 2, mxCreateScalarDouble(chaninfo.smpgroup));
 
-        mxSetCell(pca, 3, mxCreateString("aoutopts"));
-        mxSetCell(pca, count + 3, mxCreateScalarDouble(chaninfo.aoutopts));
+        mxSetCell(pca, 3, mxCreateString("spkfilter"));
+        mxSetCell(pca, count + 3, mxCreateScalarDouble(chaninfo.spkfilter));
 
-        mxSetCell(pca, 4, mxCreateString("ainpopts"));
-        mxSetCell(pca, count + 4, mxCreateScalarDouble(chaninfo.ainpopts));
+        mxSetCell(pca, 4, mxCreateString("spkgroup"));
+        mxSetCell(pca, count + 4, mxCreateScalarDouble(chaninfo.spkgroup));
 
-        mxSetCell(pca, 5, mxCreateString("smpfilter"));
-        mxSetCell(pca, count + 5, mxCreateScalarDouble(chaninfo.smpfilter));
+        mxSetCell(pca, 5, mxCreateString("spkthrlevel"));
+        mxSetCell(pca, count + 5, mxCreateScalarDouble(chaninfo.spkthrlevel));
 
-        mxSetCell(pca, 6, mxCreateString("smpgroup"));
-        mxSetCell(pca, count + 6, mxCreateScalarDouble(chaninfo.smpgroup));
+        mxSetCell(pca, 6, mxCreateString("amplrejpos"));
+        mxSetCell(pca, count + 6, mxCreateScalarDouble(chaninfo.amplrejpos));
 
-        mxSetCell(pca, 7, mxCreateString("spkfilter"));
-        mxSetCell(pca, count + 7, mxCreateScalarDouble(chaninfo.spkfilter));
+        mxSetCell(pca, 7, mxCreateString("amplrejneg"));
+        mxSetCell(pca, count + 7, mxCreateScalarDouble(chaninfo.amplrejneg));
 
-        mxSetCell(pca, 8, mxCreateString("spkopts"));
-        mxSetCell(pca, count + 8, mxCreateScalarDouble(chaninfo.spkopts));
+        mxSetCell(pca, 8, mxCreateString("refelecchan"));
+        mxSetCell(pca, count + 8, mxCreateScalarDouble(chaninfo.refelecchan));
 
-        mxSetCell(pca, 9, mxCreateString("spkthrlevel"));
-        mxSetCell(pca, count + 9, mxCreateScalarDouble(chaninfo.spkthrlevel));
+        mxSetCell(pca, 9, mxCreateString("analog_unit"));
+        mxSetCell(pca, count + 9, mxCreateString(chaninfo.physcalin.anaunit));
 
-        mxSetCell(pca, 10, mxCreateString("spkgroup"));
-        mxSetCell(pca, count + 10, mxCreateScalarDouble(chaninfo.spkgroup));
+        mxSetCell(pca, 10, mxCreateString("max_analog"));
+        mxSetCell(pca, count + 10, mxCreateScalarDouble(chaninfo.physcalin.anamax));
 
-        mxSetCell(pca, 11, mxCreateString("amplrejpos"));
-        mxSetCell(pca, count + 11, mxCreateScalarDouble(chaninfo.amplrejpos));
+        mxSetCell(pca, 11, mxCreateString("max_digital"));
+        mxSetCell(pca, count + 11, mxCreateScalarDouble(chaninfo.physcalin.digmax));
 
-        mxSetCell(pca, 12, mxCreateString("amplrejneg"));
-        mxSetCell(pca, count + 12, mxCreateScalarDouble(chaninfo.amplrejneg));
+        mxSetCell(pca, 12, mxCreateString("min_analog"));
+        mxSetCell(pca, count + 12, mxCreateScalarDouble(chaninfo.physcalin.anamin));
 
-        mxSetCell(pca, 13, mxCreateString("refelecchan"));
-        mxSetCell(pca, count + 13, mxCreateScalarDouble(chaninfo.refelecchan));
-
-        mxSetCell(pca, 14, mxCreateString("analogUnit"));
-        mxSetCell(pca, count + 14, mxCreateString(chaninfo.physcalout.anaunit));
-
-        mxSetCell(pca, 15, mxCreateString("maxAnalog"));
-        mxSetCell(pca, count + 15, mxCreateScalarDouble(chaninfo.physcalout.anamax));
-
-        mxSetCell(pca, 16, mxCreateString("maxDigital"));
-        mxSetCell(pca, count + 16, mxCreateScalarDouble(chaninfo.physcalout.digmax));
-
-        mxSetCell(pca, 17, mxCreateString("minAnalog"));
-        mxSetCell(pca, count + 17, mxCreateScalarDouble(chaninfo.physcalout.anamin));
-
-        mxSetCell(pca, 18, mxCreateString("minDigital"));
-        mxSetCell(pca, count + 18, mxCreateScalarDouble(chaninfo.physcalout.digmin));
+        mxSetCell(pca, 13, mxCreateString("min_digital"));
+        mxSetCell(pca, count + 13, mxCreateScalarDouble(chaninfo.physcalin.digmin));
     }
 
     // if new configuration to send
@@ -2681,30 +2691,29 @@ void OnCCF(
     const mxArray *prhs[] )// Array of right hand side arguments
 {
     UINT32 nInstance = 0;
-    int nFirstParam = 2;
-    cbSdkResult res;
+    int nFirstParam = 1;
+    cbSdkResult res = CBSDKRESULT_SUCCESS;
 
-    if (nrhs < 2) 
+    if (nrhs < 2)
         PrintHelp(CBMEX_FUNCTION_CCF, true, "Too few inputs provided");
     if (nlhs > 0)
         PrintHelp(CBMEX_FUNCTION_CCF, true, "Too many outputs requested");
 
-    // fill in the filename string
-    char   filename[256] = {0};
-    if (mxGetString(prhs[1], filename, sizeof(filename)))
-        PrintHelp(CBMEX_FUNCTION_CCF, true, "Invalid ccf file name");
-
-    char newfilename[256] = {0};
+    char source_file[256] = {0};
+    char destination_file[256] = {0};
+    cbSdkCCF ccf;
 
     enum
     {
         PARAM_NONE,
+        PARAM_SEND,
         PARAM_CONVERT,
+        PARAM_LOAD,
+        PARAM_SAVE,
         PARAM_INSTANCE,
-    } param = PARAM_NONE;
+    } param = PARAM_NONE, command = PARAM_NONE;
 
-    bool bSend = false;
-    bool bConvert = false;
+    bool bThreaded = false;
     // Process remaining input arguments if available
     for (int i = nFirstParam; i < nrhs; ++i)
     {
@@ -2719,11 +2728,23 @@ void OnCCF(
             }
             if (_strcmpi(cmdstr, "send") == 0)
             {
-                bSend = true;
+                param = PARAM_SEND;
+            }
+            else if (_strcmpi(cmdstr, "threaded") == 0)
+            {
+                bThreaded = true;
+            }
+            else if (_strcmpi(cmdstr, "load") == 0)
+            {
+                param = PARAM_LOAD;
             }
             else if (_strcmpi(cmdstr, "convert") == 0)
             {
                 param = PARAM_CONVERT;
+            }
+            else if (_strcmpi(cmdstr, "save") == 0)
+            {
+                param = PARAM_SAVE;
             }
             else if (_strcmpi(cmdstr, "instance") == 0)
             {
@@ -2736,10 +2757,32 @@ void OnCCF(
         } else {
             switch(param)
             {
+            case PARAM_SEND:
+                if (source_file[0] != 0 || command != PARAM_NONE)
+                    mexErrMsgTxt("Cannot specify multiple commands");
+                if (mxGetString(prhs[i], source_file, sizeof(source_file)))
+                    mexErrMsgTxt("Invalid source CCF filename");
+                command = PARAM_SEND;
+                break;
+            case PARAM_LOAD:
+                if (source_file[0] != 0)
+                    mexErrMsgTxt("Cannot specify multiple commands");
+                if (mxGetString(prhs[i], source_file, sizeof(source_file)))
+                    mexErrMsgTxt("Invalid source CCF filename");
+                break;
             case PARAM_CONVERT:
-                if (mxGetString(prhs[i], newfilename, sizeof(newfilename)))
-                    mexErrMsgTxt("Invalid new CCF filename");
-                bConvert = true;
+                if (destination_file[0] != 0 || command != PARAM_NONE)
+                    mexErrMsgTxt("Cannot specify multiple commands");
+                if (mxGetString(prhs[i], destination_file, sizeof(destination_file)))
+                    mexErrMsgTxt("Invalid destination CCF filename");
+                command = PARAM_CONVERT;
+                break;
+            case PARAM_SAVE:
+                if (destination_file[0] != 0 || command != PARAM_NONE)
+                    mexErrMsgTxt("Cannot specify multiple commands");
+                if (mxGetString(prhs[i], destination_file, sizeof(destination_file)))
+                    mexErrMsgTxt("Invalid destination CCF filename");
+                command = PARAM_SAVE;
                 break;
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
@@ -2758,24 +2801,29 @@ void OnCCF(
         PrintHelp(CBMEX_FUNCTION_CCF, true, "Last parameter requires value");
     }
 
-    // Make sure 'send' is default if no ther parameter is specified
-    if (!bConvert) // The only other parameter currently
-        bSend = true;
-
-    if (bSend)
+    switch (command)
     {
-        // Does not make sense to send live CCF back to NSP again
-        if (filename[0] == 0)
-            mexErrMsgTxt("no CCF file specified to send to NSP!");
+    case PARAM_SEND:
+        res = cbSdkReadCCF(nInstance, &ccf, NULL, true, true, bThreaded);
+        break;
+    case PARAM_SAVE:
+        res = cbSdkReadCCF(nInstance, &ccf, NULL, true, false, false);
+        break;
+    case PARAM_CONVERT:
+        if (source_file[0] == 0)
+            PrintHelp(CBMEX_FUNCTION_CCF, true, "source file not specified for 'convert' command");
+        res = cbSdkReadCCF(nInstance, &ccf, source_file, true, false, false);
+        break;
+    default:
+        // Never should happen
+        break;
     }
-
-    cbSdkCCF ccf;
-    res = cbSdkReadCCF(nInstance, &ccf, filename[0] == 0 ? NULL : filename, true, bSend);
+    // Check if reading was successful
     PrintErrorSDK(res, "cbSdkReadCCF()");
 
-    if (bConvert)
+    if (command == PARAM_SAVE || command == PARAM_CONVERT)
     {
-        res = cbSdkWriteCCF(nInstance, &ccf, newfilename);
+        res = cbSdkWriteCCF(nInstance, &ccf, destination_file, bThreaded);
         PrintErrorSDK(res, "cbSdkWriteCCF()");
     }
 }

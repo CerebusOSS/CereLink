@@ -84,17 +84,22 @@
 		<link>
 			<name>BmiVersion.h</name>
 			<type>1</type>
-			<locationURI>WORKSPACE_LOC/CentralCommon/BmiVersion.h</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/CentralCommon/BmiVersion.h</locationURI>
+		</link>
+		<link>
+			<name>CMakeLists.txt</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/build/CMakeLists.txt</locationURI>
 		</link>
 		<link>
 			<name>Central</name>
 			<type>2</type>
-			<locationURI>WORKSPACE_LOC/Central</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/Central</locationURI>
 		</link>
 		<link>
 			<name>cbhwlib</name>
 			<type>2</type>
-			<locationURI>WORKSPACE_LOC/cbhwlib</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/cbhwlib</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

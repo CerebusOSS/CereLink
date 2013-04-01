@@ -1,13 +1,23 @@
 dist/
 
+*.obj/
 *.dir/
 *.user
 *.old
 *.ncb
 *.suo
+*.aps
+*.DS_Store
 UpgradeLog.XML
 _UpgradeReport_Files/
 
-cbmex/Win32
-build/Debug
-build/Release
+/Matlab
+linux32/
+linux64/
+win64/
+win32/
+x64/
+Win32/
+Debug/
+Release/
+.settings/

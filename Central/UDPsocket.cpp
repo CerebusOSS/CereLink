@@ -120,14 +120,18 @@ cbRESULT UDPSocket::Open(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bool 
         if (setsockopt(inst_sock, SOL_SOCKET, SO_RCVBUF, (char*)&data_buff_size, opt_len) != 0)
         {
             Close();
+#ifdef __APPLE__
+            return cbRESULT_SOCKMEMERR;
+#else
             return cbRESULT_SOCKOPTERR;
+#endif
         }
         if (getsockopt(inst_sock, SOL_SOCKET, SO_RCVBUF, (char *)&data_buff_size, &opt_len) != 0)
         {
             Close();
             return cbRESULT_SOCKOPTERR;
         }
-#ifndef WIN32
+#ifdef __linux__
         // Linux returns double the requested size up to twice the rmem_max
         data_buff_size /= 2;
 #endif
@@ -136,6 +140,7 @@ cbRESULT UDPSocket::Open(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bool 
             // to increase buffer
             // sysctl -w net.core.rmem_max=8388608
             //  or
+            // nvram boot-args="ncl=65536"
             // sysctl -w kern.ipc.maxsockbuf=8388608
             Close();
             return cbRESULT_SOCKMEMERR;
@@ -159,10 +164,14 @@ cbRESULT UDPSocket::Open(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bool 
 
     // Attempt to bind Data Stream Socket to lowest address in range 192.168.137.1 to XXX.16
     BOOL socketbound = FALSE;
-    SOCKADDR_IN inst_sockaddr = {0};
+    SOCKADDR_IN inst_sockaddr;
+    memset(&inst_sockaddr, 0, sizeof(inst_sockaddr));
 
     inst_sockaddr.sin_family      = AF_INET;
     inst_sockaddr.sin_port        = htons(nInPort);    // Neuroflow Data Port
+#ifdef __APPLE__
+    inst_sockaddr.sin_len = sizeof(inst_sockaddr);
+#endif
     if (szInIP == 0)
         inst_sockaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     else
