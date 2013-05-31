@@ -88,6 +88,7 @@ public:
     cbSdkResult SdkSetComment(UINT32 rgba, UINT8 charset, const char * comment);
     cbSdkResult SdkSetChannelConfig(UINT16 channel, cbPKT_CHANINFO * chaninfo);
     cbSdkResult SdkGetChannelConfig(UINT16 channel, cbPKT_CHANINFO * chaninfo);
+    cbSdkResult SdkGetSampleGroupInfo(UINT32 proc, UINT32 group, char *label, UINT32 *period, UINT32 *length);
     cbSdkResult SdkGetSampleGroupList(UINT32 proc, UINT32 group, UINT32 *length, UINT32 *list);
     cbSdkResult SdkGetFilterDesc(UINT32 proc, UINT32 filt, cbFILTDESC * filtdesc);
     cbSdkResult SdkGetTrackObj(char * name, UINT16 * type, UINT16 * pointCount, UINT32 id);
