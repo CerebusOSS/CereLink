@@ -2865,6 +2865,45 @@ CBSDKAPI    cbSdkResult cbSdkGetChannelConfig(UINT32 nInstance, UINT16 channel, 
     return g_app[nInstance]->SdkGetChannelConfig(channel, chaninfo);
 }
 
+// Author & Date:   Joshua Southerland    31 May 2013
+// Purpose: retrieve group info
+//           wrapper to export cbGetSampleGroupInfo
+//
+// Inputs:
+//   nInsane - cbsdk instance
+//   proc   - processor
+//   group  - group (1-6)
+// Outputs:
+//   label  - return of group label
+//   period - return of group sample period
+//   length - return of length of group list
+//   Returns the error code
+cbSdkResult SdkApp::SdkGetSampleGroupInfo(UINT32 proc, UINT32 group, char *label, UINT32 *period, UINT32 *length)
+{
+    if (m_instInfo == 0)
+        return CBSDKRESULT_CLOSED;
+
+    cbRESULT cbres = cbGetSampleGroupInfo(proc, group, label, period, length, m_nInstance);
+    if (cbres == cbRESULT_INVALIDADDRESS)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (cbres)
+        return CBSDKRESULT_UNKNOWN;
+    return CBSDKRESULT_SUCCESS;
+}
+
+
+// Purpose: sdk stub for SdkApp::SdkGetSampleGroupInfo
+CBSDKAPI    cbSdkResult cbSdkGetSampleGroupInfo(UINT32 nInstance, UINT32 proc, UINT32 group, char *label, UINT32 *period, UINT32 *length)
+{
+    if (nInstance >= cbMAXOPEN)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (g_app[nInstance] == NULL)
+        return CBSDKRESULT_CLOSED;
+
+    return g_app[nInstance]->SdkGetSampleGroupInfo(proc, group, label, period, length);
+}
+
+
 // Author & Date:   Tom Richins     11 Apr 2011
 // Purpose: retrieve group list
 //           wrapper to export cbGetSampleGroupList

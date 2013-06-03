@@ -439,6 +439,9 @@ CBSDKAPI    cbSdkResult cbSdkGetChannelConfig(UINT32 nInstance, UINT16 channel, 
 // Get filter description (proc = 1 for now)
 CBSDKAPI    cbSdkResult cbSdkGetFilterDesc(UINT32 nInstance, UINT32 proc, UINT32 filt, cbFILTDESC * filtdesc);
 
+// Get sample group info (proc = 1 for now)
+CBSDKAPI    cbSdkResult cbSdkGetSampleGroupInfo(UINT32 nInstance, UINT32 proc, UINT32 group, char *label, UINT32 *period, UINT32 *length);
+
 // Get sample group list (proc = 1 for now)
 CBSDKAPI    cbSdkResult cbSdkGetSampleGroupList(UINT32 nInstance, UINT32 proc, UINT32 group, UINT32 *length, UINT32 *list);
 
