@@ -58,6 +58,8 @@ enum NetEventType
     NET_EVENT_LINKFAILURE,      // Link failure
     NET_EVENT_CRITICAL,         // Critical data catchup
     NET_EVENT_CLOSE,            // Instrument closed
+    NET_EVENT_RESET,            // Instrument got reset
+    NET_EVENT_LOCKEDRESET,      // Locked reset (for recording)
 };
 
 // Author & Date: Ehsan Azar       15 March 2010

@@ -59,27 +59,28 @@ void InstNetwork::Open(Listener * listener)
 // Purpose: Shut down the instrument network
 void InstNetwork::ShutDown()
 {
-    m_icInstrument.Shutdown();
+    if (m_bStandAlone)
+        m_icInstrument.Shutdown();
+    else
+        cbSetSystemRunLevel(cbRUNLEVEL_SHUTDOWN, 0, 0, m_nInstance);
 }
 
 // Author & Date: Ehsan Azar       23 Sept 2010
 // Purpose: Standby the instrument network
 void InstNetwork::StandBy()
 {
-    m_icInstrument.Standby();
+    if (m_bStandAlone)
+        m_icInstrument.Standby();
+    else
+        cbSetSystemRunLevel(cbRUNLEVEL_HARDRESET, 0, 0, m_nInstance);
 }
 
 // Author & Date: Ehsan Azar       15 March 2010
 // Purpose: Close the instrument network
 void InstNetwork::Close()
 {
+    // Signal thread to finish
     m_bDone = true;
-    if (m_bStandAlone)
-    {
-        // Shut down all apps that may be accessing the data
-        if (cb_cfg_buffer_ptr[m_nIdx])
-            cb_cfg_buffer_ptr[m_nIdx]->version = 0; // mechanism to shut down depending applications
-    }
     // Wait for thread to finish
     if (QThread::currentThread() != thread())
         wait();
@@ -157,14 +158,31 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 // Rely on the fact that sysrep must be the last config packet sent via NSP6.04 and upwards
                 if (pPkt->type == cbPKTTYPE_SYSREP)
                 {
-                    // This is 6.03 bugfix fixed in 6.04
+                    // Any change to the instrument will be reported here, including initial connection as stand-alone
+                    UINT32 instInfo;
+                    cbGetInstInfo(&instInfo, m_nInstance);
+                    // If instrument connection state has changed
+                    if (instInfo != m_instInfo)
+                    {
+                        m_instInfo = instInfo;
+                        InstNetworkEvent(NET_EVENT_INSTINFO, instInfo);
+                    }
                 }
                 else if (pPkt->type == cbPKTTYPE_SYSREPRUNLEV)
                 {
                     if (pNew->runlevel == cbRUNLEVEL_HARDRESET)
                     {
-                        if (!m_bStandAlone || (m_bStandAlone && m_timerTicks > 500))
-                            InstNetworkEvent(NET_EVENT_CLOSE);
+                        // If any app did a hard reset which is not the initial reset
+                        //  Application should decide what to do on reset
+                        if (!m_bStandAlone || (m_bStandAlone && pPkt->time > 500))
+                            InstNetworkEvent(NET_EVENT_RESET);
+                    }
+                    else if (pNew->runlevel == cbRUNLEVEL_RUNNING)
+                    {
+                        if (pNew->runflags & cbRUNFLAGS_LOCK)
+                        {
+                            InstNetworkEvent(NET_EVENT_LOCKEDRESET);
+                        }
                     }
                 }
             }
@@ -268,17 +286,6 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 if (m_bStandAlone)
                     memcpy(&(cb_cfg_buffer_ptr[m_nIdx]->isLnc), pPkt, sizeof(cbPKT_LNC));
                 // For 6.03 and before, use this packet instead of sysrep for instinfo event
-                // This is 6.03 bugfix fixed in 6.04
-                {
-                        UINT32 instInfo;
-                        cbGetInstInfo(&instInfo);
-                        // If instrument connection state has changed
-                        if (instInfo != m_instInfo)
-                        {
-                            m_instInfo = instInfo;
-                            InstNetworkEvent(NET_EVENT_INSTINFO, instInfo);
-                        }
-                }
             }
             else if (pPkt->type == cbPKTTYPE_REPFILECFG)
             {
@@ -287,7 +294,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                     const cbPKT_FILECFG * pPktFileCfg = reinterpret_cast<const cbPKT_FILECFG*>(pPkt);
                     if (pPktFileCfg->options == cbFILECFG_OPT_REC || pPktFileCfg->options == cbFILECFG_OPT_STOP)
                     {
-                        //cb_cfg_buffer_ptr[m_nIdx]->fileinfo = * reinterpret_cast<const cbPKT_FILECFG *>(pPkt);
+                        cb_cfg_buffer_ptr[m_nIdx]->fileinfo = * reinterpret_cast<const cbPKT_FILECFG *>(pPkt);
                     }
                 }
             }
@@ -307,7 +314,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                         if (pPktNm->flags > 0 && pPktNm->flags <= cbMAXVIDEOSOURCE)
                         {
                             memcpy(cb_cfg_buffer_ptr[m_nIdx]->isVideoSource[pPktNm->flags - 1].name, pPktNm->name, cbLEN_STR_LABEL);
-                            cb_cfg_buffer_ptr[m_nIdx]->isVideoSource[pPktNm->flags-1].fps = ((float)pPktNm->value) / 1000;
+                            cb_cfg_buffer_ptr[m_nIdx]->isVideoSource[pPktNm->flags - 1].fps = ((float)pPktNm->value) / 1000;
                             // fps>0 means valid video source
                         }
                     }
@@ -322,11 +329,16 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                             // type>0 means valid trackable
                         }
                     }
+                    // nullify all tracking upon NM exit
+                    else if (pPktNm->mode == cbNM_MODE_STATUS && pPktNm->value == cbNM_STATUS_EXIT)
+                    {
+                        memset(cb_cfg_buffer_ptr[m_nIdx]->isTrackObj, 0, sizeof(cb_cfg_buffer_ptr[m_nIdx]->isTrackObj));
+                        memset(cb_cfg_buffer_ptr[m_nIdx]->isVideoSource, 0, sizeof(cb_cfg_buffer_ptr[m_nIdx]->isVideoSource));
+                    }
                 }
             }
             else if (pPkt->type == cbPKTTYPE_WAVEFORMREP)
             {
-#if 0
                 if (m_bStandAlone)
                 {
                     const cbPKT_AOUT_WAVEFORM * pPktAoutWave = reinterpret_cast<const cbPKT_AOUT_WAVEFORM *>(pPkt);
@@ -342,7 +354,6 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                         }
                     }
                 }
-#endif
             }
             else if (pPkt->type == cbPKTTYPE_NPLAYREP)
             {
@@ -397,7 +408,7 @@ inline void InstNetwork::UpdateSortModel(const cbPKT_SS_MODELSET & rUnitModel)
     if (nUnit == 255)
         nUnit = ARRAY_SIZE(cb_cfg_buffer_ptr[m_nIdx]->isSortingOptions.asSortModel[0]) - 1;
 
-    if (cb_cfg_buffer_ptr[m_nIdx])
+    if (cb_library_initialized[m_nIdx] && cb_cfg_buffer_ptr[m_nIdx])
         cb_cfg_buffer_ptr[m_nIdx]->isSortingOptions.asSortModel[nChan][nUnit] = rUnitModel;
 }
 
@@ -412,7 +423,7 @@ inline void InstNetwork::UpdateBasisModel(const cbPKT_FS_BASIS & rBasisModel)
 
     UINT32 nChan = rBasisModel.chan - 1;
 
-    if (cb_cfg_buffer_ptr[m_nIdx])
+    if (cb_library_initialized[m_nIdx] && cb_cfg_buffer_ptr[m_nIdx])
         cb_cfg_buffer_ptr[m_nIdx]->isSortingOptions.asBasis[nChan] = rBasisModel;
 }
 
@@ -531,8 +542,11 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
 
         UINT32 bytes_to_process = recv_returned;
         do {
-            if (bLoopbackPacket == false)
+            if (bLoopbackPacket)
             {
+                // Put fake packets in-order
+                pktptr->time = cb_rec_buffer_ptr[m_nIdx]->lasttime;
+            } else {
                 ++m_nRecentPacketCount; // only count the "real" packets, not loopback ones
                 m_icInstrument.TestForReply(pktptr); // loopbacks won't need a "reply"...they are never sent
             }
