@@ -46,6 +46,7 @@
 UINT16 g_nCombine = 0; // subchannel combine level
 bool g_bAppend = false;
 bool g_bNoSpikes = false;
+bool g_bSkipEmpty = false;
 
 // Author & Date:   Ehsan Azar   Jan 16, 2013
 // Purpose: Add created header to the hdf file
@@ -1254,6 +1255,22 @@ int ConvertNSx22(FILE * pFile, hid_t file)
             printf("Invalid data header in source file\n");
             break;
         }
+        if (isDataHdr.nNumDatapoints == 0)
+        {
+            printf("Data section %d with zero points detected!\n", setCount);
+            if (g_bSkipEmpty)
+            {
+                printf(" Skip this section and assume next in file is new data header\n");
+                nGot = fread(&isDataHdr, sizeof(Nsx22DataHdr), 1, pFile);
+                if (nGot != 1)
+                    break;
+                continue;
+            } else {
+                printf(" Retrieve the rest of the file as one chunk\n"
+                        " Last section may have unaligned trailing data points\n"
+                        " Use --skipempty if instead you want to skip empty headers\n");
+            }
+        }
         for (UINT32 i = 0; i < isHdr.cnChannels; ++i)
         {
             size_t chunk_size = CHUNK_SIZE_CONTINUOUS;
@@ -1309,12 +1326,6 @@ int ConvertNSx22(FILE * pFile, hid_t file)
 
             ret = H5Dclose(dsid);
         }
-        if (isDataHdr.nNumDatapoints == 0)
-        {
-            printf("Data section with zero points detected!\n"
-                    " Retrieve the rest of the file as one chunk\n"
-                    " Last section may have unaligned trailing data points\n");
-        }
         int count = 0;
         INT16 anDataBufferCache[cbNUM_ANALOG_CHANS][CHUNK_SIZE_CONTINUOUS];
         for (UINT32 i = 0; i < isDataHdr.nNumDatapoints || isDataHdr.nNumDatapoints == 0; ++i)
@@ -1326,7 +1337,7 @@ int ConvertNSx22(FILE * pFile, hid_t file)
                 if (isDataHdr.nNumDatapoints == 0)
                     printf("Data section %d may be unaligned\n", setCount);
                 else
-                    printf("Fewer data points than specified in data header at the source file!\n");
+                    printf("Fewer data points (%u) than specified in data header (%u) at the source file!\n", i + 1, isDataHdr.nNumDatapoints);
                 break;
             }
             for (UINT32 j = 0; j < isHdr.cnChannels; ++j)
@@ -1395,6 +1406,11 @@ int main(int argc, char * const argv[])
             g_bNoSpikes = true;
             idxSrcFile++;
         }
+        else if (strcmp(argv[i], "--skipempty") == 0)
+        {
+            g_bSkipEmpty = true;
+            idxSrcFile++;
+        }
         else if (strcmp(argv[i], "--append") == 0)
         {
             g_bAppend = true;
@@ -1433,6 +1449,7 @@ int main(int argc, char * const argv[])
                " --force    : overwrites the destination if it exists, create if not\n"
                " --nocache  : slower but results in smaller file size\n"
                " --nospikes : ignore spikes\n"
+               " --skipempty: skip 0-sized headers (instead of ignoring them)\n"
                " --combine <level> : combine to the existing channels at given subchannel level (level 0 means no subchannel)\n"
                "    same experiment, same channels, different data sets (e.g. different sampling rates or filters)\n"
                " --append   : append channels to the end of current channels\n"
