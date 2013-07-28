@@ -14,6 +14,7 @@
 
 #include "StdAfx.h"
 #include "WCFUtils.h"
+#include "cbhwlib.h"
 #include "debugmacs.h"
 #include "CCFUtilsXmlItems.h"
 #include "CCFUtilsXmlItemsGenerate.h"
@@ -29,7 +30,7 @@ using namespace ccf;
 
 // Author & Date: Ehsan Azar       10 Sept 2012
 // Purpose: WCF base constructor
-WCFUtils::WCFUtils(bool bThreaded, UINT32 nInstance) : 
+WCFUtils::WCFUtils(bool bThreaded, UINT32 nInstance) :
     m_bThreaded(bThreaded), m_nInstance(nInstance)
 {
 }
@@ -95,7 +96,6 @@ int WCFUtils::SendWCF(LPCSTR szFileName, UINT16 channel)
 //  channel    - the channel read waveform from
 int WCFUtils::WriteWCFNoPrompt(LPCSTR szFileName, UINT16 channel)
 {
-/*
     QString strFilename = QString(szFileName);
     m_szFileName = szFileName;
     QVariantList lst;
@@ -159,7 +159,6 @@ int WCFUtils::WriteWCFNoPrompt(LPCSTR szFileName, UINT16 channel)
     bool bRes = xml.endGroup(true);
     if (bRes)
         return -1;
-*/
     return 0;
 }
 

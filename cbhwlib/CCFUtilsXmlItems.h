@@ -45,11 +45,13 @@ public:
     CCFXmlItem(cbPKT_NTRODEINFO & pkt, QString strName = "");
     CCFXmlItem(cbPKT_LNC & pkt, QString strName = "");
     CCFXmlItem(cbPKT_FILTINFO & pkt, QString strName = "");
+    CCFXmlItem(cbPKT_AOUT_WAVEFORM & pkt, QString strName = "");
     CCFXmlItem(cbSCALING & pkt, QString strName = "");
     CCFXmlItem(cbFILTDESC & pkt, QString strName = "");
     CCFXmlItem(cbMANUALUNITMAPPING & pkt, QString strName = "");
     CCFXmlItem(cbHOOP & pkt, QString strName = "");
     CCFXmlItem(cbAdaptControl & pkt, QString strName = "");
+    CCFXmlItem(cbWaveformData & pkt, UINT16  mode, QString strName = "");
 
     CCFXmlItem(UINT32 & number, QString strName = "");
     CCFXmlItem(INT32 & number, QString strName = "");

@@ -374,6 +374,34 @@ CCFXmlItem::CCFXmlItem(cbPKT_FILTINFO & pkt, QString strName)
     m_xmlValue = lst;
 }
 
+// Author & Date: Ehsan Azar       11 Sept 2012
+// Purpose: CCF XML item constructor
+CCFXmlItem::CCFXmlItem(cbPKT_AOUT_WAVEFORM & pkt, QString strName)
+{
+    m_xmlTag = strName;
+    m_xmlAttribs.insert("Type", "cbPKT_AOUT_WAVEFORM");
+    if (pkt.chan == 0)
+        return;
+
+    QVariantList lst;
+    lst += ccf::GetCCFXmlItem(pkt.chid, "chid");
+    lst += ccf::GetCCFXmlItem(pkt.type, "type");
+    lst += ccf::GetCCFXmlItem(pkt.dlen, "dlen");
+    lst += ccf::GetCCFXmlItem(pkt.chan, "chan");
+    lst += ccf::GetCCFXmlItem(pkt.repeats, "repeats");
+    lst += ccf::GetCCFXmlItem(pkt.trig, "trigger/type");
+    lst += ccf::GetCCFXmlItem(pkt.trigChan, "trigger/channel");
+    lst += ccf::GetCCFXmlItem(pkt.trigValue, "trigger/value");
+    lst += ccf::GetCCFXmlItem(pkt.trigNum, "number");
+    lst += ccf::GetCCFXmlItem(pkt.active, "active");
+    lst += ccf::GetCCFXmlItem(pkt.mode, "wave/mode");
+    QVariant var = CCFXmlItem(pkt.wave, pkt.mode, "wave");
+    lst += var;
+
+    // Now use the list
+    m_xmlValue = lst;
+}
+
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
 CCFXmlItem::CCFXmlItem(cbSCALING & pkt, QString strName)
@@ -459,6 +487,40 @@ CCFXmlItem::CCFXmlItem(cbAdaptControl & pkt, QString strName)
     lst += ccf::GetCCFXmlItem(pkt.nMode, "mode");
     lst += ccf::GetCCFXmlItem(pkt.fTimeOutMinutes, "TimeOutMinutes");
     lst += ccf::GetCCFXmlItem(pkt.fElapsedMinutes, "ElapsedMinutes");
+
+    // Now use the list
+    m_xmlValue = lst;
+}
+
+// Author & Date: Ehsan Azar       11 Sept 2012
+// Purpose: CCF XML item constructor
+CCFXmlItem::CCFXmlItem(cbWaveformData & pkt, UINT16 mode, QString strName)
+{
+    m_xmlTag = strName;
+    m_xmlAttribs.insert("Type", "cbWaveformData");
+    if (mode == 0)
+        return;
+
+    QVariantList lst;
+    lst += ccf::GetCCFXmlItem(pkt.offset, "offset");
+    if (mode == cbWAVEFORM_MODE_SINE)
+    {
+        lst += ccf::GetCCFXmlItem(pkt.sineFrequency, "sine/frequency");
+        lst += ccf::GetCCFXmlItem(pkt.sineAmplitude, "sine/amplitude");
+    }
+    else if (mode == cbWAVEFORM_MODE_PARAMETERS)
+    {
+        lst += ccf::GetCCFXmlItem(pkt.seqTotal, "parameters/total");
+        lst += ccf::GetCCFXmlItem(pkt.seq, "parameters/seq");
+        lst += ccf::GetCCFXmlItem(pkt.phases, "parameters/phases");
+        // Partially save these parameters
+        UINT16 phases = pkt.phases;
+        if (phases > cbMAX_WAVEFORM_PHASES)
+            phases = cbMAX_WAVEFORM_PHASES;
+        lst += ccf::GetCCFXmlItem(pkt.duration, phases, "parameters/duration");
+        lst += ccf::GetCCFXmlItem(pkt.amplitude, phases, "parameters/amplitude");
+        // future sequences will go to the parameters<n>
+    }
 
     // Now use the list
     m_xmlValue = lst;
@@ -931,6 +993,47 @@ void ccf::ReadItem(XmlFile * const xml, cbPKT_FILTINFO & item)
     ccf::ReadItem(xml, item.gain, "filterdesc/digfilt/gain");
 }
 
+// Author & Date: Ehsan Azar       12 Sept 2012
+// Purpose: Enumerate this version of item
+// Inputs:
+//   xml      - the xml file in the item group
+//   item     - item for this version
+// Outputs:
+//  Returns the item number (1-based)
+template<>
+int ccf::ItemNumber(XmlFile * const xml, cbPKT_AOUT_WAVEFORM & item)
+{
+    ccf::ReadItem(xml, item.trigNum, "number");
+    if (item.trigNum < cbMAX_AOUT_TRIGGER)
+    {
+        return (item.trigNum + 1);
+    }
+    // return zero means invalid
+    return 0;
+}
+
+// Author & Date: Ehsan Azar       11 Sept 2012
+// Purpose: Read this version of item
+// Inputs:
+//   xml      - the xml file in the item group
+//   item     - item for this version
+template<>
+void ccf::ReadItem(XmlFile * const xml, cbPKT_AOUT_WAVEFORM & item)
+{
+    ccf::ReadItem(xml, item.chid, "chid");
+    ccf::ReadItem(xml, item.type, "type");
+    ccf::ReadItem(xml, item.dlen, "dlen");
+    ccf::ReadItem(xml, item.chan, "chan");
+    ccf::ReadItem(xml, item.mode, "wave/mode");
+    ccf::ReadItem(xml, item.repeats, "repeats");
+    ccf::ReadItem(xml, item.trig, "trigger/type");
+    ccf::ReadItem(xml, item.trigChan, "trigger/channel");
+    ccf::ReadItem(xml, item.trigValue, "trigger/value");
+    ccf::ReadItem(xml, item.trigNum, "number");
+    ccf::ReadItem(xml, item.active, "active");
+    ccf::ReadItem(xml, item.wave, "wave");
+}
+
 // Author & Date: Ehsan Azar       16 April 2012
 // Purpose: Read this version of item
 // Inputs:
@@ -1004,6 +1107,33 @@ void ccf::ReadItem(XmlFile * const xml, cbAdaptControl & item)
     ccf::ReadItem(xml, item.nMode, "mode");
     ccf::ReadItem(xml, item.fTimeOutMinutes, "TimeOutMinutes");
     ccf::ReadItem(xml, item.fElapsedMinutes, "ElapsedMinutes");
+}
+
+// Author & Date: Ehsan Azar       11 Sept 2012
+// Purpose: Read this version of item
+// Inputs:
+//   xml      - the xml file in the item group
+//   item     - item for this version
+template<>
+void ccf::ReadItem(XmlFile * const xml, cbWaveformData & item)
+{
+    UINT16 mode = 0;
+    ccf::ReadItem(xml, item.offset, "offset");
+    ccf::ReadItem(xml, mode, "mode");
+    if (mode == cbWAVEFORM_MODE_SINE)
+    {
+        ccf::ReadItem(xml, item.sineFrequency, "sine/frequency");
+        ccf::ReadItem(xml, item.sineAmplitude, "sine/amplitude");
+    }
+    else if (mode == cbWAVEFORM_MODE_PARAMETERS)
+    {
+        ccf::ReadItem(xml, item.seqTotal, "parameters/total");
+        ccf::ReadItem(xml, item.seq, "parameters/seq");
+        ccf::ReadItem(xml, item.phases, "parameters/phases");
+        // No need to try to partially read, it will already ignore if some data is missing
+        ccf::ReadItem(xml, item.duration, cbMAX_WAVEFORM_PHASES, "parameters/duration");
+        ccf::ReadItem(xml, item.amplitude, cbMAX_WAVEFORM_PHASES, "parameters/amplitude");
+    }
 }
 
 // Author & Date: Ehsan Azar       16 April 2012
@@ -1149,11 +1279,13 @@ template QVariant ccf::GetCCFXmlItem<cbPKT_SS_DETECT>(cbPKT_SS_DETECT&, QString)
 template QVariant ccf::GetCCFXmlItem<cbPKT_SS_STATISTICS>(cbPKT_SS_STATISTICS&, QString);
 template QVariant ccf::GetCCFXmlItem<cbPKT_LNC>(cbPKT_LNC&, QString);
 template QVariant ccf::GetCCFXmlItem<cbPKT_FILTINFO>(cbPKT_FILTINFO&, QString);
+template QVariant ccf::GetCCFXmlItem<cbPKT_AOUT_WAVEFORM>(cbPKT_AOUT_WAVEFORM&, QString);
 
 template QVariant ccf::GetCCFXmlItem<cbPKT_CHANINFO>(cbPKT_CHANINFO * const, int, QString);
 template QVariant ccf::GetCCFXmlItem<cbPKT_NTRODEINFO>(cbPKT_NTRODEINFO * const, int, QString);
 template QVariant ccf::GetCCFXmlItem<cbPKT_SS_NOISE_BOUNDARY>(cbPKT_SS_NOISE_BOUNDARY * const, int, QString);
 template QVariant ccf::GetCCFXmlItem<cbPKT_FILTINFO>(cbPKT_FILTINFO * const, int, QString);
+template QVariant ccf::GetCCFXmlItem<cbPKT_AOUT_WAVEFORM[cbMAX_AOUT_TRIGGER]>(cbPKT_AOUT_WAVEFORM (* const)[cbMAX_AOUT_TRIGGER], int, int, QString, QString);
 
 // For link to proceed here we have to mention possible template types if not used in this unit
 template void ccf::ReadItem<cbPKT_ADAPTFILTINFO>(XmlFile * const, cbPKT_ADAPTFILTINFO &, QString);
@@ -1164,8 +1296,10 @@ template void ccf::ReadItem<cbPKT_SS_DETECT>(XmlFile * const, cbPKT_SS_DETECT &,
 template void ccf::ReadItem<cbPKT_SS_STATISTICS>(XmlFile * const, cbPKT_SS_STATISTICS &, QString);
 template void ccf::ReadItem<cbPKT_LNC>(XmlFile * const, cbPKT_LNC &, QString);
 template void ccf::ReadItem<cbPKT_FILTINFO>(XmlFile * const, cbPKT_FILTINFO &, QString);
+template void ccf::ReadItem<cbPKT_AOUT_WAVEFORM>(XmlFile * const, cbPKT_AOUT_WAVEFORM &, QString);
 
 template void ccf::ReadItem<cbPKT_CHANINFO>(XmlFile * const, cbPKT_CHANINFO * const, int, QString);
 template void ccf::ReadItem<cbPKT_NTRODEINFO>(XmlFile * const, cbPKT_NTRODEINFO * const, int, QString);
 template void ccf::ReadItem<cbPKT_SS_NOISE_BOUNDARY>(XmlFile * const, cbPKT_SS_NOISE_BOUNDARY * const, int, QString);
 template void ccf::ReadItem<cbPKT_FILTINFO>(XmlFile * const, cbPKT_FILTINFO * const, int, QString);
+template void ccf::ReadItem<cbPKT_AOUT_WAVEFORM[cbMAX_AOUT_TRIGGER]>(XmlFile * const, cbPKT_AOUT_WAVEFORM (* const)[cbMAX_AOUT_TRIGGER], int, int, QString);
