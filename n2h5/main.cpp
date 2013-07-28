@@ -136,7 +136,8 @@ int AddRoot(const char * szSrcFile, FILE * pFile, hid_t file, Nsx21Hdr & isHdr)
     memset(&header, 0, sizeof(header));
     header.nMajorVersion = 1;
     header.szApplication = isHdr.szGroup;
-    header.szComment = "";
+    char szComment[] = ""; // Old format does not have a comment
+    header.szComment = szComment;
     header.nGroupCount = 1;
     TIMSTM ts;
     memset(&ts, 0, sizeof(ts));

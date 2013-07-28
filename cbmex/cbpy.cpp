@@ -1422,9 +1422,7 @@ static PyObject * cbpy_FileConfig(PyObject *self, PyObject *args, PyObject *keyw
         {
             return PyErr_Format(PyExc_ValueError, "Filename and comment must not be specified for 'info' command");
         }
-        cbPySetErrorFromSdkError(CBSDKRESULT_NOTIMPLEMENTED, "info switch");
         {
-#if 0
             char filename[256] = {'\0'};
             char username[256] = {'\0'};
             bool bRecording = false;
@@ -1455,7 +1453,6 @@ static PyObject * cbpy_FileConfig(PyObject *self, PyObject *args, PyObject *keyw
                     return PyErr_Format(PyExc_ValueError, "Cannot retrieve username");
                 }
             }
-#endif
             return res;
         }
         break;
