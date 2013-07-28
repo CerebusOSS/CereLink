@@ -19,5 +19,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string>
-
+#ifndef WIN32
+#define _strdup strdup
+#endif
 #endif /* STDAFX_H_ */

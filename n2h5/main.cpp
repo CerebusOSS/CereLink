@@ -34,6 +34,16 @@
 #include "n2h5.h"
 #include "NevNsx.h"
 
+#ifndef WIN32
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
+
+// Keep this after all headers
+#include "compat.h"
+
 #ifdef WIN32                          // Windows needs the different spelling
 #define ftello _ftelli64
 #define fseeko _fseeki64
@@ -1490,6 +1500,7 @@ int main(int argc, char * const argv[])
     }
 
     hid_t file;
+    hid_t facpl = H5P_DEFAULT;
     
     if (g_bAppend || bCombine)
     {
@@ -1504,7 +1515,6 @@ int main(int argc, char * const argv[])
         H5Fclose(file);
     }
 
-    hid_t facpl = H5P_DEFAULT;
     if (bCache)
     {
         double rdcc_w0 = 1; // We only write so this should work

@@ -64,6 +64,7 @@ SET( LIB_NAME_STATIC cbsdk_static )
 SET( LIB_NAME_CBPY cbpy )
 SET( LIB_NAME_CBMEX cbmex )
 SET( TEST_NAME testcbsdk )
+SET( N2H5_NAME n2h5 )
 
 # Make sure debug builds are recognized
 SET(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
@@ -71,6 +72,7 @@ SET(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
 FIND_PACKAGE( Qt4 REQUIRED )
 FIND_PACKAGE( PythonLibrary )
 FIND_PACKAGE( NumPy )
+FIND_PACKAGE( HDF5 )
 
 # Try MATLAB locally first, then on MATLAB install
 FIND_PATH( MATLAB_INCLUDE_DIR
@@ -120,6 +122,11 @@ SET( LIB_SOURCE_CBPY
 SET( LIB_SOURCE_CBMEX
 	../cbmex/cbmex.cpp
 )
+SET( N2H5_SOURCE
+	../n2h5/main.cpp
+	../n2h5/n2h5.cpp
+)
+
 
 # Handle Qt
 QT4_WRAP_CPP( LIB_HEADERS_MOC ${LIB_HEADERS} )
@@ -252,7 +259,6 @@ IF( MATLAB_FOUND )
     )
 ENDIF( MATLAB_FOUND )
 
-
 #########################################################################################
 # Build Test executable
 ADD_EXECUTABLE( ${TEST_NAME} ../cbmex/testcbsdk.cpp )
@@ -266,3 +272,29 @@ INSTALL( TARGETS ${TEST_NAME} ${LIB_NAME}
 )
 INSTALL( FILES ../cbmex/cbsdk.h ../cbhwlib/cbhwlib.h DESTINATION include )
 
+#########################################################################################
+# Build n2h5 executable only if HDF5 found
+IF( HDF5_FOUND )
+    MESSAGE ( STATUS "Add n2h5 utility build target")
+    # In case it did not find it (seems like a bug in FindHDF5.cmake) 
+    IF (NOT HDF5_HL_LIBRARIES)
+        FIND_LIBRARY (HDF5_HL_LIBRARIES libhdf5_hl.so
+                      HINTS ${HDF5_LIBRARY_DIRS}
+                      /usr/lib
+                      /usr/local/lib
+                      /opt/local/lib
+        )
+	ENDIF (NOT HDF5_HL_LIBRARIES)
+    INCLUDE_DIRECTORIES( ${HDF5_INCLUDE_DIR} )
+    IF( WIN32 )
+        SET ( N2H5_SOURCE ${N2H5_SOURCE} ../n2h5/res/n2h5_res.rc )
+	ENDIF( WIN32 )
+    ADD_EXECUTABLE( ${N2H5_NAME} ${N2H5_SOURCE} )
+    TARGET_LINK_LIBRARIES (${N2H5_NAME} ${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})
+    # Install information
+    INSTALL( TARGETS ${N2H5_NAME}
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION lib${LIB_SUFFIX}
+        ARCHIVE DESTINATION lib${LIB_SUFFIX}
+    )
+ENDIF( HDF5_FOUND )

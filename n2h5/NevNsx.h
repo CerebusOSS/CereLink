@@ -15,7 +15,7 @@
 #ifndef NEVNSX_H_
 #define NEVNSX_H_
 
-#include "../common/cbhwlib.h"
+#include "cbhwlib.h"
 
 #pragma pack(push, 1)
 

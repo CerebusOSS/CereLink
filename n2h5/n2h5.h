@@ -19,7 +19,7 @@
 #ifndef N2H5_H_
 #define N2H5_H_
 
-#include "../common/cbhwlib.h"
+#include "cbhwlib.h"
 #include "hdf5.h"
 #include "hdf5_hl.h"
 
