@@ -62,6 +62,8 @@ namespace
         CBMEX_FUNCTION_CONFIG,
         CBMEX_FUNCTION_CCF,
         CBMEX_FUNCTION_SYSTEM,
+        CBMEX_FUNCTION_SYNCHOUT,
+        CBMEX_FUNCTION_EXT,
 
         CBMEX_FUNCTION_COUNT,  // This must be the last item
     } MexFxnIndex;
@@ -72,7 +74,7 @@ namespace
                             mxArray *plhs[],       // Array of left hand side arguments
                             int nrhs,              // Number of right hand side (input) arguments
                             const mxArray *prhs[]);// Array of right hand side arguments
-    
+
     typedef std::pair<PMexFxn, MexFxnIndex> NAME_PAIR;
 
     //        NAME    FXN   FXN_IDX to use
@@ -97,6 +99,8 @@ namespace
         table["config"        ] = NAME_PAIR(&::OnConfig,        CBMEX_FUNCTION_CONFIG);
         table["ccf"           ] = NAME_PAIR(&::OnCCF,           CBMEX_FUNCTION_CCF);
         table["system"        ] = NAME_PAIR(&::OnSystem,        CBMEX_FUNCTION_SYSTEM);
+        table["synchout"      ] = NAME_PAIR(&::OnSynchOut,      CBMEX_FUNCTION_SYNCHOUT);
+        table["ext"           ] = NAME_PAIR(&::OnExtCmd,        CBMEX_FUNCTION_EXT);
         return table;
     };
 };
@@ -135,7 +139,7 @@ void PrintErrorSDK(cbSdkResult res, const char * szCustom = NULL)
     switch(res)
     {
     case CBSDKRESULT_WARNCONVERT:
-        mexErrMsgTxt("If file conversion is needed");
+        mexErrMsgTxt("File conversion is needed");
         break;
     case CBSDKRESULT_WARNCLOSED:
         mexErrMsgTxt("Library is already closed");
@@ -144,6 +148,7 @@ void PrintErrorSDK(cbSdkResult res, const char * szCustom = NULL)
         mexErrMsgTxt("Library is already opened");
         break;
     case CBSDKRESULT_SUCCESS:
+        // Do nothing
         break;
     case CBSDKRESULT_NOTIMPLEMENTED:
         mexErrMsgTxt("Not implemented");
@@ -218,7 +223,7 @@ void PrintErrorSDK(cbSdkResult res, const char * szCustom = NULL)
         mexErrMsgTxt(ERR_UDP_MESSAGE);
         break;
     case CBSDKRESULT_INVALIDINST:
-        mexErrMsgTxt("Invalid range or instrument address");
+        mexErrMsgTxt("Invalid range, instrument address or instrument mode");
         break;
     case CBSDKRESULT_ERRMEMORY:
 #ifdef __APPLE__
@@ -268,10 +273,10 @@ void PrintHelp(MexFxnIndex fxnidx, bool bErr = false, const char * szCustom = NU
 
     const char * szUsage[CBMEX_FUNCTION_COUNT + 1] = {
         CBMEX_USAGE_HELP,
-        CBMEX_USAGE_OPEN, 
-        CBMEX_USAGE_CLOSE, 
-        CBMEX_USAGE_TIME, 
-        CBMEX_USAGE_TRIALCONFIG, 
+        CBMEX_USAGE_OPEN,
+        CBMEX_USAGE_CLOSE,
+        CBMEX_USAGE_TIME,
+        CBMEX_USAGE_TRIALCONFIG,
         CBMEX_USAGE_CHANLABEL,
         CBMEX_USAGE_TRIALDATA,
         CBMEX_USAGE_TRIALCOMMENT,
@@ -284,8 +289,14 @@ void PrintHelp(MexFxnIndex fxnidx, bool bErr = false, const char * szCustom = NU
         CBMEX_USAGE_CONFIG,
         CBMEX_USAGE_CCF,
         CBMEX_USAGE_SYSTEM,
+        CBMEX_USAGE_SYNCHOUT,
+        CBMEX_USAGE_EXTENSION,
+
+        // Keep this in the end
         CBMEX_USAGE_CBMEX
     };
+
+    // TODO: for CBMEX_USAGE_CBMEX, iterate all comamnds names, instead of hard-coded names help string
 
     if (bErr)
         mexErrMsgTxt(szUsage[fxnidx]);
@@ -656,7 +667,7 @@ void OnChanLabel(
     const mxArray *prhs[] )// Array of right hand side arguments
 {
     UINT32 nInstance = 0;
-   
+
     int nFirstParam = 1;
     int idxNewLabels = 0;
 
@@ -832,7 +843,7 @@ void OnTrialConfig(
     UINT32 nInstance = 0;
     int nFirstParam = 2;
     // check the number of input arguments
-    if (nrhs < 2) 
+    if (nrhs < 2)
         PrintHelp(CBMEX_FUNCTION_TRIALCONFIG, true, "At least one input is required");
 
     UINT32 bActive;
@@ -877,7 +888,7 @@ void OnTrialConfig(
             uEndVal  = ((UINT32)(*(pcfgvals+5))) & 0xFFFF;
 
             nFirstParam++; // skip the optional
-        } 
+        }
     }
 
     enum
@@ -997,7 +1008,7 @@ void OnTrialConfig(
     PrintErrorSDK(res, "cbSdkSetTrialConfig()");
 
     // process first output argument if available
-    if (nlhs > 0) 
+    if (nlhs > 0)
         plhs[0] = mxCreateScalarDouble( (double)bWithinTrial );
 
     // process second output argument if available
@@ -1059,7 +1070,7 @@ void OnTrialData(
     // make sure there is at least one output argument
     if (nlhs > 3)
         PrintHelp(CBMEX_FUNCTION_TRIALDATA, true, "Too many outputs requested");
-    
+
     if (nFirstParam < nrhs)
     {
         if (mxIsNumeric(prhs[nFirstParam]))
@@ -1073,7 +1084,7 @@ void OnTrialData(
                 bFlushBuffer = true;
 
             nFirstParam++; // skip the optional
-        } 
+        }
     }
 
     enum
@@ -1272,7 +1283,7 @@ void OnTrialComment(
                 bFlushBuffer = true;
 
             nFirstParam++; // skip the optional
-        } 
+        }
     }
 
     enum
@@ -1425,7 +1436,7 @@ void OnTrialTracking(
                 bFlushBuffer = true;
 
             nFirstParam++; // skip the optional
-        } 
+        }
     }
 
     enum
@@ -1590,11 +1601,38 @@ void OnFileConfig(
 {
     UINT32 nInstance = 0;
     int nFirstParam = 4;
+    bool bGetFileInfo = false;
+    cbSdkResult res;
 
-    if (nrhs < 4) 
+    if (nrhs == 1 || nlhs > 0)
+    {
+        if (nlhs > 3)
+            PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Too many outputs requested");
+        bGetFileInfo = true;
+    } else {
+        if (nlhs > 0)
+            PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Too many outputs requested");
+    }
+
+    if (bGetFileInfo)
+    {
+        char filename[256] = {'\0'};
+        char username[256] = {'\0'};
+        bool bRecording = false;
+        res = cbSdkGetFileConfig(nInstance, filename, username, &bRecording);
+        PrintErrorSDK(res, "cbSdkGetFileConfig()");
+        plhs[0] = mxCreateScalarDouble(bRecording);
+        if (nlhs > 1)
+            plhs[1] = mxCreateString(filename);
+        if (nlhs > 2)
+            plhs[2] = mxCreateString(username);
+        // If no inputs given, nothing else to do
+        if (nrhs == 1)
+            return;
+    }
+
+    if (nrhs < 4)
         PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Too few inputs provided");
-    if (nlhs > 0)
-        PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Too many outputs requested");
 
     // declare the packet that will be sent
     cbPKT_FILECFG fcpkt;
@@ -1686,7 +1724,7 @@ void OnFileConfig(
         PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Last parameter requires value");
     }
 
-    cbSdkResult res = cbSdkSetFileConfig(nInstance, fcpkt.filename, fcpkt.comment, bStart, options);
+    res = cbSdkSetFileConfig(nInstance, fcpkt.filename, fcpkt.comment, bStart, options);
     PrintErrorSDK(res, "cbSdkSetFileConfig()");
 }
 
@@ -1706,7 +1744,7 @@ void OnDigitalOut(
     UINT32 nInstance = 0;
     int nFirstParam = 3;
 
-    if (nrhs < 3) 
+    if (nrhs < 3)
         PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Too few inputs provided");
     if (nlhs > 0)
         PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Too many outputs requested");
@@ -1783,13 +1821,11 @@ void OnAnalogOut(
     UINT32 nInstance = 0;
     int nFirstParam = 2;
 
-    if (nrhs < 3) 
+    if (nrhs < 3)
         PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Too few inputs provided");
     if (nlhs > 0)
         PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Too many outputs requested");
 
-    mexErrMsgTxt("Not implemented");
-#if 0
     enum
     {
         PARAM_NONE,
@@ -2007,7 +2043,7 @@ void OnAnalogOut(
 
     if (nIdxWave == 0 && nIdxMonitor == 0 && !bDisable)
     {
-        PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, 
+        PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true,
             "No action specified\n"
             "specify waveform, monitoring or disable");
     }
@@ -2065,7 +2101,7 @@ void OnAnalogOut(
 
             if (bUnitMv)
             {
-                // FIXME: Use cbSdkGetChannelConfig
+                // FIXME: add to SDK
                 cbSCALING isScaleOut;
                 ::cbGetAoutCaps(channel, NULL, &isScaleOut, NULL, nInstance);
 
@@ -2112,7 +2148,7 @@ void OnAnalogOut(
             double dAmplitude = *(pcfgvals + 1);
             if (bUnitMv)
             {
-                // FIXME: Use cbSdkGetChannelConfig
+                // FIXME: add to SDK
                 cbSCALING isScaleOut;
                 ::cbGetAoutCaps(channel, NULL, &isScaleOut, NULL, nInstance);
 
@@ -2164,6 +2200,10 @@ void OnAnalogOut(
             {
                 wf.trig = cbSdkWaveformTrigger_SOFTRESET;
             }
+            else if (_strcmpi(cmdstr, "extension") == 0)
+            {
+                wf.trig = cbSdkWaveformTrigger_EXTENSION;
+            }
             else if (_strcmpi(cmdstr, "off") == 0)
             {
                 wf.trig = cbSdkWaveformTrigger_NONE;
@@ -2197,7 +2237,6 @@ void OnAnalogOut(
 
     cbSdkResult res = cbSdkSetAnalogOutput(nInstance, channel, nIdxWave ? &wf : NULL, nIdxMonitor ? &mon : NULL);
     PrintErrorSDK(res, "cbSdkSetAnalogOutput()");
-#endif
 }
 
 // Author & Date:   Ehsan Azar       11 March 2011
@@ -2214,7 +2253,7 @@ void OnMask(
     int nFirstParam = 2;
     UINT32 bActive = 1;
 
-    if (nrhs < 2) 
+    if (nrhs < 2)
         PrintHelp(CBMEX_FUNCTION_MASK, true, "Too few inputs provided");
     if (nlhs > 0)
         PrintHelp(CBMEX_FUNCTION_MASK, true, "Too many outputs requested");
@@ -2231,11 +2270,11 @@ void OnMask(
             // check for proper data structure
             if (mxGetNumberOfElements(prhs[nFirstParam]) != 1)
                 PrintHelp(CBMEX_FUNCTION_MASK, true, "Invalid active parameter");
-            
+
             bActive = (UINT32)mxGetScalar(prhs[nFirstParam]);
 
             nFirstParam++; // skip the optional
-        } 
+        }
     }
 
     enum
@@ -2301,7 +2340,7 @@ void OnComment(
     UINT32 nInstance = 0;
     int nFirstParam = 4;
 
-    if (nrhs < 4) 
+    if (nrhs < 4)
         PrintHelp(CBMEX_FUNCTION_COMMENT, true, "Too few inputs provided");
     if (nlhs > 0)
         PrintHelp(CBMEX_FUNCTION_COMMENT, true, "Too many outputs requested");
@@ -2385,7 +2424,7 @@ void OnConfig(
     cbSdkResult res;
     bool bHasNewParams = false;
 
-    if (nrhs < 2) 
+    if (nrhs < 2)
         PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Too few inputs provided");
     if (nlhs > 1)
         PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Too many outputs requested");
@@ -2840,7 +2879,7 @@ void OnSystem(
     UINT32 nInstance = 0;
     int nFirstParam = 2;
 
-    if (nrhs < 2) 
+    if (nrhs < 2)
         PrintHelp(CBMEX_FUNCTION_SYSTEM, true, "Too few inputs provided");
     if (nlhs > 0)
         PrintHelp(CBMEX_FUNCTION_SYSTEM, true, "Too many outputs requested");
@@ -2911,6 +2950,222 @@ void OnSystem(
     PrintErrorSDK(res, "cbSdkSystem()");
 }
 
+// Author & Date:   Ehsan Azar       23 April 2013
+// Purpose: Send a synch output command
+void OnSynchOut(
+    int nlhs,              // Number of left hand side (output) arguments
+    mxArray *plhs[],       // Array of left hand side arguments
+    int nrhs,              // Number of right hand side (input) arguments
+    const mxArray *prhs[] )// Array of right hand side arguments
+{
+    UINT32 nInstance = 0;
+    UINT32 nFreq = 0;
+    UINT32 nRepeats = 0;
+    UINT32 nChannel = 1;
+
+    if (nrhs < 2)
+        PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, "Too few inputs provided");
+    if (nlhs > 0)
+        PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, "Too many outputs requested");
+
+
+    enum
+    {
+        PARAM_NONE,
+        PARAM_INSTANCE,
+        PARAM_FREQ,
+        PARAM_REPEATS,
+    } param = PARAM_NONE;
+
+    // Process remaining input arguments if available
+    for (int i = 1; i < nrhs; ++i)
+    {
+        if (param == PARAM_NONE)
+        {
+            char cmdstr[128];
+            if (mxGetString(prhs[i], cmdstr, 16))
+            {
+                char errstr[128];
+                sprintf(errstr, "Parameter %d is invalid", i);
+                PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, errstr);
+            }
+            if (_strcmpi(cmdstr, "instance") == 0)
+            {
+                param = PARAM_INSTANCE;
+            } 
+            else if (_strcmpi(cmdstr, "freq") == 0)
+            {
+                param = PARAM_FREQ;
+            }
+            else if (_strcmpi(cmdstr, "repeats") == 0)
+            {
+                param = PARAM_REPEATS;
+            } else {
+                char errstr[128];
+                sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
+                PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, errstr);
+            }
+        } else {
+            switch(param)
+            {
+            case PARAM_INSTANCE:
+                if (!mxIsNumeric(prhs[i]))
+                    PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, "Invalid instance number");
+                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                break;
+            case PARAM_FREQ:
+                if (!mxIsNumeric(prhs[i]))
+                    PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, "Invalid frequency value");
+                nFreq = (UINT32)(mxGetScalar(prhs[i]) * 1000);
+                break;
+            case PARAM_REPEATS:
+                if (!mxIsNumeric(prhs[i]))
+                    PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, "Invalid repeats value");
+                nRepeats = (UINT32)mxGetScalar(prhs[i]);
+                break;
+            default:
+                break;
+            }
+            param = PARAM_NONE;
+        }
+    } // end for (int i = nFirstParam
+    if (param != PARAM_NONE)
+    {
+        // Some parameter did not have a value, and value is non-optional
+        PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, "Last parameter requires value");
+    }
+
+    cbSdkResult res = cbSdkSetSynchOutput(nInstance, nChannel, nFreq, nRepeats);
+    if (res == CBSDKRESULT_NOTIMPLEMENTED)
+        PrintErrorSDK(res, "cbSdkSynchOut(): Only CerePlex currently supports this command");
+    PrintErrorSDK(res, "cbSdkSynchOut()");
+}
+
+// Author & Date:   Ehsan Azar       14 May 2013
+// Purpose: Send an extension command
+void OnExtCmd(
+    int nlhs,              // Number of left hand side (output) arguments
+    mxArray *plhs[],       // Array of left hand side arguments
+    int nrhs,              // Number of right hand side (input) arguments
+    const mxArray *prhs[] )// Array of right hand side arguments
+{
+    UINT32 nInstance = 0;
+    cbSdkResult res = CBSDKRESULT_SUCCESS;
+    cbSdkExtCmd extCmd;
+
+    if (nrhs < 2)
+        PrintHelp(CBMEX_FUNCTION_EXT, true, "Too few inputs provided");
+    if (nlhs > 0)
+        PrintHelp(CBMEX_FUNCTION_EXT, true, "Too many outputs requested");
+
+
+    enum
+    {
+        PARAM_NONE,
+        PARAM_INSTANCE,
+        PARAM_CMD,
+        PARAM_UPLOAD,
+        PARAM_INPUT,
+    } param = PARAM_NONE;
+
+    // Process remaining input arguments if available
+    for (int i = 1; i < nrhs; ++i)
+    {
+        if (param == PARAM_NONE)
+        {
+            char cmdstr[128];
+            if (mxGetString(prhs[i], cmdstr, 16))
+            {
+                char errstr[128];
+                sprintf(errstr, "Parameter %d is invalid", i);
+                PrintHelp(CBMEX_FUNCTION_EXT, true, errstr);
+            }
+            if (_strcmpi(cmdstr, "instance") == 0)
+            {
+                param = PARAM_INSTANCE;
+            } 
+            else if (_strcmpi(cmdstr, "upload") == 0)
+            {
+                param = PARAM_UPLOAD;
+            }
+            else if (_strcmpi(cmdstr, "command") == 0)
+            {
+                param = PARAM_CMD;
+            }
+            else if (_strcmpi(cmdstr, "input") == 0)
+            {
+                param = PARAM_INPUT;
+            }
+            else if (_strcmpi(cmdstr, "terminate") == 0)
+            {
+                // Send a kill request
+                extCmd.cmd = cbSdkExtCmd_TERMINATE;
+                res = cbSdkExtDoCommand(nInstance, &extCmd);
+                // On error just get out of the for-loop
+                if (res != CBSDKRESULT_SUCCESS)
+                    break;
+            } else {
+                char errstr[128];
+                sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
+                PrintHelp(CBMEX_FUNCTION_EXT, true, errstr);
+            }
+        } else {
+            char cmdstr[cbMAX_LOG] = {'\0'};
+            switch(param)
+            {
+            case PARAM_INSTANCE:
+                if (!mxIsNumeric(prhs[i]))
+                    PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, "Invalid instance number");
+                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                break;
+            case PARAM_UPLOAD:
+                if (mxGetString(prhs[i], cmdstr, cbMAX_LOG - 1))
+                    PrintHelp(CBMEX_FUNCTION_EXT, true, "Invalid filename");
+                extCmd.cmd = cbSdkExtCmd_UPLOAD;
+                strncpy(extCmd.szCmd, cmdstr, sizeof(extCmd.szCmd));
+                res = cbSdkExtDoCommand(nInstance, &extCmd);
+                // On error just get out of the for-loop without goto
+                if (res != CBSDKRESULT_SUCCESS)
+                    i = nrhs;
+                break;
+            case PARAM_CMD:
+                if (mxGetString(prhs[i], cmdstr, cbMAX_LOG - 1))
+                    PrintHelp(CBMEX_FUNCTION_EXT, true, "Invalid command string");
+                extCmd.cmd = cbSdkExtCmd_RPC;
+                strncpy(extCmd.szCmd, cmdstr, sizeof(extCmd.szCmd));
+                res = cbSdkExtDoCommand(nInstance, &extCmd);
+                // On error just get out of the for-loop without goto
+                if (res != CBSDKRESULT_SUCCESS)
+                    i = nrhs;
+                break;
+            case PARAM_INPUT:
+                if (mxGetString(prhs[i], cmdstr, cbMAX_LOG - 1))
+                    PrintHelp(CBMEX_FUNCTION_EXT, true, "Invalid input string");
+                extCmd.cmd = cbSdkExtCmd_INPUT;
+                strncpy(extCmd.szCmd, cmdstr, sizeof(extCmd.szCmd));
+                res = cbSdkExtDoCommand(nInstance, &extCmd);
+                // On error just get out of the for-loop without goto
+                if (res != CBSDKRESULT_SUCCESS)
+                    i = nrhs;
+                break;
+            default:
+                break;
+            }
+            param = PARAM_NONE;
+        }
+    } // end for (int i = nFirstParam
+
+    if (param != PARAM_NONE)
+    {
+        // Some parameter did not have a value, and value is non-optional
+        PrintHelp(CBMEX_FUNCTION_EXT, true, "Last parameter requires value");
+    }
+
+    if (res == CBSDKRESULT_NOTIMPLEMENTED)
+        PrintErrorSDK(res, "cbSdkExtCmd(): NSP1 does not support this");
+    PrintErrorSDK(res, "cbSdkExtCmd()");
+}
+
 #ifdef WIN32
 #define MEX_EXPORT
 #else
@@ -2940,7 +3195,7 @@ extern "C" MEX_EXPORT void mexFunction(
     mexAtExit(matexit);
 
     // test for minimum number of arguments
-    if (nrhs < 1) 
+    if (nrhs < 1)
         PrintHelp(CBMEX_FUNCTION_COUNT, true);
 
     // get the command string and process the command

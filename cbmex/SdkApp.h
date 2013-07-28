@@ -32,7 +32,7 @@ public:
     void ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt); // Process incoming packets
     UINT32 GetInstInfo() {return m_instInfo;}
     cbRESULT GetLastCbErr() {return m_lastCbErr;}
-    void Open(UINT32 id, int nInPort = cbNET_UDP_PORT_BCAST, int nOutPort = cbNET_UDP_PORT_CNT, 
+    void Open(UINT32 id, int nInPort = cbNET_UDP_PORT_BCAST, int nOutPort = cbNET_UDP_PORT_CNT,
         LPCSTR szInIP = cbNET_UDP_ADDR_INST, LPCSTR szOutIP = cbNET_UDP_ADDR_CNT, int nRecBufSize = NSP_REC_BUF_SIZE);
 private:
     void OnPktGroup(const cbPKT_GROUP * const pkt);
@@ -66,7 +66,7 @@ public:
                                   UINT32 * puComments, UINT32 * puTrackings, bool * pbAbsolute);
     cbSdkResult SdkSetTrialConfig(UINT32 bActive, UINT16 begchan, UINT32 begmask, UINT32 begval,
                                   UINT16 endchan, UINT32 endmask, UINT32 endval, bool bDouble,
-                                  UINT32 uWaveforms, UINT32 uConts, UINT32 uEvents, UINT32 uComments, UINT32 uTrackings, 
+                                  UINT32 uWaveforms, UINT32 uConts, UINT32 uEvents, UINT32 uComments, UINT32 uTrackings,
                                   bool bAbsolute);
     cbSdkResult SdkGetChannelLabel(UINT16 channel, UINT32 * bValid, char * label, UINT32 * userflags, INT32 * position);
     cbSdkResult SdkSetChannelLabel(UINT16 channel, const char * label, UINT32 userflags, INT32 * position);
@@ -83,6 +83,8 @@ public:
     cbSdkResult SdkSendPacket(void * ppckt);
     cbSdkResult SdkSetSystemRunLevel(UINT32 runlevel, UINT32 locked, UINT32 resetque);
     cbSdkResult SdkSetDigitalOutput(UINT16 channel, UINT16 value);
+    cbSdkResult SdkSetSynchOutput(UINT16 channel, UINT32 nFreq, UINT32 nRepeats);
+    cbSdkResult SdkExtDoCommand(cbSdkExtCmd * extCmd);
     cbSdkResult SdkSetAnalogOutput(UINT16 channel, cbSdkWaveformData * wf, cbSdkAoutMon * mon);
     cbSdkResult SdkSetChannelMask(UINT16 channel, UINT32 bActive);
     cbSdkResult SdkSetComment(UINT32 rgba, UINT8 charset, const char * comment);

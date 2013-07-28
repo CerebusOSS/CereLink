@@ -108,8 +108,8 @@ cbRESULT Instrument::Open(STARTUP_OPTIONS nStartupOptionsFlags, bool bBroadcast,
 #else
         // Do nothing. _cprintf is defined as printf
 #endif
-    } 
-    else if (OPT_LOCAL == nStartupOptionsFlags) 
+    }
+    else if (OPT_LOCAL == nStartupOptionsFlags)
     {
         // If local instrument then connect to it
         szInIP  = LOOPBACK_ADDRESS;
@@ -134,9 +134,9 @@ int Instrument::Send(void *ppkt)
         if (pCache->OkToSend())
             break;
     }
-    // pCache = std::find_if(m_aicCache, pEnd, std::mem_fun_ref(&CachedPacket::OkToSend));
 
-    ASSERT(pCache != pEnd);
+    if (pCache == pEnd)
+        return -1;
     pCache->AddPacket(ppkt, cbSize);
     return m_icUDP.Send(ppkt, cbSize);
 }

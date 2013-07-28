@@ -2138,7 +2138,7 @@ void cbPySetErrorFromSdkError(cbSdkResult sdkres, const char * szErr)
 #ifdef __APPLE__
         PyErr_SetString(g_cbpyError, "Memory allocation error trying to establish master connection\n"
                 "Consider sysctl -w kern.sysv.shmmax=16777216\n"
-        		"         sysctl -w kern.sysv.shmall=4194304");
+                "         sysctl -w kern.sysv.shmall=4194304");
 
 #else
         PyErr_SetString(g_cbpyError, "Memory allocation error trying to establish master connection");

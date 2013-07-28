@@ -41,6 +41,8 @@ void OnComment       (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]
 void OnConfig        (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] );
 void OnCCF           (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] );
 void OnSystem        (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] );
+void OnSynchOut      (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] );
+void OnExtCmd        (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] );
 ////////////////////// end of Prototypes for all of the Matlab events ////////
 
 #define CBMEX_USAGE_CBMEX \
@@ -50,7 +52,7 @@ void OnSystem        (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]
         "<command> is a string and can be any of:\n" \
         "'help', 'open', 'close', 'time', 'trialconfig', 'chanlabel',\n" \
         "'trialdata', 'fileconfig', 'digitalout', 'mask', 'comment', 'config',\n" \
-        "'analogout', 'trialcomment', 'trialtracking', 'ccf', 'system'\n" \
+        "'analogout', 'trialcomment', 'trialtracking', 'ccf', 'system', 'synchout', 'ext'\n" \
         "Use cbmex('help', <command>) for each command usage\n" \
 
 #define CBMEX_USAGE_HELP \
@@ -225,7 +227,7 @@ void OnSystem        (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]
 
 #define CBMEX_USAGE_FILECONFIG \
         "Configures file recording\n" \
-        "Format: cbmex('fileconfig', filename, comments, action, [<parameter>[, value]])\n" \
+        "Format: [recording filename username] = cbmex('fileconfig', [filename, comments, action, [<parameter>[, value]]])\n" \
         "Inputs:\n" \
         "filename: file name string (255 character maximum)\n" \
         "comments: file comment string (255 character maximum)\n" \
@@ -238,6 +240,10 @@ void OnSystem        (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]
         "         'close' - closes the File dialog if open\n" \
         "         'open'  - opens the File dialog if closed, ignoring other parameters\n" \
         "         'none'  - opens the File dialog if closed, sets parameters given, starts or stops recording\n" \
+        "Outputs:\n" \
+        "recording: 1 if recording is in progress, 0 if not\n" \
+        "filename:  recording file name\n" \
+        "username:  recording user name\n" \
 
 #define CBMEX_USAGE_DIGITALOUT \
         "Set digital output properties for given channel\n" \
@@ -249,7 +255,7 @@ void OnSystem        (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]
         " from left to right parameters will override previous ones or combine with them if possible.\n" \
         "<parameter>[, value] can be any of:\n" \
         "'instance', value: value is the library instance to use (default is 0)\n" \
-        
+
 
 #define CBMEX_USAGE_ANALOGOUT \
         "Set analog output properties for given channel\n" \
@@ -285,6 +291,7 @@ void OnSystem        (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]
         "                    'spike' is the spike event on given input channel\n" \
         "                    'cmtcolor' is the trigger based on colored comment\n" \
         "                    'softreset' is the trigger based on software reset (e.g. result of file recording)\n" \
+        "                    'extension' is the trigger based on extension\n" \
         "'input', input: input depends on 'trigger' or 'monitor'\n" \
         "                 If trigger is 'dinrise' or 'dinfall' then 'input' is bit number of 1 to 16 for first digital input\n" \
         "                 If trigger is 'spike' then 'input' is input channel with spike data\n" \
@@ -371,7 +378,7 @@ void OnSystem        (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]
         "'save', destination_file: Save active configuration to CCF file\n" \
         "'load', source_file, 'convert', destination_file: convert source file to new CCF file (in latest format)\n" \
         "'instance', value: value is the library instance to use (default is 0)\n" \
-    
+
 #define CBMEX_USAGE_SYSTEM \
         "Perform given cbmex system command\n" \
         "Format: cbmex('system', <command>, [<parameter>[, value]])\n" \
@@ -383,6 +390,30 @@ void OnSystem        (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]
         "<parameter>[, value] pairs are optional, some parameters do not have values.\n" \
         " from left to right parameters will override previous ones or combine with them if possible.\n" \
         "<parameter>[, value] can be any of:\n" \
+        "'instance', value: value is the library instance to use (default is 0)\n" \
+
+#define CBMEX_USAGE_SYNCHOUT \
+        "Set synch output clock\n" \
+        "Format: cbmex('synchout', [<parameter>[, value]])\n" \
+        "Inputs:\n" \
+        "<parameter>[, value] pairs are optional, some parameters do not have values.\n" \
+        " from left to right parameters will override previous ones or combine with them if possible.\n" \
+        "<parameter>[, value] can be any of:\n" \
+        "'freq', value: value is the frequency in Hz, 0 to stop (closest supported frequency will be used)\n" \
+        "'repeats', repeats: number of repeats. 0 (default) means non-stop\n" \
+        "'instance', value: value is the library instance to use (default is 0)\n" \
+
+#define CBMEX_USAGE_EXTENSION \
+        "Extension control\n" \
+        "Format: cbmex('ext', [<parameter>[, value]])\n" \
+        "Inputs:\n" \
+        "<parameter>[, value] pairs are optional, some parameters do not have values.\n" \
+        " from left to right parameters will override previous ones or combine with them if possible.\n" \
+        "<parameter>[, value] can be any of:\n" \
+        "'upload', filepath: upload given file to extension root (blocks until upload finish)\n" \
+        "'command', cmd: cmd is string command to run on extension root\n" \
+        "'input', line: line is input to the previous command (if running)\n" \
+        "'terminate': to signal last running command to terminate (if running)\n" \
         "'instance', value: value is the library instance to use (default is 0)\n" \
 
 #endif /* CBMEX_H_INCLUDED */
