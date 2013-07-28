@@ -674,6 +674,8 @@ void InstNetwork::run()
         return;
     }
 
+    m_nIdx = cb_library_index[m_nInstance];
+
     if (cbOpen(FALSE, m_nInstance) == cbRESULT_OK)
     {
         m_nIdx = cb_library_index[m_nInstance];
@@ -750,7 +752,7 @@ void InstNetwork::run()
         // Start the network loop
         while (!m_bDone)
         {
-            cbRESULT waitresult = cbWaitforData();
+            cbRESULT waitresult = cbWaitforData(m_nInstance);   //hls );
             if (waitresult == cbRESULT_NOCENTRALAPP)
             {
                 // No instrument anymore
@@ -787,11 +789,11 @@ void InstNetwork::OnWaitEvent()
 {
     // Look to see how much there is to process
     UINT32 pktstogo;
-    cbCheckforData(m_enLOC, &pktstogo);
+    cbCheckforData(m_enLOC, &pktstogo, m_nInstance);
 
     if (m_enLOC == LOC_CRITICAL)
     {
-        cbMakePacketReadingBeginNow();
+        cbMakePacketReadingBeginNow(m_nInstance);
         InstNetworkEvent(NET_EVENT_CRITICAL);
         return;
     }
@@ -804,7 +806,7 @@ void InstNetwork::OnWaitEvent()
         cbPKT_GENERIC *pktptr = cbGetNextPacketPtr(m_nInstance);
         if (pktptr == NULL)
         {
-            cbMakePacketReadingBeginNow();
+            cbMakePacketReadingBeginNow(m_nInstance);
             InstNetworkEvent(NET_EVENT_CRITICAL);
             break;
         } else {
