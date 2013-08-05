@@ -39,6 +39,7 @@
 									<listOptionValue builtIn="false" value="/usr/include/QtXml"/>
 									<listOptionValue builtIn="false" value="/usr/include/QtCore"/>
 									<listOptionValue builtIn="false" value="/usr/local/lib/python2.7/site-packages/numpy/core/include/"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1817976239" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
@@ -55,6 +56,7 @@
 									<listOptionValue builtIn="false" value="/usr/include/QtCore"/>
 									<listOptionValue builtIn="false" value="/usr/include/python2.7"/>
 									<listOptionValue builtIn="false" value="/usr/local/lib/python2.7/site-packages/numpy/core/include/"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
 								</option>
 								<option id="gnu.c.compiler.option.preprocessor.undef.symbol.689281578" name="Undefined symbols (-U)" superClass="gnu.c.compiler.option.preprocessor.undef.symbol"/>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1743872822" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
@@ -67,7 +69,9 @@
 								</inputType>
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.assembler.base.262573075" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.base">
-								<option id="gnu.both.asm.option.include.paths.1600082172" name="Include paths (-I)" superClass="gnu.both.asm.option.include.paths"/>
+								<option id="gnu.both.asm.option.include.paths.1600082172" name="Include paths (-I)" superClass="gnu.both.asm.option.include.paths" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
+								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.224816801" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
 							</tool>
 						</toolChain>
@@ -120,6 +124,7 @@
 									<listOptionValue builtIn="false" value="/usr/include/QtCore"/>
 									<listOptionValue builtIn="false" value="/usr/include/python2.7"/>
 									<listOptionValue builtIn="false" value="/usr/include/numpy/"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1585890353" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
@@ -136,6 +141,7 @@
 									<listOptionValue builtIn="false" value="/usr/include/QtCore"/>
 									<listOptionValue builtIn="false" value="/usr/include/python2.7"/>
 									<listOptionValue builtIn="false" value="/usr/include/numpy/"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
 								</option>
 								<option id="gnu.c.compiler.option.preprocessor.undef.symbol.80651432" name="Undefined symbols (-U)" superClass="gnu.c.compiler.option.preprocessor.undef.symbol"/>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.331763194" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
@@ -151,6 +157,7 @@
 								<option id="gnu.both.asm.option.include.paths.71554273" name="Include paths (-I)" superClass="gnu.both.asm.option.include.paths" valueType="includePath">
 									<listOptionValue builtIn="false" value="/usr/include/python2.7"/>
 									<listOptionValue builtIn="false" value="/usr/include/numpy/"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.1178234299" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
 							</tool>
@@ -204,6 +211,7 @@
 									<listOptionValue builtIn="false" value="/usr/include/QtCore"/>
 									<listOptionValue builtIn="false" value="/usr/include/python2.7"/>
 									<listOptionValue builtIn="false" value="/usr/include/numpy/"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.622438130" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
@@ -220,6 +228,7 @@
 									<listOptionValue builtIn="false" value="/usr/include/QtCore"/>
 									<listOptionValue builtIn="false" value="/usr/include/python2.7"/>
 									<listOptionValue builtIn="false" value="/usr/include/numpy/"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
 								</option>
 								<option id="gnu.c.compiler.option.preprocessor.undef.symbol.1385693086" name="Undefined symbols (-U)" superClass="gnu.c.compiler.option.preprocessor.undef.symbol"/>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1668267826" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
@@ -235,6 +244,7 @@
 								<option id="gnu.both.asm.option.include.paths.80725437" name="Include paths (-I)" superClass="gnu.both.asm.option.include.paths" valueType="includePath">
 									<listOptionValue builtIn="false" value="/usr/include/python2.7"/>
 									<listOptionValue builtIn="false" value="/usr/include/numpy/"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.220551168" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
 							</tool>
@@ -288,6 +298,7 @@
 									<listOptionValue builtIn="false" value="/usr/include/QtCore"/>
 									<listOptionValue builtIn="false" value="/usr/include/python2.7"/>
 									<listOptionValue builtIn="false" value="/usr/include/numpy/"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1747931551" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
@@ -304,6 +315,7 @@
 									<listOptionValue builtIn="false" value="/usr/include/QtCore"/>
 									<listOptionValue builtIn="false" value="/usr/include/python2.7"/>
 									<listOptionValue builtIn="false" value="/usr/include/numpy/"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
 								</option>
 								<option id="gnu.c.compiler.option.preprocessor.undef.symbol.262907615" name="Undefined symbols (-U)" superClass="gnu.c.compiler.option.preprocessor.undef.symbol"/>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1492060219" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
@@ -319,6 +331,7 @@
 								<option id="gnu.both.asm.option.include.paths.146459562" name="Include paths (-I)" superClass="gnu.both.asm.option.include.paths" valueType="includePath">
 									<listOptionValue builtIn="false" value="/usr/include/python2.7"/>
 									<listOptionValue builtIn="false" value="/usr/include/numpy/"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.1766845268" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
 							</tool>
@@ -372,6 +385,7 @@
 									<listOptionValue builtIn="false" value="/usr/include/QtCore"/>
 									<listOptionValue builtIn="false" value="/usr/include/python2.7"/>
 									<listOptionValue builtIn="false" value="/usr/include/numpy/"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1415446945" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
@@ -388,6 +402,7 @@
 									<listOptionValue builtIn="false" value="/usr/include/QtCore"/>
 									<listOptionValue builtIn="false" value="/usr/include/python2.7"/>
 									<listOptionValue builtIn="false" value="/usr/include/numpy/"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
 								</option>
 								<option id="gnu.c.compiler.option.preprocessor.undef.symbol.1065000883" name="Undefined symbols (-U)" superClass="gnu.c.compiler.option.preprocessor.undef.symbol"/>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1113666571" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
@@ -402,6 +417,7 @@
 							<tool id="cdt.managedbuild.tool.gnu.assembler.base.852778092" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.base">
 								<option id="gnu.both.asm.option.include.paths.1892838516" name="Include paths (-I)" superClass="gnu.both.asm.option.include.paths" valueType="includePath">
 									<listOptionValue builtIn="false" value="/usr/include/numpy/"/>
+									<listOptionValue builtIn="false" value="&quot;C:\Python27\include&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.891608986" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
 							</tool>
@@ -427,24 +443,31 @@
 		<resource resourceType="PROJECT" workspacePath="/cbmex"/>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
+	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
 	<storageModule moduleId="scannerConfiguration">
 		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
 		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1726044379.1098106580;cdt.managedbuild.toolchain.gnu.base.1726044379.1098106580.;cdt.managedbuild.tool.gnu.c.compiler.base.1389670316;cdt.managedbuild.tool.gnu.c.compiler.input.1668267826">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="org.eclipse.cdt.managedbuilder.core.GCCManagedMakePerProjectProfileC"/>
 		</scannerConfigBuildInfo>
-		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1726044379.502039549;cdt.managedbuild.toolchain.gnu.base.1726044379.502039549.;cdt.managedbuild.tool.gnu.c.compiler.base.1743894480;cdt.managedbuild.tool.gnu.c.compiler.input.1492060219">
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1726044379.1246677383;cdt.managedbuild.toolchain.gnu.base.1726044379.1246677383.;cdt.managedbuild.tool.gnu.c.compiler.base.517325099;cdt.managedbuild.tool.gnu.c.compiler.input.1113666571">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="org.eclipse.cdt.managedbuilder.core.GCCManagedMakePerProjectProfileC"/>
 		</scannerConfigBuildInfo>
 		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1726044379.718705073;cdt.managedbuild.toolchain.gnu.base.1726044379.718705073.;cdt.managedbuild.tool.gnu.cpp.compiler.base.675412292;cdt.managedbuild.tool.gnu.cpp.compiler.input.1585890353">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="org.eclipse.cdt.managedbuilder.core.GCCManagedMakePerProjectProfileCPP"/>
 		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1726044379.502039549;cdt.managedbuild.toolchain.gnu.base.1726044379.502039549.;cdt.managedbuild.tool.gnu.c.compiler.base.1743894480;cdt.managedbuild.tool.gnu.c.compiler.input.1492060219">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="org.eclipse.cdt.managedbuilder.core.GCCManagedMakePerProjectProfileC"/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1726044379.1246677383;cdt.managedbuild.toolchain.gnu.base.1726044379.1246677383.;cdt.managedbuild.tool.gnu.cpp.compiler.base.1781469743;cdt.managedbuild.tool.gnu.cpp.compiler.input.1415446945">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="org.eclipse.cdt.managedbuilder.core.GCCManagedMakePerProjectProfileCPP"/>
+		</scannerConfigBuildInfo>
 		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1726044379;cdt.managedbuild.toolchain.gnu.base.1726044379.1434736980;cdt.managedbuild.tool.gnu.c.compiler.base.1299114727;cdt.managedbuild.tool.gnu.c.compiler.input.1743872822">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="org.eclipse.cdt.managedbuilder.core.GCCManagedMakePerProjectProfileC"/>
 		</scannerConfigBuildInfo>
-		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1726044379;cdt.managedbuild.toolchain.gnu.base.1726044379.1434736980;cdt.managedbuild.tool.gnu.cpp.compiler.base.1287299795;cdt.managedbuild.tool.gnu.cpp.compiler.input.1817976239">
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1726044379.1098106580;cdt.managedbuild.toolchain.gnu.base.1726044379.1098106580.;cdt.managedbuild.tool.gnu.cpp.compiler.base.1579459107;cdt.managedbuild.tool.gnu.cpp.compiler.input.622438130">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="org.eclipse.cdt.managedbuilder.core.GCCManagedMakePerProjectProfileCPP"/>
 		</scannerConfigBuildInfo>
-		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1726044379.1098106580;cdt.managedbuild.toolchain.gnu.base.1726044379.1098106580.;cdt.managedbuild.tool.gnu.cpp.compiler.base.1579459107;cdt.managedbuild.tool.gnu.cpp.compiler.input.622438130">
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1726044379;cdt.managedbuild.toolchain.gnu.base.1726044379.1434736980;cdt.managedbuild.tool.gnu.cpp.compiler.base.1287299795;cdt.managedbuild.tool.gnu.cpp.compiler.input.1817976239">
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="org.eclipse.cdt.managedbuilder.core.GCCManagedMakePerProjectProfileCPP"/>
 		</scannerConfigBuildInfo>
 		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.1726044379.718705073;cdt.managedbuild.toolchain.gnu.base.1726044379.718705073.;cdt.managedbuild.tool.gnu.c.compiler.base.1544333779;cdt.managedbuild.tool.gnu.c.compiler.input.331763194">
@@ -454,5 +477,4 @@
 			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId="org.eclipse.cdt.managedbuilder.core.GCCManagedMakePerProjectProfileCPP"/>
 		</scannerConfigBuildInfo>
 	</storageModule>
-	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
 </cproject>
