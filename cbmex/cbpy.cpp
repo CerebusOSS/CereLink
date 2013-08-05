@@ -1684,121 +1684,123 @@ static PyObject * cbpy_Config(PyObject *self, PyObject *args, PyObject *keywds)
         return NULL;
 
     bool bHasNewParams = false;
-    PyObject *pKey, *pValue;
-    Py_ssize_t pos = 0;
-    while (PyDict_Next(pNewConfig, &pos, &pKey, &pValue))
+    if (pNewConfig != NULL)
     {
-        if (PyUnicode_Check(pKey))
-            return PyErr_Format(PyExc_TypeError, "Invalid config key; unicode not supported yet");
-        const char * pszKey = PyString_AsString(pKey);
-        if (pszKey == NULL)
-            return PyErr_Format(PyExc_TypeError, "Invalid config key; should be string");
-        LUT_CONFIG_INPUTS_CMD::iterator it = g_lutConfigInputsCmd.find(pszKey);
-        if (it == g_lutConfigInputsCmd.end())
-            return PyErr_Format(PyExc_ValueError, "Invalid config input (%s)", pszKey);
-        bHasNewParams = true;
-        CONFIG_CMD cmd = it->second;
-        switch (cmd)
+        PyObject *pKey, *pValue;
+        Py_ssize_t pos = 0;
+        while (PyDict_Next(pNewConfig, &pos, &pKey, &pValue))
         {
-        case CONFIG_CMD_USERFLAGS:
-            if (!PyInt_Check(pValue))
-                return PyErr_Format(PyExc_ValueError, "Invalid userflags number");
-            chaninfo.userflags = PyInt_AsLong(pValue);
-            break;
-        case CONFIG_CMD_SMPFILTER:
-            if (!PyInt_Check(pValue))
-                return PyErr_Format(PyExc_ValueError, "Invalid smpfilter number");
-            chaninfo.smpfilter = PyInt_AsLong(pValue);
-            break;
-        case CONFIG_CMD_SMPGROUP:
-            if (!PyInt_Check(pValue))
-                return PyErr_Format(PyExc_ValueError, "Invalid smpgroup number");
-            chaninfo.smpgroup = PyInt_AsLong(pValue);
-            break;
-        case CONFIG_CMD_SPKFILTER:
-            if (!PyInt_Check(pValue))
-                return PyErr_Format(PyExc_ValueError, "Invalid spkfilter number");
-            chaninfo.spkfilter = PyInt_AsLong(pValue);
-            break;
-        case CONFIG_CMD_SPKGROUP:
-            if (!PyInt_Check(pValue))
-                return PyErr_Format(PyExc_ValueError, "Invalid spkgroup number");
-            chaninfo.spkgroup = PyInt_AsLong(pValue);
-            break;
-        case CONFIG_CMD_SPKTHRLEVEL:
             if (PyUnicode_Check(pKey))
-                return PyErr_Format(PyExc_TypeError, "Invalid spkthrlevel value; unicode not supported yet");
-            if (PyInt_Check(pValue))
+                return PyErr_Format(PyExc_TypeError, "Invalid config key; unicode not supported yet");
+            const char * pszKey = PyString_AsString(pKey);
+            if (pszKey == NULL)
+                return PyErr_Format(PyExc_TypeError, "Invalid config key; should be string");
+            LUT_CONFIG_INPUTS_CMD::iterator it = g_lutConfigInputsCmd.find(pszKey);
+            if (it == g_lutConfigInputsCmd.end())
+                return PyErr_Format(PyExc_ValueError, "Invalid config input (%s)", pszKey);
+            bHasNewParams = true;
+            CONFIG_CMD cmd = it->second;
+            switch (cmd)
             {
-                chaninfo.spkthrlevel = PyInt_AsLong(pValue);
-            } else {
-                const char * pSzValue = PyString_AsString(pValue);
-                if (pSzValue == NULL)
-                    return PyErr_Format(PyExc_TypeError, "Invalid spkthrlevel value; should be string or integer");
-                INT32 nValue = 0;
-                sdkres = cbSdkAnalogToDigital(nInstance, nChannel, pSzValue, &nValue);
-                if (sdkres != CBSDKRESULT_SUCCESS)
-                    cbPySetErrorFromSdkError(sdkres, "cbSdkAnalogToDigital()");
-                if (sdkres < CBSDKRESULT_SUCCESS)
-                    return NULL;
-                chaninfo.spkthrlevel = nValue;
-            }
-            break;
-        case CONFIG_CMD_AMPLREJPOS:
-            if (PyUnicode_Check(pKey))
-                return PyErr_Format(PyExc_TypeError, "Invalid amplrejpos value; unicode not supported yet");
-            if (PyInt_Check(pValue))
-            {
-                chaninfo.amplrejpos = PyInt_AsLong(pValue);
-            } else {
-                const char * pSzValue = PyString_AsString(pValue);
-                if (pSzValue == NULL)
-                    return PyErr_Format(PyExc_TypeError, "Invalid amplrejpos value; should be string or integer");
-                INT32 nValue = 0;
-                sdkres = cbSdkAnalogToDigital(nInstance, nChannel, pSzValue, &nValue);
-                if (sdkres != CBSDKRESULT_SUCCESS)
-                    cbPySetErrorFromSdkError(sdkres, "cbSdkAnalogToDigital()");
-                if (sdkres < CBSDKRESULT_SUCCESS)
-                    return NULL;
-                chaninfo.amplrejpos = nValue;
-            }
-            break;
-        case CONFIG_CMD_AMPLREJNEG:
-            if (PyUnicode_Check(pKey))
-                return PyErr_Format(PyExc_TypeError, "Invalid amplrejneg value; unicode not supported yet");
-            if (PyInt_Check(pValue))
-            {
-                chaninfo.amplrejneg = PyInt_AsLong(pValue);
-            } else {
-                const char * pSzValue = PyString_AsString(pValue);
-                if (pSzValue == NULL)
-                    return PyErr_Format(PyExc_TypeError, "Invalid amplrejneg value; should be string or integer");
-                INT32 nValue = 0;
-                sdkres = cbSdkAnalogToDigital(nInstance, nChannel, pSzValue, &nValue);
-                if (sdkres != CBSDKRESULT_SUCCESS)
-                    cbPySetErrorFromSdkError(sdkres, "cbSdkAnalogToDigital()");
-                if (sdkres < CBSDKRESULT_SUCCESS)
-                    return NULL;
-                chaninfo.amplrejneg = nValue;
-            }
-            break;
-        case CONFIG_CMD_REFELECCHAN:
-            if (!PyInt_Check(pValue))
-                return PyErr_Format(PyExc_ValueError, "Invalid refelecchan number");
-            chaninfo.refelecchan = PyInt_AsLong(pValue);
-            break;
-        default:
-            // Ignore the rest
-            break;
-        } //end switch (cmd
-    } //end while (PyDict_Next
+            case CONFIG_CMD_USERFLAGS:
+                if (!PyInt_Check(pValue))
+                    return PyErr_Format(PyExc_ValueError, "Invalid userflags number");
+                chaninfo.userflags = PyInt_AsLong(pValue);
+                break;
+            case CONFIG_CMD_SMPFILTER:
+                if (!PyInt_Check(pValue))
+                    return PyErr_Format(PyExc_ValueError, "Invalid smpfilter number");
+                chaninfo.smpfilter = PyInt_AsLong(pValue);
+                break;
+            case CONFIG_CMD_SMPGROUP:
+                if (!PyInt_Check(pValue))
+                    return PyErr_Format(PyExc_ValueError, "Invalid smpgroup number");
+                chaninfo.smpgroup = PyInt_AsLong(pValue);
+                break;
+            case CONFIG_CMD_SPKFILTER:
+                if (!PyInt_Check(pValue))
+                    return PyErr_Format(PyExc_ValueError, "Invalid spkfilter number");
+                chaninfo.spkfilter = PyInt_AsLong(pValue);
+                break;
+            case CONFIG_CMD_SPKGROUP:
+                if (!PyInt_Check(pValue))
+                    return PyErr_Format(PyExc_ValueError, "Invalid spkgroup number");
+                chaninfo.spkgroup = PyInt_AsLong(pValue);
+                break;
+            case CONFIG_CMD_SPKTHRLEVEL:
+                if (PyUnicode_Check(pKey))
+                    return PyErr_Format(PyExc_TypeError, "Invalid spkthrlevel value; unicode not supported yet");
+                if (PyInt_Check(pValue))
+                {
+                    chaninfo.spkthrlevel = PyInt_AsLong(pValue);
+                } else {
+                    const char * pSzValue = PyString_AsString(pValue);
+                    if (pSzValue == NULL)
+                        return PyErr_Format(PyExc_TypeError, "Invalid spkthrlevel value; should be string or integer");
+                    INT32 nValue = 0;
+                    sdkres = cbSdkAnalogToDigital(nInstance, nChannel, pSzValue, &nValue);
+                    if (sdkres != CBSDKRESULT_SUCCESS)
+                        cbPySetErrorFromSdkError(sdkres, "cbSdkAnalogToDigital()");
+                    if (sdkres < CBSDKRESULT_SUCCESS)
+                        return NULL;
+                    chaninfo.spkthrlevel = nValue;
+                }
+                break;
+            case CONFIG_CMD_AMPLREJPOS:
+                if (PyUnicode_Check(pKey))
+                    return PyErr_Format(PyExc_TypeError, "Invalid amplrejpos value; unicode not supported yet");
+                if (PyInt_Check(pValue))
+                {
+                    chaninfo.amplrejpos = PyInt_AsLong(pValue);
+                } else {
+                    const char * pSzValue = PyString_AsString(pValue);
+                    if (pSzValue == NULL)
+                        return PyErr_Format(PyExc_TypeError, "Invalid amplrejpos value; should be string or integer");
+                    INT32 nValue = 0;
+                    sdkres = cbSdkAnalogToDigital(nInstance, nChannel, pSzValue, &nValue);
+                    if (sdkres != CBSDKRESULT_SUCCESS)
+                        cbPySetErrorFromSdkError(sdkres, "cbSdkAnalogToDigital()");
+                    if (sdkres < CBSDKRESULT_SUCCESS)
+                        return NULL;
+                    chaninfo.amplrejpos = nValue;
+                }
+                break;
+            case CONFIG_CMD_AMPLREJNEG:
+                if (PyUnicode_Check(pKey))
+                    return PyErr_Format(PyExc_TypeError, "Invalid amplrejneg value; unicode not supported yet");
+                if (PyInt_Check(pValue))
+                {
+                    chaninfo.amplrejneg = PyInt_AsLong(pValue);
+                } else {
+                    const char * pSzValue = PyString_AsString(pValue);
+                    if (pSzValue == NULL)
+                        return PyErr_Format(PyExc_TypeError, "Invalid amplrejneg value; should be string or integer");
+                    INT32 nValue = 0;
+                    sdkres = cbSdkAnalogToDigital(nInstance, nChannel, pSzValue, &nValue);
+                    if (sdkres != CBSDKRESULT_SUCCESS)
+                        cbPySetErrorFromSdkError(sdkres, "cbSdkAnalogToDigital()");
+                    if (sdkres < CBSDKRESULT_SUCCESS)
+                        return NULL;
+                    chaninfo.amplrejneg = nValue;
+                }
+                break;
+            case CONFIG_CMD_REFELECCHAN:
+                if (!PyInt_Check(pValue))
+                    return PyErr_Format(PyExc_ValueError, "Invalid refelecchan number");
+                chaninfo.refelecchan = PyInt_AsLong(pValue);
+                break;
+            default:
+                // Ignore the rest
+                break;
+            } //end switch (cmd
+        } //end while (PyDict_Next
 
-    sdkres = cbSdkSetChannelConfig(nInstance, nChannel, &chaninfo);
-    if (sdkres != CBSDKRESULT_SUCCESS)
-        cbPySetErrorFromSdkError(sdkres);
-    if (sdkres < CBSDKRESULT_SUCCESS)
-        return res;
-
+        sdkres = cbSdkSetChannelConfig(nInstance, nChannel, &chaninfo);
+        if (sdkres != CBSDKRESULT_SUCCESS)
+            cbPySetErrorFromSdkError(sdkres);
+        if (sdkres < CBSDKRESULT_SUCCESS)
+            return res;
+    }
     // If no outputs, we are done here
     if (nOutputs == CONFIG_CMD_NONE)
     {
