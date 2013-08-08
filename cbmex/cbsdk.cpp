@@ -3475,6 +3475,35 @@ CBSDKAPI    cbSdkResult cbSdkUnRegisterCallback(UINT32 nInstance, cbSdkCallbackT
     return g_app[nInstance]->SdkUnRegisterCallback(callbacktype);
 }
 
+// Author & Date:   Ehsan Azar     7 Aug 2013
+// Purpose: Get callback status
+//           if unregistered returns success, and means a register should not fail
+// Inputs:
+//   callbacktype - the calback type to unregister
+// Outputs:
+//   returns the error code
+cbSdkResult SdkApp::SdkCallbackStatus(cbSdkCallbackType callbacktype)
+{
+    if (m_instInfo == 0)
+        return CBSDKRESULT_CLOSED;
+    if (m_pCallback[callbacktype])
+        return CBSDKRESULT_CALLBACKREGFAILED; // Already registered
+    return CBSDKRESULT_SUCCESS;
+}
+
+// Purpose: sdk stub for SdkApp::SdkCallbackStatus
+CBSDKAPI    cbSdkResult cbSdkCallbackStatus(UINT32 nInstance, cbSdkCallbackType callbacktype)
+{
+    if (callbacktype >= CBSDKCALLBACK_COUNT)
+        return CBSDKRESULT_INVALIDCALLBACKTYPE;
+    if (nInstance >= cbMAXOPEN)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (g_app[nInstance] == NULL)
+        return CBSDKRESULT_CLOSED;
+
+    return g_app[nInstance]->SdkCallbackStatus(callbacktype);
+}
+
 // Author & Date:   Ehsan Azar     21 Feb 2013
 // Purpose: Convert volts string (e.g. '5V', '-65mV', ...) to its raw digital value equivalent for given channel
 // Inputs:

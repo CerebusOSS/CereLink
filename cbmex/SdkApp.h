@@ -98,6 +98,7 @@ public:
     cbSdkResult SdkSetSpikeConfig(UINT32 spklength, UINT32 spkpretrig);
     cbSdkResult SdkGetSysConfig(UINT32 * spklength, UINT32 * spkpretrig, UINT32 * sysfreq);
     cbSdkResult SdkSystem(cbSdkSystemType cmd);
+    cbSdkResult SdkCallbackStatus(cbSdkCallbackType callbacktype);
     cbSdkResult SdkRegisterCallback(cbSdkCallbackType callbacktype, cbSdkCallback pCallbackFn, void * pCallbackData);
     cbSdkResult SdkUnRegisterCallback(cbSdkCallbackType callbacktype);
     cbSdkResult SdkAnalogToDigital(UINT16 channel, const char * szVoltsUnitString, INT32 * digital);

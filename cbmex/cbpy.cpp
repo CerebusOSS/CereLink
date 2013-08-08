@@ -28,6 +28,7 @@
 
 static PyObject * g_cbpyError; // cbpy exception
 static PyObject * g_callback[CBSDKCALLBACK_COUNT] = {NULL};
+static PyObject * g_callback_param[CBSDKCALLBACK_COUNT] = {NULL};
 static PyGILState_STATE g_gilState; // Python global interpreter lock state
 
 typedef enum {
@@ -105,6 +106,9 @@ typedef enum {
 typedef std::map<std::string, CONNECTION_PARAM> LUT_CONNECTION_PARAM;
 LUT_CONNECTION_PARAM g_lutConnectionParam;
 
+typedef std::map<std::string, cbSdkPktType> LUT_PKT_TYPE;
+LUT_PKT_TYPE g_lutPktType;
+
 // Author & Date: Ehsan Azar       4 July 2012
 // Purpose: Create all lookup tables
 //          Note: All parameter names start with lower letter and follow under_score notation
@@ -113,6 +117,24 @@ LUT_CONNECTION_PARAM g_lutConnectionParam;
 //   Returns 0 on success, error code otherwise
 static int CreateLUTs()
 {
+    // Create packet type callbacks
+    g_lutPktType["packet_lost"  ] = cbSdkPkt_PACKETLOST;
+    g_lutPktType["inst_info"    ] = cbSdkPkt_INSTINFO;
+    g_lutPktType["spike"        ] = cbSdkPkt_SPIKE;
+    g_lutPktType["digital"      ] = cbSdkPkt_DIGITAL;
+    g_lutPktType["serial"       ] = cbSdkPkt_SERIAL;
+    g_lutPktType["continuous"   ] = cbSdkPkt_CONTINUOUS;
+    g_lutPktType["tracking"     ] = cbSdkPkt_TRACKING;
+    g_lutPktType["comment"      ] = cbSdkPkt_COMMENT;
+    g_lutPktType["group_info"   ] = cbSdkPkt_GROUPINFO;
+    g_lutPktType["channel_info" ] = cbSdkPkt_CHANINFO;
+    g_lutPktType["file_config"  ] = cbSdkPkt_FILECFG;
+    g_lutPktType["poll"         ] = cbSdkPkt_POLL;
+    g_lutPktType["synch"        ] = cbSdkPkt_SYNCH;
+    g_lutPktType["neuromotive"  ] = cbSdkPkt_NM;
+    g_lutPktType["ccf"          ] = cbSdkPkt_CCF;
+    g_lutPktType["impedance"    ] = cbSdkPkt_IMPEDANCE;
+    g_lutPktType["heartbeat"    ] = cbSdkPkt_SYSHEARTBEAT;
     // Create ChanLabel outputs LUT
     g_lutChanLabelOutputs["none"         ] = CHANLABEL_OUTPUTS_NONE;
     g_lutChanLabelOutputs["label"        ] = CHANLABEL_OUTPUTS_LABEL;
@@ -167,6 +189,23 @@ static int CreateLUTs()
     return 0;
 }
 
+PyDoc_STRVAR(cbpy_version__doc__,
+"Find library and instrument version.\n\n"
+"Inputs:\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   dict - dictionary with following keys\n"
+"        major - major API version\n"
+"        minor - minor API version\n"
+"        release - release API version\n"
+"        beta - beta API version (0 if a non-beta)\n"
+"        protocol_major - major protocol version\n"
+"        protocol_minor - minor protocol version\n"
+"        nsp_major - major NSP firmware version\n"
+"        nsp_minor - minor NSP firmware version\n"
+"        nsp_release - release NSP firmware version\n"
+"        nsp_beta - beta NSP firmware version (0 if non-beta)\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Return library version
 static PyObject * cbpy_version(PyObject *self, PyObject *args, PyObject *keywds)
@@ -193,6 +232,77 @@ static PyObject * cbpy_version(PyObject *self, PyObject *args, PyObject *keywds)
 }
 
 // Author & Date: Ehsan Azar       6 May 2012
+// Purpose: The only registered callback with SDK
+static void sdk_callback(UINT32 nInstance, const cbSdkPktType type, const void* pEventData, void* /*pCallbackData*/)
+{
+    if (type >= cbSdkPkt_COUNT)
+        return;
+    PyObject * my_callback = g_callback[type];
+    PyObject * my_callback_param = g_callback_param[type];
+    if (my_callback == NULL)
+        return;
+
+    g_gilState = PyGILState_Ensure();
+    my_callback = g_callback[type];
+    if (my_callback != NULL)
+    {
+        PyObject * res = NULL;
+        if (my_callback_param != NULL)
+            res = PyObject_CallFunctionObjArgs(my_callback, my_callback_param);
+        else
+            res = PyObject_CallFunctionObjArgs(my_callback);
+        // Check to see if True is returned unregister this function
+        if (res != NULL)
+        {
+            if (PyObject_IsTrue(res) == 1)
+            {
+                Py_XDECREF(my_callback);
+                g_callback[type] = NULL;
+                Py_XDECREF(my_callback_param);
+                g_callback_param[type] = NULL;
+            }
+        }
+    }
+    PyGILState_Release(g_gilState);
+}
+
+PyDoc_STRVAR(cbpy_register__doc__,
+"Register a callback function\n\n"
+"Notes:\n"
+"   1- Each callback will be called with a list.\n"
+"       The list (if non-empty) is filled with of dictionaries.\n"
+"       Each dictionary is a packet or event as described below.\n"
+"Inputs:\n"
+"   type - callback type, string can be one the following\n"
+"           'packet_lost' - called if packets are being lost\n"
+"           'inst_info' - instrument information\n"
+"           'spike' - spike packet received\n"
+"           'digital'\n"
+"           'serial'\n"
+"           'continuous'\n"
+"           'tracking'\n"
+"           'comment'\n"
+"           'group_info'\n"
+"           'channel_info'\n"
+"           'file_config'\n"
+"           'poll'\n"
+"           'synch'\n"
+"           'neuromotive'\n"
+"           'ccf'\n"
+"           'impedance'\n"
+"           'heartbeat'\n"
+"   callback - callable object to be invoked when event of given type happens\n"
+"           Previously registered callback for given type (if any) will be unregistered.\n"
+"           Return True from callback to unregister it.\n"
+"   call_param - if given should be a dictionary, and will be passed to the callback\n"
+"   channels - channel to receive callback for.\n"
+"               Only callbacks specified will use this parameter, and is ignored by others\n"
+"   buffer - tuple (packets, time)\n"
+"           how many packets to buffer (in the list) or how much time to wait\n"
+"           before calling the callback. (CURRENTLY IGNORED!)\n"
+"   instance - (optional) library instance number\n");
+
+// Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Register a Python callback function
 static PyObject * cbpy_register(PyObject *self, PyObject *args, PyObject *keywds)
 {
@@ -204,51 +314,45 @@ static PyObject * cbpy_register(PyObject *self, PyObject *args, PyObject *keywds
     }
     cbSdkVersion ver;
     PyObject *pCallback = NULL;
+    PyObject * pCallparam = NULL;
     char * pSzType = NULL;
     int nInstance = 0;
-    static char kw[][32] = {"type", "callback", "instance"};
+    static char kw[][32] = {"type", "callback", "call_param", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], NULL};
-    if (!PyArg_ParseTupleAndKeywords(args, keywds, "sO|i:Register", kwlist, &pSzType, &pCallback, &nInstance))
+    if (!PyArg_ParseTupleAndKeywords(args, keywds, "sO|O!i:Register", kwlist, &pSzType, &pCallback, &PyDict_Type, &pCallparam, &nInstance))
         return NULL;
     if (!PyCallable_Check(pCallback))
-        return PyErr_Format(PyExc_TypeError, "callback parameter should be callable");
+        return PyErr_Format(PyExc_TypeError, "callback parameter must be callable");
+    LUT_PKT_TYPE::iterator it = g_lutPktType.find(pSzType);
+    if (it == g_lutPktType.end())
+        return PyErr_Format(PyExc_ValueError, "Invalid callback type (%s)", pSzType);
+    cbSdkPktType type = it->second;
     Py_XINCREF(pCallback);
-    //Py_XDECREF(my_callback);
-    //my_callback = pCallback;
-
-    Py_INCREF(Py_None);
-    res = Py_None;
-    return res;
-}
-
-// Author & Date: Ehsan Azar       6 May 2012
-// Purpose: Unregister a Python callback function
-static PyObject * cbpy_unregister(PyObject *self, PyObject *args, PyObject *keywds)
-{
-    PyObject * res = NULL;
-    Py_INCREF(Py_None);
-    res = Py_None;
-    return res;
-}
-
-// Author & Date: Ehsan Azar       6 May 2012
-// Purpose: The only registered callback with SDK
-static void sdk_callback(const cbSdkPktType type, const void* pEventData, void* pCallbackData)
-{
+    Py_XINCREF(pCallparam);
+    PyObject * my_callback = g_callback[type];
+    PyObject * my_callback_param = g_callback_param[type];
     g_gilState = PyGILState_Ensure();
-    int idx = type;
-    if (type == cbSdkPkt_PACKETLOST)
-    {
-        // Only the first registered callback receives packet lost events
-        for (int i = 0; i < cbSdkPkt_COUNT; ++i)
-        {
-            if (g_callback[i] != NULL)
-                idx = i;
-        }
-    }
-    if (g_callback[idx] != NULL)
-        PyObject_CallFunctionObjArgs(g_callback[idx]);
+    Py_XDECREF(my_callback);
+    my_callback = pCallback;
+    g_callback[type] = my_callback;
+    Py_XDECREF(my_callback_param);
+    my_callback_param = pCallparam;
+    g_callback_param[type] = my_callback_param;
     PyGILState_Release(g_gilState);
+
+    cbSdkResult sdkres = cbSdkCallbackStatus(nInstance, CBSDKCALLBACK_ALL);
+    if (sdkres == CBSDKRESULT_SUCCESS)
+    {
+        sdkres = cbSdkRegisterCallback(nInstance, CBSDKCALLBACK_ALL, &sdk_callback, (void *)NULL);
+        if (sdkres != CBSDKRESULT_SUCCESS)
+            cbPySetErrorFromSdkError(sdkres);
+        if (sdkres < CBSDKRESULT_SUCCESS)
+            return NULL;
+    }
+
+    Py_INCREF(Py_None);
+    res = Py_None;
+    return res;
 }
 
 // Author & Date: Ehsan Azar       6 May 2012
@@ -2164,26 +2268,25 @@ void cbPySetErrorFromSdkError(cbSdkResult sdkres, const char * szErr)
 // All function names start with Capital letter and follow camel notation
 static PyMethodDef g_cbpyMethods[] =
 {
-    {"Version",  (PyCFunction)cbpy_version, METH_VARARGS | METH_KEYWORDS, "Get library version info."},
-    {"Register",  (PyCFunction)cbpy_register, METH_VARARGS | METH_KEYWORDS, "Register a callback function."},
-    {"Unregister",  (PyCFunction)cbpy_unregister, METH_VARARGS | METH_KEYWORDS, "Unregister a callback function."},
-    {"Open",  (PyCFunction)cbpy_open, METH_VARARGS | METH_KEYWORDS, "Open library."},
-    {"Close",  (PyCFunction)cbpy_close, METH_VARARGS | METH_KEYWORDS, "Close library."},
-    {"Time",  (PyCFunction)cbpy_time, METH_VARARGS | METH_KEYWORDS, "Instrument time."},
-    {"ChanLabel",  (PyCFunction)cbpy_channel_label, METH_VARARGS | METH_KEYWORDS, "Get or set channel label."},
-    {"TrialConfig",  (PyCFunction)cbpy_trial_config, METH_VARARGS | METH_KEYWORDS, "Configure trial settings."},
-    {"TrialCont",  (PyCFunction)cbpy_trial_continuous, METH_VARARGS | METH_KEYWORDS, "Trial continuous data"},
-    {"TrialEvent",  (PyCFunction)cbpy_trial_event, METH_VARARGS | METH_KEYWORDS, "Trial spike and event data"},
-    {"TrialComment",  (PyCFunction)cbpy_trial_comment, METH_VARARGS | METH_KEYWORDS, "Trial comments."},
-    {"TrialTracking",  (PyCFunction)cbpy_trial_tracking, METH_VARARGS | METH_KEYWORDS, "Trial tracking data."},
-    {"FileConfig",  (PyCFunction)cbpy_file_config, METH_VARARGS | METH_KEYWORDS, "Configure remote file recording."},
-    {"DigitalOut",  (PyCFunction)cbpy_digital_out, METH_VARARGS | METH_KEYWORDS, "Digital output command."},
-    {"AnalogOut",  (PyCFunction)cbpy_analog_out, METH_VARARGS | METH_KEYWORDS, "Analog output command."},
-    {"Mask",  (PyCFunction)cbpy_mask, METH_VARARGS | METH_KEYWORDS, "Mask channels for trials."},
-    {"Comment",  (PyCFunction)cbpy_comment, METH_VARARGS | METH_KEYWORDS, "Comment or custom event."},
-    {"Config",  (PyCFunction)cbpy_config, METH_VARARGS | METH_KEYWORDS, "Configure a channel."},
-    {"CCF",  (PyCFunction)cbpy_ccf, METH_VARARGS | METH_KEYWORDS, "Load or convert Cerebus Config File (CCF)."},
-    {"System",  (PyCFunction)cbpy_system, METH_VARARGS | METH_KEYWORDS, "Instrument system runtime command."},
+    {"version",  (PyCFunction)cbpy_version, METH_VARARGS | METH_KEYWORDS, cbpy_version__doc__},
+    {"register",  (PyCFunction)cbpy_register, METH_VARARGS | METH_KEYWORDS, cbpy_register__doc__},
+    {"open",  (PyCFunction)cbpy_open, METH_VARARGS | METH_KEYWORDS, "Open library."},
+    {"close",  (PyCFunction)cbpy_close, METH_VARARGS | METH_KEYWORDS, "Close library."},
+    {"time",  (PyCFunction)cbpy_time, METH_VARARGS | METH_KEYWORDS, "Instrument time."},
+    {"channel_label",  (PyCFunction)cbpy_channel_label, METH_VARARGS | METH_KEYWORDS, "Get or set channel label."},
+    {"trial_config",  (PyCFunction)cbpy_trial_config, METH_VARARGS | METH_KEYWORDS, "Configure trial settings."},
+    {"trial_continuous",  (PyCFunction)cbpy_trial_continuous, METH_VARARGS | METH_KEYWORDS, "Trial continuous data"},
+    {"trial_event",  (PyCFunction)cbpy_trial_event, METH_VARARGS | METH_KEYWORDS, "Trial spike and event data"},
+    {"trial_comment",  (PyCFunction)cbpy_trial_comment, METH_VARARGS | METH_KEYWORDS, "Trial comments."},
+    {"trial_tracking",  (PyCFunction)cbpy_trial_tracking, METH_VARARGS | METH_KEYWORDS, "Trial tracking data."},
+    {"file_config",  (PyCFunction)cbpy_file_config, METH_VARARGS | METH_KEYWORDS, "Configure remote file recording."},
+    {"digital_out",  (PyCFunction)cbpy_digital_out, METH_VARARGS | METH_KEYWORDS, "Digital output command."},
+    {"analog_out",  (PyCFunction)cbpy_analog_out, METH_VARARGS | METH_KEYWORDS, "Analog output command."},
+    {"mask",  (PyCFunction)cbpy_mask, METH_VARARGS | METH_KEYWORDS, "Mask channels for trials."},
+    {"comment",  (PyCFunction)cbpy_comment, METH_VARARGS | METH_KEYWORDS, "Comment or custom event."},
+    {"config",  (PyCFunction)cbpy_config, METH_VARARGS | METH_KEYWORDS, "Configure a channel."},
+    {"ccf",  (PyCFunction)cbpy_ccf, METH_VARARGS | METH_KEYWORDS, "Load or convert Cerebus Config File (CCF)."},
+    {"system",  (PyCFunction)cbpy_system, METH_VARARGS | METH_KEYWORDS, "Instrument system runtime command."},
     {NULL, NULL, 0, NULL} // This has to be the last
 };
 

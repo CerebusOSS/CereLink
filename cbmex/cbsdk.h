@@ -185,23 +185,23 @@ typedef enum _cbSdkPktType
 
 typedef enum _cbSdkCallbackType
 {
-    CBSDKCALLBACK_ALL = 0,      // Monitor all events
-    CBSDKCALLBACK_INSTINFO,     // Monitor instrument connection information
-    CBSDKCALLBACK_SPIKE,        // Monitor spike events
-    CBSDKCALLBACK_DIGITAL,      // Monitor digital input events
-    CBSDKCALLBACK_SERIAL,       // Monitor serial input events
-    CBSDKCALLBACK_CONTINUOUS,   // Monitor continuous events
-    CBSDKCALLBACK_TRACKING,     // Monitor video tracking events
-    CBSDKCALLBACK_COMMENT,      // Monitor comment or custom events
-    CBSDKCALLBACK_GROUPINFO,    // Monitor channel group info events
-    CBSDKCALLBACK_CHANINFO,     // Monitor channel info events
-    CBSDKCALLBACK_FILECFG,      // Monitor file config events
-    CBSDKCALLBACK_POLL,         // respond to poll
-    CBSDKCALLBACK_SYNCH,        // Monitor video synchronizarion events
-    CBSDKCALLBACK_NM,           // Monitor NeuroMotive events
-    CBSDKCALLBACK_CCF,          // Monitor CCF events
-    CBSDKCALLBACK_IMPEDENCE,    // Monitor impedence events
-    CBSDKCALLBACK_SYSHEARTBEAT, // Monitor system heartbeats (100 times a second)
+    CBSDKCALLBACK_ALL = cbSdkPkt_PACKETLOST,        // Monitor all events
+    CBSDKCALLBACK_INSTINFO = cbSdkPkt_INSTINFO,     // Monitor instrument connection information
+    CBSDKCALLBACK_SPIKE = cbSdkPkt_SPIKE,           // Monitor spike events
+    CBSDKCALLBACK_DIGITAL = cbSdkPkt_DIGITAL,       // Monitor digital input events
+    CBSDKCALLBACK_SERIAL = cbSdkPkt_SERIAL,         // Monitor serial input events
+    CBSDKCALLBACK_CONTINUOUS = cbSdkPkt_CONTINUOUS, // Monitor continuous events
+    CBSDKCALLBACK_TRACKING = cbSdkPkt_TRACKING,     // Monitor video tracking events
+    CBSDKCALLBACK_COMMENT = cbSdkPkt_COMMENT,       // Monitor comment or custom events
+    CBSDKCALLBACK_GROUPINFO = cbSdkPkt_GROUPINFO,   // Monitor channel group info events
+    CBSDKCALLBACK_CHANINFO = cbSdkPkt_CHANINFO,     // Monitor channel info events
+    CBSDKCALLBACK_FILECFG = cbSdkPkt_FILECFG,       // Monitor file config events
+    CBSDKCALLBACK_POLL = cbSdkPkt_POLL,             // respond to poll
+    CBSDKCALLBACK_SYNCH = cbSdkPkt_SYNCH,           // Monitor video synchronizarion events
+    CBSDKCALLBACK_NM = cbSdkPkt_NM,                 // Monitor NeuroMotive events
+    CBSDKCALLBACK_CCF = cbSdkPkt_CCF,               // Monitor CCF events
+    CBSDKCALLBACK_IMPEDENCE = cbSdkPkt_IMPEDANCE,   // Monitor impedence events
+    CBSDKCALLBACK_SYSHEARTBEAT = cbSdkPkt_SYSHEARTBEAT, // Monitor system heartbeats (100 times a second)
     CBSDKCALLBACK_COUNT  // Always the last value
 } cbSdkCallbackType;
 
@@ -488,6 +488,7 @@ CBSDKAPI    cbSdkResult cbSdkSystem(UINT32 nInstance, cbSdkSystemType cmd); // P
 
 CBSDKAPI    cbSdkResult cbSdkRegisterCallback(UINT32 nInstance, cbSdkCallbackType callbacktype, cbSdkCallback pCallbackFn, void* pCallbackData);
 CBSDKAPI    cbSdkResult cbSdkUnRegisterCallback(UINT32 nInstance, cbSdkCallbackType callbacktype);
+CBSDKAPI    cbSdkResult cbSdkCallbackStatus(UINT32 nInstance, cbSdkCallbackType callbacktype);
 // At most one callback per each callback type per each connection
 
 // Convert volts string (e.g. '5V', '-65mV', ...) to its raw digital value equivalent for given channel
