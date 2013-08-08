@@ -169,7 +169,7 @@ static int CreateLUTs()
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Return library version
-static PyObject * cbpy_Version(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_version(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     int nInstance = 0;
@@ -194,7 +194,7 @@ static PyObject * cbpy_Version(PyObject *self, PyObject *args, PyObject *keywds)
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Register a Python callback function
-static PyObject * cbpy_Register(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_register(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     if (!PyEval_ThreadsInitialized())
@@ -223,7 +223,7 @@ static PyObject * cbpy_Register(PyObject *self, PyObject *args, PyObject *keywds
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Unregister a Python callback function
-static PyObject * cbpy_Unregister(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_unregister(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     Py_INCREF(Py_None);
@@ -253,7 +253,7 @@ static void sdk_callback(const cbSdkPktType type, const void* pEventData, void* 
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Open library
-static PyObject * cbpy_Open(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_open(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     char * pSzConnection = NULL;
@@ -356,7 +356,7 @@ static PyObject * cbpy_Open(PyObject *self, PyObject *args, PyObject *keywds)
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Close library
-static PyObject * cbpy_Close(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_close(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     int nInstance = 0;
@@ -377,7 +377,7 @@ static PyObject * cbpy_Close(PyObject *self, PyObject *args, PyObject *keywds)
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Get instrument time
-static PyObject * cbpy_Time(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_time(PyObject *self, PyObject *args, PyObject *keywds)
 {
     cbSdkResult sdkres = CBSDKRESULT_SUCCESS;
     char * pSzUnit = NULL;
@@ -431,7 +431,7 @@ static PyObject * cbpy_Time(PyObject *self, PyObject *args, PyObject *keywds)
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Get or set channel label
 //           Optionally get channel validity and unit validity
-static PyObject * cbpy_ChanLabel(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_channel_label(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     int nInstance = 0;
@@ -571,7 +571,7 @@ static PyObject * cbpy_ChanLabel(PyObject *self, PyObject *args, PyObject *keywd
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Configure trial settings
-static PyObject * cbpy_TrialConfig(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_trial_config(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     UINT16 uBegChan   = 0;
@@ -718,7 +718,7 @@ static PyObject * cbpy_TrialConfig(PyObject *self, PyObject *args, PyObject *key
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Trial continuous data
-static PyObject * cbpy_TrialCont(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_trial_continuous(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     bool   bDouble = false;
@@ -809,7 +809,7 @@ static PyObject * cbpy_TrialCont(PyObject *self, PyObject *args, PyObject *keywd
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Trial spike and event data
-static PyObject * cbpy_TrialEvent(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_trial_event(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     bool   bDouble = false;
@@ -930,7 +930,7 @@ static PyObject * cbpy_TrialEvent(PyObject *self, PyObject *args, PyObject *keyw
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Trial comments.
-static PyObject * cbpy_TrialComment(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_trial_comment(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     int nTupleCount = 0; // output tuple size
@@ -1109,7 +1109,7 @@ static PyObject * cbpy_TrialComment(PyObject *self, PyObject *args, PyObject *ke
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Trial tracking points
-static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_trial_tracking(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     int nTupleCount = 0; // output tuple size
@@ -1392,7 +1392,7 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Configure remote file recording
-static PyObject * cbpy_FileConfig(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_file_config(PyObject *self, PyObject *args, PyObject *keywds)
 {
     cbSdkResult sdkres;
     PyObject * res = NULL;
@@ -1490,7 +1490,7 @@ static PyObject * cbpy_FileConfig(PyObject *self, PyObject *args, PyObject *keyw
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Digital output command
-static PyObject * cbpy_DigitalOut(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_digital_out(PyObject *self, PyObject *args, PyObject *keywds)
 {
     cbSdkResult sdkres;
     PyObject * res = NULL;
@@ -1542,7 +1542,7 @@ static PyObject * cbpy_DigitalOut(PyObject *self, PyObject *args, PyObject *keyw
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Analog output command.
-static PyObject * cbpy_AnalogOut(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_analog_out(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     // TODO implement for 6.04
@@ -1553,7 +1553,7 @@ static PyObject * cbpy_AnalogOut(PyObject *self, PyObject *args, PyObject *keywd
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Mask channels for trials
-static PyObject * cbpy_Mask(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_mask(PyObject *self, PyObject *args, PyObject *keywds)
 {
     cbSdkResult sdkres;
     PyObject * res = NULL;
@@ -1595,7 +1595,7 @@ static PyObject * cbpy_Mask(PyObject *self, PyObject *args, PyObject *keywds)
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Comment or custom event
-static PyObject * cbpy_Comment(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_comment(PyObject *self, PyObject *args, PyObject *keywds)
 {
     cbSdkResult sdkres;
     PyObject * res = NULL;
@@ -1624,7 +1624,7 @@ static PyObject * cbpy_Comment(PyObject *self, PyObject *args, PyObject *keywds)
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Configure a channel
-static PyObject * cbpy_Config(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_config(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     int nInstance = 0;
@@ -1934,7 +1934,7 @@ static PyObject * cbpy_Config(PyObject *self, PyObject *args, PyObject *keywds)
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Load or convert CCF
-static PyObject * cbpy_CCF(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_ccf(PyObject *self, PyObject *args, PyObject *keywds)
 {
     cbSdkResult sdkres = CBSDKRESULT_SUCCESS;
     PyObject * res = NULL;
@@ -2010,7 +2010,7 @@ static PyObject * cbpy_CCF(PyObject *self, PyObject *args, PyObject *keywds)
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Instrument system runtime command
-static PyObject * cbpy_System(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_system(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     static char kw[][32] = {"command", "instance"};
@@ -2164,26 +2164,26 @@ void cbPySetErrorFromSdkError(cbSdkResult sdkres, const char * szErr)
 // All function names start with Capital letter and follow camel notation
 static PyMethodDef g_cbpyMethods[] =
 {
-    {"Version",  (PyCFunction)cbpy_Version, METH_VARARGS | METH_KEYWORDS, "Library and instrument version."},
-    {"Register",  (PyCFunction)cbpy_Register, METH_VARARGS | METH_KEYWORDS, "Register a callback function."},
-    {"Unregister",  (PyCFunction)cbpy_Unregister, METH_VARARGS | METH_KEYWORDS, "Unregister a callback function."},
-    {"Open",  (PyCFunction)cbpy_Open, METH_VARARGS | METH_KEYWORDS, "Open library."},
-    {"Close",  (PyCFunction)cbpy_Close, METH_VARARGS | METH_KEYWORDS, "Close library."},
-    {"Time",  (PyCFunction)cbpy_Time, METH_VARARGS | METH_KEYWORDS, "Instrument time."},
-    {"ChanLabel",  (PyCFunction)cbpy_ChanLabel, METH_VARARGS | METH_KEYWORDS, "Get or set channel label."},
-    {"TrialConfig",  (PyCFunction)cbpy_TrialConfig, METH_VARARGS | METH_KEYWORDS, "Configure trial settings."},
-    {"TrialCont",  (PyCFunction)cbpy_TrialCont, METH_VARARGS | METH_KEYWORDS, "Trial continuous data"},
-    {"TrialEvent",  (PyCFunction)cbpy_TrialEvent, METH_VARARGS | METH_KEYWORDS, "Trial spike and event data"},
-    {"TrialComment",  (PyCFunction)cbpy_TrialComment, METH_VARARGS | METH_KEYWORDS, "Trial comments."},
-    {"TrialTracking",  (PyCFunction)cbpy_TrialTracking, METH_VARARGS | METH_KEYWORDS, "Trial tracking data."},
-    {"FileConfig",  (PyCFunction)cbpy_FileConfig, METH_VARARGS | METH_KEYWORDS, "Configure remote file recording."},
-    {"DigitalOut",  (PyCFunction)cbpy_DigitalOut, METH_VARARGS | METH_KEYWORDS, "Digital output command."},
-    {"AnalogOut",  (PyCFunction)cbpy_AnalogOut, METH_VARARGS | METH_KEYWORDS, "Analog output command."},
-    {"Mask",  (PyCFunction)cbpy_Mask, METH_VARARGS | METH_KEYWORDS, "Mask channels for trials."},
-    {"Comment",  (PyCFunction)cbpy_Comment, METH_VARARGS | METH_KEYWORDS, "Comment or custom event."},
-    {"Config",  (PyCFunction)cbpy_Config, METH_VARARGS | METH_KEYWORDS, "Configure a channel."},
-    {"CCF",  (PyCFunction)cbpy_CCF, METH_VARARGS | METH_KEYWORDS, "Load or convert Cerebus Config File (CCF)."},
-    {"System",  (PyCFunction)cbpy_System, METH_VARARGS | METH_KEYWORDS, "Instrument system runtime command."},
+    {"Version",  (PyCFunction)cbpy_version, METH_VARARGS | METH_KEYWORDS, "Get library version info."},
+    {"Register",  (PyCFunction)cbpy_register, METH_VARARGS | METH_KEYWORDS, "Register a callback function."},
+    {"Unregister",  (PyCFunction)cbpy_unregister, METH_VARARGS | METH_KEYWORDS, "Unregister a callback function."},
+    {"Open",  (PyCFunction)cbpy_open, METH_VARARGS | METH_KEYWORDS, "Open library."},
+    {"Close",  (PyCFunction)cbpy_close, METH_VARARGS | METH_KEYWORDS, "Close library."},
+    {"Time",  (PyCFunction)cbpy_time, METH_VARARGS | METH_KEYWORDS, "Instrument time."},
+    {"ChanLabel",  (PyCFunction)cbpy_channel_label, METH_VARARGS | METH_KEYWORDS, "Get or set channel label."},
+    {"TrialConfig",  (PyCFunction)cbpy_trial_config, METH_VARARGS | METH_KEYWORDS, "Configure trial settings."},
+    {"TrialCont",  (PyCFunction)cbpy_trial_continuous, METH_VARARGS | METH_KEYWORDS, "Trial continuous data"},
+    {"TrialEvent",  (PyCFunction)cbpy_trial_event, METH_VARARGS | METH_KEYWORDS, "Trial spike and event data"},
+    {"TrialComment",  (PyCFunction)cbpy_trial_comment, METH_VARARGS | METH_KEYWORDS, "Trial comments."},
+    {"TrialTracking",  (PyCFunction)cbpy_trial_tracking, METH_VARARGS | METH_KEYWORDS, "Trial tracking data."},
+    {"FileConfig",  (PyCFunction)cbpy_file_config, METH_VARARGS | METH_KEYWORDS, "Configure remote file recording."},
+    {"DigitalOut",  (PyCFunction)cbpy_digital_out, METH_VARARGS | METH_KEYWORDS, "Digital output command."},
+    {"AnalogOut",  (PyCFunction)cbpy_analog_out, METH_VARARGS | METH_KEYWORDS, "Analog output command."},
+    {"Mask",  (PyCFunction)cbpy_mask, METH_VARARGS | METH_KEYWORDS, "Mask channels for trials."},
+    {"Comment",  (PyCFunction)cbpy_comment, METH_VARARGS | METH_KEYWORDS, "Comment or custom event."},
+    {"Config",  (PyCFunction)cbpy_config, METH_VARARGS | METH_KEYWORDS, "Configure a channel."},
+    {"CCF",  (PyCFunction)cbpy_ccf, METH_VARARGS | METH_KEYWORDS, "Load or convert Cerebus Config File (CCF)."},
+    {"System",  (PyCFunction)cbpy_system, METH_VARARGS | METH_KEYWORDS, "Instrument system runtime command."},
     {NULL, NULL, 0, NULL} // This has to be the last
 };
 
