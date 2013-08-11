@@ -160,6 +160,7 @@ static int CreateLUTs()
     g_lutCCFCmd["send"     ] = CCF_CMD_SEND;
     g_lutCCFCmd["convert"  ] = CCF_CMD_CONVERT;
     // Create Config command LUT
+    g_lutConfigInputsCmd["none"          ] = CONFIG_CMD_NONE;
     g_lutConfigInputsCmd["userflags"     ] = CONFIG_CMD_USERFLAGS;
     g_lutConfigInputsCmd["smpfilter"     ] = CONFIG_CMD_SMPFILTER;
     g_lutConfigInputsCmd["smpgroup"      ] = CONFIG_CMD_SMPGROUP;
@@ -194,7 +195,7 @@ PyDoc_STRVAR(cbpy_version__doc__,
 "Inputs:\n"
 "   instance - (optional) library instance number\n"
 "Outputs:\n"
-"   dict - dictionary with following keys\n"
+"   dictionary with following keys\n"
 "        major - major API version\n"
 "        minor - minor API version\n"
 "        release - release API version\n"
@@ -269,36 +270,40 @@ static void sdk_callback(UINT32 nInstance, const cbSdkPktType type, const void* 
 PyDoc_STRVAR(cbpy_register__doc__,
 "Register a callback function\n\n"
 "Notes:\n"
-"   1- Each callback will be called with a list.\n"
-"       The list (if non-empty) is filled with of dictionaries.\n"
-"       Each dictionary is a packet or event as described below.\n"
+"   1- Each callback will be called with a list (CURRENTLY NOT IMPLEMENTED!).\n"
+"       The list (if non-empty) is filled with of data_item.\n"
+"       Each data_item is a dictionary created from a packet or event as described below.\n"
 "Inputs:\n"
 "   type - callback type, string can be one the following\n"
-"           'packet_lost' - called if packets are being lost\n"
-"           'inst_info' - instrument information\n"
-"           'spike' - spike packet received\n"
-"           'digital'\n"
-"           'serial'\n"
-"           'continuous'\n"
-"           'tracking'\n"
-"           'comment'\n"
-"           'group_info'\n"
-"           'channel_info'\n"
-"           'file_config'\n"
-"           'poll'\n"
-"           'synch'\n"
-"           'neuromotive'\n"
-"           'ccf'\n"
-"           'impedance'\n"
-"           'heartbeat'\n"
+"           'packet_lost': called if packets are being lost\n"
+"               data_item is {}\n"
+"           'inst_info': instrument information\n"
+"               data_item is {'instrument', blah}\n"
+"           'spike': spike packet data\n"
+"               channels if specified should be a list of 1-based electrode numbers\n"
+"               data_item is {'channel', blah}\n"
+"           'digital': digital packet data\n"
+"           'serial': serial packet data\n"
+"           'continuous': continuous packet data\n"
+"           'tracking': tracking packet data\n"
+"           'comment': comment packet data\n"
+"           'group_info': channel group information\n"
+"           'channel_info': channel information\n"
+"           'file_config': file configuration change\n"
+"           'poll': polling data\n"
+"           'synch': synchronization data\n"
+"           'neuromotive': NeuroMotive status\n"
+"           'ccf': CCF saving, loading or converting status\n"
+"           'impedance': impedence data\n"
+"           'heartbeat': system heartbeat\n"
 "   callback - callable object to be invoked when event of given type happens\n"
 "           Previously registered callback for given type (if any) will be unregistered.\n"
 "           Return True from callback to unregister it.\n"
-"   call_param - if given should be a dictionary, and will be passed to the callback\n"
+"   callback_param - if given should be a dictionary, and will be passed to the callback\n"
 "   channels - channel to receive callback for.\n"
 "               Only callbacks specified will use this parameter, and is ignored by others\n"
 "   buffer - tuple (packets, time)\n"
-"           how many packets to buffer (in the list) or how much time to wait\n"
+"           how many packets to buffer (in the list) or how much time (in milliseconds) to wait\n"
 "           before calling the callback. (CURRENTLY IGNORED!)\n"
 "   instance - (optional) library instance number\n");
 
@@ -317,7 +322,7 @@ static PyObject * cbpy_register(PyObject *self, PyObject *args, PyObject *keywds
     PyObject * pCallparam = NULL;
     char * pSzType = NULL;
     int nInstance = 0;
-    static char kw[][32] = {"type", "callback", "call_param", "instance"};
+    static char kw[][32] = {"type", "callback", "callback_param", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "sO|O!i:Register", kwlist, &pSzType, &pCallback, &PyDict_Type, &pCallparam, &nInstance))
         return NULL;
@@ -354,6 +359,27 @@ static PyObject * cbpy_register(PyObject *self, PyObject *args, PyObject *keywds
     res = Py_None;
     return res;
 }
+
+PyDoc_STRVAR(cbpy_open__doc__,
+"Open library.\n\n"
+"Inputs:\n"
+"   connection - connection type, string can be one the following\n"
+"           'default': tries slave then master connection\n"
+"           'master': tries master connection (UDP)\n"
+"           'slave': tries slave connection (needs another master already open)\n"
+"   parameter - dictionary with following keys (all optional)\n"
+"           'inst-addr': instrument IPv4 address.\n"
+"           'inst-port': instrument port number.\n"
+"           'client-addr': client IPv4 address.\n"
+"           'client-port': client port number.\n"
+"           'receive-buffer-size': override default network buffer size (low value may result in drops).\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   dictionary with following keys\n"
+"       'connection': Final established connection; can be any of:\n"
+"                      'Default', 'Slave', 'Master', 'Closed', 'Unknown'\n"
+"       'instrument': Instrument connected to; can be any of:\n"
+"                      'NSP', 'nPlay', 'Local NSP', 'Remote nPlay', 'Unknown'\n");
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Open library
@@ -458,6 +484,11 @@ static PyObject * cbpy_open(PyObject *self, PyObject *args, PyObject *keywds)
     return res;
 }
 
+PyDoc_STRVAR(cbpy_close__doc__,
+"Close library.\n\n"
+"Inputs:\n"
+"   instance - (optional) library instance number\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Close library
 static PyObject * cbpy_close(PyObject *self, PyObject *args, PyObject *keywds)
@@ -478,6 +509,17 @@ static PyObject * cbpy_close(PyObject *self, PyObject *args, PyObject *keywds)
     }
     return res;
 }
+
+PyDoc_STRVAR(cbpy_time__doc__,
+"Instrument time.\n\n"
+"Inputs:\n"
+"   unit - time unit, string can be one the following\n"
+"           'samples': (default) sample number integer\n"
+"           'seconds' or 's': seconds calculated from samples\n"
+"           'milliseconds' or 'ms': milliseconds calculated from samples\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   time - time passed since last reset\n");
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Get instrument time
@@ -531,6 +573,21 @@ static PyObject * cbpy_time(PyObject *self, PyObject *args, PyObject *keywds)
     }
     return res;
 }
+
+PyDoc_STRVAR(cbpy_channel_label__doc__,
+"Get or set channel label.\n\n"
+"Inputs:\n"
+"   channel - electrode channel number (1-based)\n"
+"   new_label - (optional) string, new channel label\n"
+"   outputs - (optional) one string or list of one of the following strings to specify what should go to output\n"
+"           'none', 'label', 'enabled', 'valid_unit'\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   Output is a dictionary only if either some 'outputs' specified, or 'new_label' not specified\n"
+"   dictionary with the following keys\n"
+"       'label': string, current label of channel\n"
+"       'enabled': boolean, if channel is enabled\n"
+"       'valid_unit': array, valid spike units\n");
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Get or set channel label
@@ -672,6 +729,32 @@ static PyObject * cbpy_channel_label(PyObject *self, PyObject *args, PyObject *k
 
     return res;
 }
+
+PyDoc_STRVAR(cbpy_trial_config__doc__,
+"Configure trial settings.\n\n"
+"Inputs:\n"
+"   reset - boolean, set True to flush data cache and start collecting data immediately,\n"
+"           set False to stop collecting data immediately\n"
+"   buffer_parameter - (optional) dictionary with following keys (all optional)\n"
+"           'double': boolean, if specified, the data is in double precision format\n"
+"           'absolute': boolean, if specified event timing is absolute (new polling will not reset time for events)\n"
+"           'continuous_length': set the number of continuous data to be cached\n"
+"           'event_length': set the number of events to be cached\n"
+"           'comment_length': set number of comments to be cached\n"
+"           'tracking_length': set the number of video tracking events to be cached\n"
+"   range_parameter - (optional) dictionary with following keys (all optional)\n"
+"           'begin_channel': integer, channel to start polling if certain value seen\n"
+"           'begin_mask': integer, channel mask to start polling if certain value seen\n"
+"           'begin_value': value to start polling\n"
+"           'end_channel': channel to end polling if certain value seen\n"
+"           'end_mask': channel mask to end polling if certain value seen\n"
+"           'end_value': value to end polling\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   dictionary with the following keys\n"
+"       'label': string, current label of channel\n"
+"       'enabled': boolean, if channel is enabled\n"
+"       'valid_unit': array, valid spike units\n");
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Configure trial settings
@@ -820,6 +903,18 @@ static PyObject * cbpy_trial_config(PyObject *self, PyObject *args, PyObject *ke
     return res;
 }
 
+PyDoc_STRVAR(cbpy_trial_continuous__doc__,
+"Trial continuous data.\n\n"
+"Inputs:\n"
+"   reset - (optional) boolean \n"
+"           set False (default) to leave buffer intact.\n"
+"           set True to clear all the data and reset the trial time to the current time.\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   list of tuples (channel, continuous_array)\n"
+"       channel: integer, channel number (1-based)\n"
+"       continuous_array: array, continuous values for channel\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Trial continuous data
 static PyObject * cbpy_trial_continuous(PyObject *self, PyObject *args, PyObject *keywds)
@@ -910,6 +1005,19 @@ static PyObject * cbpy_trial_continuous(PyObject *self, PyObject *args, PyObject
     }
     return res;
 }
+
+PyDoc_STRVAR(cbpy_trial_event__doc__,
+"Trial spike and event data.\n\n"
+"Inputs:\n"
+"   reset - (optional) boolean \n"
+"           set False (default) to leave buffer intact.\n"
+"           set True to clear all the data and reset the trial time to the current time.\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   list of tuples (channel, digital_events) or (channel, unit0_ts, ..., unitN_ts)\n"
+"       channel: integer, channel number (1-based)\n"
+"       digital_events: array, digital event values for channel (if a digital or serial channel)\n"
+"       unitN_ts: array, spike timestamps of unit N for channel (if an electrode channel)\n");
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Trial spike and event data
@@ -1031,6 +1139,24 @@ static PyObject * cbpy_trial_event(PyObject *self, PyObject *args, PyObject *key
     }
     return res;
 }
+
+PyDoc_STRVAR(cbpy_trial_comment__doc__,
+"Trial comments.\n\n"
+"Inputs:\n"
+"   reset - (optional) boolean \n"
+"           set False (default) to leave buffer intact.\n"
+"           set True to clear all the data and reset the trial time to the current time.\n"
+"   charsets - (optional) boolean, if character sets should be returned (default True)\n"
+"   timestamps - (optional) boolean, if time stamps should be returned (default True)\n"
+"   data - (optional) boolean, if data field should be returned (default True)\n"
+"   comments - (optional) boolean, if comment strings should be returned (default True)\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   tuple (charset_array, timestamps_array, data_array, comments_list)\n"
+"       charset_array: array of character sets\n"
+"       timestamps_array: array of timestamps of comments\n"
+"       data_array: array of comment additional data\n"
+"       comments_list: list of comments\n");
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Trial comments.
@@ -1211,6 +1337,26 @@ static PyObject * cbpy_trial_comment(PyObject *self, PyObject *args, PyObject *k
     return res;
 }
 
+PyDoc_STRVAR(cbpy_trial_tracking__doc__,
+"Trial tracking data.\n\n"
+"Inputs:\n"
+"   reset - (optional) boolean \n"
+"           set False (default) to leave buffer intact.\n"
+"           set True to clear all the data and reset the trial time to the current time.\n"
+"   timestamps - (optional) boolean, if packet time stamps should be returned (default True)\n"
+"   synch_timestamps - (optional) boolean, if synchronized time stamps should be returned (default True)\n"
+"   synch_frame_numbers - (optional) boolean, ifframe numbers should be returned (default True)\n"
+"   coordinates - (optional) boolean, if coordinates should be returned (default True)\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   list of tuples (trackable_id, trackable_type, timestamps_array, synch_timestamps_array, coordinates_array)\n"
+"       trackable_id: trackable ID\n"
+"       trackable_type: trackable type\n"
+"       timestamps_array: array of tracking packet time stamps\n"
+"       synch_timestamps_array: array of synchronized time stamps\n"
+"       coordinates_array: array of trackable coordinates (each an array)\n");
+
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Trial tracking points
 static PyObject * cbpy_trial_tracking(PyObject *self, PyObject *args, PyObject *keywds)
@@ -1297,7 +1443,7 @@ static PyObject * cbpy_trial_tracking(PyObject *self, PyObject *args, PyObject *
     for (UINT32 id = 0; id < trialtracking.count; id++)
     {
         UINT16 trackable_id = trialtracking.ids[id]; // Actual tracking id
-        UINT16 trackable_type = trialtracking.types[id]; // Actual tracking id
+        UINT16 trackable_type = trialtracking.types[id]; // Actual tracking type
         PyObject * pTuple = PyTuple_New(nTupleCount + 2);
         if (pTuple == NULL)
             return PyErr_Format(PyExc_MemoryError, "Could not create output tuple");
@@ -1494,6 +1640,25 @@ static PyObject * cbpy_trial_tracking(PyObject *self, PyObject *args, PyObject *
     return res;
 }
 
+PyDoc_STRVAR(cbpy_file_config__doc__,
+"Configure remote file recording or get status of recording.\n\n"
+"Inputs:\n"
+"   command - string, File configuration command, can be of of the following\n"
+"           'info': get File recording information\n"
+"           'open': opens the File dialog if closed, ignoring other parameters\n"
+"           'close': closes the File dialog if open\n"
+"           'start': starts recording, opens dialog if closed\n"
+"           'stop': stops recording\n"
+"   filename - (optional) string, file name to use for recording\n"
+"   comment - (optional) string, file comment to use for file recording\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   Only if command is 'info' output is returned\n"
+"   A dictionary with following keys:\n"
+"       'Recording': boolean, if recording is in progress\n"
+"       'FileName': string, file name being recorded\n"
+"       'UserName': Computer that is recording\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Configure remote file recording
 static PyObject * cbpy_file_config(PyObject *self, PyObject *args, PyObject *keywds)
@@ -1592,6 +1757,18 @@ static PyObject * cbpy_file_config(PyObject *self, PyObject *args, PyObject *key
     return res;
 }
 
+PyDoc_STRVAR(cbpy_digital_out__doc__,
+"Digital output command.\n\n"
+"Inputs:\n"
+"   channel - integer, digital output channel number (1-based)\n"
+"               On NSP, 153 (dout1), 154 (dout2), 155 (dout3), 156 (dout4)\n"
+"   command - string, digital output command, can be of of the following\n"
+"           'set_value': set default digital value\n"
+"   value - (optional), depends on the command\n"
+"           for command of 'set_value':\n"
+"               string, can be 'high' or 'low' (default)\n"
+"   instance - (optional) library instance number\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Digital output command
 static PyObject * cbpy_digital_out(PyObject *self, PyObject *args, PyObject *keywds)
@@ -1644,6 +1821,38 @@ static PyObject * cbpy_digital_out(PyObject *self, PyObject *args, PyObject *key
     return res;
 }
 
+PyDoc_STRVAR(cbpy_analog_out__doc__,
+"Analog output command. (CURRENTLY NOT IMPLEMENTED!)\n\n"
+"Inputs:\n"
+"   channel - integer, analog output channel number (1-based)\n"
+"           For NSP: 145 (aout1), 146 (aout2), 147 (aout3), 148 (aout4)\n"
+"                    149 (audout1), 150 (audout2)\n"
+"   command - string, digital output command, can be of of the following\n"
+"           'monitor': monitors continuous or spike\n"
+"           'disable': disable analog output\n"
+"           'set_waveform': analog output a waveform specified in the value\n"
+"   value - (optional), depends on the command\n"
+"           for command of 'monitor':\n"
+"               list of strings, string can be 'spike' or 'continuous', 'track'\n"
+"               'track' - monitor the last tracked channel\n"
+"           for command of 'set_waveform':\n"
+"               dictionary with following keys:\n"
+"               'trigger': string, can be one of the following:\n"
+"                   'off':\n"
+"                   'instant':\n"
+"                   'spike':\n"
+"                   'comment_color':\n"
+"                   'diginp_rise':\n"
+"                   'soft_reset':\n"
+"                   'extension':\n"
+"               'trigger_input': trigger input, depends on trigger\n"
+"               'trigger_value': trigger value, depends on trigger\n"
+"               'offset': amplitude offset of the waveform\n"
+"               'repeats': number of repeats. 0 (default) means non-stop\n"
+"               'index': trigger index (0 to 4) is the per-channel trigger index (default is 0)\n"
+"               'waveform': {'sinusoid': (frequency, amplitude)} or {'sequence': [durations_array, amplitudes_array]}\n"
+"   instance - (optional) library instance number\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Analog output command.
 static PyObject * cbpy_analog_out(PyObject *self, PyObject *args, PyObject *keywds)
@@ -1654,6 +1863,15 @@ static PyObject * cbpy_analog_out(PyObject *self, PyObject *args, PyObject *keyw
     cbPySetErrorFromSdkError(sdkres);
     return res;
 }
+
+PyDoc_STRVAR(cbpy_mask__doc__,
+"Mask channels for trials (global mask).\n\n"
+"Inputs:\n"
+"   channel - integer, digital output channel number (1-based)\n"
+"   command - string, can be of of the following\n"
+"           'on': include the channel\n"
+"           'off': exclude the channel\n"
+"   instance - (optional) library instance number\n");
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Mask channels for trials
@@ -1697,6 +1915,13 @@ static PyObject * cbpy_mask(PyObject *self, PyObject *args, PyObject *keywds)
     return res;
 }
 
+PyDoc_STRVAR(cbpy_comment__doc__,
+"Comment or custom event.\n\n"
+"Inputs:\n"
+"   comment - string, comment to send\n"
+"   data - integer, comment extra data\n"
+"   instance - (optional) library instance number\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Comment or custom event
 static PyObject * cbpy_comment(PyObject *self, PyObject *args, PyObject *keywds)
@@ -1709,7 +1934,7 @@ static PyObject * cbpy_comment(PyObject *self, PyObject *args, PyObject *keywds)
     UINT32 rgba = 0;
     UINT8 charset = 0;
 
-    static char kw[][32] = {"comment", "rgba", "charset", "instance"};
+    static char kw[][32] = {"comment", "data", "charset", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "s|Iii", kwlist,
                                      &pSzComment, &rgba, &charset, &nInstance))
@@ -1726,6 +1951,52 @@ static PyObject * cbpy_comment(PyObject *self, PyObject *args, PyObject *keywds)
     return res;
 }
 
+PyDoc_STRVAR(cbpy_config__doc__,
+"Configure a channel (optionally get previous configuration).\n\n"
+"Inputs:\n"
+"   channel - integer, channel number (1-based)\n"
+"   new_config - dictionary with following keys (all optional):\n"
+"       'userflags': integer, user specified custom flags per-channel\n"
+"       'smpfilter': integer, continuous sampling filter index (0 means unfiltered, 1-12, refer to notes)\n"
+"       'smpgroup': integer, continuous sampling group (0 means disable, 1-5, refer to notes)\n"
+"       'spkfilter': integer, spike filter index (0 means unfiltered, 1-12, refer to notes)\n"
+"       'spkgroup': integer, spike NTrode group (0 means individual)\n"
+"       'spkthrlevel': integer or string, spike threshold value raw value,\n"
+"                       or a string with value followed by voltage unit (V, mV, uV)\n"
+"       'amplrejpos': integer or string, positive value to reject spike, raw value,\n"
+"                       or a string with value followed by voltage unit (V, mV, uV)\n"
+"       'amplrejneg': integer, negative value to reject spike, raw value, raw value,\n"
+"                       or a string with value followed by voltage unit (V, mV, uV)\n"
+"       'refelecchan': integer, reference electrode channel (1-based)\n"
+"   outputs - (optional) one string or list of one of the following strings to specify what should go to output\n"
+"           'none', 'userflags', 'smpfilter', 'smpgroup', 'spkfilter', 'spkgroup', 'spkthrlevel', 'amplrejpos',\n"
+"            'amplrejneg', 'refelecchan'\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   Output is a dictionary only if either some 'outputs' specified, or 'new_config' not specified\n"
+"   Dictionary with the same keys as new_config, all in raw integer format\n"
+"Notes:\n"
+"   NSP filter numbers:\n"
+"       1: HP 750Hz\n"
+"       2: HP 250Hz\n"
+"       3: HP 100Hz\n"
+"       4: LP 50Hz\n"
+"       5: LP 125Hz\n"
+"       6: LP 250Hz\n"
+"       7: LP 500Hz\n"
+"       8: LP 150Hz\n"
+"       9: BP 10Hz-250Hz\n"
+"       10: LP 2.5kHz\n"
+"       11: LP 2kHz\n"
+"       12: BP 250Hz-5kHz\n"
+"       13: Custom (if loaded)\n"
+"   NSP sampling group numbers:\n"
+"       1: 500 S/s\n"
+"       2: 1 kS/s\n"
+"       3: 2 kS/s\n"
+"       4: 10 kS/s\n"
+"       5: 30 kS/s\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Configure a channel
 static PyObject * cbpy_config(PyObject *self, PyObject *args, PyObject *keywds)
@@ -1735,7 +2006,7 @@ static PyObject * cbpy_config(PyObject *self, PyObject *args, PyObject *keywds)
     UINT16 nChannel = 0;
     PyObject * pNewConfig = NULL;
     PyObject * pOutputsParam = NULL; // List of strings to specify the optional outputs
-    static char kw[][32] = {"channel", "config", "outputs", "instance"};
+    static char kw[][32] = {"channel", "new_config", "outputs", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "i|O!Oi", kwlist, &nChannel, &PyDict_Type, &pNewConfig, &pOutputsParam, &nInstance))
         return NULL;
@@ -2036,6 +2307,18 @@ static PyObject * cbpy_config(PyObject *self, PyObject *args, PyObject *keywds)
     return res;
 }
 
+PyDoc_STRVAR(cbpy_ccf__doc__,
+"Load or convert Cerebus Config File (CCF).\n\n"
+"Inputs:\n"
+"   command - string, can be one of the following:\n"
+"       'save': Save a new CCF file\n"
+"       'send': Send source CCF file to NSP\n"
+"       'convert': Convert source CCF file to destination CCF file\n"
+"   source - string, source CCF file path\n"
+"   destination - string, destination CCF file path\n"
+"   threaded - boolean, if threads should be used for sending and converting\n"
+"   instance - (optional) library instance number\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Load or convert CCF
 static PyObject * cbpy_ccf(PyObject *self, PyObject *args, PyObject *keywds)
@@ -2111,6 +2394,16 @@ static PyObject * cbpy_ccf(PyObject *self, PyObject *args, PyObject *keywds)
     }
     return res;
 }
+
+
+PyDoc_STRVAR(cbpy_system__doc__,
+"Instrument system runtime command.\n\n"
+"Inputs:\n"
+"   command - string, can be one of the following:\n"
+"       'reset': Restart NSP\n"
+"       'shutdown': Shutdown NSP\n"
+"       'standby': Hardware to stand by\n"
+"   instance - (optional) library instance number\n");
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Instrument system runtime command
@@ -2270,23 +2563,23 @@ static PyMethodDef g_cbpyMethods[] =
 {
     {"version",  (PyCFunction)cbpy_version, METH_VARARGS | METH_KEYWORDS, cbpy_version__doc__},
     {"register",  (PyCFunction)cbpy_register, METH_VARARGS | METH_KEYWORDS, cbpy_register__doc__},
-    {"open",  (PyCFunction)cbpy_open, METH_VARARGS | METH_KEYWORDS, "Open library."},
-    {"close",  (PyCFunction)cbpy_close, METH_VARARGS | METH_KEYWORDS, "Close library."},
-    {"time",  (PyCFunction)cbpy_time, METH_VARARGS | METH_KEYWORDS, "Instrument time."},
-    {"channel_label",  (PyCFunction)cbpy_channel_label, METH_VARARGS | METH_KEYWORDS, "Get or set channel label."},
-    {"trial_config",  (PyCFunction)cbpy_trial_config, METH_VARARGS | METH_KEYWORDS, "Configure trial settings."},
-    {"trial_continuous",  (PyCFunction)cbpy_trial_continuous, METH_VARARGS | METH_KEYWORDS, "Trial continuous data"},
-    {"trial_event",  (PyCFunction)cbpy_trial_event, METH_VARARGS | METH_KEYWORDS, "Trial spike and event data"},
-    {"trial_comment",  (PyCFunction)cbpy_trial_comment, METH_VARARGS | METH_KEYWORDS, "Trial comments."},
-    {"trial_tracking",  (PyCFunction)cbpy_trial_tracking, METH_VARARGS | METH_KEYWORDS, "Trial tracking data."},
-    {"file_config",  (PyCFunction)cbpy_file_config, METH_VARARGS | METH_KEYWORDS, "Configure remote file recording."},
-    {"digital_out",  (PyCFunction)cbpy_digital_out, METH_VARARGS | METH_KEYWORDS, "Digital output command."},
-    {"analog_out",  (PyCFunction)cbpy_analog_out, METH_VARARGS | METH_KEYWORDS, "Analog output command."},
-    {"mask",  (PyCFunction)cbpy_mask, METH_VARARGS | METH_KEYWORDS, "Mask channels for trials."},
-    {"comment",  (PyCFunction)cbpy_comment, METH_VARARGS | METH_KEYWORDS, "Comment or custom event."},
-    {"config",  (PyCFunction)cbpy_config, METH_VARARGS | METH_KEYWORDS, "Configure a channel."},
-    {"ccf",  (PyCFunction)cbpy_ccf, METH_VARARGS | METH_KEYWORDS, "Load or convert Cerebus Config File (CCF)."},
-    {"system",  (PyCFunction)cbpy_system, METH_VARARGS | METH_KEYWORDS, "Instrument system runtime command."},
+    {"open",  (PyCFunction)cbpy_open, METH_VARARGS | METH_KEYWORDS, cbpy_open__doc__},
+    {"close",  (PyCFunction)cbpy_close, METH_VARARGS | METH_KEYWORDS, cbpy_close__doc__},
+    {"time",  (PyCFunction)cbpy_time, METH_VARARGS | METH_KEYWORDS, cbpy_time__doc__},
+    {"channel_label",  (PyCFunction)cbpy_channel_label, METH_VARARGS | METH_KEYWORDS, cbpy_channel_label__doc__},
+    {"trial_config",  (PyCFunction)cbpy_trial_config, METH_VARARGS | METH_KEYWORDS, cbpy_trial_config__doc__},
+    {"trial_continuous",  (PyCFunction)cbpy_trial_continuous, METH_VARARGS | METH_KEYWORDS, cbpy_trial_continuous__doc__},
+    {"trial_event",  (PyCFunction)cbpy_trial_event, METH_VARARGS | METH_KEYWORDS, cbpy_trial_event__doc__},
+    {"trial_comment",  (PyCFunction)cbpy_trial_comment, METH_VARARGS | METH_KEYWORDS, cbpy_trial_comment__doc__},
+    {"trial_tracking",  (PyCFunction)cbpy_trial_tracking, METH_VARARGS | METH_KEYWORDS, cbpy_trial_tracking__doc__},
+    {"file_config",  (PyCFunction)cbpy_file_config, METH_VARARGS | METH_KEYWORDS, cbpy_file_config__doc__},
+    {"digital_out",  (PyCFunction)cbpy_digital_out, METH_VARARGS | METH_KEYWORDS, cbpy_digital_out__doc__},
+    {"analog_out",  (PyCFunction)cbpy_analog_out, METH_VARARGS | METH_KEYWORDS, cbpy_analog_out__doc__},
+    {"mask",  (PyCFunction)cbpy_mask, METH_VARARGS | METH_KEYWORDS, cbpy_mask__doc__},
+    {"comment",  (PyCFunction)cbpy_comment, METH_VARARGS | METH_KEYWORDS, cbpy_comment__doc__},
+    {"config",  (PyCFunction)cbpy_config, METH_VARARGS | METH_KEYWORDS, cbpy_config__doc__},
+    {"ccf",  (PyCFunction)cbpy_ccf, METH_VARARGS | METH_KEYWORDS, cbpy_ccf__doc__},
+    {"system",  (PyCFunction)cbpy_system, METH_VARARGS | METH_KEYWORDS, cbpy_system__doc__},
     {NULL, NULL, 0, NULL} // This has to be the last
 };
 
@@ -2346,12 +2639,5 @@ extern "C" CBSDKAPI MOD_INIT(cbpy)
         return MOD_ERROR_VAL;
     }
 
-    //TODO: add this for callbacks
-    // Add cbpy specific types to the module
-    //if (cbPyAddTypes(m))
-    //{
-    //    PyErr_SetString(g_cbpyError, "Module; could not add types");
-    //    return MOD_ERROR_VAL;
-    //}
     return MOD_SUCCESS_VAL(m);
 }
