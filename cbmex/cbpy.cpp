@@ -27,8 +27,12 @@
 #include <map>
 
 static PyObject * g_cbpyError; // cbpy exception
-static PyObject * g_callback[CBSDKCALLBACK_COUNT] = {NULL};
-static PyObject * g_callback_param[CBSDKCALLBACK_COUNT] = {NULL};
+static PyObject * g_callback[cbMAXOPEN][CBSDKCALLBACK_COUNT] = {NULL};
+static PyObject * g_callback_param[cbMAXOPEN][CBSDKCALLBACK_COUNT] = {NULL};
+static UINT32 g_callback_max_size[cbMAXOPEN][CBSDKCALLBACK_COUNT] = {0};
+static UINT32 g_callback_max_timer[cbMAXOPEN][CBSDKCALLBACK_COUNT] = {0};
+static UINT32 g_callback_timer[cbMAXOPEN][CBSDKCALLBACK_COUNT] = {0};
+static PyObject * g_callback_list[cbMAXOPEN][CBSDKCALLBACK_COUNT] = {NULL};
 static PyGILState_STATE g_gilState; // Python global interpreter lock state
 
 typedef enum {
@@ -232,56 +236,211 @@ static PyObject * cbpy_version(PyObject *self, PyObject *args, PyObject *keywds)
     return res;
 }
 
-// Author & Date: Ehsan Azar       6 May 2012
-// Purpose: The only registered callback with SDK
-static void sdk_callback(UINT32 nInstance, const cbSdkPktType type, const void* pEventData, void* /*pCallbackData*/)
+// Author & Date: Ehsan Azar       11 Aug 2013
+// Purpose: Convert sdk packet to Python object
+static PyObject * event_data_convert(UINT32 nInstance, cbSdkPktType type, const void * pEventData)
 {
-    if (type >= cbSdkPkt_COUNT)
-        return;
-    PyObject * my_callback = g_callback[type];
-    PyObject * my_callback_param = g_callback_param[type];
-    if (my_callback == NULL)
-        return;
+    cbSdkResult sdkres = CBSDKRESULT_SUCCESS;
+    PyObject * res = PyDict_New();
+    switch (type)
+    {
+    case cbSdkPkt_PACKETLOST:
+        // data points to cbSdkPktLostEvent
+    {
+        cbSdkPktLostEvent * pPkt = (cbSdkPktLostEvent *)pEventData;
+        char lost_reason[][15] = {"unknown", "link_failure", "pc_nsp", "network"};
+        unsigned int reason = pPkt->type;
+        if (reason > 3)
+            reason = 0;
+        PyObject * pVal = PyString_FromString(lost_reason[reason]);
+        PyDict_SetItemString(res, "reason", pVal);
+    }
+        break;
+    case cbSdkPkt_INSTINFO:
+        // data points to cbSdkInstInfo
+    {
+        cbSdkInstInfo * pPkt = (cbSdkInstInfo *)pEventData;
+        PyObject * pVal = PyLong_FromLong(pPkt->instInfo);
+        PyDict_SetItemString(res, "bitfield", pVal);
+    }
+        break;
+    case cbSdkPkt_SPIKE:
+        // data points ro cbPKT_SPK
+    {
+        PyArrayObject * pArr;
+        PyObject * pVal;
+        cbPKT_SPK * pPkt = (cbPKT_SPK *)pEventData;
+        pVal = PyLong_FromLong(pPkt->chid + 1);
+        PyDict_SetItemString(res, "channel", pVal);
+        pVal = PyLong_FromLong(pPkt->unit);
+        PyDict_SetItemString(res, "unit", pVal);
+        int dims[2] = {3, 1};
+        pArr = (PyArrayObject *)PyArray_FromDims(1, dims, NPY_FLOAT64);
+        for (int i = 0; i < 3; ++i)
+            *((double *)(UINT8 *)PyArray_DATA(pArr) + i) = pPkt->fPattern[i];
+        PyDict_SetItemString(res, "pattern", (PyObject *)pArr);
+
+        UINT32 spklength;
+        sdkres = cbSdkGetSysConfig(nInstance, &spklength, NULL, NULL);
+        if (sdkres != CBSDKRESULT_SUCCESS)
+            cbPySetErrorFromSdkError(sdkres, "error cbSdkGetSysConfig");
+        if (sdkres < CBSDKRESULT_SUCCESS)
+            return res;
+
+        dims[0] = spklength;
+        pArr = (PyArrayObject *)PyArray_FromDims(1, dims, NPY_INT16);
+        for (int i = 0; i < spklength; ++i)
+            *((INT16 *)(UINT8 *)PyArray_DATA(pArr) + i) = pPkt->wave[i];
+        PyDict_SetItemString(res, "wave", (PyObject *)pArr);
+    }
+        break;
+    case cbSdkPkt_DIGITAL:
+        // data points to cbPKT_DINP
+        break;
+    case cbSdkPkt_SERIAL:
+        // data points to cbPKT_DINP
+        break;
+    case cbSdkPkt_CONTINUOUS:
+        // data points to cbPKT_GROUP
+        break;
+    case cbSdkPkt_TRACKING:
+        // data points to cbPKT_VIDEOTRACK
+        break;
+    case cbSdkPkt_COMMENT:
+        // data points to cbPKT_COMMENT
+        break;
+    case cbSdkPkt_GROUPINFO:
+        // data points to cbPKT_GROUPINFO
+        break;
+    case cbSdkPkt_CHANINFO:
+        // data points to cbPKT_CHANINFO
+        break;
+    case cbSdkPkt_FILECFG:
+        // data points to cbPKT_FILECFG
+        break;
+    case cbSdkPkt_POLL:
+        // data points to cbPKT_POLL
+        break;
+    case cbSdkPkt_SYNCH:
+        // data points to cbPKT_VIDEOSYNCH
+        break;
+    case cbSdkPkt_NM:
+        // data points to cbPKT_NM
+        break;
+    case cbSdkPkt_CCF:
+        // data points to cbSdkCCFEvent
+        break;
+    case cbSdkPkt_IMPEDANCE:
+        // data points to cbPKT_IMPEDANCE
+        break;
+    case cbSdkPkt_SYSHEARTBEAT:
+        // data points to cbPKT_SYSHEARTBEAT
+        break;
+    }
+
+    return res;
+}
+
+// Author & Date: Ehsan Azar       11 Aug 2013
+// Purpose: Call a registered callback
+static void sdk_call_callback(UINT32 nInstance, const cbSdkPktType type, PyObject * pData)
+{
+    PyObject * my_callback = g_callback[nInstance][type];
+    PyObject * my_callback_param = g_callback_param[nInstance][type];
 
     g_gilState = PyGILState_Ensure();
-    my_callback = g_callback[type];
+    my_callback = g_callback[nInstance][type];
     if (my_callback != NULL)
     {
         PyObject * res = NULL;
         if (my_callback_param != NULL)
-            res = PyObject_CallFunctionObjArgs(my_callback, my_callback_param);
+            res = PyObject_CallFunctionObjArgs(my_callback, my_callback_param, pData);
         else
-            res = PyObject_CallFunctionObjArgs(my_callback);
+            res = PyObject_CallFunctionObjArgs(my_callback, pData);
         // Check to see if True is returned unregister this function
         if (res != NULL)
         {
             if (PyObject_IsTrue(res) == 1)
             {
                 Py_XDECREF(my_callback);
-                g_callback[type] = NULL;
+                g_callback[nInstance][type] = NULL;
                 Py_XDECREF(my_callback_param);
-                g_callback_param[type] = NULL;
+                g_callback_param[nInstance][type] = NULL;
+                g_callback_max_size[nInstance][type] = 0;
+                g_callback_max_timer[nInstance][type] = 0;
             }
         }
     }
     PyGILState_Release(g_gilState);
 }
 
+// Author & Date: Ehsan Azar       6 May 2012
+// Purpose: The only registered callback with SDK
+static void sdk_callback(UINT32 nInstance, const cbSdkPktType type, const void * pEventData, void* /*pCallbackData*/)
+{
+    if (type >= cbSdkPkt_COUNT)
+        return;
+    PyObject * my_callback = g_callback[nInstance][type];
+    if (my_callback == NULL)
+        return;
+
+    if (g_callback_list[nInstance][type] == NULL)
+    {
+        g_callback_list[nInstance][type] = PyList_New(0);
+        g_callback_timer[nInstance][type] = g_callback_max_timer[nInstance][type];
+    }
+    PyList_Append(g_callback_list[nInstance][type], event_data_convert(nInstance, type, pEventData));
+
+    // If max size reached go on and call
+    if (PyList_GET_SIZE(g_callback_list[nInstance][type]) >= g_callback_max_size[nInstance][type])
+    {
+        sdk_call_callback(nInstance, type, g_callback_list[nInstance][type]);
+        Py_XDECREF(g_callback_list[nInstance][type]);
+        g_callback_list[nInstance][type] = NULL;
+        g_callback_timer[nInstance][type] = 0;
+    }
+
+    // Take advantage of the fact that heartbeats are generated every 10ms
+    if (type == cbSdkPkt_SYSHEARTBEAT)
+    {
+        for (int i = 0; i < cbSdkPkt_COUNT; ++i)
+        {
+            my_callback = g_callback[nInstance][i];
+            // If there is some data for a registered callback
+            if (my_callback != NULL && g_callback_list[nInstance][i] != NULL)
+            {
+                // Check if timer is expired
+                if (g_callback_timer[nInstance][i] >= 10)
+                    g_callback_timer[nInstance][i] -= 10;
+                if (g_callback_timer[nInstance][i] < 10)
+                {
+                    sdk_call_callback(nInstance, (cbSdkPktType)i, g_callback_list[nInstance][i]);
+                    Py_XDECREF(g_callback_list[nInstance][i]);
+                    g_callback_list[nInstance][i] = NULL;
+                    g_callback_timer[nInstance][i] = 0;
+                }
+            }
+        } // end for (int i = 0;
+    } // end if (type == cbSdkPkt_SYSHEARTBEAT
+}
+
 PyDoc_STRVAR(cbpy_register__doc__,
 "Register a callback function\n\n"
 "Notes:\n"
-"   1- Each callback will be called with a list (CURRENTLY NOT IMPLEMENTED!).\n"
+"   1- Each callback will be called with callback_param followed by data_item_list list.\n"
 "       The list (if non-empty) is filled with of data_item.\n"
 "       Each data_item is a dictionary created from a packet or event as described below.\n"
 "Inputs:\n"
 "   type - callback type, string can be one the following\n"
 "           'packet_lost': called if packets are being lost\n"
-"               data_item is {}\n"
+"               data_item is {'cause': reason}\n"
+"                reason is a string and can be any of 'unknown', 'link_failure', 'pc_nsp', 'network'\n"
 "           'inst_info': instrument information\n"
-"               data_item is {'instrument', blah}\n"
+"               data_item is {'bitfield', instino}\n"
+"                instinfo is integer bitfield of instrument type\n"
 "           'spike': spike packet data\n"
 "               channels if specified should be a list of 1-based electrode numbers\n"
-"               data_item is {'channel', blah}\n"
+"               data_item is {'channel', channel_number, 'unit', unit_number, 'pattern', pattern_array, 'wave', wave_array}\n"
 "           'digital': digital packet data\n"
 "           'serial': serial packet data\n"
 "           'continuous': continuous packet data\n"
@@ -297,14 +456,17 @@ PyDoc_STRVAR(cbpy_register__doc__,
 "           'impedance': impedence data\n"
 "           'heartbeat': system heartbeat\n"
 "   callback - callable object to be invoked when event of given type happens\n"
+"               function signature of callable(callback_param, data_item_list) is expected\n"
 "           Previously registered callback for given type (if any) will be unregistered.\n"
 "           Return True from callback to unregister it.\n"
 "   callback_param - if given should be a dictionary, and will be passed to the callback\n"
-"   channels - channel to receive callback for.\n"
+"   channels - list, channels to receive callback for.\n"
 "               Only callbacks specified will use this parameter, and is ignored by others\n"
-"   buffer - tuple (packets, time)\n"
-"           how many packets to buffer (in the list) or how much time (in milliseconds) to wait\n"
-"           before calling the callback. (CURRENTLY IGNORED!)\n"
+"   buffer - tuple (buffer_len, buffer_timer)\n"
+"           maximum how many packets to buffer (in the list) and how much time (in milliseconds) to wait\n"
+"           before calling the callback.\n"
+"           If buffer gets full (all of buffer_len packets get queued), callback is called and timer is set.\n"
+"           If buffer is not empty and timer is reset, callback is called.\n"
 "   instance - (optional) library instance number\n");
 
 // Author & Date: Ehsan Azar       6 May 2012
@@ -318,31 +480,52 @@ static PyObject * cbpy_register(PyObject *self, PyObject *args, PyObject *keywds
         PyEval_ReleaseLock();
     }
     cbSdkVersion ver;
+    PyObject *pBuffer = NULL;
     PyObject *pCallback = NULL;
     PyObject * pCallparam = NULL;
     char * pSzType = NULL;
     int nInstance = 0;
-    static char kw[][32] = {"type", "callback", "callback_param", "instance"};
-    static char * kwlist[] = {kw[0], kw[1], kw[2], NULL};
-    if (!PyArg_ParseTupleAndKeywords(args, keywds, "sO|O!i:Register", kwlist, &pSzType, &pCallback, &PyDict_Type, &pCallparam, &nInstance))
+    static char kw[][32] = {"type", "callback", "callback_param", "buffer", "instance"};
+    static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], kw[4], NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, keywds, "sO|O!O!i:Register", kwlist, &pSzType, &pCallback,
+            &PyDict_Type, &pCallparam, PyTuple_Type, &pBuffer, &nInstance))
         return NULL;
     if (!PyCallable_Check(pCallback))
         return PyErr_Format(PyExc_TypeError, "callback parameter must be callable");
     LUT_PKT_TYPE::iterator it = g_lutPktType.find(pSzType);
     if (it == g_lutPktType.end())
         return PyErr_Format(PyExc_ValueError, "Invalid callback type (%s)", pSzType);
+    if (PyTuple_GET_SIZE(pBuffer) != 2)
+        return PyErr_Format(PyExc_ValueError, "Callback buffer must have 2 values");
+
+    PyObject * pValue = PyTuple_GetItem(pBuffer, 0);
+    long nBufferLen = 0;
+    if (PyInt_Check(pValue))
+        nBufferLen = PyInt_AsLong(pValue);
+    else
+        return PyErr_Format(PyExc_TypeError, "Invalid buffer_len in buffer; should be integer");
+
+    pValue = PyTuple_GetItem(pBuffer, 1);
+    long nBufferTimer = 0;
+    if (PyInt_Check(pValue))
+        nBufferTimer = PyInt_AsLong(pValue);
+    else
+        return PyErr_Format(PyExc_TypeError, "Invalid buffer_timer in buffer; should be integer");
+
     cbSdkPktType type = it->second;
     Py_XINCREF(pCallback);
     Py_XINCREF(pCallparam);
-    PyObject * my_callback = g_callback[type];
-    PyObject * my_callback_param = g_callback_param[type];
+    PyObject * my_callback = g_callback[nInstance][type];
+    PyObject * my_callback_param = g_callback_param[nInstance][type];
     g_gilState = PyGILState_Ensure();
+    g_callback_max_size[nInstance][type] = nBufferLen;
+    g_callback_max_timer[nInstance][type] = nBufferTimer;
     Py_XDECREF(my_callback);
     my_callback = pCallback;
-    g_callback[type] = my_callback;
+    g_callback[nInstance][type] = my_callback;
     Py_XDECREF(my_callback_param);
     my_callback_param = pCallparam;
-    g_callback_param[type] = my_callback_param;
+    g_callback_param[nInstance][type] = my_callback_param;
     PyGILState_Release(g_gilState);
 
     cbSdkResult sdkres = cbSdkCallbackStatus(nInstance, CBSDKCALLBACK_ALL);
