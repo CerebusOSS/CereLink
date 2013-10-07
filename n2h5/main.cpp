@@ -104,8 +104,8 @@ int AddRoot(FILE * pFile, hid_t file, NevHdr & isHdr)
     BmiRootAttr_t header;
     memset(&header, 0, sizeof(header));
     header.nMajorVersion = 1;
-    header.szApplication = isHdr.szApplication;
-    header.szComment = isHdr.szComment;
+    strncpy(header.szApplication, isHdr.szApplication, 32);
+    strncpy(header.szComment, isHdr.szComment, 256);
     header.nGroupCount = 1;
     {
         TIMSTM ts;
@@ -115,7 +115,7 @@ int AddRoot(FILE * pFile, hid_t file, NevHdr & isHdr)
                 st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute,
                 st.wSecond, st.wMilliseconds * 1000); 
         ts.chNull = '\0';
-        header.szDate = (char *)&ts;
+        strncpy(header.szDate, (char *)&ts, sizeof(ts));
     }
 
     return AddRoot(file, header);
@@ -135,9 +135,9 @@ int AddRoot(const char * szSrcFile, FILE * pFile, hid_t file, Nsx21Hdr & isHdr)
     BmiRootAttr_t header;
     memset(&header, 0, sizeof(header));
     header.nMajorVersion = 1;
-    header.szApplication = isHdr.szGroup;
+    strncpy(header.szApplication, isHdr.szGroup, 16);
     char szComment[] = ""; // Old format does not have a comment
-    header.szComment = szComment;
+    strncpy(header.szComment, szComment, 1024);
     header.nGroupCount = 1;
     TIMSTM ts;
     memset(&ts, 0, sizeof(ts));
@@ -182,8 +182,8 @@ int AddRoot(FILE * pFile, hid_t file, Nsx22Hdr & isHdr)
     BmiRootAttr_t header;
     memset(&header, 0, sizeof(header));
     header.nMajorVersion = 1;
-    header.szApplication = isHdr.szGroup;
-    header.szComment = isHdr.szComment;
+    strncpy(header.szApplication, isHdr.szGroup, 16);
+    strncpy(header.szComment, isHdr.szComment, 256);
     header.nGroupCount = 1;
     {
         TIMSTM ts;
@@ -193,7 +193,7 @@ int AddRoot(FILE * pFile, hid_t file, Nsx22Hdr & isHdr)
                 st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute,
                 st.wSecond, st.wMilliseconds * 1000); 
         ts.chNull = '\0';
-        header.szDate = (char *)&ts;
+        strncpy(header.szDate, (char *)&ts, sizeof(ts));
     }
 
     return AddRoot(file, header);
@@ -298,7 +298,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                 return 1;
             }
             id--;
-            chanAttr[id].szLabel = _strdup(isExtHdr.neulabel.label);
+            strncpy(chanAttr[id].szLabel, isExtHdr.neulabel.label, 16);
         }
         else if (0 == strncmp(isExtHdr.achPacketID, "NEUEVFLT", sizeof(isExtHdr.achPacketID)))
         {
@@ -320,7 +320,7 @@ int ConvertNev(FILE * pFile, hid_t file)
         {
             synchAttr.id = isExtHdr.id;
             synchAttr.fFps = isExtHdr.videosyn.fFps;
-            synchAttr.szLabel = _strdup(isExtHdr.videosyn.label);
+            strncpy(synchAttr.szLabel, isExtHdr.videosyn.label, 16);
         }
         else if (0 == strncmp(isExtHdr.achPacketID, "TRACKOBJ", sizeof(isExtHdr.achPacketID)))
         {
@@ -334,7 +334,7 @@ int ConvertNev(FILE * pFile, hid_t file)
             trackingAttr[id].type = isExtHdr.id; // 0-based type
             trackingAttr[id].trackID = isExtHdr.trackobj.trackID;
             trackingAttr[id].maxPoints = isExtHdr.trackobj.maxPoints;
-            trackingAttr[id].szLabel = _strdup(isExtHdr.trackobj.label);
+            strncpy(trackingAttr[id].szLabel, isExtHdr.trackobj.label, 16);
         }
         else if (0 == strncmp(isExtHdr.achPacketID, "MAPFILE", sizeof(isExtHdr.achPacketID)))
         {
@@ -356,7 +356,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                 printf("Invalid digital input mode in source file header\n");
                 return 1;
             }
-            chanAttr[id].szLabel = _strdup(isExtHdr.diglabel.label);
+            strncpy(chanAttr[id].szLabel, isExtHdr.diglabel.label, 16);
         } else {
             printf("Unknown header (%7s) in the source file\n", isExtHdr.achPacketID);
         }
@@ -381,7 +381,9 @@ int ConvertNev(FILE * pFile, hid_t file)
             hid_t tid_attr_map_str = H5Tcopy(H5T_C_S1);
             ret = H5Tset_size(tid_attr_map_str, 1024);
             hid_t aid = H5Acreate(gid_channel, "MapFile", tid_attr_map_str, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            ret = H5Awrite(aid, tid_attr_map_str, szMapFile);
+            char szMapFileRecord[1024] = {0};
+            strcpy(szMapFileRecord, szMapFile);
+            ret = H5Awrite(aid, tid_attr_map_str, szMapFileRecord);
             ret = H5Aclose(aid);
             H5Tclose(tid_attr_map_str);
         }
@@ -949,7 +951,7 @@ int ConvertNSx21(const char * szSrcFile, FILE * pFile, hid_t file)
             std::string strLabel = "chan";
             sprintf(szNum, "%u", id);
             strLabel += szNum;
-            chanAttr[i].szLabel = _strdup(strLabel.c_str());
+            strncpy(chanAttr[i].szLabel, strLabel.c_str(), 64);
             samplingAttr[i].fClock = 30000;
             // FIXME: This might be incorrect for really old file recordings
             // TODO: search the file to see if 14 is more accurate
@@ -1149,7 +1151,7 @@ int ConvertNSx22(FILE * pFile, hid_t file)
         filtAttr[i].lpfreq = isExtHdr.lpfreq;
         filtAttr[i].lporder = isExtHdr.lporder;
         filtAttr[i].lptype = isExtHdr.lptype;
-        chanAttr[i].szLabel = _strdup(isExtHdr.label);
+        strncpy(chanAttr[i].szLabel, isExtHdr.label, 16);
 
         chanExt2Attr[i].anamax = isExtHdr.anamax;
         chanExt2Attr[i].anamin = isExtHdr.anamin;
