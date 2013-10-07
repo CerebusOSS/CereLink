@@ -184,7 +184,7 @@ typedef struct {
     UINT16 coords[cbMAX_TRACKCOORDS];
 } BmiTracking_fl_t;
 
-hid_t CreateTrackingType(hid_t loc, int dim, int width, int maxLen = -1);
+hid_t CreateTrackingType(hid_t loc, int dim, int width);
 
 #define BMI_COMMENT_LEN 256
 // Comment or user event
