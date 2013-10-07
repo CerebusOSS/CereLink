@@ -73,7 +73,6 @@ hid_t CreateChanExtAttrType(hid_t loc)
         tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
         return tid;
     }
-    hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
 
     tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiChanExtAttr_t));
     ret = H5Tinsert(tid, "NanoVoltsPerLSB", offsetof(BmiChanExtAttr_t, dFactor), H5T_NATIVE_DOUBLE);
@@ -130,10 +129,8 @@ hid_t CreateChanExt2AttrType(hid_t loc)
         tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
         return tid;
     }
-    hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
-    ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
     hid_t tid_attr_unit_str = H5Tcopy(H5T_C_S1);
-    ret = H5Tset_size(tid_attr_unit_str, 16);
+    ret = H5Tset_size(tid_attr_unit_str, 64);
 
     tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiChanExt2Attr_t));
     ret = H5Tinsert(tid, "DigitalMin", offsetof(BmiChanExt2Attr_t, digmin), H5T_NATIVE_INT32);
@@ -145,7 +142,6 @@ hid_t CreateChanExt2AttrType(hid_t loc)
     ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
     H5Tclose(tid_attr_unit_str);
-    H5Tclose(tid_attr_vl_str);
 
     return tid;
 }
@@ -167,16 +163,16 @@ hid_t CreateChanAttrType(hid_t loc)
         tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
         return tid;
     }
-    hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
-    ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
+    hid_t tid_attr_label_str = H5Tcopy(H5T_C_S1);
+    ret = H5Tset_size(tid_attr_label_str, 64);
 
     tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiChanAttr_t));
     ret = H5Tinsert(tid, "ID", offsetof(BmiChanAttr_t, id), H5T_NATIVE_UINT16);
-    ret = H5Tinsert(tid, "Label", offsetof(BmiChanAttr_t, szLabel), tid_attr_vl_str);
+    ret = H5Tinsert(tid, "Label", offsetof(BmiChanAttr_t, szLabel), tid_attr_label_str);
 
     ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-    H5Tclose(tid_attr_vl_str);
+    H5Tclose(tid_attr_label_str);
     return tid;
 }
 
@@ -224,21 +220,24 @@ hid_t CreateRootAttrType(hid_t loc)
         tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
         return tid;
     }
-    hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
-    ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
+    hid_t tid_attr_str = H5Tcopy(H5T_C_S1);
+    ret = H5Tset_size(tid_attr_str, 64);
+    hid_t tid_attr_comment_str = H5Tcopy(H5T_C_S1);
+    ret = H5Tset_size(tid_attr_comment_str, 1024);
 
     tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiRootAttr_t));
     ret = H5Tinsert(tid, "MajorVersion", offsetof(BmiRootAttr_t, nMajorVersion), H5T_NATIVE_UINT32);
     ret = H5Tinsert(tid, "MinorVersion", offsetof(BmiRootAttr_t, nMinorVersion), H5T_NATIVE_UINT32);
     ret = H5Tinsert(tid, "Flags", offsetof(BmiRootAttr_t, nFlags), H5T_NATIVE_UINT32);
     ret = H5Tinsert(tid, "GroupCount", offsetof(BmiRootAttr_t, nGroupCount), H5T_NATIVE_UINT32);
-    ret = H5Tinsert(tid, "Date", offsetof(BmiRootAttr_t, szDate), tid_attr_vl_str); // date of the file creation
-    ret = H5Tinsert(tid, "Application", offsetof(BmiRootAttr_t, szApplication), tid_attr_vl_str); // application that created the file
-    ret = H5Tinsert(tid, "Comment", offsetof(BmiRootAttr_t, szComment), tid_attr_vl_str); // file comments
+    ret = H5Tinsert(tid, "Date", offsetof(BmiRootAttr_t, szDate), tid_attr_str); // date of the file creation
+    ret = H5Tinsert(tid, "Application", offsetof(BmiRootAttr_t, szApplication), tid_attr_str); // application that created the file
+    ret = H5Tinsert(tid, "Comment", offsetof(BmiRootAttr_t, szComment), tid_attr_comment_str); // file comments
 
     ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-    H5Tclose(tid_attr_vl_str);
+    H5Tclose(tid_attr_str);
+    H5Tclose(tid_attr_comment_str);
     return tid;
 }
 
@@ -259,17 +258,17 @@ hid_t CreateSynchAttrType(hid_t loc)
         tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
         return tid;
     }
-    hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
-    ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
+    hid_t tid_attr_label_str = H5Tcopy(H5T_C_S1);
+    ret = H5Tset_size(tid_attr_label_str, 64);
 
     tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiSynchAttr_t));
     ret = H5Tinsert(tid, "ID", offsetof(BmiSynchAttr_t, id), H5T_NATIVE_UINT16);
-    ret = H5Tinsert(tid, "Label", offsetof(BmiSynchAttr_t, szLabel), tid_attr_vl_str);
+    ret = H5Tinsert(tid, "Label", offsetof(BmiSynchAttr_t, szLabel), tid_attr_label_str);
     ret = H5Tinsert(tid, "FPS", offsetof(BmiSynchAttr_t, fFps), H5T_NATIVE_FLOAT);
 
     ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-    H5Tclose(tid_attr_vl_str);
+    H5Tclose(tid_attr_label_str);
     return tid;
 }
 
@@ -290,18 +289,18 @@ hid_t CreateTrackingAttrType(hid_t loc)
         tid = H5Topen(loc, strLink.c_str(), H5P_DEFAULT);
         return tid;
     }
-    hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
-    ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
+    hid_t tid_attr_label_str = H5Tcopy(H5T_C_S1);
+    ret = H5Tset_size(tid_attr_label_str, 128);
 
     tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiTrackingAttr_t));
-    ret = H5Tinsert(tid, "Label", offsetof(BmiTrackingAttr_t, szLabel), tid_attr_vl_str);
+    ret = H5Tinsert(tid, "Label", offsetof(BmiTrackingAttr_t, szLabel), tid_attr_label_str);
     ret = H5Tinsert(tid, "Type", offsetof(BmiTrackingAttr_t, type), H5T_NATIVE_UINT16);
     ret = H5Tinsert(tid, "TrackID", offsetof(BmiTrackingAttr_t, trackID), H5T_NATIVE_UINT16);
     ret = H5Tinsert(tid, "MaxPoints", offsetof(BmiTrackingAttr_t, maxPoints), H5T_NATIVE_UINT16);
 
     ret = H5Tcommit(loc, strLink.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-    H5Tclose(tid_attr_vl_str);
+    H5Tclose(tid_attr_label_str);
     return tid;
 }
 

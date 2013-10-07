@@ -378,12 +378,12 @@ int ConvertNev(FILE * pFile, hid_t file)
             gid_channel = H5Gcreate(file, "channel", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if (szMapFile != NULL)
         {
-            hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
-            ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
-            hid_t aid = H5Acreate(gid_channel, "MapFile", tid_attr_vl_str, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            ret = H5Awrite(aid, tid_attr_vl_str, szMapFile);
+            hid_t tid_attr_map_str = H5Tcopy(H5T_C_S1);
+            ret = H5Tset_size(tid_attr_map_str, 1024);
+            hid_t aid = H5Acreate(gid_channel, "MapFile", tid_attr_map_str, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+            ret = H5Awrite(aid, tid_attr_map_str, szMapFile);
             ret = H5Aclose(aid);
-            H5Tclose(tid_attr_vl_str);
+            H5Tclose(tid_attr_map_str);
         }
         if (g_bAppend)
         {
