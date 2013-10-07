@@ -488,7 +488,7 @@ hid_t CreateTrackingType(hid_t loc, int dim, int width)
     {
         tid = H5Topen(loc, strLabel.c_str(), H5P_DEFAULT);
     } else {
-        tid = H5Tcreate(H5T_COMPOUND, offsetof(BmiTracking_fl_t, coords) + dim * width * maxLen);
+        tid = H5Tcreate(H5T_COMPOUND, offsetof(BmiTracking_fl_t, coords) + dim * width * 1);
         ret = H5Tinsert(tid, "TimeStamp", offsetof(BmiTracking_fl_t, dwTimestamp), H5T_NATIVE_UINT32);
         ret = H5Tinsert(tid, "ParentID", offsetof(BmiTracking_fl_t, parentID), H5T_NATIVE_UINT16);
         ret = H5Tinsert(tid, "NodeCount", offsetof(BmiTracking_fl_t, nodeCount), H5T_NATIVE_UINT16);
