@@ -227,7 +227,7 @@ int ConvertNev(FILE * pFile, hid_t file)
     hid_t tid_dig = -1;
     hid_t tid_comment = -1;
     hid_t tid_tracking[cbMAXTRACKOBJ];
-    bool  bFixedLengthTracking[cbMAXTRACKOBJ];
+    int   size_tracking[cbMAXTRACKOBJ] = {0};
     hid_t tid_synch = -1;
     hid_t tid_sampling_attr = -1;
     hid_t tid_filt_attr = -1;
@@ -556,7 +556,6 @@ int ConvertNev(FILE * pFile, hid_t file)
         for (int i = 0; i < cbMAXTRACKOBJ; ++i)
         {
             tid_tracking[i] = -1;
-            bFixedLengthTracking[i] = false;
             if (trackingAttr[i].szLabel != NULL)
             {
                 bHasVideo = true;
@@ -582,13 +581,8 @@ int ConvertNev(FILE * pFile, hid_t file)
                     break;
                 }
                 // The only fixed length now is the case for single point tracking
-                if (trackingAttr[i].maxPoints == 1)
-                {
-                    bFixedLengthTracking[i] = true;
-                    tid_tracking[i] = CreateTrackingType(gid_video, dim, width,  1);
-                } else {
-                    tid_tracking[i] = CreateTrackingType(gid_video, dim, width);
-                }
+                tid_tracking[i] = CreateTrackingType(gid_video, dim, width);
+                size_tracking[i] = dim * width; // Size of each tracking element in bytes
                 char szNum[7];
                 std::string strLabel = "tracking";
                 sprintf(szNum, "%05u", trackingAttr[i].trackID);
@@ -862,22 +856,18 @@ int ConvertNev(FILE * pFile, hid_t file)
                             H5Gclose(gid);
                         }
 
-                        if (bFixedLengthTracking[id])
+                        // Flatten tracking array
+                        BmiTracking_fl_t tr;
+                        tr.dwTimestamp = nevData.dwTimestamp;
+                        tr.nodeCount = nevData.track.nodeCount;
+                        tr.parentID = nevData.track.parentID;
+                        if (size_tracking[id] > 0)
                         {
-                            BmiTracking_fl_t tr;
-                            tr.dwTimestamp = nevData.dwTimestamp;
-                            tr.nodeCount = nevData.track.nodeCount;
-                            tr.parentID = nevData.track.parentID;
-                            memcpy(tr.coords, &nevData.track.coords[0], sizeof(tr.coords));
-                            ret = H5PTappend(ptid_tracking[id], 1, &tr);
-                        } else {
-                            BmiTracking_t tr;
-                            tr.dwTimestamp = nevData.dwTimestamp;
-                            tr.nodeCount = nevData.track.nodeCount;
-                            tr.parentID = nevData.track.parentID;
-                            tr.coords.len = nevData.track.coordsLength;
-                            tr.coords.p = nevData.track.coords;
-                            ret = H5PTappend(ptid_tracking[id], 1, &tr);
+                            for (int i = 0; i < nevData.track.coordsLength; ++i)
+                            {
+                                memcpy(tr.coords, (char *)&nevData.track.coords[0] + i * size_tracking[id], size_tracking[id]);
+                                ret = H5PTappend(ptid_tracking[id], 1, &tr);
+                            }
                         }
                     }
                     break;
