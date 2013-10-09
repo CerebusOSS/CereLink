@@ -403,82 +403,45 @@ hid_t CreateTrackingType(hid_t loc, int dim, int width)
 {
     herr_t ret;
     hid_t tid_coords;
-    hsize_t     adims[2] = {1, 0};
     std::string strLabel = "BmiTracking";
+    // e.g. for 1D (32-bit) fixed-length, type name will be "BmiTracking32_1D_t"
+    //      for 2D (16-bit) fixed-length, type name will be "BmiTracking16_2D_t"
+
+    switch (width)
     {
-        hid_t tid;
-        // e.g. for 1D (32-bit) fixed-length, type name will be "BmiTracking32_1D_t"
-        //      for 2D (16-bit) fixed-length, type name will be "BmiTracking16_2D_t"
-        switch (width)
-        {
-        case 1:
-            strLabel += "8";
-            break;
-        case 2:
-            strLabel += "16";
-            break;
-        case 4:
-            strLabel += "32";
-            break;
-        default:
-            return 0;
-            // should not happen
-            break;
-        }
-        switch (dim)
-        {
-        case 1:
-            strLabel += "_1D";
-            switch (width)
-            {
-            case 1:
-                tid_coords = H5Tcopy(H5T_NATIVE_UINT8);
-                break;
-            case 2:
-                tid_coords = H5Tcopy(H5T_NATIVE_UINT16);
-                break;
-            case 4:
-                tid_coords = H5Tcopy(H5T_NATIVE_UINT32);
-                break;
-            }
-            break;
-        case 2:
-            strLabel += "_2D";
-            adims[1] = 2;
-            switch (width)
-            {
-            case 1:
-                tid_coords = H5Tarray_create(H5T_NATIVE_UINT8, 2, adims);
-                break;
-            case 2:
-                tid_coords = H5Tarray_create(H5T_NATIVE_UINT16, 2, adims);
-                break;
-            case 4:
-                tid_coords = H5Tarray_create(H5T_NATIVE_UINT32, 2, adims);
-                break;
-            }
-            break;
-        case 3:
-            strLabel += "_3D";
-            adims[1] = 3;
-            switch (width)
-            {
-            case 1:
-                tid_coords = H5Tarray_create(H5T_NATIVE_UINT8, 2, adims);
-                break;
-            case 2:
-                tid_coords = H5Tarray_create(H5T_NATIVE_UINT16, 2, adims);
-                break;
-            case 4:
-                tid_coords = H5Tarray_create(H5T_NATIVE_UINT32, 2, adims);
-                break;
-            }
-            break;
-        default:
-            return 0;
-            // should not happen
-            break;
-        }
+    hid_t tid;
+    case 1:
+        strLabel += "8";
+        tid_coords = H5Tcopy(H5T_NATIVE_UINT8);
+        break;
+    case 2:
+        strLabel += "16";
+        tid_coords = H5Tcopy(H5T_NATIVE_UINT16);
+        break;
+    case 4:
+        strLabel += "32";
+        tid_coords = H5Tcopy(H5T_NATIVE_UINT32);
+        break;
+    default:
+        return 0;
+        // should not happen
+        break;
+    }
+    switch (dim)
+    {
+    case 1:
+        strLabel += "_1D";
+        break;
+    case 2:
+        strLabel += "_2D";
+        break;
+    case 3:
+        strLabel += "_3D";
+        break;
+    default:
+        return 0;
+        // should not happen
+        break;
     }
     strLabel += "_t";
 
@@ -491,7 +454,9 @@ hid_t CreateTrackingType(hid_t loc, int dim, int width)
         ret = H5Tinsert(tid, "TimeStamp", offsetof(BmiTracking_fl_t, dwTimestamp), H5T_NATIVE_UINT32);
         ret = H5Tinsert(tid, "ParentID", offsetof(BmiTracking_fl_t, parentID), H5T_NATIVE_UINT16);
         ret = H5Tinsert(tid, "NodeCount", offsetof(BmiTracking_fl_t, nodeCount), H5T_NATIVE_UINT16);
-        ret = H5Tinsert(tid, "Coords", offsetof(BmiTracking_fl_t, coords), tid_coords);
+        char corrd_labels[3][2] = {"x", "y", "z"};
+        for (int i = 0; i < dim; ++i)
+            ret = H5Tinsert(tid, corrd_labels[i], offsetof(BmiTracking_fl_t, coords) + i * width, tid_coords);
         ret = H5Tcommit(loc, strLabel.c_str(), tid, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     }
 
