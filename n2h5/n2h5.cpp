@@ -130,7 +130,7 @@ hid_t CreateChanExt2AttrType(hid_t loc)
         return tid;
     }
     hid_t tid_attr_unit_str = H5Tcopy(H5T_C_S1);
-    ret = H5Tset_size(tid_attr_unit_str, 64);
+    ret = H5Tset_size(tid_attr_unit_str, 16);
 
     tid = H5Tcreate(H5T_COMPOUND, sizeof(BmiChanExt2Attr_t));
     ret = H5Tinsert(tid, "DigitalMin", offsetof(BmiChanExt2Attr_t, digmin), H5T_NATIVE_INT32);
