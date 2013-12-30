@@ -454,6 +454,7 @@ hid_t CreateTrackingType(hid_t loc, int dim, int width)
         ret = H5Tinsert(tid, "TimeStamp", offsetof(BmiTracking_fl_t, dwTimestamp), H5T_NATIVE_UINT32);
         ret = H5Tinsert(tid, "ParentID", offsetof(BmiTracking_fl_t, parentID), H5T_NATIVE_UINT16);
         ret = H5Tinsert(tid, "NodeCount", offsetof(BmiTracking_fl_t, nodeCount), H5T_NATIVE_UINT16);
+        ret = H5Tinsert(tid, "ElapsedTime", offsetof(BmiTracking_fl_t, etime), H5T_NATIVE_UINT32);
         char corrd_labels[3][2] = {"x", "y", "z"};
         for (int i = 0; i < dim; ++i)
             ret = H5Tinsert(tid, corrd_labels[i], offsetof(BmiTracking_fl_t, coords) + i * width, tid_coords);

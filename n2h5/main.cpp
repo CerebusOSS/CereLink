@@ -58,6 +58,9 @@ bool g_bAppend = false;
 bool g_bNoSpikes = false;
 bool g_bSkipEmpty = false;
 
+// Keep last synch packet
+BmiSynch_t g_synch = {0};
+
 // Author & Date:   Ehsan Azar   Jan 16, 2013
 // Purpose: Add created header to the hdf file
 // Inputs:
@@ -817,12 +820,11 @@ int ConvertNev(FILE * pFile, hid_t file)
                             ptid_synch = H5PTcreate_fl(gid, "synch_set", tid_synch, chunk_size, compression);
                             H5Gclose(gid);
                         }
-                        BmiSynch_t synch;
-                        synch.dwTimestamp = nevData.dwTimestamp;
-                        synch.etime = nevData.synch.etime;
-                        synch.frame = nevData.synch.frame;
-                        synch.split = nevData.synch.split;
-                        ret = H5PTappend(ptid_synch, 1, &synch);
+                        g_synch.dwTimestamp = nevData.dwTimestamp;
+                        g_synch.etime = nevData.synch.etime;
+                        g_synch.frame = nevData.synch.frame;
+                        g_synch.split = nevData.synch.split;
+                        ret = H5PTappend(ptid_synch, 1, &g_synch);
                     }
                     break;
                 case 0xFFFD: // found a video tracking event
@@ -863,6 +865,8 @@ int ConvertNev(FILE * pFile, hid_t file)
                         tr.dwTimestamp = nevData.dwTimestamp;
                         tr.nodeCount = nevData.track.nodeCount;
                         tr.parentID = nevData.track.parentID;
+                        // Use last synch packet to augment the data
+                        tr.etime = g_synch.etime;
                         if (size_tracking[id] > 0)
                         {
                             for (int i = 0; i < nevData.track.coordsLength; ++i)

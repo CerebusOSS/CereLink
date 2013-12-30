@@ -180,6 +180,7 @@ typedef struct {
     UINT32 dwTimestamp;
     UINT16 parentID;
     UINT16 nodeCount;
+    UINT32 etime;
     // This must be the last
     UINT16 coords[cbMAX_TRACKCOORDS];
 } BmiTracking_fl_t;
