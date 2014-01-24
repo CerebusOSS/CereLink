@@ -62,6 +62,7 @@
 #endif
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #define _strcmpi strcasecmp
 #define _strnicmp strncasecmp
 #define _snprintf snprintf
