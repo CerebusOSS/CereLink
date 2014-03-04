@@ -612,26 +612,26 @@ static PyObject * cbpy_open(PyObject *self, PyObject *args, PyObject *keywds)
             case CONNECTION_PARAM_INST_ADDR:
                 if (PyUnicode_Check(pValue))
                     return PyErr_Format(PyExc_TypeError, "Invalid instrument IP address; unicode not supported yet");
-                con.szInIP = PyString_AsString(pValue);
-                if (con.szInIP == NULL)
+                con.szOutIP = PyString_AsString(pValue);
+                if (con.szOutIP == NULL)
                     return PyErr_Format(PyExc_TypeError, "Invalid instrument IP address; should be string");
                 break;
             case CONNECTION_PARAM_INST_PORT:
                 if (PyInt_Check(pValue))
-                    con.nInPort = PyInt_AsLong(pValue);
+                    con.nOutPort = PyInt_AsLong(pValue);
                 else
                     return PyErr_Format(PyExc_TypeError, "Invalid instrument port number; should be integer");
                 break;
             case CONNECTION_PARAM_CLIENT_ADDR:
                 if (PyUnicode_Check(pValue))
                     return PyErr_Format(PyExc_TypeError, "Invalid client IP address; unicode not supported yet");
-                con.szOutIP = PyString_AsString(pValue);
-                if (con.szOutIP == NULL)
+                con.szInIP = PyString_AsString(pValue);
+                if (con.szInIP == NULL)
                     return PyErr_Format(PyExc_TypeError, "Invalid client IP address; should be string");
                 break;
             case CONNECTION_PARAM_CLIENT_PORT:
                 if (PyInt_Check(pValue))
-                    con.nOutPort = PyInt_AsLong(pValue);
+                    con.nInPort = PyInt_AsLong(pValue);
                 else
                     return PyErr_Format(PyExc_TypeError, "Invalid client port number; should be integer");
                 break;
