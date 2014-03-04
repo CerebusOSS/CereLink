@@ -499,9 +499,9 @@ void OnOpen(
         instType = CBSDKINSTRUMENT_COUNT;
     if (nlhs > 0)
     {
-        plhs[0] = mxCreateScalarDouble(conType);
+        plhs[0] = mxCreateDoubleScalar(conType);
         if (nlhs > 1)
-            plhs[1] = mxCreateScalarDouble(instType);
+            plhs[1] = mxCreateDoubleScalar(instType);
     }
 
     char strConnection[CBSDKCONNECTION_COUNT + 1][8] = {"Default", "Central", "Udp", "Closed", "Unknown"};
@@ -649,7 +649,7 @@ void OnTime(
     cbSdkResult res = cbSdkGetTime(nInstance, &cbtime);
     PrintErrorSDK(res, "cbSdkGetTime()");
 
-    plhs[0] = mxCreateScalarDouble(bSamples ? cbtime : cbSdk_SECONDS_PER_TICK * cbtime);
+    plhs[0] = mxCreateDoubleScalar(bSamples ? cbtime : cbSdk_SECONDS_PER_TICK * cbtime);
 }
 
 // Author & Date:   Kirk Korver     13 Jun 2005
@@ -787,12 +787,12 @@ void OnChanLabel(
             {
                 for (int i = 0; i < 6; ++i)
                 {
-                    mxSetCell(pca, ch - 1 + count * (i + 1), mxCreateScalarDouble(bValid[i]));
+                    mxSetCell(pca, ch - 1 + count * (i + 1), mxCreateDoubleScalar(bValid[i]));
                 }
             }
             else if ( (ch == MAX_CHANS_DIGITAL_IN) || (ch == MAX_CHANS_SERIAL) )
             {
-                mxSetCell(pca, ch - 1 + count, mxCreateScalarDouble(bValid[0]));
+                mxSetCell(pca, ch - 1 + count, mxCreateDoubleScalar(bValid[0]));
             }
         }
         plhs[0] = pca;
@@ -1009,7 +1009,7 @@ void OnTrialConfig(
 
     // process first output argument if available
     if (nlhs > 0)
-        plhs[0] = mxCreateScalarDouble( (double)bWithinTrial );
+        plhs[0] = mxCreateDoubleScalar( (double)bWithinTrial );
 
     // process second output argument if available
     if (nlhs > 1)
@@ -1211,8 +1211,8 @@ void OnTrialData(
         {
             trialcont.samples[channel] = NULL;
             UINT32 num_samples = trialcont.num_samples[channel];
-            mxSetCell(pca, channel, mxCreateScalarDouble(trialcont.chan[channel]));
-            mxSetCell(pca, channel + trialcont.count, mxCreateScalarDouble(trialcont.sample_rates[channel]));
+            mxSetCell(pca, channel, mxCreateDoubleScalar(trialcont.chan[channel]));
+            mxSetCell(pca, channel + trialcont.count, mxCreateDoubleScalar(trialcont.sample_rates[channel]));
             mxArray *mxa;
             if (bTrialDouble)
                 mxa = mxCreateDoubleMatrix(num_samples, 1, mxREAL);
@@ -1238,7 +1238,7 @@ void OnTrialData(
     if (nlhs >= 2)
     {
         // Buffers are already filled
-        plhs[nlhs - 2] = mxCreateScalarDouble(cbSdk_SECONDS_PER_TICK * trialcont.time);
+        plhs[nlhs - 2] = mxCreateDoubleScalar(cbSdk_SECONDS_PER_TICK * trialcont.time);
     }
 }
 
@@ -1621,7 +1621,7 @@ void OnFileConfig(
         bool bRecording = false;
         res = cbSdkGetFileConfig(nInstance, filename, username, &bRecording);
         PrintErrorSDK(res, "cbSdkGetFileConfig()");
-        plhs[0] = mxCreateScalarDouble(bRecording);
+        plhs[0] = mxCreateDoubleScalar(bRecording);
         if (nlhs > 1)
             plhs[1] = mxCreateString(filename);
         if (nlhs > 2)
@@ -2669,46 +2669,46 @@ void OnConfig(
         mxArray *pca = mxCreateCellMatrix(count, 2);
         plhs[0] = pca;
         mxSetCell(pca, 0, mxCreateString("userflags"));
-        mxSetCell(pca, count + 0, mxCreateScalarDouble(chaninfo.userflags));
+        mxSetCell(pca, count + 0, mxCreateDoubleScalar(chaninfo.userflags));
 
         mxSetCell(pca, 1, mxCreateString("smpfilter"));
-        mxSetCell(pca, count + 1, mxCreateScalarDouble(chaninfo.smpfilter));
+        mxSetCell(pca, count + 1, mxCreateDoubleScalar(chaninfo.smpfilter));
 
         mxSetCell(pca, 2, mxCreateString("smpgroup"));
-        mxSetCell(pca, count + 2, mxCreateScalarDouble(chaninfo.smpgroup));
+        mxSetCell(pca, count + 2, mxCreateDoubleScalar(chaninfo.smpgroup));
 
         mxSetCell(pca, 3, mxCreateString("spkfilter"));
-        mxSetCell(pca, count + 3, mxCreateScalarDouble(chaninfo.spkfilter));
+        mxSetCell(pca, count + 3, mxCreateDoubleScalar(chaninfo.spkfilter));
 
         mxSetCell(pca, 4, mxCreateString("spkgroup"));
-        mxSetCell(pca, count + 4, mxCreateScalarDouble(chaninfo.spkgroup));
+        mxSetCell(pca, count + 4, mxCreateDoubleScalar(chaninfo.spkgroup));
 
         mxSetCell(pca, 5, mxCreateString("spkthrlevel"));
-        mxSetCell(pca, count + 5, mxCreateScalarDouble(chaninfo.spkthrlevel));
+        mxSetCell(pca, count + 5, mxCreateDoubleScalar(chaninfo.spkthrlevel));
 
         mxSetCell(pca, 6, mxCreateString("amplrejpos"));
-        mxSetCell(pca, count + 6, mxCreateScalarDouble(chaninfo.amplrejpos));
+        mxSetCell(pca, count + 6, mxCreateDoubleScalar(chaninfo.amplrejpos));
 
         mxSetCell(pca, 7, mxCreateString("amplrejneg"));
-        mxSetCell(pca, count + 7, mxCreateScalarDouble(chaninfo.amplrejneg));
+        mxSetCell(pca, count + 7, mxCreateDoubleScalar(chaninfo.amplrejneg));
 
         mxSetCell(pca, 8, mxCreateString("refelecchan"));
-        mxSetCell(pca, count + 8, mxCreateScalarDouble(chaninfo.refelecchan));
+        mxSetCell(pca, count + 8, mxCreateDoubleScalar(chaninfo.refelecchan));
 
         mxSetCell(pca, 9, mxCreateString("analog_unit"));
         mxSetCell(pca, count + 9, mxCreateString(chaninfo.physcalin.anaunit));
 
         mxSetCell(pca, 10, mxCreateString("max_analog"));
-        mxSetCell(pca, count + 10, mxCreateScalarDouble(chaninfo.physcalin.anamax));
+        mxSetCell(pca, count + 10, mxCreateDoubleScalar(chaninfo.physcalin.anamax));
 
         mxSetCell(pca, 11, mxCreateString("max_digital"));
-        mxSetCell(pca, count + 11, mxCreateScalarDouble(chaninfo.physcalin.digmax));
+        mxSetCell(pca, count + 11, mxCreateDoubleScalar(chaninfo.physcalin.digmax));
 
         mxSetCell(pca, 12, mxCreateString("min_analog"));
-        mxSetCell(pca, count + 12, mxCreateScalarDouble(chaninfo.physcalin.anamin));
+        mxSetCell(pca, count + 12, mxCreateDoubleScalar(chaninfo.physcalin.anamin));
 
         mxSetCell(pca, 13, mxCreateString("min_digital"));
-        mxSetCell(pca, count + 13, mxCreateScalarDouble(chaninfo.physcalin.digmin));
+        mxSetCell(pca, count + 13, mxCreateDoubleScalar(chaninfo.physcalin.digmin));
     }
 
     // if new configuration to send
