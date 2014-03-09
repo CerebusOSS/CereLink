@@ -171,6 +171,10 @@ IF( WIN32 )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} ws2_32 winmm )
 ENDIF( WIN32 )
 
+# Install headers
+set(HEADERS "../cbmex/cbsdk.h" "../cbhwlib/cbhwlib.h")
+install(FILES ${HEADERS} DESTINATION include)
+
 ADD_CUSTOM_COMMAND(
 	TARGET "${LIB_NAME}"
 	POST_BUILD
