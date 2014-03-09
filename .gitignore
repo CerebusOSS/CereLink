@@ -1,5 +1,7 @@
 dist/
 
+.*
+*.*~
 *.obj/
 *.dir/
 *.user
@@ -22,3 +24,4 @@ Debug/
 Release/
 .settings/
 .metadata/
+
