@@ -17,7 +17,7 @@ if build_ext:
                             ['cerebus/cbpyw.pyx',
                              'cerebus/cbpy.cpp', 
                             ],
-                            libraries=["cbsdk_static"],
+                            libraries=["cbsdk_static", "QtCore", "QtXml"],
                             include_dirs=[numpy.get_include()],
                             language="c++",             # generate C++ code
     )
@@ -27,7 +27,7 @@ else:
                             ['cerebus/cbpyw.cpp',
                              'cerebus/cbpy.cpp', 
                             ],
-                            libraries=["cbsdk_static"],
+                            libraries=["cbsdk_static", "QtCore", "QtXml"],
                             include_dirs=[numpy.get_include()],
     )
     
