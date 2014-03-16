@@ -934,10 +934,7 @@ PyDoc_STRVAR(cbpy_trial_config__doc__,
 "           'end_value': value to end polling\n"
 "   instance - (optional) library instance number\n"
 "Outputs:\n"
-"   dictionary with the following keys\n"
-"       'label': string, current label of channel\n"
-"       'enabled': boolean, if channel is enabled\n"
-"       'valid_unit': array, valid spike units\n");
+"   active- (boolean) if it is active\n");
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Configure trial settings

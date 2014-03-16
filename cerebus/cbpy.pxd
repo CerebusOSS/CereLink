@@ -7,7 +7,7 @@ Purpose: C interface for cbpy wrapper
 
 '''
 
-from libc.stdint cimport uint32_t
+from libc.stdint cimport uint32_t, uint16_t
 
 cdef extern from "cbpy.h":
     
@@ -53,3 +53,28 @@ cdef extern from "cbpy.h":
         
     int cbpy_gettype(int nInstance, cbSdkConnectionType * conType, cbSdkInstrumentType * instType)
     
+    ctypedef struct cbSdkConfigParam:
+        uint32_t bActive
+        uint16_t Begchan
+        uint32_t Begmask
+        uint32_t Begval
+        uint16_t Endchan
+        uint32_t Endmask
+        uint32_t Endval
+        int bDouble
+        uint32_t uWaveforms
+        uint32_t uConts
+        uint32_t uEvents
+        uint32_t uComments
+        uint32_t uTrackings
+        int bAbsolute
+    
+    cdef enum sdk_bufer_range:
+        cbSdk_CONTINUOUS_DATA_SAMPLES = 102400
+        cbSdk_EVENT_DATA_SAMPLES = (2 * 8192)
+                    
+    int cbpy_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param)
+    int cbpy_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
+    
+    
+            

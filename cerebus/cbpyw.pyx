@@ -124,4 +124,66 @@ def connection(instance = 0):
         inst_idx = len(instruments) - 1
         
     return {'connection':connections[con_idx],'instrument':instruments[inst_idx]}
+
+def trial_config(instance=0, reset=True, 
+                 buffer_parameter={}, 
+                 range_parameter={'continuous_length':cbSdk_CONTINUOUS_DATA_SAMPLES,
+                                  'event_length':cbSdk_EVENT_DATA_SAMPLES}):
+    '''Configure trial settings.
+    Inputs:
+       reset - boolean, set True to flush data cache and start collecting data immediately,
+               set False to stop collecting data immediately
+       buffer_parameter - (optional) dictionary with following keys (all optional)
+               'double': boolean, if specified, the data is in double precision format
+               'absolute': boolean, if specified event timing is absolute (new polling will not reset time for events)
+               'continuous_length': set the number of continuous data to be cached
+               'event_length': set the number of events to be cached
+               'comment_length': set number of comments to be cached
+               'tracking_length': set the number of video tracking events to be cached
+       range_parameter - (optional) dictionary with following keys (all optional)
+               'begin_channel': integer, channel to start polling if certain value seen
+               'begin_mask': integer, channel mask to start polling if certain value seen
+               'begin_value': value to start polling
+               'end_channel': channel to end polling if certain value seen
+               'end_mask': channel mask to end polling if certain value seen
+               'end_value': value to end polling
+       instance - (optional) library instance number
+    Outputs:
+       reset - (boolean) if it is reset
+    '''    
+    
+    cdef int res
+    cdef cbSdkConfigParam cfg_param
+    cfg_param.bActive = reset
+    
+    res = cbpy_get_trial_config(<int>instance, &cfg_param)
+    if res < 0:
+        # Make this raise error classes
+        raise RuntimeError("error %d" % res)
+    
+    # retrieve old values
+    res = cbpy_get_trial_config(<int>instance, &cfg_param)
+    
+    cfg_param.bDouble = buffer_parameter.get('double', 0)
+    cfg_param.uWaveforms = 0 # does not work ayways
+    cfg_param.uConts = buffer_parameter.get('continuous_length', 0)
+    cfg_param.uEvents = buffer_parameter.get('event_length', 0)
+    cfg_param.uComments = buffer_parameter.get('comment_length', 0)
+    cfg_param.uTrackings = buffer_parameter.get('tracking_length', 0)
+    cfg_param.bAbsolute = buffer_parameter.get('absolute', 0)
+    
+    
+    cfg_param.Begchan = range_parameter.get('begin_channel', 0)
+    cfg_param.Begmask = range_parameter.get('begin_mask', 0)
+    cfg_param.Begval = range_parameter.get('begin_value', 0)
+    cfg_param.Endchan = range_parameter.get('end_channel', 0)
+    cfg_param.Endmask = range_parameter.get('end_mask', 0)
+    cfg_param.Endval = range_parameter.get('end_value', 0)
+    
+    res = cbpy_set_trial_config(<int>instance, &cfg_param)
+    if res < 0:
+        # Make this raise error classes
+        raise RuntimeError("error %d" % res)
+    
+    return res, reset
     
