@@ -7,9 +7,9 @@ try:
     from Cython.Distutils import build_ext
 except ImportError:
     build_ext = None
+import numpy
 
 CYTHON_REQUIREMENT = 'Cython==0.19.1'
-
 
 if build_ext:
     cbpy_module = Extension(
@@ -18,6 +18,7 @@ if build_ext:
                              'cerebus/cbpy.cpp', 
                             ],
                             libraries=["cbsdk_static"],
+                            include_dirs=[numpy.get_include()],
                             language="c++",             # generate C++ code
     )
 else:
@@ -26,7 +27,8 @@ else:
                             ['cerebus/cbpyw.cpp',
                              'cerebus/cbpy.cpp', 
                             ],
-                            libraries=["cbsdk_static"]
+                            libraries=["cbsdk_static"],
+                            include_dirs=[numpy.get_include()],
     )
     
     class build_ext(_build_ext.build_ext):
