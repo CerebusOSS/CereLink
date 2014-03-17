@@ -187,3 +187,37 @@ def trial_config(instance=0, reset=True,
     
     return res, reset
     
+def trial_event(instance = 0, reset=False):
+    '''
+    Trial spike and event data.
+    Inputs:
+       reset - (optional) boolean 
+               set False (default) to leave buffer intact.
+               set True to clear all the data and reset the trial time to the current time.
+       instance - (optional) library instance number
+    Outputs:
+       list of arrays [channel, digital_events] or [channel, unit0_ts, ..., unitN_ts]
+           channel: integer, channel number (1-based)
+           digital_events: array, digital event values for channel (if a digital or serial channel)
+           unitN_ts: array, spike timestamps of unit N for channel (if an electrode channel));
+    '''
+    
+    cdef int res
+    cdef cbSdkTrialEvent trialevent
+    
+    trial = []
+    
+    res = cbpy_init_trial_event(<int>instance, &trialevent)
+    if res < 0:
+        # Make this raise error classes
+        raise RuntimeError("error %d" % res)
+    
+    # allocate memory
+    raise NotImplementedError('needs work')
+    
+    # get the trial
+    res = cbpy_get_trial_event(<int>instance, <int>reset, &trialevent) 
+
+    return res, trial
+    
+        
