@@ -75,6 +75,21 @@ cdef extern from "cbpy.h":
                     
     int cbpy_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param)
     int cbpy_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
+
+    cdef enum cbhwlib_consts:
+        cbNUM_FE_CHANS = 128
+        cbNUM_ANAIN_CHANS = 16
+        cbNUM_ANALOG_CHANS =  (128+16)
+        cbMAXUNITS = 5
     
+    ctypedef struct cbSdkTrialEvent:
+        uint16_t count
+        uint16_t chan[cbNUM_ANALOG_CHANS + 2]
+        uint32_t num_samples[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1]
+        void * timestamps[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1]
+        void * waveforms[cbNUM_ANALOG_CHANS + 2]
+    
+    int cbpy_init_trial_event(int nInstance, cbSdkTrialEvent * tiralevent)
+    int cbpy_get_trial_event(int nInstance, int reset, cbSdkTrialEvent * tiralevent)
     
             

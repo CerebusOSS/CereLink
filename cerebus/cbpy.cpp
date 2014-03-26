@@ -5,6 +5,8 @@
  * @author: dashesy
  */
 
+#include <string.h>
+
 #include "cbpy.h"
 
 int cbpy_version(int nInstance, cbSdkVersion *ver)
@@ -50,6 +52,25 @@ int cbpy_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
             pcfg_param->uConts, pcfg_param->uEvents, pcfg_param->uComments,
             pcfg_param->uTrackings,
             pcfg_param->bAbsolute);
+
+    return sdkres;
+}
+
+int cbpy_init_trial_event(int nInstance, cbSdkTrialEvent * trialevent)
+{
+    bool bDouble;
+    cbSdkResult sdkres = cbSdkGetTrialConfig(nInstance, 0, 0, 0, 0, 0, 0, 0, &bDouble);
+    if (sdkres != CBSDKRESULT_SUCCESS)
+        return sdkres;
+    memset(trialevent, 0, sizeof(*trialevent));
+    sdkres = cbSdkInitTrialData(nInstance, trialevent, 0, 0, 0);
+
+    return sdkres;
+}
+
+int cbpy_get_trial_event(int nInstance, bool reset, cbSdkTrialEvent * trialevent)
+{
+    cbSdkResult sdkres = cbSdkGetTrialData(nInstance, reset, trialevent, 0, 0, 0);
 
     return sdkres;
 }
