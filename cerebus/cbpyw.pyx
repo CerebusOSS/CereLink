@@ -88,9 +88,9 @@ def open(instance = 0, connection='default', parameter={}):
         # Make this raise error classes
         raise RuntimeError("error %d" % res)
     
-    return res, connection(instance=instance)
+    return res, get_connection_type(instance=instance)
     
-def connection(instance = 0):
+def get_connection_type(instance = 0):
     ''' Get connection type
     Inputs:
        instance - (optional) library instance number
