@@ -68,7 +68,7 @@ def open(instance = 0, connection='default', parameter={}):
     
     wconType = {'default': CBSDKCONNECTION_DEFAULT, 'slave': CBSDKCONNECTION_CENTRAL, 'master': CBSDKCONNECTION_UDP} 
     if not connection in wconType.keys():
-        raise RuntimeError("invalid connection %S" % connection)
+        raise RuntimeError("invalid connection %s" % connection)
      
     cdef cbSdkConnectionType conType = wconType[connection]
     cdef cbSdkConnection con
@@ -127,8 +127,7 @@ def connection(instance = 0):
 
 def trial_config(instance=0, reset=True, 
                  buffer_parameter={}, 
-                 range_parameter={'continuous_length':cbSdk_CONTINUOUS_DATA_SAMPLES,
-                                  'event_length':cbSdk_EVENT_DATA_SAMPLES}):
+                 range_parameter={}):
     '''Configure trial settings.
     Inputs:
        reset - boolean, set True to flush data cache and start collecting data immediately,
@@ -166,8 +165,8 @@ def trial_config(instance=0, reset=True,
     
     cfg_param.bDouble = buffer_parameter.get('double', 0)
     cfg_param.uWaveforms = 0 # does not work ayways
-    cfg_param.uConts = buffer_parameter.get('continuous_length', 0)
-    cfg_param.uEvents = buffer_parameter.get('event_length', 0)
+    cfg_param.uConts = buffer_parameter.get('continuous_length', cbSdk_CONTINUOUS_DATA_SAMPLES)
+    cfg_param.uEvents = buffer_parameter.get('event_length', cbSdk_EVENT_DATA_SAMPLES)
     cfg_param.uComments = buffer_parameter.get('comment_length', 0)
     cfg_param.uTrackings = buffer_parameter.get('tracking_length', 0)
     cfg_param.bAbsolute = buffer_parameter.get('absolute', 0)
