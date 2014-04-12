@@ -127,7 +127,8 @@ def get_connection_type(instance = 0):
 
 def trial_config(instance=0, reset=True, 
                  buffer_parameter={}, 
-                 range_parameter={}):
+                 range_parameter={},
+                 noevent=0,nocontinuous=0):
     '''Configure trial settings.
     Inputs:
        reset - boolean, set True to flush data cache and start collecting data immediately,
@@ -146,6 +147,8 @@ def trial_config(instance=0, reset=True,
                'end_channel': channel to end polling if certain value seen
                'end_mask': channel mask to end polling if certain value seen
                'end_value': value to end polling
+       'noevent': equivalant of setting 'event_length' to 0
+       'nocontinuous': equivalant of setting 'continuous_length' to 0
        instance - (optional) library instance number
     Outputs:
        reset - (boolean) if it is reset
@@ -161,11 +164,11 @@ def trial_config(instance=0, reset=True,
         # Make this raise error classes
         raise RuntimeError("error %d" % res)
     
-    
+
     cfg_param.bDouble = buffer_parameter.get('double', cfg_param.bDouble)
     cfg_param.uWaveforms = 0 # does not work ayways
-    cfg_param.uConts = buffer_parameter.get('continuous_length', cbSdk_CONTINUOUS_DATA_SAMPLES)
-    cfg_param.uEvents = buffer_parameter.get('event_length', cbSdk_EVENT_DATA_SAMPLES)
+    cfg_param.uConts = 0 if nocontinuous else buffer_parameter.get('continuous_length', cbSdk_CONTINUOUS_DATA_SAMPLES)
+    cfg_param.uEvents = 0 if noevent else buffer_parameter.get('event_length', cbSdk_EVENT_DATA_SAMPLES)
     cfg_param.uComments = buffer_parameter.get('comment_length', 0)
     cfg_param.uTrackings = buffer_parameter.get('tracking_length', 0)
     cfg_param.bAbsolute = buffer_parameter.get('absolute', 0)
