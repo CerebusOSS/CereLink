@@ -60,7 +60,7 @@ int cbpy_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
 int cbpy_init_trial_event(int nInstance, cbSdkTrialEvent * trialevent)
 {
     memset(trialevent, 0, sizeof(*trialevent));
-    sdkres = cbSdkInitTrialData(nInstance, trialevent, 0, 0, 0);
+    cbSdkResult sdkres = cbSdkInitTrialData(nInstance, trialevent, 0, 0, 0);
 
     return sdkres;
 }
