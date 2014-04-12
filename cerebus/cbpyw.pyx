@@ -155,15 +155,14 @@ def trial_config(instance=0, reset=True,
     cdef cbSdkConfigParam cfg_param
     cfg_param.bActive = reset
     
+    # retrieve old values
     res = cbpy_get_trial_config(<int>instance, &cfg_param)
     if res < 0:
         # Make this raise error classes
         raise RuntimeError("error %d" % res)
     
-    # retrieve old values
-    res = cbpy_get_trial_config(<int>instance, &cfg_param)
     
-    cfg_param.bDouble = buffer_parameter.get('double', 0)
+    cfg_param.bDouble = buffer_parameter.get('double', cfg_param.bDouble)
     cfg_param.uWaveforms = 0 # does not work ayways
     cfg_param.uConts = buffer_parameter.get('continuous_length', cbSdk_CONTINUOUS_DATA_SAMPLES)
     cfg_param.uEvents = buffer_parameter.get('event_length', cbSdk_EVENT_DATA_SAMPLES)
@@ -195,24 +194,74 @@ def trial_event(instance = 0, reset=False):
                set True to clear all the data and reset the trial time to the current time.
        instance - (optional) library instance number
     Outputs:
-       list of arrays [channel, digital_events] or [channel, unit0_ts, ..., unitN_ts]
+       list of arrays [channel, {'timestamps':[unit0_ts, ..., unitN_ts], 'events':digital_events}]
            channel: integer, channel number (1-based)
            digital_events: array, digital event values for channel (if a digital or serial channel)
            unitN_ts: array, spike timestamps of unit N for channel (if an electrode channel));
     '''
     
     cdef int res
+    cdef cbSdkConfigParam cfg_param
     cdef cbSdkTrialEvent trialevent
     
     trial = []
     
+    # retrieve old values
+    res = cbpy_get_trial_config(<int>instance, &cfg_param)
+    if res < 0:
+        # Make this raise error classes
+        raise RuntimeError("error %d" % res)
+    
+    # get how many samples are avaialble
     res = cbpy_init_trial_event(<int>instance, &trialevent)
     if res < 0:
         # Make this raise error classes
         raise RuntimeError("error %d" % res)
     
+    if trialevent.count == 0:
+        return res, trial
+    
+    
+    cdef np.double_t[:] mxa_d
+    cdef np.uint32_t[:] mxa_u32
+    cdef np.uint16_t[:] mxa_u16
+    
     # allocate memory
-    raise NotImplementedError('needs work')
+    for channel in range(trialevent.count):
+        ch = trialevent.chan[channel] # Actual channel number
+        
+        timestamps = []
+        # Fill timestamps for non-empty channels
+        for u in range(cbMAXUNITS+1):
+            trialevent.timestamps[channel][u] = NULL
+            num_samples = trialevent.num_samples[channel][u]
+            ts = []
+            if num_samples:
+                if cfg_param.bDouble:
+                    mxa_d = np.zeros(num_samples, dtype=np.double)
+                    trialevent.timestamps[channel][u] = <void *>&mxa_d[0]
+                    ts = np.asarray(mxa_d)
+                else:
+                    mxa_u32 = np.zeros(num_samples, dtype=np.uint32)
+                    trialevent.timestamps[channel][u] = <void *>&mxa_u32[0]
+                    ts = np.asarray(mxa_u32)
+            timestamps.append(ts)
+        
+        dig_events = []
+        # Fill values for non-empty digital or serial channels
+        if ch == MAX_CHANS_DIGITAL_IN or ch == MAX_CHANS_SERIAL:
+            num_samples = trialevent.num_samples[channel][0]
+            if num_samples:
+                if cfg_param.bDouble:
+                    mxa_d = np.zeros(num_samples, dtype=np.double)
+                    trialevent.waveforms[channel] = <void *>&mxa_d[0]
+                    dig_events = np.asarray(mxa_d)
+                else:
+                    mxa_u16 = np.zeros(num_samples, dtype=np.uint16)
+                    trialevent.waveforms[channel] = <void *>&mxa_u16[0]
+                    dig_events = np.asarray(mxa_u16)
+        
+        trial.append([ch, {'timestamps':timestamps, 'events':dig_events}])
     
     # get the trial
     res = cbpy_get_trial_event(<int>instance, <int>reset, &trialevent) 
