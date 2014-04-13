@@ -352,7 +352,7 @@ def trial_continuous(instance = 0, reset=False):
     return res, trial
     
 def file_config(instance = 0, command='info', comment='', filename=''):
-    ''' "Configure remote file recording or get status of recording.
+    ''' Configure remote file recording or get status of recording.
     Inputs:
        command - string, File configuration command, can be of of the following
                'info': get File recording information
@@ -368,7 +368,7 @@ def file_config(instance = 0, command='info', comment='', filename=''):
        A dictionary with following keys:
            'Recording': boolean, if recording is in progress
            'FileName': string, file name being recorded
-           'UserName': Computer that is recording)
+           'UserName': Computer that is recording
     '''
     
     
