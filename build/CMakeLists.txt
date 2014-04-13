@@ -279,7 +279,6 @@ INSTALL( FILES ../cbmex/cbsdk.h ../cbhwlib/cbhwlib.h DESTINATION include )
 
 #########################################################################################
 # Build n2h5 executable only if HDF5 found
-SET ( HDF5_FOUND 0 )
 IF( HDF5_FOUND )
     MESSAGE ( STATUS "Add n2h5 utility build target")
     # In case it did not find it (seems like a bug in FindHDF5.cmake) 
