@@ -24,6 +24,13 @@ int cbpy_open(int nInstance, cbSdkConnectionType conType, cbSdkConnection con)
     return sdkres;
 }
 
+int cbpy_close(int nInstance)
+{
+    cbSdkResult sdkres = cbSdkClose(nInstance);
+
+    return sdkres;
+}
+
 int cbpy_gettype(int nInstance, cbSdkConnectionType * conType, cbSdkInstrumentType * instType)
 {
     cbSdkResult sdkres = cbSdkGetType(nInstance, conType, instType);
@@ -72,9 +79,18 @@ int cbpy_get_trial_event(int nInstance, bool reset, cbSdkTrialEvent * trialevent
     return sdkres;
 }
 
-int cbpy_close(int nInstance)
+int cbpy_init_trial_cont(int nInstance, cbSdkTrialCont * trialcont)
 {
-    cbSdkResult sdkres = cbSdkClose(nInstance);
+    memset(trialcont, 0, sizeof(*trialcont));
+    cbSdkResult sdkres = cbSdkInitTrialData(nInstance, 0, trialcont, 0, 0);
 
     return sdkres;
 }
+
+int cbpy_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
+{
+    cbSdkResult sdkres = cbSdkGetTrialData(nInstance, reset, 0, trialcont, 0, 0);
+
+    return sdkres;
+}
+
