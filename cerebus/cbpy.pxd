@@ -107,5 +107,16 @@ cdef extern from "cbpy.h":
     int cbpy_init_trial_cont(int nInstance, cbSdkTrialCont * trialcont)
     int cbpy_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
 
-    
+    cdef enum cbhwlib_cbFILECFG:
+        cbFILECFG_OPT_NONE =         0x00000000  
+        cbFILECFG_OPT_KEEPALIVE =    0x00000001  
+        cbFILECFG_OPT_REC =          0x00000002  
+        cbFILECFG_OPT_STOP =         0x00000003  
+        cbFILECFG_OPT_NMREC =        0x00000004  
+        cbFILECFG_OPT_CLOSE =        0x00000005  
+        cbFILECFG_OPT_SYNCH =        0x00000006  
+        cbFILECFG_OPT_OPEN =         0x00000007  
+        
+    int cbpy_get_file_config(int instance,  char * filename, char * username, int * pbRecording)
+    int cbpy_file_config(int instance, const char * filename, const char * comment, int start, unsigned int options)
             
