@@ -334,11 +334,13 @@ def trial_continuous(instance = 0, reset=False):
         num_samples = trialcont.num_samples[channel]
         if cfg_param.bDouble:
             mxa_d = np.zeros(num_samples, dtype=np.double)
-            trialcont.samples[channel] = <void *>&mxa_d[0]
+            if num_samples:
+                trialcont.samples[channel] = <void *>&mxa_d[0]
             cont = np.asarray(mxa_d)
         else:
             mxa_i16 = np.zeros(num_samples, dtype=np.int16)
-            trialcont.samples[channel] = <void *>&mxa_i16[0]
+            if num_samples:
+                trialcont.samples[channel] = <void *>&mxa_i16[0]
             cont = np.asarray(mxa_i16)
             
         row.append(cont)
