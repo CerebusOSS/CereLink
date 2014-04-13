@@ -189,8 +189,7 @@ def trial_config(instance=0, reset=True,
     return res, reset
     
 def trial_event(instance = 0, reset=False):
-    '''
-    Trial spike and event data.
+    ''' Trial spike and event data.
     Inputs:
        reset - (optional) boolean 
                set False (default) to leave buffer intact.
