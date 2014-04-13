@@ -44,6 +44,7 @@ cdef extern from "cbpy.h":
         
         
     int cbpy_open(int nInstance, cbSdkConnectionType conType, cbSdkConnection con)
+    int cbpy_close(int nInstance)
     
     ctypedef enum cbSdkInstrumentType:
         CBSDKINSTRUMENT_NSP = 0           # NSP
@@ -95,6 +96,16 @@ cdef extern from "cbpy.h":
     int cbpy_init_trial_event(int nInstance, cbSdkTrialEvent * trialevent)
     int cbpy_get_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
 
-    int cbpy_close(int nInstance)
+    ctypedef struct cbSdkTrialCont:
+        uint16_t count
+        uint16_t chan[cbNUM_ANALOG_CHANS + 0]
+        uint16_t sample_rates[cbNUM_ANALOG_CHANS + 0]
+        uint32_t num_samples[cbNUM_ANALOG_CHANS + 0]
+        uint32_t time
+        void * samples[cbNUM_ANALOG_CHANS + 0]
+        
+    int cbpy_init_trial_cont(int nInstance, cbSdkTrialCont * trialcont)
+    int cbpy_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
+
     
             

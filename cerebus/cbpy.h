@@ -14,6 +14,7 @@
 
 int cbpy_version(int nInstance, cbSdkVersion * ver);
 int cbpy_open(int nInstance, cbSdkConnectionType conType, cbSdkConnection con);
+int cbpy_close(int nInstance);
 int cbpy_gettype(int nInstance, cbSdkConnectionType * conType, cbSdkInstrumentType * instType);
 
 typedef struct _cbSdkConfigParam {
@@ -43,6 +44,7 @@ int cbpy_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param);
 int cbpy_init_trial_event(int nInstance, cbSdkTrialEvent * trialevent);
 int cbpy_get_trial_event(int nInstance, bool reset, cbSdkTrialEvent * trialevent);
 
-int cbpy_close(int nInstance);
+int cbpy_init_trial_cont(int nInstance, cbSdkTrialCont * trialcont);
+int cbpy_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont);
 
 #endif // include guard

@@ -89,6 +89,22 @@ def open(instance = 0, connection='default', parameter={}):
         raise RuntimeError("error %d" % res)
     
     return res, get_connection_type(instance=instance)
+
+def close(instance=0):
+    '''Close library.
+    Inputs:
+       instance - (optional) library instance number
+    '''
+    
+    cdef int res
+    
+    res = cbpy_close(<int>instance)
+
+    if res < 0:
+        # Make this raise error classes
+        raise RuntimeError("error %d" % res)
+    
+    return res
     
 def get_connection_type(instance = 0):
     ''' Get connection type
@@ -189,8 +205,7 @@ def trial_config(instance=0, reset=True,
     return res, reset
     
 def trial_event(instance = 0, reset=False):
-    '''
-    Trial spike and event data.
+    ''' Trial spike and event data.
     Inputs:
        reset - (optional) boolean 
                set False (default) to leave buffer intact.
@@ -250,6 +265,7 @@ def trial_event(instance = 0, reset=False):
                     ts = np.asarray(mxa_u32)
             timestamps.append(ts)
         
+        trialevent.waveforms[channel] = NULL
         dig_events = []
         # Fill values for non-empty digital or serial channels
         if ch == MAX_CHANS_DIGITAL_IN or ch == MAX_CHANS_SERIAL:
@@ -270,20 +286,69 @@ def trial_event(instance = 0, reset=False):
     res = cbpy_get_trial_event(<int>instance, <int>reset, &trialevent) 
 
     return res, trial
-    
-        
-def close(instance=0):
-    '''Close library.
+
+def trial_continuous(instance = 0, reset=False):
+    ''' Trial continuous data.
     Inputs:
+       reset - (optional) boolean 
+               set False (default) to leave buffer intact.
+               set True to clear all the data and reset the trial time to the current time.
        instance - (optional) library instance number
+    Outputs:
+       list of the form [channel, continuous_array]
+           channel: integer, channel number (1-based)
+           continuous_array: array, continuous values for channel)
     '''
     
     cdef int res
+    cdef cbSdkConfigParam cfg_param
+    cdef cbSdkTrialCont trialcont
     
-    res = cbpy_close(<int>instance)
-
+    trial = []
+    
+    # retrieve old values
+    res = cbpy_get_trial_config(<int>instance, &cfg_param)
     if res < 0:
         # Make this raise error classes
         raise RuntimeError("error %d" % res)
     
-    return res
+    # get how many samples are avaialble
+    res = cbpy_init_trial_cont(<int>instance, &trialcont)
+    if res < 0:
+        # Make this raise error classes
+        raise RuntimeError("error %d" % res)
+    
+    if trialcont.count == 0:
+        return res, trial
+
+    cdef np.double_t[:] mxa_d
+    cdef np.int16_t[:] mxa_i16
+
+    # allocate memory
+    for channel in range(trialcont.count):
+        ch = trialcont.chan[channel] # Actual channel number
+        
+        row = [ch]
+        
+        trialcont.samples[channel] = NULL
+        num_samples = trialcont.num_samples[channel]
+        if cfg_param.bDouble:
+            mxa_d = np.zeros(num_samples, dtype=np.double)
+            if num_samples:
+                trialcont.samples[channel] = <void *>&mxa_d[0]
+            cont = np.asarray(mxa_d)
+        else:
+            mxa_i16 = np.zeros(num_samples, dtype=np.int16)
+            if num_samples:
+                trialcont.samples[channel] = <void *>&mxa_i16[0]
+            cont = np.asarray(mxa_i16)
+            
+        row.append(cont)
+        trial.append(row)
+        
+    # get the trial
+    res = cbpy_get_trial_cont(<int>instance, <int>reset, &trialcont) 
+
+    return res, trial
+    
+        
