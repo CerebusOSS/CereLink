@@ -76,11 +76,14 @@ cdef extern from "cbpy.h":
     int cbpy_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param)
     int cbpy_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
 
+    # need to find a better way for cbhwlib constants
     cdef enum cbhwlib_consts:
         cbNUM_FE_CHANS = 128
         cbNUM_ANAIN_CHANS = 16
-        cbNUM_ANALOG_CHANS =  (128+16)
+        cbNUM_ANALOG_CHANS =  (cbNUM_FE_CHANS+cbNUM_ANAIN_CHANS)
         cbMAXUNITS = 5
+        MAX_CHANS_DIGITAL_IN = (cbNUM_FE_CHANS+cbNUM_ANAIN_CHANS+4+2+1)
+        MAX_CHANS_SERIAL = (MAX_CHANS_DIGITAL_IN+1)
     
     ctypedef struct cbSdkTrialEvent:
         uint16_t count
