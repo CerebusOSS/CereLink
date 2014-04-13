@@ -61,7 +61,7 @@ def open(instance = 0, connection='default', parameter={}):
                'receive-buffer-size': override default network buffer size (low value may result in drops).
        instance - (optional) library instance number
     Outputs:
-        Same as "connection" command output
+        Same as "get_connection_type" command output
     '''
     
     cdef int res
@@ -123,12 +123,12 @@ def get_connection_type(instance = 0):
     if inst_idx < 0 or inst_idx >= len(instruments):
         inst_idx = len(instruments) - 1
         
-    return {'connection':connections[con_idx],'instrument':instruments[inst_idx]}
+    return {'connection':connections[con_idx], 'instrument':instruments[inst_idx]}
 
 def trial_config(instance=0, reset=True, 
                  buffer_parameter={}, 
                  range_parameter={},
-                 noevent=0,nocontinuous=0):
+                 noevent=0, nocontinuous=0):
     '''Configure trial settings.
     Inputs:
        reset - boolean, set True to flush data cache and start collecting data immediately,
@@ -147,8 +147,8 @@ def trial_config(instance=0, reset=True,
                'end_channel': channel to end polling if certain value seen
                'end_mask': channel mask to end polling if certain value seen
                'end_value': value to end polling
-       'noevent': equivalant of setting 'event_length' to 0
-       'nocontinuous': equivalant of setting 'continuous_length' to 0
+       'noevent': equivalent of setting 'event_length' to 0
+       'nocontinuous': equivalent of setting 'continuous_length' to 0
        instance - (optional) library instance number
     Outputs:
        reset - (boolean) if it is reset
@@ -272,3 +272,18 @@ def trial_event(instance = 0, reset=False):
     return res, trial
     
         
+def close(instance=0):
+    '''Close library.
+    Inputs:
+       instance - (optional) library instance number
+    '''
+    
+    cdef int res
+    
+    res = cbpy_close(<int>instance)
+
+    if res < 0:
+        # Make this raise error classes
+        raise RuntimeError("error %d" % res)
+    
+    return res
