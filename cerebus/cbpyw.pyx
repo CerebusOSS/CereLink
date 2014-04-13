@@ -383,7 +383,7 @@ def file_config(instance = 0, command='info', comment='', filename=''):
         if res < 0:
             # Make this raise error classes
             raise RuntimeError("error %d" % res)
-        info = {'Recording':(bRecording != 0), 'FileName':<bytes>filename, 'UserName':<bytes>username}
+        info = {'Recording':(bRecording != 0), 'FileName':<bytes>fname, 'UserName':<bytes>username}
         return res, info
    
     cdef int start = 0 
