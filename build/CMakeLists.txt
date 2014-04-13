@@ -283,7 +283,7 @@ IF( HDF5_FOUND )
     MESSAGE ( STATUS "Add n2h5 utility build target")
     # In case it did not find it (seems like a bug in FindHDF5.cmake) 
     IF (NOT HDF5_HL_LIBRARIES)
-        FIND_LIBRARY (HDF5_HL_LIBRARIES libhdf5_hl.so
+        FIND_LIBRARY (HDF5_HL_LIBRARIES libhdf5_hl
                       HINTS ${HDF5_LIBRARY_DIRS}
                       /usr/lib
                       /usr/local/lib

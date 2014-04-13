@@ -8,6 +8,11 @@ try:
 except ImportError:
     build_ext = None
 import numpy
+import sys
+
+# Make sure on OSX we bring in the framework
+if sys.platform == "darwin":
+    os.environ['LDFLAGS'] = '-framework Qt'
 
 CYTHON_REQUIREMENT = 'Cython==0.19.1'
 

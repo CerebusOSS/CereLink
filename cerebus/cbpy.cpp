@@ -1,9 +1,12 @@
 /*
  * Cerebus Python
+ *  C wrapper to use cbsdk in Cython
  *
  * @date March 9, 2014
  * @author: dashesy
  */
+
+#include <string.h>
 
 #include "cbpy.h"
 
@@ -50,6 +53,21 @@ int cbpy_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
             pcfg_param->uConts, pcfg_param->uEvents, pcfg_param->uComments,
             pcfg_param->uTrackings,
             pcfg_param->bAbsolute);
+
+    return sdkres;
+}
+
+int cbpy_init_trial_event(int nInstance, cbSdkTrialEvent * trialevent)
+{
+    memset(trialevent, 0, sizeof(*trialevent));
+    cbSdkResult sdkres = cbSdkInitTrialData(nInstance, trialevent, 0, 0, 0);
+
+    return sdkres;
+}
+
+int cbpy_get_trial_event(int nInstance, bool reset, cbSdkTrialEvent * trialevent)
+{
+    cbSdkResult sdkres = cbSdkGetTrialData(nInstance, reset, trialevent, 0, 0, 0);
 
     return sdkres;
 }
