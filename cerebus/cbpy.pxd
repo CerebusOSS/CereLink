@@ -92,7 +92,9 @@ cdef extern from "cbpy.h":
         void * timestamps[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1]
         void * waveforms[cbNUM_ANALOG_CHANS + 2]
     
-    int cbpy_init_trial_event(int nInstance, cbSdkTrialEvent * tiralevent)
-    int cbpy_get_trial_event(int nInstance, int reset, cbSdkTrialEvent * tiralevent)
+    int cbpy_init_trial_event(int nInstance, cbSdkTrialEvent * trialevent)
+    int cbpy_get_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
+
+    int cbpy_close(int nInstance)
     
             

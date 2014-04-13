@@ -71,3 +71,10 @@ int cbpy_get_trial_event(int nInstance, bool reset, cbSdkTrialEvent * trialevent
 
     return sdkres;
 }
+
+int cbpy_close(int nInstance)
+{
+    cbSdkResult sdkres = cbSdkClose(nInstance);
+
+    return sdkres;
+}

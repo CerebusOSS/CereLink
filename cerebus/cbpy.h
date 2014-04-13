@@ -43,4 +43,6 @@ int cbpy_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param);
 int cbpy_init_trial_event(int nInstance, cbSdkTrialEvent * trialevent);
 int cbpy_get_trial_event(int nInstance, bool reset, cbSdkTrialEvent * trialevent);
 
+int cbpy_close(int nInstance);
+
 #endif // include guard
