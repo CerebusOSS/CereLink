@@ -12,7 +12,11 @@ import sys
 
 # Make sure on OSX we bring in the framework
 if sys.platform == "darwin":
-    os.environ['LDFLAGS'] = '-framework Qt'
+    extra_link_args=['-F', '/usr/local/lib/', '-framework', 'QtCore', '-framework', 'QtXml']
+    libraries = ["cbsdk_static"]
+else:
+    extra_link_args= []
+    libraries = ["cbsdk_static", "QtCore", "QtXml"]
 
 CYTHON_REQUIREMENT = 'Cython==0.19.1'
 
@@ -22,7 +26,8 @@ if build_ext:
                             ['cerebus/cbpyw.pyx',
                              'cerebus/cbpy.cpp', 
                             ],
-                            libraries=["cbsdk_static", "QtCore", "QtXml"],
+                            libraries=libraries,
+                            extra_link_args=extra_link_args,
                             include_dirs=[numpy.get_include()],
                             language="c++",             # generate C++ code
     )
@@ -32,7 +37,8 @@ else:
                             ['cerebus/cbpyw.cpp',
                              'cerebus/cbpy.cpp', 
                             ],
-                            libraries=["cbsdk_static", "QtCore", "QtXml"],
+                            libraries=libraries,
+                            extra_link_args=extra_link_args,
                             include_dirs=[numpy.get_include()],
     )
     

@@ -44,6 +44,7 @@ cdef extern from "cbpy.h":
         
         
     int cbpy_open(int nInstance, cbSdkConnectionType conType, cbSdkConnection con)
+    int cbpy_close(int nInstance)
     
     ctypedef enum cbSdkInstrumentType:
         CBSDKINSTRUMENT_NSP = 0           # NSP
@@ -95,6 +96,27 @@ cdef extern from "cbpy.h":
     int cbpy_init_trial_event(int nInstance, cbSdkTrialEvent * trialevent)
     int cbpy_get_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
 
-    int cbpy_close(int nInstance)
-    
+    ctypedef struct cbSdkTrialCont:
+        uint16_t count
+        uint16_t chan[cbNUM_ANALOG_CHANS + 0]
+        uint16_t sample_rates[cbNUM_ANALOG_CHANS + 0]
+        uint32_t num_samples[cbNUM_ANALOG_CHANS + 0]
+        uint32_t time
+        void * samples[cbNUM_ANALOG_CHANS + 0]
+        
+    int cbpy_init_trial_cont(int nInstance, cbSdkTrialCont * trialcont)
+    int cbpy_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
+
+    cdef enum cbhwlib_cbFILECFG:
+        cbFILECFG_OPT_NONE =         0x00000000  
+        cbFILECFG_OPT_KEEPALIVE =    0x00000001  
+        cbFILECFG_OPT_REC =          0x00000002  
+        cbFILECFG_OPT_STOP =         0x00000003  
+        cbFILECFG_OPT_NMREC =        0x00000004  
+        cbFILECFG_OPT_CLOSE =        0x00000005  
+        cbFILECFG_OPT_SYNCH =        0x00000006  
+        cbFILECFG_OPT_OPEN =         0x00000007  
+        
+    int cbpy_get_file_config(int instance,  char * filename, char * username, int * pbRecording)
+    int cbpy_file_config(int instance, const char * filename, const char * comment, int start, unsigned int options)
             
