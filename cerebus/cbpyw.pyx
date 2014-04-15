@@ -172,13 +172,14 @@ def trial_config(instance=0, reset=True,
     
     cdef int res
     cdef cbSdkConfigParam cfg_param
-    cfg_param.bActive = reset
     
     # retrieve old values
     res = cbpy_get_trial_config(<int>instance, &cfg_param)
     if res < 0:
         # Make this raise error classes
         raise RuntimeError("error %d" % res)
+    
+    cfg_param.bActive = reset
     
 
     cfg_param.bDouble = buffer_parameter.get('double', cfg_param.bDouble)
