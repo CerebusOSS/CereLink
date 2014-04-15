@@ -94,3 +94,17 @@ int cbpy_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
     return sdkres;
 }
 
+int cbpy_get_file_config(int instance,  char * filename, char * username, int * pbRecording)
+{
+    bool bRecording;
+    cbSdkResult sdkres = cbSdkGetFileConfig(instance, filename, username, &bRecording);
+    *pbRecording = bRecording;
+
+    return sdkres;
+}
+
+int cbpy_file_config(int instance, const char * filename, const char * comment, int start, unsigned int options)
+{
+    cbSdkResult sdkres = cbSdkSetFileConfig(instance, filename == NULL ? "" : filename, comment == NULL ? "" : comment, start, options);
+    return sdkres;
+}

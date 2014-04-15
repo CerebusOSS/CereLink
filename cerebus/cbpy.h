@@ -47,4 +47,7 @@ int cbpy_get_trial_event(int nInstance, bool reset, cbSdkTrialEvent * trialevent
 int cbpy_init_trial_cont(int nInstance, cbSdkTrialCont * trialcont);
 int cbpy_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont);
 
+int cbpy_get_file_config(int instance,  char * filename, char * username, int * pbRecording);
+int cbpy_file_config(int instance,  const char * filename, const char * comment, int start, unsigned int options);
+
 #endif // include guard

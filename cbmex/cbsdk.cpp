@@ -711,7 +711,7 @@ cbSdkResult SdkApp::SdkOpen(UINT32 nInstance, cbSdkConnectionType conType, cbSdk
     m_uTrialStartTime = 0;
 
     // If this is not part of another Qt application, and the-only Qt app intance is not present
-    if (QCoreApplication::instance() == NULL)
+    if (QCoreApplication::instance() == NULL && QAppPriv::pApp == NULL)
         QAppPriv::pApp = new QCoreApplication(QAppPriv::argc, QAppPriv::argv);
 
     if (conType == CBSDKCONNECTION_UDP)

@@ -172,13 +172,14 @@ def trial_config(instance=0, reset=True,
     
     cdef int res
     cdef cbSdkConfigParam cfg_param
-    cfg_param.bActive = reset
     
     # retrieve old values
     res = cbpy_get_trial_config(<int>instance, &cfg_param)
     if res < 0:
         # Make this raise error classes
         raise RuntimeError("error %d" % res)
+    
+    cfg_param.bActive = reset
     
 
     cfg_param.bDouble = buffer_parameter.get('double', cfg_param.bDouble)
@@ -351,4 +352,62 @@ def trial_continuous(instance = 0, reset=False):
 
     return res, trial
     
-        
+def file_config(instance = 0, command='info', comment='', filename=''):
+    ''' Configure remote file recording or get status of recording.
+    Inputs:
+       command - string, File configuration command, can be of of the following
+               'info': get File recording information
+               'open': opens the File dialog if closed, ignoring other parameters
+               'close': closes the File dialog if open
+               'start': starts recording, opens dialog if closed
+               'stop': stops recording
+       filename - (optional) string, file name to use for recording
+       comment - (optional) string, file comment to use for file recording
+       instance - (optional) library instance number
+    Outputs:
+       Only if command is 'info' output is returned
+       A dictionary with following keys:
+           'Recording': boolean, if recording is in progress
+           'FileName': string, file name being recorded
+           'UserName': Computer that is recording
+    '''
+    
+    
+    cdef int res
+    cdef char fname[256]
+    cdef char username[256]
+    cdef int bRecording = 0
+    
+    if command == 'info':
+
+        res = cbpy_get_file_config(<int>instance, fname, username, &bRecording)
+        if res < 0:
+            # Make this raise error classes
+            raise RuntimeError("error %d" % res)
+        info = {'Recording':(bRecording != 0), 'FileName':<bytes>fname, 'UserName':<bytes>username}
+        return res, info
+   
+    cdef int start = 0 
+    cdef unsigned int options = cbFILECFG_OPT_NONE     
+    if command == 'open':
+        if filename or comment:
+            raise RuntimeError('filename and comment should not be specified for open')
+        options = cbFILECFG_OPT_OPEN
+    elif command == 'close':
+        options = cbFILECFG_OPT_CLOSE
+    elif command == 'start':
+        if not filename or not comment:
+            raise RuntimeError('filename and comment should be specified for start')
+        start = 1
+    elif command == 'stop':
+        if not filename or not comment:
+            raise RuntimeError('filename and comment should be specified for stop')
+        start = 0
+    else:
+        raise RuntimeError("invalid file config command %s" % command)
+    
+    filename_string = filename.encode('UTF-8')
+    comment_string = comment.encode('UTF-8')
+    res = cbpy_file_config(<int>instance, <const char *>filename_string, <char *>comment_string, start, options)
+    
+    return res
