@@ -50,4 +50,6 @@ int cbpy_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont);
 int cbpy_get_file_config(int instance,  char * filename, char * username, int * pbRecording);
 int cbpy_file_config(int instance,  const char * filename, const char * comment, int start, unsigned int options);
 
+int cbpy_time(int instance, int * pcbtime);
+
 #endif // include guard
