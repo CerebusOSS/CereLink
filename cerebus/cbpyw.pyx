@@ -413,7 +413,7 @@ def file_config(instance=0, command='info', comment='', filename=''):
     return res
 
 
-def cbpy_time(instance=0, unit='samples'):
+def time(instance=0, unit='samples'):
     '''Instrument time.
     Inputs:
        unit - time unit, string can be one the following
@@ -431,17 +431,16 @@ def cbpy_time(instance=0, unit='samples'):
     if unit == 'samples':
         factor = 1
     elif unit in ['seconds', 's']:
-        factor = 1  # TODO: sysfreq
+        raise NotImplementedError("Use time unit of samples for now")
     elif unit in ['milliseconds', 'ms']:
-        factor = 1  # TODO: sysfreq / 1000
+        raise NotImplementedError("Use time unit of samples for now")
     else:
         raise RuntimeError("Invalid time unit %s" % unit)
     
 
     cdef int cbtime
-    res = cbpy_time(<int>instance, &cbtime)
+    res = cbpy_get_time(<int>instance, &cbtime)
 
     time = float(cbtime) / factor
     
     return res, time
-}

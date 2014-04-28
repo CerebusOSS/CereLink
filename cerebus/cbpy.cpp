@@ -110,7 +110,10 @@ int cbpy_file_config(int instance, const char * filename, const char * comment, 
 }
 
 
-int cbpy_time(int instance, int * pcbtime) {
-    sdkres = cbSdkGetTime(nInstance, pcbtime);
+int cbpy_get_time(int instance, int * pcbtime) {
+    UINT32 cbtime;
+    cbSdkResult sdkres = cbSdkGetTime(instance, &cbtime);
+    *pcbtime = (int)cbtime;
+
     return sdkres;
 }
