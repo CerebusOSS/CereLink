@@ -108,3 +108,12 @@ int cbpy_file_config(int instance, const char * filename, const char * comment, 
     cbSdkResult sdkres = cbSdkSetFileConfig(instance, filename == NULL ? "" : filename, comment == NULL ? "" : comment, start, options);
     return sdkres;
 }
+
+
+int cbpy_get_time(int instance, int * pcbtime) {
+    UINT32 cbtime;
+    cbSdkResult sdkres = cbSdkGetTime(instance, &cbtime);
+    *pcbtime = (int)cbtime;
+
+    return sdkres;
+}

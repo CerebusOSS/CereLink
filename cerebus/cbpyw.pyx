@@ -12,7 +12,7 @@ import numpy as np
 cimport numpy as np
 cimport cython
 
-def version(instance = 0):
+def version(instance=0):
     '''Get library version
     Inputs:
         instance - (optional) library instance number
@@ -46,7 +46,7 @@ def version(instance = 0):
     return res, ver_dict
 
 
-def open(instance = 0, connection='default', parameter={}):
+def open(instance=0, connection='default', parameter={}):
     '''Open library.
     Inputs:
        connection - connection type, string can be one the following
@@ -106,7 +106,7 @@ def close(instance=0):
     
     return res
     
-def get_connection_type(instance = 0):
+def get_connection_type(instance=0):
     ''' Get connection type
     Inputs:
        instance - (optional) library instance number
@@ -205,7 +205,7 @@ def trial_config(instance=0, reset=True,
     
     return res, reset
     
-def trial_event(instance = 0, reset=False):
+def trial_event(instance=0, reset=False):
     ''' Trial spike and event data.
     Inputs:
        reset - (optional) boolean 
@@ -288,7 +288,7 @@ def trial_event(instance = 0, reset=False):
 
     return res, trial
 
-def trial_continuous(instance = 0, reset=False):
+def trial_continuous(instance=0, reset=False):
     ''' Trial continuous data.
     Inputs:
        reset - (optional) boolean 
@@ -352,11 +352,11 @@ def trial_continuous(instance = 0, reset=False):
 
     return res, trial
     
-def file_config(instance = 0, command='info', comment='', filename=''):
+def file_config(instance=0, command='info', comment='', filename=''):
     ''' Configure remote file recording or get status of recording.
     Inputs:
        command - string, File configuration command, can be of of the following
-               'info': get File recording information
+               'info': (default) get File recording information
                'open': opens the File dialog if closed, ignoring other parameters
                'close': closes the File dialog if open
                'start': starts recording, opens dialog if closed
@@ -411,3 +411,36 @@ def file_config(instance = 0, command='info', comment='', filename=''):
     res = cbpy_file_config(<int>instance, <const char *>filename_string, <char *>comment_string, start, options)
     
     return res
+
+
+def time(instance=0, unit='samples'):
+    '''Instrument time.
+    Inputs:
+       unit - time unit, string can be one the following
+                'samples': (default) sample number integer
+                'seconds' or 's': seconds calculated from samples
+                'milliseconds' or 'ms': milliseconds calculated from samples
+       instance - (optional) library instance number
+    Outputs:
+       time - time passed since last reset
+    '''
+
+
+    cdef int res
+
+    if unit == 'samples':
+        factor = 1
+    elif unit in ['seconds', 's']:
+        raise NotImplementedError("Use time unit of samples for now")
+    elif unit in ['milliseconds', 'ms']:
+        raise NotImplementedError("Use time unit of samples for now")
+    else:
+        raise RuntimeError("Invalid time unit %s" % unit)
+    
+
+    cdef int cbtime
+    res = cbpy_get_time(<int>instance, &cbtime)
+
+    time = float(cbtime) / factor
+    
+    return res, time
