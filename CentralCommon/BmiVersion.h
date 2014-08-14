@@ -25,9 +25,9 @@
 #define STRINGIFY(s) STR(s)
 
 #define BMI_VERSION_MAJOR    6
-#define BMI_VERSION_MINOR    3
+#define BMI_VERSION_MINOR    4
 #define BMI_VERSION_RELEASE  0
-#define BMI_VERSION_BETA     2
+#define BMI_VERSION_BETA     0
 
 // Take care of the leading zero
 #if BMI_VERSION_MINOR < 10

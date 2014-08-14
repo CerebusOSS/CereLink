@@ -19,7 +19,7 @@
 #ifndef N2H5_H_
 #define N2H5_H_
 
-#include "../common/cbhwlib.h"
+#include "cbhwlib.h"
 #include "hdf5.h"
 #include "hdf5_hl.h"
 
@@ -28,7 +28,7 @@
 //
 typedef struct {
     UINT16 id;          // channel id
-    char * szLabel;     // Channel label
+    char szLabel[64];     // Channel label
 } BmiChanAttr_t;
 
 hid_t CreateChanAttrType(hid_t loc);
@@ -107,9 +107,9 @@ typedef struct {
     UINT32 nMinorVersion;
     UINT32 nFlags;
     UINT32 nGroupCount; // Number of data groups withing this file
-    char * szDate;          // File creation date-time in SQL format
-    char  * szApplication;  // Which application created this file
-    char * szComment;       // File Comment 
+    char szDate[64];         // File creation date-time in SQL format
+    char szApplication[64];  // Which application created this file
+    char szComment[1024];    // File Comment
 } BmiRootAttr_t;
 
 hid_t CreateRootAttrType(hid_t loc);
@@ -120,7 +120,7 @@ hid_t CreateRootAttrType(hid_t loc);
 typedef struct {
     UINT16 id; // video source ID
     float fFps;
-    char * szLabel;        // Name of the video source
+    char szLabel[64];        // Name of the video source
 } BmiSynchAttr_t;
 
 hid_t CreateSynchAttrType(hid_t loc);
@@ -132,7 +132,7 @@ typedef struct {
     UINT16 type;     // trackable type
     UINT16 trackID;  // trackable ID
     UINT16 maxPoints;
-    char * szLabel;  // Name of the trackable
+    char szLabel[128];  // Name of the trackable
 } BmiTrackingAttr_t;
 
 hid_t CreateTrackingAttrType(hid_t loc);
@@ -180,11 +180,12 @@ typedef struct {
     UINT32 dwTimestamp;
     UINT16 parentID;
     UINT16 nodeCount;
+    UINT32 etime;
     // This must be the last
     UINT16 coords[cbMAX_TRACKCOORDS];
 } BmiTracking_fl_t;
 
-hid_t CreateTrackingType(hid_t loc, int dim, int width, int maxLen = -1);
+hid_t CreateTrackingType(hid_t loc, int dim, int width);
 
 #define BMI_COMMENT_LEN 256
 // Comment or user event

@@ -49,6 +49,8 @@ namespace ccf
     int ItemNumber(XmlFile * const xml, cbPKT_NTRODEINFO & item);
     template<>
     int ItemNumber(XmlFile * const xml, cbPKT_SS_NOISE_BOUNDARY & item);
+    template<>
+    int ItemNumber(XmlFile * const xml, cbPKT_AOUT_WAVEFORM & item);
     // This is for basic types
     template <typename T>
     void ReadItem(XmlFile * const xml, T & item);
@@ -87,6 +89,8 @@ namespace ccf
     void ReadItem(XmlFile * const xml, cbHOOP & item);
     template<>
     void ReadItem(XmlFile * const xml, cbAdaptControl & item);
+    template<>
+    void ReadItem(XmlFile * const xml, cbWaveformData & item);
 };      // namespace ccf
 
 #endif // include guard

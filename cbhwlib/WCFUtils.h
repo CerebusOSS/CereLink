@@ -15,8 +15,6 @@
 #ifndef WCFUTILS_H_INCLUDED
 #define WCFUTILS_H_INCLUDED
 
-#include "cbhwlib.h"
-
 //
 // Make sure not to include (directly or indirectly) any
 //  implementation details such as Qt

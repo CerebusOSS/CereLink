@@ -47,7 +47,7 @@ public:
     void Shutdown();
     void TestForReply(void * pPacket);
 
-    enum { TICK_COUNT = 4 };        // Default number of ticks to wait for a response ( 10ms per tick)
+    enum { TICK_COUNT = 15 };        // Default number of ticks to wait for a response ( 10ms per tick)
     enum { RESEND_COUNT = 10 };     // Default number of times to "resend" a packet before erroring out.
     void Reset(int nMaxTickCount = TICK_COUNT, int nMaxRetryCount = RESEND_COUNT);
 

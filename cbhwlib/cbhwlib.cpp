@@ -148,13 +148,13 @@ void DestroySharedObjects(BOOL bStandAlone, UINT32 nInstance)
     if (bStandAlone)
     {
         // clear out the version string
-        if (cb_cfg_buffer_ptr[nIdx]) 
+        if (cb_cfg_buffer_ptr[nIdx])
             cb_cfg_buffer_ptr[nIdx]->version = 0;
     }
 
     // close out the signal events
 #ifdef WIN32
-    if (cb_sig_event_hnd[nIdx]) 
+    if (cb_sig_event_hnd[nIdx])
         CloseHandle(cb_sig_event_hnd[nIdx]);
 #else
     if (cb_sig_event_hnd[nIdx])
@@ -293,9 +293,9 @@ cbRESULT cbOpen(BOOL bStandAlone, UINT32 nInstance)
 
     char szLockName[64] = {0};
     if (nInstance == 0)
-        _snprintf(szLockName, sizeof(szLockName), "cbCentralAppMutex");
+        _snprintf(szLockName, sizeof(szLockName), "cbSharedDataMutex");
     else
-        _snprintf(szLockName, sizeof(szLockName), "cbCentralAppMutex%d", nInstance);
+        _snprintf(szLockName, sizeof(szLockName), "cbSharedDataMutex%d", nInstance);
 
     // If it is stand alone application
     if (bStandAlone)
@@ -335,9 +335,9 @@ cbRESULT cbOpen(BOOL bStandAlone, UINT32 nInstance)
     if (nInstance == 0)
         _snprintf(buf, sizeof(buf), "%s", GLOBAL_XMT_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", GLOBAL_XMT_NAME, nInstance);            
+        _snprintf(buf, sizeof(buf), "%s%d", GLOBAL_XMT_NAME, nInstance);
     // Create the shared global transmit buffer; if unsuccessful, release rec buffer and return FALSE
-    cb_xmt_global_buffer_hnd[nIdx] = OpenSharedBuffer(buf, false);;
+    cb_xmt_global_buffer_hnd[nIdx] = OpenSharedBuffer(buf, false);
     cb_xmt_global_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_global_buffer_hnd[nIdx], false);
     if (cb_xmt_global_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
 
@@ -355,14 +355,14 @@ cbRESULT cbOpen(BOOL bStandAlone, UINT32 nInstance)
     else
         _snprintf(buf, sizeof(buf), "%s%d", CFG_BUF_NAME, nInstance);
     // Create the shared neuromatic configuration buffer; if unsuccessful, release rec buffer and return FALSE
-    cb_cfg_buffer_hnd[nIdx] = OpenSharedBuffer(buf, true);;
+    cb_cfg_buffer_hnd[nIdx] = OpenSharedBuffer(buf, true);
     cb_cfg_buffer_ptr[nIdx] = (cbCFGBUFF*)GetSharedBuffer(cb_cfg_buffer_hnd[nIdx], true);
     if (cb_cfg_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
 
     if (nInstance == 0)
         _snprintf(buf, sizeof(buf), "%s", STATUS_BUF_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", STATUS_BUF_NAME, nInstance);            
+        _snprintf(buf, sizeof(buf), "%s%d", STATUS_BUF_NAME, nInstance);
     // Create the shared pc status buffer; if unsuccessful, release rec buffer and return FALSE
     cb_pc_status_buffer_hnd[nIdx] = OpenSharedBuffer(buf, false);;
     cb_pc_status_buffer_ptr[nIdx] = (cbPcStatus*)GetSharedBuffer(cb_pc_status_buffer_hnd[nIdx], false);
@@ -372,7 +372,7 @@ cbRESULT cbOpen(BOOL bStandAlone, UINT32 nInstance)
     if (nInstance == 0)
         _snprintf(buf, sizeof(buf), "%s", SPK_BUF_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", SPK_BUF_NAME, nInstance);            
+        _snprintf(buf, sizeof(buf), "%s%d", SPK_BUF_NAME, nInstance);
     cb_spk_buffer_hnd[nIdx] = OpenSharedBuffer(buf, false);;
     cb_spk_buffer_ptr[nIdx] = (cbSPKBUFF*)GetSharedBuffer(cb_spk_buffer_hnd[nIdx], false);
     if (cb_spk_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
@@ -381,7 +381,7 @@ cbRESULT cbOpen(BOOL bStandAlone, UINT32 nInstance)
     if (nInstance == 0)
         _snprintf(buf, sizeof(buf), "%s", SIG_EVT_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", SIG_EVT_NAME, nInstance);            
+        _snprintf(buf, sizeof(buf), "%s%d", SIG_EVT_NAME, nInstance);
 #ifdef WIN32
     cb_sig_event_hnd[nIdx] = OpenEvent(SYNCHRONIZE, TRUE, buf);
     if (cb_sig_event_hnd[nIdx] == NULL)  {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
@@ -468,7 +468,7 @@ cbRESULT cbAquireSystemLock(const char * lpName, HANDLE & hLock)
     {
         return cbRESULT_SYSLOCK;
     }
-    fprintf(pflock, "%u", (UINT32)getppid());
+    fprintf(pflock, "%u", (UINT32)getpid());
     hLock = (void *)pflock;
 #endif
     return cbRESULT_OK;
@@ -491,9 +491,12 @@ cbRESULT cbReleaseSystemLock(const char * lpName, HANDLE & hLock)
 #else
     if (hLock)
     {
+        char szLockName[256] = {0};
+        char * szTmpDir = getenv("TMPDIR");
+        _snprintf(szLockName, sizeof(szLockName), "%s/%s.lock", szTmpDir == NULL ? "/tmp" : szTmpDir, lpName);
         FILE * pflock = (FILE *)hLock;
         fclose(pflock); // Close mutex
-        remove(lpName); // Cleanup
+        remove(szLockName); // Cleanup
     }
 #endif
     hLock = NULL;
@@ -523,6 +526,8 @@ cbRESULT cbGetInstInfo(UINT32 *instInfo, UINT32 nInstance)
             type = cbINSTINFO_CEREPLEX;
         else if (strstr(isInfo.ident, "Emulator") != NULL)
             type = cbINSTINFO_EMULATOR;
+        if (strstr(isInfo.ident, "NSP1 ") != NULL)
+            type |= cbINSTINFO_NSP1;
     }
 
     if (cbCheckApp("cbNPlayMutex") == cbRESULT_OK)
@@ -558,44 +563,12 @@ cbRESULT cbGetInstInfo(UINT32 *instInfo, UINT32 nInstance)
 cbRESULT cbGetLatency(UINT32 *nLatency, UINT32 nInstance)
 {
     *nLatency = 0;
-    cbPROCINFO isInfo;
-    memset(&isInfo, 0, sizeof(cbPROCINFO));
-    cbRESULT res = cbGetProcInfo(cbNSP1, &isInfo, nInstance);
-    if (res)
-        return res;
-
-    union _NSP_VERSION
-    {
-        UINT32 dwComplete;
-        struct
-        {
-            BYTE byMajor;       // The major version - must match Central
-            BYTE byMinor;       // The minor version - must match Central
-            BYTE byRelease;     // the current release - interim releases
-            BYTE byBeta;        // Beta number will only work with same beta of Central
-        };
-    } ver;
-
-    ver.dwComplete = isInfo.idcode;
-    // Linearize the version for easy compare
-    UINT32 nVersion = (UINT32)ver.byBeta + ((UINT32)ver.byRelease << 8) + ((UINT32)ver.byMinor << 16) + ((UINT32)ver.byMajor << 24);
 
     UINT32 spikelen;
-    res = cbGetSpikeLength(&spikelen, NULL, NULL, nInstance);
+    cbRESULT res = cbGetSpikeLength(&spikelen, NULL, NULL, nInstance);
     if (res)
         return res;
-
-    // Version 6.03.02.00 is the first to use (2 * spikelen + 16) total latency (between irq-in and irq-out)
-    if (nVersion < 0x06030200)
-    {
-        // This is the difference between 600 and (2 * spikelen + 6)
-        *nLatency = 600 - (2 * spikelen + 6);
-    }
-    else 
-    {
-        // This is the difference between (2 * spikelen + 16) and (2 * spikelen + 6)
-        *nLatency = 10;
-    }
+    if (nLatency) *nLatency = (2 * spikelen + 16);
     return cbRESULT_OK;
 }
 
@@ -630,9 +603,9 @@ cbRESULT cbClose(BOOL bStandAlone, UINT32 nInstance)
     {
         char buf[256] = {0};
         if (nInstance == 0)
-            _snprintf(buf, sizeof(buf), "cbCentralAppMutex");
+            _snprintf(buf, sizeof(buf), "cbSharedDataMutex");
         else
-            _snprintf(buf, sizeof(buf), "cbCentralAppMutex%d", nInstance);
+            _snprintf(buf, sizeof(buf), "cbSharedDataMutex%d", nInstance);
         if (cb_sys_lock_hnd[nInstance])
             cbReleaseSystemLock(buf, cb_sys_lock_hnd[nInstance]);
         return cbRESULT_OK;
@@ -1270,7 +1243,6 @@ cbRESULT cbSetSpikeLength(UINT32 length, UINT32 pretrig, UINT32 nInstance)
 cbRESULT cbGetAoutWaveform(UINT32 channel, UINT8  trigNum, UINT16  * mode, UINT32  * repeats, UINT16  * trig,
                            UINT16  * trigChan, UINT16  * trigValue, cbWaveformData * wave, UINT32 nInstance)
 {
-#if 0
     UINT32 nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
@@ -1290,7 +1262,6 @@ cbRESULT cbGetAoutWaveform(UINT32 channel, UINT8  trigNum, UINT16  * mode, UINT3
     if (trigChan) *trigChan = cb_cfg_buffer_ptr[nIdx]->isWaveform[channel][trigNum].trigChan;
     if (trigValue) *trigValue = cb_cfg_buffer_ptr[nIdx]->isWaveform[channel][trigNum].trigValue;
     if (wave)     *wave = cb_cfg_buffer_ptr[nIdx]->isWaveform[channel][trigNum].wave;
-#endif
     return cbRESULT_OK;
 }
 
@@ -1313,7 +1284,6 @@ cbRESULT cbGetFilterDesc(UINT32 proc, UINT32 filt, cbFILTDESC *filtdesc, UINT32 
 
 cbRESULT cbGetFileInfo(cbPKT_FILECFG * filecfg, UINT32 nInstance)
 {
-#if 0
     UINT32 nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
@@ -1322,7 +1292,6 @@ cbRESULT cbGetFileInfo(cbPKT_FILECFG * filecfg, UINT32 nInstance)
 
     // otherwise, return the data
     if (filecfg) *filecfg = cb_cfg_buffer_ptr[nIdx]->fileinfo;
-#endif
     return cbRESULT_OK;
 }
 
@@ -1454,9 +1423,9 @@ cbRESULT cbSetChanLabel(UINT32 chan, const char *label, UINT32 userflags, INT32 
     chaninfo.chan      = chan;
     memcpy(chaninfo.label, label, cbLEN_STR_LABEL);
     chaninfo.userflags = userflags;
-    if (position) 
+    if (position)
         memcpy(&chaninfo.position, position, 4 * sizeof(INT32));
-    else 
+    else
         memcpy(&chaninfo.position, &(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].position[0]), 4 * sizeof(INT32));
 
     // Enter the packet into the XMT buffer queue
@@ -1476,7 +1445,7 @@ cbRESULT cbGetChanUnitMapping(UINT32 chan, cbMANUALUNITMAPPING *unitmapping, UIN
     if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Return the requested data from the rec buffer
-    if (unitmapping) 
+    if (unitmapping)
         memcpy(unitmapping, &cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].unitmapping[0], cbMAXUNITS * sizeof(cbMANUALUNITMAPPING));
 
     return cbRESULT_OK;
@@ -1504,7 +1473,7 @@ cbRESULT cbSetChanUnitMapping(UINT32 chan, cbMANUALUNITMAPPING *unitmapping, UIN
     chaninfo.type      = cbPKTTYPE_CHANSETUNITOVERRIDES;
     chaninfo.dlen      = cbPKTDLEN_CHANINFO;
     chaninfo.chan      = chan;
-    if (unitmapping) 
+    if (unitmapping)
         memcpy(&chaninfo.unitmapping, unitmapping, cbMAXUNITS * sizeof(cbMANUALUNITMAPPING));
 
     // Enter the packet into the XMT buffer queue
@@ -1673,7 +1642,7 @@ cbRESULT cbSetChanAutoThreshold( UINT32 chan, const UINT32 bEnabled, UINT32 nIns
 }
 
 
-cbRESULT cbGetNTrodeInfo( const UINT32 ntrode, char *label, cbMANUALUNITMAPPING ellipses[][cbMAXUNITS], 
+cbRESULT cbGetNTrodeInfo( const UINT32 ntrode, char *label, cbMANUALUNITMAPPING ellipses[][cbMAXUNITS],
                          UINT16 * nSite, UINT16 * chans, UINT16 * fs, UINT32 nInstance)
 {
     UINT32 nIdx = cb_library_index[nInstance];
@@ -2686,7 +2655,7 @@ cbRESULT cbSSGetStatistics(UINT32 * pnUpdateSpikes, UINT32 * pnAutoalg, UINT32 *
                            float * pfClusterHistClosePeakPercentage,
                            float * pfClusterHistMinPeakPercentage,
                            UINT32 * pnWaveBasisSize,
-                           UINT32 * pnWaveSampleSize, 
+                           UINT32 * pnWaveSampleSize,
                            UINT32 nInstance)
 {
     UINT32 nIdx = cb_library_index[nInstance];
@@ -2741,7 +2710,7 @@ cbRESULT cbSSSetStatistics(UINT32 nUpdateSpikes, UINT32 nAutoalg, UINT32 nMode,
                            float fClusterHistClosePeakPercentage,
                            float fClusterHistMinPeakPercentage,
                            UINT32 nWaveBasisSize,
-                           UINT32 nWaveSampleSize, 
+                           UINT32 nWaveSampleSize,
                            UINT32 nInstance)
 {
     UINT32 nIdx = cb_library_index[nInstance];
@@ -3178,8 +3147,8 @@ cbRESULT cbSetRefElecFilter(UINT32  proc,             // which NSP processor?
 //   bReadOnly - if should open memory for read-only operation
 cbRESULT cbGetChannelSelection(cbPKT_UNIT_SELECTION * pPktUnitSel, UINT32 nInstance)
 {
-#if 0
     UINT32 nIdx = cb_library_index[nInstance];
+
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
@@ -3187,7 +3156,7 @@ cbRESULT cbGetChannelSelection(cbPKT_UNIT_SELECTION * pPktUnitSel, UINT32 nInsta
         return cbRESULT_HARDWAREOFFLINE;
 
     if (pPktUnitSel) *pPktUnitSel = cb_pc_status_buffer_ptr[nIdx]->isSelection;
-#endif
+
     return cbRESULT_OK;
 }
 
@@ -3204,7 +3173,7 @@ cbRESULT CreateSharedObjects(UINT32 nInstance)
     if (nInstance == 0)
         _snprintf(buf, sizeof(buf), "%s", REC_BUF_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", REC_BUF_NAME, nInstance);            
+        _snprintf(buf, sizeof(buf), "%s%d", REC_BUF_NAME, nInstance);
     cb_rec_buffer_hnd[nIdx] = CreateSharedBuffer(buf, sizeof(cbRECBUFF));
     cb_rec_buffer_ptr[nIdx] = (cbRECBUFF*)GetSharedBuffer(cb_rec_buffer_hnd[nIdx], false);
 
@@ -3227,7 +3196,7 @@ cbRESULT CreateSharedObjects(UINT32 nInstance)
         if (nInstance == 0)
             _snprintf(buf, sizeof(buf), "%s", GLOBAL_XMT_NAME);
         else
-            _snprintf(buf, sizeof(buf), "%s%d", GLOBAL_XMT_NAME, nInstance);            
+            _snprintf(buf, sizeof(buf), "%s%d", GLOBAL_XMT_NAME, nInstance);
         cb_xmt_global_buffer_hnd[nIdx] = CreateSharedBuffer(buf, cbXMT_GLOBAL_BUFFSTRUCTSIZE);
         // map the global memory into local ram space and get pointer
         cb_xmt_global_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_global_buffer_hnd[nIdx], false);
@@ -3240,7 +3209,7 @@ cbRESULT CreateSharedObjects(UINT32 nInstance)
         if (nInstance == 0)
             _snprintf(buf, sizeof(buf), "%s", LOCAL_XMT_NAME);
         else
-            _snprintf(buf, sizeof(buf), "%s%d", LOCAL_XMT_NAME, nInstance);            
+            _snprintf(buf, sizeof(buf), "%s%d", LOCAL_XMT_NAME, nInstance);
         cb_xmt_local_buffer_hnd[nIdx] = CreateSharedBuffer(buf, cbXMT_LOCAL_BUFFSTRUCTSIZE);
         // map the global memory into local ram space and get pointer
         cb_xmt_local_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_local_buffer_hnd[nIdx], false);
@@ -3279,7 +3248,7 @@ cbRESULT CreateSharedObjects(UINT32 nInstance)
     if (nInstance == 0)
         _snprintf(buf, sizeof(buf), "%s", STATUS_BUF_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", STATUS_BUF_NAME, nInstance);            
+        _snprintf(buf, sizeof(buf), "%s%d", STATUS_BUF_NAME, nInstance);
     cb_pc_status_buffer_hnd[nIdx] = CreateSharedBuffer(buf, sizeof(cbPcStatus));
     cb_pc_status_buffer_ptr[nIdx] = (cbPcStatus*)GetSharedBuffer(cb_pc_status_buffer_hnd[nIdx], false);
     if (cb_pc_status_buffer_ptr[nIdx] == NULL)
@@ -3335,7 +3304,7 @@ cbRESULT CreateSharedObjects(UINT32 nInstance)
     if (nInstance == 0)
         _snprintf(buf, sizeof(buf), "%s", SIG_EVT_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", SIG_EVT_NAME, nInstance);            
+        _snprintf(buf, sizeof(buf), "%s%d", SIG_EVT_NAME, nInstance);
 #ifdef WIN32
     cb_sig_event_hnd[nIdx] = CreateEvent(NULL, TRUE, FALSE, buf);
     if (cb_sig_event_hnd[nIdx] == NULL)

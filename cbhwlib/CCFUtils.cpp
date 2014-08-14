@@ -81,7 +81,6 @@ ccfResult CCFUtils::SendCCF()
     if (m_pCallbackFn)
         m_pCallbackFn(m_nInstance, res, m_szFileName, CCFSTATE_SEND, 0);
 
-#if 0
     // Custom digital filters
     for (int i = 0; i < cbNUM_DIGITAL_FILTERS; ++i)
     {
@@ -91,7 +90,6 @@ ccfResult CCFUtils::SendCCF()
             cbSendPacket(&data.filtinfo[i], m_nInstance);
         }
     }
-#endif
     // Chaninfo
     for (int i = 0; i < cbMAXCHANS; ++i)
     {
@@ -133,7 +131,6 @@ ccfResult CCFUtils::SendCCF()
         data.isSysInfo.type = cbPKTTYPE_SYSSETSPKLEN;
         cbSendPacket(&data.isSysInfo, m_nInstance);
     }
-#if 0
     // LNC
     if (data.isLnc.type)
     {
@@ -152,7 +149,6 @@ ccfResult CCFUtils::SendCCF()
             }
         }
     }
-#endif
     // NTrode
     for (int i = 0; i < cbMAXNTRODES; ++i)
     {
@@ -185,7 +181,7 @@ ccfResult CCFUtils::SendCCF()
     if (data.isSS_Status.type)
     {
         data.isSS_Status.type = cbPKTTYPE_SS_STATUSSET;
-        data.isSS_Status.cntlNumUnits.nMode = ADAPT_NEVER;
+        data.isSS_Status.cntlNumUnits.nMode = ADAPT_NEVER; // Prevent rebuilding spike sorting when loading ccf.
         cbSendPacket(&data.isSS_Status, m_nInstance);
     }
 
@@ -248,7 +244,9 @@ ccfResult CCFUtils::ReadVersion(LPCSTR szFileName)
         m_nInternalVersion = m_pImpl->GetInternalVersion();
         m_nInternalOriginalVersion = m_pImpl->GetInternalOriginalVersion();
         m_bBinaryOriginal = m_pImpl->IsBinaryOriginal();
-    } else {
+    }
+    else
+    {
         // read from NSP
         m_nInternalVersion = m_pImpl->GetInternalVersion();
         m_pImpl->m_nInternalOriginalVersion = m_nInternalOriginalVersion = m_nInternalVersion;
@@ -290,7 +288,9 @@ ccfResult CCFUtils::ReadCCF(LPCSTR szFileName, bool bConvert)
     if (m_bBinaryOriginal)
     {
         pConfig = new CCFUtilsBinary();
-    } else {
+    }
+    else
+    {
         switch (m_pImpl->GetInternalOriginalVersion())
         {
         case 12:
@@ -317,7 +317,9 @@ ccfResult CCFUtils::ReadCCF(LPCSTR szFileName, bool bConvert)
         {
             // Perform a threaded read (and optional send) operation
             ccf::ConReadCCF(szFileName, m_bSend, m_pCCF, m_pCallbackFn, m_nInstance);
-        } else {
+        }
+        else
+        {
             if (m_pCallbackFn)
                 m_pCallbackFn(m_nInstance, res, szFileName, CCFSTATE_READ, 0);
             // Ask the right version to read its own data
@@ -356,10 +358,8 @@ void CCFUtils::ReadCCFOfNSP()
     UINT32 nIdx = cb_library_index[m_nInstance];
 
     cbCCF & data = dynamic_cast<ccfXml *>(m_pImpl)->m_data;
-#if 0
     for (int i = 0; i < cbNUM_DIGITAL_FILTERS; ++i)
         data.filtinfo[i] = cb_cfg_buffer_ptr[nIdx]->filtinfo[0][cbFIRST_DIGITAL_FILTER + i];
-#endif
     for (int i = 0; i < cbMAXCHANS; ++i)
         data.isChan[i] = cb_cfg_buffer_ptr[nIdx]->chaninfo[i];
     data.isAdaptInfo = cb_cfg_buffer_ptr[nIdx]->adaptinfo;
@@ -380,7 +380,6 @@ void CCFUtils::ReadCCFOfNSP()
     }
     for (int i = 0; i < cbMAXNTRODES; ++i)
         data.isNTrodeInfo[i] = cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[i];
-#if 0
     data.isLnc = cb_cfg_buffer_ptr[nIdx]->isLnc;
     for (int i = 0; i < AOUT_NUM_GAIN_CHANS; ++i)
     {
@@ -391,7 +390,6 @@ void CCFUtils::ReadCCFOfNSP()
             data.isWaveform[i][j].active = 0;
         }
     }
-#endif
 }
 
 // Author & Date:   Ehsan Azar   12 April 2012

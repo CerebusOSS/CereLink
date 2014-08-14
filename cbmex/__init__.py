@@ -10,3 +10,4 @@
 # $Author: Ehsan $#
 
 __author__ = 'dashesy (Ehsan Azar)'
+__all__ = ['cbpy']

@@ -27,7 +27,12 @@
 #include <map>
 
 static PyObject * g_cbpyError; // cbpy exception
-static PyObject * g_callback[CBSDKCALLBACK_COUNT] = {NULL};
+static PyObject * g_callback[cbMAXOPEN][CBSDKCALLBACK_COUNT] = {NULL};
+static PyObject * g_callback_param[cbMAXOPEN][CBSDKCALLBACK_COUNT] = {NULL};
+static UINT32 g_callback_max_size[cbMAXOPEN][CBSDKCALLBACK_COUNT] = {0};
+static UINT32 g_callback_max_timer[cbMAXOPEN][CBSDKCALLBACK_COUNT] = {0};
+static UINT32 g_callback_timer[cbMAXOPEN][CBSDKCALLBACK_COUNT] = {0};
+static PyObject * g_callback_list[cbMAXOPEN][CBSDKCALLBACK_COUNT] = {NULL};
 static PyGILState_STATE g_gilState; // Python global interpreter lock state
 
 typedef enum {
@@ -105,6 +110,9 @@ typedef enum {
 typedef std::map<std::string, CONNECTION_PARAM> LUT_CONNECTION_PARAM;
 LUT_CONNECTION_PARAM g_lutConnectionParam;
 
+typedef std::map<std::string, cbSdkPktType> LUT_PKT_TYPE;
+LUT_PKT_TYPE g_lutPktType;
+
 // Author & Date: Ehsan Azar       4 July 2012
 // Purpose: Create all lookup tables
 //          Note: All parameter names start with lower letter and follow under_score notation
@@ -113,6 +121,24 @@ LUT_CONNECTION_PARAM g_lutConnectionParam;
 //   Returns 0 on success, error code otherwise
 static int CreateLUTs()
 {
+    // Create packet type callbacks
+    g_lutPktType["packet_lost"  ] = cbSdkPkt_PACKETLOST;
+    g_lutPktType["inst_info"    ] = cbSdkPkt_INSTINFO;
+    g_lutPktType["spike"        ] = cbSdkPkt_SPIKE;
+    g_lutPktType["digital"      ] = cbSdkPkt_DIGITAL;
+    g_lutPktType["serial"       ] = cbSdkPkt_SERIAL;
+    g_lutPktType["continuous"   ] = cbSdkPkt_CONTINUOUS;
+    g_lutPktType["tracking"     ] = cbSdkPkt_TRACKING;
+    g_lutPktType["comment"      ] = cbSdkPkt_COMMENT;
+    g_lutPktType["group_info"   ] = cbSdkPkt_GROUPINFO;
+    g_lutPktType["channel_info" ] = cbSdkPkt_CHANINFO;
+    g_lutPktType["file_config"  ] = cbSdkPkt_FILECFG;
+    g_lutPktType["poll"         ] = cbSdkPkt_POLL;
+    g_lutPktType["synch"        ] = cbSdkPkt_SYNCH;
+    g_lutPktType["neuromotive"  ] = cbSdkPkt_NM;
+    g_lutPktType["ccf"          ] = cbSdkPkt_CCF;
+    g_lutPktType["impedance"    ] = cbSdkPkt_IMPEDANCE;
+    g_lutPktType["heartbeat"    ] = cbSdkPkt_SYSHEARTBEAT;
     // Create ChanLabel outputs LUT
     g_lutChanLabelOutputs["none"         ] = CHANLABEL_OUTPUTS_NONE;
     g_lutChanLabelOutputs["label"        ] = CHANLABEL_OUTPUTS_LABEL;
@@ -138,6 +164,7 @@ static int CreateLUTs()
     g_lutCCFCmd["send"     ] = CCF_CMD_SEND;
     g_lutCCFCmd["convert"  ] = CCF_CMD_CONVERT;
     // Create Config command LUT
+    g_lutConfigInputsCmd["none"          ] = CONFIG_CMD_NONE;
     g_lutConfigInputsCmd["userflags"     ] = CONFIG_CMD_USERFLAGS;
     g_lutConfigInputsCmd["smpfilter"     ] = CONFIG_CMD_SMPFILTER;
     g_lutConfigInputsCmd["smpgroup"      ] = CONFIG_CMD_SMPGROUP;
@@ -167,9 +194,26 @@ static int CreateLUTs()
     return 0;
 }
 
+PyDoc_STRVAR(cbpy_version__doc__,
+"Find library and instrument version.\n\n"
+"Inputs:\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   dictionary with following keys\n"
+"        major - major API version\n"
+"        minor - minor API version\n"
+"        release - release API version\n"
+"        beta - beta API version (0 if a non-beta)\n"
+"        protocol_major - major protocol version\n"
+"        protocol_minor - minor protocol version\n"
+"        nsp_major - major NSP firmware version\n"
+"        nsp_minor - minor NSP firmware version\n"
+"        nsp_release - release NSP firmware version\n"
+"        nsp_beta - beta NSP firmware version (0 if non-beta)\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Return library version
-static PyObject * cbpy_Version(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_version(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     int nInstance = 0;
@@ -192,9 +236,242 @@ static PyObject * cbpy_Version(PyObject *self, PyObject *args, PyObject *keywds)
     return res;
 }
 
+// Author & Date: Ehsan Azar       11 Aug 2013
+// Purpose: Convert sdk packet to Python object
+static PyObject * event_data_convert(UINT32 nInstance, cbSdkPktType type, const void * pEventData)
+{
+    cbSdkResult sdkres = CBSDKRESULT_SUCCESS;
+    PyObject * res = PyDict_New();
+    switch (type)
+    {
+    case cbSdkPkt_PACKETLOST:
+        // data points to cbSdkPktLostEvent
+    {
+        cbSdkPktLostEvent * pPkt = (cbSdkPktLostEvent *)pEventData;
+        char lost_reason[][15] = {"unknown", "link_failure", "pc_nsp", "network"};
+        unsigned int reason = pPkt->type;
+        if (reason > 3)
+            reason = 0;
+        PyObject * pVal = PyString_FromString(lost_reason[reason]);
+        PyDict_SetItemString(res, "reason", pVal);
+    }
+        break;
+    case cbSdkPkt_INSTINFO:
+        // data points to cbSdkInstInfo
+    {
+        cbSdkInstInfo * pPkt = (cbSdkInstInfo *)pEventData;
+        PyObject * pVal = PyLong_FromLong(pPkt->instInfo);
+        PyDict_SetItemString(res, "bitfield", pVal);
+    }
+        break;
+    case cbSdkPkt_SPIKE:
+        // data points ro cbPKT_SPK
+    {
+        PyArrayObject * pArr;
+        PyObject * pVal;
+        cbPKT_SPK * pPkt = (cbPKT_SPK *)pEventData;
+        pVal = PyLong_FromLong(pPkt->chid + 1);
+        PyDict_SetItemString(res, "channel", pVal);
+        pVal = PyLong_FromLong(pPkt->unit);
+        PyDict_SetItemString(res, "unit", pVal);
+        int dims[2] = {3, 1};
+        pArr = (PyArrayObject *)PyArray_FromDims(1, dims, NPY_FLOAT64);
+        for (int i = 0; i < 3; ++i)
+            *((double *)(UINT8 *)PyArray_DATA(pArr) + i) = pPkt->fPattern[i];
+        PyDict_SetItemString(res, "pattern", (PyObject *)pArr);
+
+        UINT32 spklength;
+        sdkres = cbSdkGetSysConfig(nInstance, &spklength, NULL, NULL);
+        if (sdkres != CBSDKRESULT_SUCCESS)
+            cbPySetErrorFromSdkError(sdkres, "error cbSdkGetSysConfig");
+        if (sdkres < CBSDKRESULT_SUCCESS)
+            return res;
+
+        dims[0] = spklength;
+        pArr = (PyArrayObject *)PyArray_FromDims(1, dims, NPY_INT16);
+        for (int i = 0; i < spklength; ++i)
+            *((INT16 *)(UINT8 *)PyArray_DATA(pArr) + i) = pPkt->wave[i];
+        PyDict_SetItemString(res, "wave", (PyObject *)pArr);
+    }
+        break;
+    case cbSdkPkt_DIGITAL:
+        // data points to cbPKT_DINP
+        break;
+    case cbSdkPkt_SERIAL:
+        // data points to cbPKT_DINP
+        break;
+    case cbSdkPkt_CONTINUOUS:
+        // data points to cbPKT_GROUP
+        break;
+    case cbSdkPkt_TRACKING:
+        // data points to cbPKT_VIDEOTRACK
+        break;
+    case cbSdkPkt_COMMENT:
+        // data points to cbPKT_COMMENT
+        break;
+    case cbSdkPkt_GROUPINFO:
+        // data points to cbPKT_GROUPINFO
+        break;
+    case cbSdkPkt_CHANINFO:
+        // data points to cbPKT_CHANINFO
+        break;
+    case cbSdkPkt_FILECFG:
+        // data points to cbPKT_FILECFG
+        break;
+    case cbSdkPkt_POLL:
+        // data points to cbPKT_POLL
+        break;
+    case cbSdkPkt_SYNCH:
+        // data points to cbPKT_VIDEOSYNCH
+        break;
+    case cbSdkPkt_NM:
+        // data points to cbPKT_NM
+        break;
+    case cbSdkPkt_CCF:
+        // data points to cbSdkCCFEvent
+        break;
+    case cbSdkPkt_IMPEDANCE:
+        // data points to cbPKT_IMPEDANCE
+        break;
+    case cbSdkPkt_SYSHEARTBEAT:
+        // data points to cbPKT_SYSHEARTBEAT
+        break;
+    }
+
+    return res;
+}
+
+// Author & Date: Ehsan Azar       11 Aug 2013
+// Purpose: Call a registered callback
+static void sdk_call_callback(UINT32 nInstance, const cbSdkPktType type, PyObject * pData)
+{
+    PyObject * my_callback = g_callback[nInstance][type];
+    PyObject * my_callback_param = g_callback_param[nInstance][type];
+
+    g_gilState = PyGILState_Ensure();
+    my_callback = g_callback[nInstance][type];
+    if (my_callback != NULL)
+    {
+        PyObject * res = NULL;
+        if (my_callback_param != NULL)
+            res = PyObject_CallFunctionObjArgs(my_callback, my_callback_param, pData);
+        else
+            res = PyObject_CallFunctionObjArgs(my_callback, pData);
+        // Check to see if True is returned unregister this function
+        if (res != NULL)
+        {
+            if (PyObject_IsTrue(res) == 1)
+            {
+                Py_XDECREF(my_callback);
+                g_callback[nInstance][type] = NULL;
+                Py_XDECREF(my_callback_param);
+                g_callback_param[nInstance][type] = NULL;
+                g_callback_max_size[nInstance][type] = 0;
+                g_callback_max_timer[nInstance][type] = 0;
+            }
+        }
+    }
+    PyGILState_Release(g_gilState);
+}
+
+// Author & Date: Ehsan Azar       6 May 2012
+// Purpose: The only registered callback with SDK
+static void sdk_callback(UINT32 nInstance, const cbSdkPktType type, const void * pEventData, void* /*pCallbackData*/)
+{
+    if (type >= cbSdkPkt_COUNT)
+        return;
+    PyObject * my_callback = g_callback[nInstance][type];
+    if (my_callback == NULL)
+        return;
+
+    if (g_callback_list[nInstance][type] == NULL)
+    {
+        g_callback_list[nInstance][type] = PyList_New(0);
+        g_callback_timer[nInstance][type] = g_callback_max_timer[nInstance][type];
+    }
+    PyList_Append(g_callback_list[nInstance][type], event_data_convert(nInstance, type, pEventData));
+
+    // If max size reached go on and call
+    if (PyList_GET_SIZE(g_callback_list[nInstance][type]) >= g_callback_max_size[nInstance][type])
+    {
+        sdk_call_callback(nInstance, type, g_callback_list[nInstance][type]);
+        Py_XDECREF(g_callback_list[nInstance][type]);
+        g_callback_list[nInstance][type] = NULL;
+        g_callback_timer[nInstance][type] = 0;
+    }
+
+    // Take advantage of the fact that heartbeats are generated every 10ms
+    if (type == cbSdkPkt_SYSHEARTBEAT)
+    {
+        for (int i = 0; i < cbSdkPkt_COUNT; ++i)
+        {
+            my_callback = g_callback[nInstance][i];
+            // If there is some data for a registered callback
+            if (my_callback != NULL && g_callback_list[nInstance][i] != NULL)
+            {
+                // Check if timer is expired
+                if (g_callback_timer[nInstance][i] >= 10)
+                    g_callback_timer[nInstance][i] -= 10;
+                if (g_callback_timer[nInstance][i] < 10)
+                {
+                    sdk_call_callback(nInstance, (cbSdkPktType)i, g_callback_list[nInstance][i]);
+                    Py_XDECREF(g_callback_list[nInstance][i]);
+                    g_callback_list[nInstance][i] = NULL;
+                    g_callback_timer[nInstance][i] = 0;
+                }
+            }
+        } // end for (int i = 0;
+    } // end if (type == cbSdkPkt_SYSHEARTBEAT
+}
+
+PyDoc_STRVAR(cbpy_register__doc__,
+"Register a callback function\n\n"
+"Notes:\n"
+"   1- Each callback will be called with callback_param followed by data_item_list list.\n"
+"       The list (if non-empty) is filled with of data_item.\n"
+"       Each data_item is a dictionary created from a packet or event as described below.\n"
+"Inputs:\n"
+"   type - callback type, string can be one the following\n"
+"           'packet_lost': called if packets are being lost\n"
+"               data_item is {'cause': reason}\n"
+"                reason is a string and can be any of 'unknown', 'link_failure', 'pc_nsp', 'network'\n"
+"           'inst_info': instrument information\n"
+"               data_item is {'bitfield', instino}\n"
+"                instinfo is integer bitfield of instrument type\n"
+"           'spike': spike packet data\n"
+"               channels if specified should be a list of 1-based electrode numbers\n"
+"               data_item is {'channel', channel_number, 'unit', unit_number, 'pattern', pattern_array, 'wave', wave_array}\n"
+"           'digital': digital packet data\n"
+"           'serial': serial packet data\n"
+"           'continuous': continuous packet data\n"
+"           'tracking': tracking packet data\n"
+"           'comment': comment packet data\n"
+"           'group_info': channel group information\n"
+"           'channel_info': channel information\n"
+"           'file_config': file configuration change\n"
+"           'poll': polling data\n"
+"           'synch': synchronization data\n"
+"           'neuromotive': NeuroMotive status\n"
+"           'ccf': CCF saving, loading or converting status\n"
+"           'impedance': impedence data\n"
+"           'heartbeat': system heartbeat\n"
+"   callback - callable object to be invoked when event of given type happens\n"
+"               function signature of callable(callback_param, data_item_list) is expected\n"
+"           Previously registered callback for given type (if any) will be unregistered.\n"
+"           Return True from callback to unregister it.\n"
+"   callback_param - if given should be a dictionary, and will be passed to the callback\n"
+"   channels - list, channels to receive callback for.\n"
+"               Only callbacks specified will use this parameter, and is ignored by others\n"
+"   buffer - tuple (buffer_len, buffer_timer)\n"
+"           maximum how many packets to buffer (in the list) and how much time (in milliseconds) to wait\n"
+"           before calling the callback.\n"
+"           If buffer gets full (all of buffer_len packets get queued), callback is called and timer is set.\n"
+"           If buffer is not empty and timer is reset, callback is called.\n"
+"   instance - (optional) library instance number\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Register a Python callback function
-static PyObject * cbpy_Register(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_register(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     if (!PyEval_ThreadsInitialized())
@@ -203,57 +480,93 @@ static PyObject * cbpy_Register(PyObject *self, PyObject *args, PyObject *keywds
         PyEval_ReleaseLock();
     }
     cbSdkVersion ver;
+    PyObject *pBuffer = NULL;
     PyObject *pCallback = NULL;
+    PyObject * pCallparam = NULL;
     char * pSzType = NULL;
     int nInstance = 0;
-    static char kw[][32] = {"type", "callback", "instance"};
-    static char * kwlist[] = {kw[0], kw[1], kw[2], NULL};
-    if (!PyArg_ParseTupleAndKeywords(args, keywds, "sO|i:Register", kwlist, &pSzType, &pCallback, &nInstance))
+    static char kw[][32] = {"type", "callback", "callback_param", "buffer", "instance"};
+    static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], kw[4], NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, keywds, "sO|O!O!i:Register", kwlist, &pSzType, &pCallback,
+            &PyDict_Type, &pCallparam, PyTuple_Type, &pBuffer, &nInstance))
         return NULL;
     if (!PyCallable_Check(pCallback))
-        return PyErr_Format(PyExc_TypeError, "callback parameter should be callable");
+        return PyErr_Format(PyExc_TypeError, "callback parameter must be callable");
+    LUT_PKT_TYPE::iterator it = g_lutPktType.find(pSzType);
+    if (it == g_lutPktType.end())
+        return PyErr_Format(PyExc_ValueError, "Invalid callback type (%s)", pSzType);
+    if (PyTuple_GET_SIZE(pBuffer) != 2)
+        return PyErr_Format(PyExc_ValueError, "Callback buffer must have 2 values");
+
+    PyObject * pValue = PyTuple_GetItem(pBuffer, 0);
+    long nBufferLen = 0;
+    if (PyInt_Check(pValue))
+        nBufferLen = PyInt_AsLong(pValue);
+    else
+        return PyErr_Format(PyExc_TypeError, "Invalid buffer_len in buffer; should be integer");
+
+    pValue = PyTuple_GetItem(pBuffer, 1);
+    long nBufferTimer = 0;
+    if (PyInt_Check(pValue))
+        nBufferTimer = PyInt_AsLong(pValue);
+    else
+        return PyErr_Format(PyExc_TypeError, "Invalid buffer_timer in buffer; should be integer");
+
+    cbSdkPktType type = it->second;
     Py_XINCREF(pCallback);
-    //Py_XDECREF(my_callback);
-    //my_callback = pCallback;
-
-    Py_INCREF(Py_None);
-    res = Py_None;
-    return res;
-}
-
-// Author & Date: Ehsan Azar       6 May 2012
-// Purpose: Unregister a Python callback function
-static PyObject * cbpy_Unregister(PyObject *self, PyObject *args, PyObject *keywds)
-{
-    PyObject * res = NULL;
-    Py_INCREF(Py_None);
-    res = Py_None;
-    return res;
-}
-
-// Author & Date: Ehsan Azar       6 May 2012
-// Purpose: The only registered callback with SDK
-static void sdk_callback(const cbSdkPktType type, const void* pEventData, void* pCallbackData)
-{
+    Py_XINCREF(pCallparam);
+    PyObject * my_callback = g_callback[nInstance][type];
+    PyObject * my_callback_param = g_callback_param[nInstance][type];
     g_gilState = PyGILState_Ensure();
-    int idx = type;
-    if (type == cbSdkPkt_PACKETLOST)
-    {
-        // Only the first registered callback receives packet lost events
-        for (int i = 0; i < cbSdkPkt_COUNT; ++i)
-        {
-            if (g_callback[i] != NULL)
-                idx = i;
-        }
-    }
-    if (g_callback[idx] != NULL)
-        PyObject_CallFunctionObjArgs(g_callback[idx]);
+    g_callback_max_size[nInstance][type] = nBufferLen;
+    g_callback_max_timer[nInstance][type] = nBufferTimer;
+    Py_XDECREF(my_callback);
+    my_callback = pCallback;
+    g_callback[nInstance][type] = my_callback;
+    Py_XDECREF(my_callback_param);
+    my_callback_param = pCallparam;
+    g_callback_param[nInstance][type] = my_callback_param;
     PyGILState_Release(g_gilState);
+
+    cbSdkResult sdkres = cbSdkCallbackStatus(nInstance, CBSDKCALLBACK_ALL);
+    if (sdkres == CBSDKRESULT_SUCCESS)
+    {
+        sdkres = cbSdkRegisterCallback(nInstance, CBSDKCALLBACK_ALL, &sdk_callback, (void *)NULL);
+        if (sdkres != CBSDKRESULT_SUCCESS)
+            cbPySetErrorFromSdkError(sdkres);
+        if (sdkres < CBSDKRESULT_SUCCESS)
+            return NULL;
+    }
+
+    Py_INCREF(Py_None);
+    res = Py_None;
+    return res;
 }
+
+PyDoc_STRVAR(cbpy_open__doc__,
+"Open library.\n\n"
+"Inputs:\n"
+"   connection - connection type, string can be one the following\n"
+"           'default': tries slave then master connection\n"
+"           'master': tries master connection (UDP)\n"
+"           'slave': tries slave connection (needs another master already open)\n"
+"   parameter - dictionary with following keys (all optional)\n"
+"           'inst-addr': instrument IPv4 address.\n"
+"           'inst-port': instrument port number.\n"
+"           'client-addr': client IPv4 address.\n"
+"           'client-port': client port number.\n"
+"           'receive-buffer-size': override default network buffer size (low value may result in drops).\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   dictionary with following keys\n"
+"       'connection': Final established connection; can be any of:\n"
+"                      'Default', 'Slave', 'Master', 'Closed', 'Unknown'\n"
+"       'instrument': Instrument connected to; can be any of:\n"
+"                      'NSP', 'nPlay', 'Local NSP', 'Remote nPlay', 'Unknown'\n");
 
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Open library
-static PyObject * cbpy_Open(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_open(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     char * pSzConnection = NULL;
@@ -299,26 +612,26 @@ static PyObject * cbpy_Open(PyObject *self, PyObject *args, PyObject *keywds)
             case CONNECTION_PARAM_INST_ADDR:
                 if (PyUnicode_Check(pValue))
                     return PyErr_Format(PyExc_TypeError, "Invalid instrument IP address; unicode not supported yet");
-                con.szInIP = PyString_AsString(pValue);
-                if (con.szInIP == NULL)
+                con.szOutIP = PyString_AsString(pValue);
+                if (con.szOutIP == NULL)
                     return PyErr_Format(PyExc_TypeError, "Invalid instrument IP address; should be string");
                 break;
             case CONNECTION_PARAM_INST_PORT:
                 if (PyInt_Check(pValue))
-                    con.nInPort = PyInt_AsLong(pValue);
+                    con.nOutPort = PyInt_AsLong(pValue);
                 else
                     return PyErr_Format(PyExc_TypeError, "Invalid instrument port number; should be integer");
                 break;
             case CONNECTION_PARAM_CLIENT_ADDR:
                 if (PyUnicode_Check(pValue))
                     return PyErr_Format(PyExc_TypeError, "Invalid client IP address; unicode not supported yet");
-                con.szOutIP = PyString_AsString(pValue);
-                if (con.szOutIP == NULL)
+                con.szInIP = PyString_AsString(pValue);
+                if (con.szInIP == NULL)
                     return PyErr_Format(PyExc_TypeError, "Invalid client IP address; should be string");
                 break;
             case CONNECTION_PARAM_CLIENT_PORT:
                 if (PyInt_Check(pValue))
-                    con.nOutPort = PyInt_AsLong(pValue);
+                    con.nInPort = PyInt_AsLong(pValue);
                 else
                     return PyErr_Format(PyExc_TypeError, "Invalid client port number; should be integer");
                 break;
@@ -354,9 +667,14 @@ static PyObject * cbpy_Open(PyObject *self, PyObject *args, PyObject *keywds)
     return res;
 }
 
+PyDoc_STRVAR(cbpy_close__doc__,
+"Close library.\n\n"
+"Inputs:\n"
+"   instance - (optional) library instance number\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Close library
-static PyObject * cbpy_Close(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_close(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     int nInstance = 0;
@@ -375,9 +693,20 @@ static PyObject * cbpy_Close(PyObject *self, PyObject *args, PyObject *keywds)
     return res;
 }
 
+PyDoc_STRVAR(cbpy_time__doc__,
+"Instrument time.\n\n"
+"Inputs:\n"
+"   unit - time unit, string can be one the following\n"
+"           'samples': (default) sample number integer\n"
+"           'seconds' or 's': seconds calculated from samples\n"
+"           'milliseconds' or 'ms': milliseconds calculated from samples\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   time - time passed since last reset\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Get instrument time
-static PyObject * cbpy_Time(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_time(PyObject *self, PyObject *args, PyObject *keywds)
 {
     cbSdkResult sdkres = CBSDKRESULT_SUCCESS;
     char * pSzUnit = NULL;
@@ -428,10 +757,25 @@ static PyObject * cbpy_Time(PyObject *self, PyObject *args, PyObject *keywds)
     return res;
 }
 
+PyDoc_STRVAR(cbpy_channel_label__doc__,
+"Get or set channel label.\n\n"
+"Inputs:\n"
+"   channel - electrode channel number (1-based)\n"
+"   new_label - (optional) string, new channel label\n"
+"   outputs - (optional) one string or list of one of the following strings to specify what should go to output\n"
+"           'none', 'label', 'enabled', 'valid_unit'\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   Output is a dictionary only if either some 'outputs' specified, or 'new_label' not specified\n"
+"   dictionary with the following keys\n"
+"       'label': string, current label of channel\n"
+"       'enabled': boolean, if channel is enabled\n"
+"       'valid_unit': array, valid spike units\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Get or set channel label
 //           Optionally get channel validity and unit validity
-static PyObject * cbpy_ChanLabel(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_channel_label(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     int nInstance = 0;
@@ -569,9 +913,32 @@ static PyObject * cbpy_ChanLabel(PyObject *self, PyObject *args, PyObject *keywd
     return res;
 }
 
+PyDoc_STRVAR(cbpy_trial_config__doc__,
+"Configure trial settings.\n\n"
+"Inputs:\n"
+"   reset - boolean, set True to flush data cache and start collecting data immediately,\n"
+"           set False to stop collecting data immediately\n"
+"   buffer_parameter - (optional) dictionary with following keys (all optional)\n"
+"           'double': boolean, if specified, the data is in double precision format\n"
+"           'absolute': boolean, if specified event timing is absolute (new polling will not reset time for events)\n"
+"           'continuous_length': set the number of continuous data to be cached\n"
+"           'event_length': set the number of events to be cached\n"
+"           'comment_length': set number of comments to be cached\n"
+"           'tracking_length': set the number of video tracking events to be cached\n"
+"   range_parameter - (optional) dictionary with following keys (all optional)\n"
+"           'begin_channel': integer, channel to start polling if certain value seen\n"
+"           'begin_mask': integer, channel mask to start polling if certain value seen\n"
+"           'begin_value': value to start polling\n"
+"           'end_channel': channel to end polling if certain value seen\n"
+"           'end_mask': channel mask to end polling if certain value seen\n"
+"           'end_value': value to end polling\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   active- (boolean) if it is active\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Configure trial settings
-static PyObject * cbpy_TrialConfig(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_trial_config(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     UINT16 uBegChan   = 0;
@@ -716,9 +1083,21 @@ static PyObject * cbpy_TrialConfig(PyObject *self, PyObject *args, PyObject *key
     return res;
 }
 
+PyDoc_STRVAR(cbpy_trial_continuous__doc__,
+"Trial continuous data.\n\n"
+"Inputs:\n"
+"   reset - (optional) boolean \n"
+"           set False (default) to leave buffer intact.\n"
+"           set True to clear all the data and reset the trial time to the current time.\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   list of tuples (channel, continuous_array)\n"
+"       channel: integer, channel number (1-based)\n"
+"       continuous_array: array, continuous values for channel\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Trial continuous data
-static PyObject * cbpy_TrialCont(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_trial_continuous(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     bool   bDouble = false;
@@ -807,9 +1186,22 @@ static PyObject * cbpy_TrialCont(PyObject *self, PyObject *args, PyObject *keywd
     return res;
 }
 
+PyDoc_STRVAR(cbpy_trial_event__doc__,
+"Trial spike and event data.\n\n"
+"Inputs:\n"
+"   reset - (optional) boolean \n"
+"           set False (default) to leave buffer intact.\n"
+"           set True to clear all the data and reset the trial time to the current time.\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   list of tuples (channel, digital_events) or (channel, unit0_ts, ..., unitN_ts)\n"
+"       channel: integer, channel number (1-based)\n"
+"       digital_events: array, digital event values for channel (if a digital or serial channel)\n"
+"       unitN_ts: array, spike timestamps of unit N for channel (if an electrode channel)\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Trial spike and event data
-static PyObject * cbpy_TrialEvent(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_trial_event(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     bool   bDouble = false;
@@ -928,9 +1320,27 @@ static PyObject * cbpy_TrialEvent(PyObject *self, PyObject *args, PyObject *keyw
     return res;
 }
 
+PyDoc_STRVAR(cbpy_trial_comment__doc__,
+"Trial comments.\n\n"
+"Inputs:\n"
+"   reset - (optional) boolean \n"
+"           set False (default) to leave buffer intact.\n"
+"           set True to clear all the data and reset the trial time to the current time.\n"
+"   charsets - (optional) boolean, if character sets should be returned (default True)\n"
+"   timestamps - (optional) boolean, if time stamps should be returned (default True)\n"
+"   data - (optional) boolean, if data field should be returned (default True)\n"
+"   comments - (optional) boolean, if comment strings should be returned (default True)\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   tuple (charset_array, timestamps_array, data_array, comments_list)\n"
+"       charset_array: array of character sets\n"
+"       timestamps_array: array of timestamps of comments\n"
+"       data_array: array of comment additional data\n"
+"       comments_list: list of comments\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Trial comments.
-static PyObject * cbpy_TrialComment(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_trial_comment(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     int nTupleCount = 0; // output tuple size
@@ -1107,9 +1517,29 @@ static PyObject * cbpy_TrialComment(PyObject *self, PyObject *args, PyObject *ke
     return res;
 }
 
+PyDoc_STRVAR(cbpy_trial_tracking__doc__,
+"Trial tracking data.\n\n"
+"Inputs:\n"
+"   reset - (optional) boolean \n"
+"           set False (default) to leave buffer intact.\n"
+"           set True to clear all the data and reset the trial time to the current time.\n"
+"   timestamps - (optional) boolean, if packet time stamps should be returned (default True)\n"
+"   synch_timestamps - (optional) boolean, if synchronized time stamps should be returned (default True)\n"
+"   synch_frame_numbers - (optional) boolean, ifframe numbers should be returned (default True)\n"
+"   coordinates - (optional) boolean, if coordinates should be returned (default True)\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   list of tuples (trackable_id, trackable_type, timestamps_array, synch_timestamps_array, coordinates_array)\n"
+"       trackable_id: trackable ID\n"
+"       trackable_type: trackable type\n"
+"       timestamps_array: array of tracking packet time stamps\n"
+"       synch_timestamps_array: array of synchronized time stamps\n"
+"       coordinates_array: array of trackable coordinates (each an array)\n");
+
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Trial tracking points
-static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_trial_tracking(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     int nTupleCount = 0; // output tuple size
@@ -1193,7 +1623,7 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
     for (UINT32 id = 0; id < trialtracking.count; id++)
     {
         UINT16 trackable_id = trialtracking.ids[id]; // Actual tracking id
-        UINT16 trackable_type = trialtracking.types[id]; // Actual tracking id
+        UINT16 trackable_type = trialtracking.types[id]; // Actual tracking type
         PyObject * pTuple = PyTuple_New(nTupleCount + 2);
         if (pTuple == NULL)
             return PyErr_Format(PyExc_MemoryError, "Could not create output tuple");
@@ -1390,9 +1820,28 @@ static PyObject * cbpy_TrialTracking(PyObject *self, PyObject *args, PyObject *k
     return res;
 }
 
+PyDoc_STRVAR(cbpy_file_config__doc__,
+"Configure remote file recording or get status of recording.\n\n"
+"Inputs:\n"
+"   command - string, File configuration command, can be of of the following\n"
+"           'info': get File recording information\n"
+"           'open': opens the File dialog if closed, ignoring other parameters\n"
+"           'close': closes the File dialog if open\n"
+"           'start': starts recording, opens dialog if closed\n"
+"           'stop': stops recording\n"
+"   filename - (optional) string, file name to use for recording\n"
+"   comment - (optional) string, file comment to use for file recording\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   Only if command is 'info' output is returned\n"
+"   A dictionary with following keys:\n"
+"       'Recording': boolean, if recording is in progress\n"
+"       'FileName': string, file name being recorded\n"
+"       'UserName': Computer that is recording\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Configure remote file recording
-static PyObject * cbpy_FileConfig(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_file_config(PyObject *self, PyObject *args, PyObject *keywds)
 {
     cbSdkResult sdkres;
     PyObject * res = NULL;
@@ -1422,9 +1871,7 @@ static PyObject * cbpy_FileConfig(PyObject *self, PyObject *args, PyObject *keyw
         {
             return PyErr_Format(PyExc_ValueError, "Filename and comment must not be specified for 'info' command");
         }
-        cbPySetErrorFromSdkError(CBSDKRESULT_NOTIMPLEMENTED, "info switch");
         {
-#if 0
             char filename[256] = {'\0'};
             char username[256] = {'\0'};
             bool bRecording = false;
@@ -1455,7 +1902,6 @@ static PyObject * cbpy_FileConfig(PyObject *self, PyObject *args, PyObject *keyw
                     return PyErr_Format(PyExc_ValueError, "Cannot retrieve username");
                 }
             }
-#endif
             return res;
         }
         break;
@@ -1491,9 +1937,21 @@ static PyObject * cbpy_FileConfig(PyObject *self, PyObject *args, PyObject *keyw
     return res;
 }
 
+PyDoc_STRVAR(cbpy_digital_out__doc__,
+"Digital output command.\n\n"
+"Inputs:\n"
+"   channel - integer, digital output channel number (1-based)\n"
+"               On NSP, 153 (dout1), 154 (dout2), 155 (dout3), 156 (dout4)\n"
+"   command - string, digital output command, can be of of the following\n"
+"           'set_value': set default digital value\n"
+"   value - (optional), depends on the command\n"
+"           for command of 'set_value':\n"
+"               string, can be 'high' or 'low' (default)\n"
+"   instance - (optional) library instance number\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Digital output command
-static PyObject * cbpy_DigitalOut(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_digital_out(PyObject *self, PyObject *args, PyObject *keywds)
 {
     cbSdkResult sdkres;
     PyObject * res = NULL;
@@ -1543,9 +2001,41 @@ static PyObject * cbpy_DigitalOut(PyObject *self, PyObject *args, PyObject *keyw
     return res;
 }
 
+PyDoc_STRVAR(cbpy_analog_out__doc__,
+"Analog output command. (CURRENTLY NOT IMPLEMENTED!)\n\n"
+"Inputs:\n"
+"   channel - integer, analog output channel number (1-based)\n"
+"           For NSP: 145 (aout1), 146 (aout2), 147 (aout3), 148 (aout4)\n"
+"                    149 (audout1), 150 (audout2)\n"
+"   command - string, digital output command, can be of of the following\n"
+"           'monitor': monitors continuous or spike\n"
+"           'disable': disable analog output\n"
+"           'set_waveform': analog output a waveform specified in the value\n"
+"   value - (optional), depends on the command\n"
+"           for command of 'monitor':\n"
+"               list of strings, string can be 'spike' or 'continuous', 'track'\n"
+"               'track' - monitor the last tracked channel\n"
+"           for command of 'set_waveform':\n"
+"               dictionary with following keys:\n"
+"               'trigger': string, can be one of the following:\n"
+"                   'off':\n"
+"                   'instant':\n"
+"                   'spike':\n"
+"                   'comment_color':\n"
+"                   'diginp_rise':\n"
+"                   'soft_reset':\n"
+"                   'extension':\n"
+"               'trigger_input': trigger input, depends on trigger\n"
+"               'trigger_value': trigger value, depends on trigger\n"
+"               'offset': amplitude offset of the waveform\n"
+"               'repeats': number of repeats. 0 (default) means non-stop\n"
+"               'index': trigger index (0 to 4) is the per-channel trigger index (default is 0)\n"
+"               'waveform': {'sinusoid': (frequency, amplitude)} or {'sequence': [durations_array, amplitudes_array]}\n"
+"   instance - (optional) library instance number\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Analog output command.
-static PyObject * cbpy_AnalogOut(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_analog_out(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     // TODO implement for 6.04
@@ -1554,9 +2044,18 @@ static PyObject * cbpy_AnalogOut(PyObject *self, PyObject *args, PyObject *keywd
     return res;
 }
 
+PyDoc_STRVAR(cbpy_mask__doc__,
+"Mask channels for trials (global mask).\n\n"
+"Inputs:\n"
+"   channel - integer, digital output channel number (1-based)\n"
+"   command - string, can be of of the following\n"
+"           'on': include the channel\n"
+"           'off': exclude the channel\n"
+"   instance - (optional) library instance number\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Mask channels for trials
-static PyObject * cbpy_Mask(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_mask(PyObject *self, PyObject *args, PyObject *keywds)
 {
     cbSdkResult sdkres;
     PyObject * res = NULL;
@@ -1596,9 +2095,16 @@ static PyObject * cbpy_Mask(PyObject *self, PyObject *args, PyObject *keywds)
     return res;
 }
 
+PyDoc_STRVAR(cbpy_comment__doc__,
+"Comment or custom event.\n\n"
+"Inputs:\n"
+"   comment - string, comment to send\n"
+"   data - integer, comment extra data\n"
+"   instance - (optional) library instance number\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Comment or custom event
-static PyObject * cbpy_Comment(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_comment(PyObject *self, PyObject *args, PyObject *keywds)
 {
     cbSdkResult sdkres;
     PyObject * res = NULL;
@@ -1608,7 +2114,7 @@ static PyObject * cbpy_Comment(PyObject *self, PyObject *args, PyObject *keywds)
     UINT32 rgba = 0;
     UINT8 charset = 0;
 
-    static char kw[][32] = {"comment", "rgba", "charset", "instance"};
+    static char kw[][32] = {"comment", "data", "charset", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "s|Iii", kwlist,
                                      &pSzComment, &rgba, &charset, &nInstance))
@@ -1625,16 +2131,62 @@ static PyObject * cbpy_Comment(PyObject *self, PyObject *args, PyObject *keywds)
     return res;
 }
 
+PyDoc_STRVAR(cbpy_config__doc__,
+"Configure a channel (optionally get previous configuration).\n\n"
+"Inputs:\n"
+"   channel - integer, channel number (1-based)\n"
+"   new_config - dictionary with following keys (all optional):\n"
+"       'userflags': integer, user specified custom flags per-channel\n"
+"       'smpfilter': integer, continuous sampling filter index (0 means unfiltered, 1-12, refer to notes)\n"
+"       'smpgroup': integer, continuous sampling group (0 means disable, 1-5, refer to notes)\n"
+"       'spkfilter': integer, spike filter index (0 means unfiltered, 1-12, refer to notes)\n"
+"       'spkgroup': integer, spike NTrode group (0 means individual)\n"
+"       'spkthrlevel': integer or string, spike threshold value raw value,\n"
+"                       or a string with value followed by voltage unit (V, mV, uV)\n"
+"       'amplrejpos': integer or string, positive value to reject spike, raw value,\n"
+"                       or a string with value followed by voltage unit (V, mV, uV)\n"
+"       'amplrejneg': integer, negative value to reject spike, raw value, raw value,\n"
+"                       or a string with value followed by voltage unit (V, mV, uV)\n"
+"       'refelecchan': integer, reference electrode channel (1-based)\n"
+"   outputs - (optional) one string or list of one of the following strings to specify what should go to output\n"
+"           'none', 'userflags', 'smpfilter', 'smpgroup', 'spkfilter', 'spkgroup', 'spkthrlevel', 'amplrejpos',\n"
+"            'amplrejneg', 'refelecchan'\n"
+"   instance - (optional) library instance number\n"
+"Outputs:\n"
+"   Output is a dictionary only if either some 'outputs' specified, or 'new_config' not specified\n"
+"   Dictionary with the same keys as new_config, all in raw integer format\n"
+"Notes:\n"
+"   NSP filter numbers:\n"
+"       1: HP 750Hz\n"
+"       2: HP 250Hz\n"
+"       3: HP 100Hz\n"
+"       4: LP 50Hz\n"
+"       5: LP 125Hz\n"
+"       6: LP 250Hz\n"
+"       7: LP 500Hz\n"
+"       8: LP 150Hz\n"
+"       9: BP 10Hz-250Hz\n"
+"       10: LP 2.5kHz\n"
+"       11: LP 2kHz\n"
+"       12: BP 250Hz-5kHz\n"
+"       13: Custom (if loaded)\n"
+"   NSP sampling group numbers:\n"
+"       1: 500 S/s\n"
+"       2: 1 kS/s\n"
+"       3: 2 kS/s\n"
+"       4: 10 kS/s\n"
+"       5: 30 kS/s\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Configure a channel
-static PyObject * cbpy_Config(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_config(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     int nInstance = 0;
     UINT16 nChannel = 0;
     PyObject * pNewConfig = NULL;
     PyObject * pOutputsParam = NULL; // List of strings to specify the optional outputs
-    static char kw[][32] = {"channel", "config", "outputs", "instance"};
+    static char kw[][32] = {"channel", "new_config", "outputs", "instance"};
     static char * kwlist[] = {kw[0], kw[1], kw[2], kw[3], NULL};
     if (!PyArg_ParseTupleAndKeywords(args, keywds, "i|O!Oi", kwlist, &nChannel, &PyDict_Type, &pNewConfig, &pOutputsParam, &nInstance))
         return NULL;
@@ -1687,121 +2239,123 @@ static PyObject * cbpy_Config(PyObject *self, PyObject *args, PyObject *keywds)
         return NULL;
 
     bool bHasNewParams = false;
-    PyObject *pKey, *pValue;
-    Py_ssize_t pos = 0;
-    while (PyDict_Next(pNewConfig, &pos, &pKey, &pValue))
+    if (pNewConfig != NULL)
     {
-        if (PyUnicode_Check(pKey))
-            return PyErr_Format(PyExc_TypeError, "Invalid config key; unicode not supported yet");
-        const char * pszKey = PyString_AsString(pKey);
-        if (pszKey == NULL)
-            return PyErr_Format(PyExc_TypeError, "Invalid config key; should be string");
-        LUT_CONFIG_INPUTS_CMD::iterator it = g_lutConfigInputsCmd.find(pszKey);
-        if (it == g_lutConfigInputsCmd.end())
-            return PyErr_Format(PyExc_ValueError, "Invalid config input (%s)", pszKey);
-        bHasNewParams = true;
-        CONFIG_CMD cmd = it->second;
-        switch (cmd)
+        PyObject *pKey, *pValue;
+        Py_ssize_t pos = 0;
+        while (PyDict_Next(pNewConfig, &pos, &pKey, &pValue))
         {
-        case CONFIG_CMD_USERFLAGS:
-            if (!PyInt_Check(pValue))
-                return PyErr_Format(PyExc_ValueError, "Invalid userflags number");
-            chaninfo.userflags = PyInt_AsLong(pValue);
-            break;
-        case CONFIG_CMD_SMPFILTER:
-            if (!PyInt_Check(pValue))
-                return PyErr_Format(PyExc_ValueError, "Invalid smpfilter number");
-            chaninfo.smpfilter = PyInt_AsLong(pValue);
-            break;
-        case CONFIG_CMD_SMPGROUP:
-            if (!PyInt_Check(pValue))
-                return PyErr_Format(PyExc_ValueError, "Invalid smpgroup number");
-            chaninfo.smpgroup = PyInt_AsLong(pValue);
-            break;
-        case CONFIG_CMD_SPKFILTER:
-            if (!PyInt_Check(pValue))
-                return PyErr_Format(PyExc_ValueError, "Invalid spkfilter number");
-            chaninfo.spkfilter = PyInt_AsLong(pValue);
-            break;
-        case CONFIG_CMD_SPKGROUP:
-            if (!PyInt_Check(pValue))
-                return PyErr_Format(PyExc_ValueError, "Invalid spkgroup number");
-            chaninfo.spkgroup = PyInt_AsLong(pValue);
-            break;
-        case CONFIG_CMD_SPKTHRLEVEL:
             if (PyUnicode_Check(pKey))
-                return PyErr_Format(PyExc_TypeError, "Invalid spkthrlevel value; unicode not supported yet");
-            if (PyInt_Check(pValue))
+                return PyErr_Format(PyExc_TypeError, "Invalid config key; unicode not supported yet");
+            const char * pszKey = PyString_AsString(pKey);
+            if (pszKey == NULL)
+                return PyErr_Format(PyExc_TypeError, "Invalid config key; should be string");
+            LUT_CONFIG_INPUTS_CMD::iterator it = g_lutConfigInputsCmd.find(pszKey);
+            if (it == g_lutConfigInputsCmd.end())
+                return PyErr_Format(PyExc_ValueError, "Invalid config input (%s)", pszKey);
+            bHasNewParams = true;
+            CONFIG_CMD cmd = it->second;
+            switch (cmd)
             {
-                chaninfo.spkthrlevel = PyInt_AsLong(pValue);
-            } else {
-                const char * pSzValue = PyString_AsString(pValue);
-                if (pSzValue == NULL)
-                    return PyErr_Format(PyExc_TypeError, "Invalid spkthrlevel value; should be string or integer");
-                INT32 nValue = 0;
-                sdkres = cbSdkAnalogToDigital(nInstance, nChannel, pSzValue, &nValue);
-                if (sdkres != CBSDKRESULT_SUCCESS)
-                    cbPySetErrorFromSdkError(sdkres, "cbSdkAnalogToDigital()");
-                if (sdkres < CBSDKRESULT_SUCCESS)
-                    return NULL;
-                chaninfo.spkthrlevel = nValue;
-            }
-            break;
-        case CONFIG_CMD_AMPLREJPOS:
-            if (PyUnicode_Check(pKey))
-                return PyErr_Format(PyExc_TypeError, "Invalid amplrejpos value; unicode not supported yet");
-            if (PyInt_Check(pValue))
-            {
-                chaninfo.amplrejpos = PyInt_AsLong(pValue);
-            } else {
-                const char * pSzValue = PyString_AsString(pValue);
-                if (pSzValue == NULL)
-                    return PyErr_Format(PyExc_TypeError, "Invalid amplrejpos value; should be string or integer");
-                INT32 nValue = 0;
-                sdkres = cbSdkAnalogToDigital(nInstance, nChannel, pSzValue, &nValue);
-                if (sdkres != CBSDKRESULT_SUCCESS)
-                    cbPySetErrorFromSdkError(sdkres, "cbSdkAnalogToDigital()");
-                if (sdkres < CBSDKRESULT_SUCCESS)
-                    return NULL;
-                chaninfo.amplrejpos = nValue;
-            }
-            break;
-        case CONFIG_CMD_AMPLREJNEG:
-            if (PyUnicode_Check(pKey))
-                return PyErr_Format(PyExc_TypeError, "Invalid amplrejneg value; unicode not supported yet");
-            if (PyInt_Check(pValue))
-            {
-                chaninfo.amplrejneg = PyInt_AsLong(pValue);
-            } else {
-                const char * pSzValue = PyString_AsString(pValue);
-                if (pSzValue == NULL)
-                    return PyErr_Format(PyExc_TypeError, "Invalid amplrejneg value; should be string or integer");
-                INT32 nValue = 0;
-                sdkres = cbSdkAnalogToDigital(nInstance, nChannel, pSzValue, &nValue);
-                if (sdkres != CBSDKRESULT_SUCCESS)
-                    cbPySetErrorFromSdkError(sdkres, "cbSdkAnalogToDigital()");
-                if (sdkres < CBSDKRESULT_SUCCESS)
-                    return NULL;
-                chaninfo.amplrejneg = nValue;
-            }
-            break;
-        case CONFIG_CMD_REFELECCHAN:
-            if (!PyInt_Check(pValue))
-                return PyErr_Format(PyExc_ValueError, "Invalid refelecchan number");
-            chaninfo.refelecchan = PyInt_AsLong(pValue);
-            break;
-        default:
-            // Ignore the rest
-            break;
-        } //end switch (cmd
-    } //end while (PyDict_Next
+            case CONFIG_CMD_USERFLAGS:
+                if (!PyInt_Check(pValue))
+                    return PyErr_Format(PyExc_ValueError, "Invalid userflags number");
+                chaninfo.userflags = PyInt_AsLong(pValue);
+                break;
+            case CONFIG_CMD_SMPFILTER:
+                if (!PyInt_Check(pValue))
+                    return PyErr_Format(PyExc_ValueError, "Invalid smpfilter number");
+                chaninfo.smpfilter = PyInt_AsLong(pValue);
+                break;
+            case CONFIG_CMD_SMPGROUP:
+                if (!PyInt_Check(pValue))
+                    return PyErr_Format(PyExc_ValueError, "Invalid smpgroup number");
+                chaninfo.smpgroup = PyInt_AsLong(pValue);
+                break;
+            case CONFIG_CMD_SPKFILTER:
+                if (!PyInt_Check(pValue))
+                    return PyErr_Format(PyExc_ValueError, "Invalid spkfilter number");
+                chaninfo.spkfilter = PyInt_AsLong(pValue);
+                break;
+            case CONFIG_CMD_SPKGROUP:
+                if (!PyInt_Check(pValue))
+                    return PyErr_Format(PyExc_ValueError, "Invalid spkgroup number");
+                chaninfo.spkgroup = PyInt_AsLong(pValue);
+                break;
+            case CONFIG_CMD_SPKTHRLEVEL:
+                if (PyUnicode_Check(pKey))
+                    return PyErr_Format(PyExc_TypeError, "Invalid spkthrlevel value; unicode not supported yet");
+                if (PyInt_Check(pValue))
+                {
+                    chaninfo.spkthrlevel = PyInt_AsLong(pValue);
+                } else {
+                    const char * pSzValue = PyString_AsString(pValue);
+                    if (pSzValue == NULL)
+                        return PyErr_Format(PyExc_TypeError, "Invalid spkthrlevel value; should be string or integer");
+                    INT32 nValue = 0;
+                    sdkres = cbSdkAnalogToDigital(nInstance, nChannel, pSzValue, &nValue);
+                    if (sdkres != CBSDKRESULT_SUCCESS)
+                        cbPySetErrorFromSdkError(sdkres, "cbSdkAnalogToDigital()");
+                    if (sdkres < CBSDKRESULT_SUCCESS)
+                        return NULL;
+                    chaninfo.spkthrlevel = nValue;
+                }
+                break;
+            case CONFIG_CMD_AMPLREJPOS:
+                if (PyUnicode_Check(pKey))
+                    return PyErr_Format(PyExc_TypeError, "Invalid amplrejpos value; unicode not supported yet");
+                if (PyInt_Check(pValue))
+                {
+                    chaninfo.amplrejpos = PyInt_AsLong(pValue);
+                } else {
+                    const char * pSzValue = PyString_AsString(pValue);
+                    if (pSzValue == NULL)
+                        return PyErr_Format(PyExc_TypeError, "Invalid amplrejpos value; should be string or integer");
+                    INT32 nValue = 0;
+                    sdkres = cbSdkAnalogToDigital(nInstance, nChannel, pSzValue, &nValue);
+                    if (sdkres != CBSDKRESULT_SUCCESS)
+                        cbPySetErrorFromSdkError(sdkres, "cbSdkAnalogToDigital()");
+                    if (sdkres < CBSDKRESULT_SUCCESS)
+                        return NULL;
+                    chaninfo.amplrejpos = nValue;
+                }
+                break;
+            case CONFIG_CMD_AMPLREJNEG:
+                if (PyUnicode_Check(pKey))
+                    return PyErr_Format(PyExc_TypeError, "Invalid amplrejneg value; unicode not supported yet");
+                if (PyInt_Check(pValue))
+                {
+                    chaninfo.amplrejneg = PyInt_AsLong(pValue);
+                } else {
+                    const char * pSzValue = PyString_AsString(pValue);
+                    if (pSzValue == NULL)
+                        return PyErr_Format(PyExc_TypeError, "Invalid amplrejneg value; should be string or integer");
+                    INT32 nValue = 0;
+                    sdkres = cbSdkAnalogToDigital(nInstance, nChannel, pSzValue, &nValue);
+                    if (sdkres != CBSDKRESULT_SUCCESS)
+                        cbPySetErrorFromSdkError(sdkres, "cbSdkAnalogToDigital()");
+                    if (sdkres < CBSDKRESULT_SUCCESS)
+                        return NULL;
+                    chaninfo.amplrejneg = nValue;
+                }
+                break;
+            case CONFIG_CMD_REFELECCHAN:
+                if (!PyInt_Check(pValue))
+                    return PyErr_Format(PyExc_ValueError, "Invalid refelecchan number");
+                chaninfo.refelecchan = PyInt_AsLong(pValue);
+                break;
+            default:
+                // Ignore the rest
+                break;
+            } //end switch (cmd
+        } //end while (PyDict_Next
 
-    sdkres = cbSdkSetChannelConfig(nInstance, nChannel, &chaninfo);
-    if (sdkres != CBSDKRESULT_SUCCESS)
-        cbPySetErrorFromSdkError(sdkres);
-    if (sdkres < CBSDKRESULT_SUCCESS)
-        return res;
-
+        sdkres = cbSdkSetChannelConfig(nInstance, nChannel, &chaninfo);
+        if (sdkres != CBSDKRESULT_SUCCESS)
+            cbPySetErrorFromSdkError(sdkres);
+        if (sdkres < CBSDKRESULT_SUCCESS)
+            return res;
+    }
     // If no outputs, we are done here
     if (nOutputs == CONFIG_CMD_NONE)
     {
@@ -1933,9 +2487,21 @@ static PyObject * cbpy_Config(PyObject *self, PyObject *args, PyObject *keywds)
     return res;
 }
 
+PyDoc_STRVAR(cbpy_ccf__doc__,
+"Load or convert Cerebus Config File (CCF).\n\n"
+"Inputs:\n"
+"   command - string, can be one of the following:\n"
+"       'save': Save a new CCF file\n"
+"       'send': Send source CCF file to NSP\n"
+"       'convert': Convert source CCF file to destination CCF file\n"
+"   source - string, source CCF file path\n"
+"   destination - string, destination CCF file path\n"
+"   threaded - boolean, if threads should be used for sending and converting\n"
+"   instance - (optional) library instance number\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Load or convert CCF
-static PyObject * cbpy_CCF(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_ccf(PyObject *self, PyObject *args, PyObject *keywds)
 {
     cbSdkResult sdkres = CBSDKRESULT_SUCCESS;
     PyObject * res = NULL;
@@ -2009,9 +2575,19 @@ static PyObject * cbpy_CCF(PyObject *self, PyObject *args, PyObject *keywds)
     return res;
 }
 
+
+PyDoc_STRVAR(cbpy_system__doc__,
+"Instrument system runtime command.\n\n"
+"Inputs:\n"
+"   command - string, can be one of the following:\n"
+"       'reset': Restart NSP\n"
+"       'shutdown': Shutdown NSP\n"
+"       'standby': Hardware to stand by\n"
+"   instance - (optional) library instance number\n");
+
 // Author & Date: Ehsan Azar       6 May 2012
 // Purpose: Instrument system runtime command
-static PyObject * cbpy_System(PyObject *self, PyObject *args, PyObject *keywds)
+static PyObject * cbpy_system(PyObject *self, PyObject *args, PyObject *keywds)
 {
     PyObject * res = NULL;
     static char kw[][32] = {"command", "instance"};
@@ -2138,7 +2714,7 @@ void cbPySetErrorFromSdkError(cbSdkResult sdkres, const char * szErr)
 #ifdef __APPLE__
         PyErr_SetString(g_cbpyError, "Memory allocation error trying to establish master connection\n"
                 "Consider sysctl -w kern.sysv.shmmax=16777216\n"
-        		"         sysctl -w kern.sysv.shmall=4194304");
+                "         sysctl -w kern.sysv.shmall=4194304");
 
 #else
         PyErr_SetString(g_cbpyError, "Memory allocation error trying to establish master connection");
@@ -2165,26 +2741,25 @@ void cbPySetErrorFromSdkError(cbSdkResult sdkres, const char * szErr)
 // All function names start with Capital letter and follow camel notation
 static PyMethodDef g_cbpyMethods[] =
 {
-    {"Version",  (PyCFunction)cbpy_Version, METH_VARARGS | METH_KEYWORDS, "Library and instrument version."},
-    {"Register",  (PyCFunction)cbpy_Register, METH_VARARGS | METH_KEYWORDS, "Register a callback function."},
-    {"Unregister",  (PyCFunction)cbpy_Unregister, METH_VARARGS | METH_KEYWORDS, "Unregister a callback function."},
-    {"Open",  (PyCFunction)cbpy_Open, METH_VARARGS | METH_KEYWORDS, "Open library."},
-    {"Close",  (PyCFunction)cbpy_Close, METH_VARARGS | METH_KEYWORDS, "Close library."},
-    {"Time",  (PyCFunction)cbpy_Time, METH_VARARGS | METH_KEYWORDS, "Instrument time."},
-    {"ChanLabel",  (PyCFunction)cbpy_ChanLabel, METH_VARARGS | METH_KEYWORDS, "Get or set channel label."},
-    {"TrialConfig",  (PyCFunction)cbpy_TrialConfig, METH_VARARGS | METH_KEYWORDS, "Configure trial settings."},
-    {"TrialCont",  (PyCFunction)cbpy_TrialCont, METH_VARARGS | METH_KEYWORDS, "Trial continuous data"},
-    {"TrialEvent",  (PyCFunction)cbpy_TrialEvent, METH_VARARGS | METH_KEYWORDS, "Trial spike and event data"},
-    {"TrialComment",  (PyCFunction)cbpy_TrialComment, METH_VARARGS | METH_KEYWORDS, "Trial comments."},
-    {"TrialTracking",  (PyCFunction)cbpy_TrialTracking, METH_VARARGS | METH_KEYWORDS, "Trial tracking data."},
-    {"FileConfig",  (PyCFunction)cbpy_FileConfig, METH_VARARGS | METH_KEYWORDS, "Configure remote file recording."},
-    {"DigitalOut",  (PyCFunction)cbpy_DigitalOut, METH_VARARGS | METH_KEYWORDS, "Digital output command."},
-    {"AnalogOut",  (PyCFunction)cbpy_AnalogOut, METH_VARARGS | METH_KEYWORDS, "Analog output command."},
-    {"Mask",  (PyCFunction)cbpy_Mask, METH_VARARGS | METH_KEYWORDS, "Mask channels for trials."},
-    {"Comment",  (PyCFunction)cbpy_Comment, METH_VARARGS | METH_KEYWORDS, "Comment or custom event."},
-    {"Config",  (PyCFunction)cbpy_Config, METH_VARARGS | METH_KEYWORDS, "Configure a channel."},
-    {"CCF",  (PyCFunction)cbpy_CCF, METH_VARARGS | METH_KEYWORDS, "Load or convert Cerebus Config File (CCF)."},
-    {"System",  (PyCFunction)cbpy_System, METH_VARARGS | METH_KEYWORDS, "Instrument system runtime command."},
+    {"version",  (PyCFunction)cbpy_version, METH_VARARGS | METH_KEYWORDS, cbpy_version__doc__},
+    {"register",  (PyCFunction)cbpy_register, METH_VARARGS | METH_KEYWORDS, cbpy_register__doc__},
+    {"open",  (PyCFunction)cbpy_open, METH_VARARGS | METH_KEYWORDS, cbpy_open__doc__},
+    {"close",  (PyCFunction)cbpy_close, METH_VARARGS | METH_KEYWORDS, cbpy_close__doc__},
+    {"time",  (PyCFunction)cbpy_time, METH_VARARGS | METH_KEYWORDS, cbpy_time__doc__},
+    {"channel_label",  (PyCFunction)cbpy_channel_label, METH_VARARGS | METH_KEYWORDS, cbpy_channel_label__doc__},
+    {"trial_config",  (PyCFunction)cbpy_trial_config, METH_VARARGS | METH_KEYWORDS, cbpy_trial_config__doc__},
+    {"trial_continuous",  (PyCFunction)cbpy_trial_continuous, METH_VARARGS | METH_KEYWORDS, cbpy_trial_continuous__doc__},
+    {"trial_event",  (PyCFunction)cbpy_trial_event, METH_VARARGS | METH_KEYWORDS, cbpy_trial_event__doc__},
+    {"trial_comment",  (PyCFunction)cbpy_trial_comment, METH_VARARGS | METH_KEYWORDS, cbpy_trial_comment__doc__},
+    {"trial_tracking",  (PyCFunction)cbpy_trial_tracking, METH_VARARGS | METH_KEYWORDS, cbpy_trial_tracking__doc__},
+    {"file_config",  (PyCFunction)cbpy_file_config, METH_VARARGS | METH_KEYWORDS, cbpy_file_config__doc__},
+    {"digital_out",  (PyCFunction)cbpy_digital_out, METH_VARARGS | METH_KEYWORDS, cbpy_digital_out__doc__},
+    {"analog_out",  (PyCFunction)cbpy_analog_out, METH_VARARGS | METH_KEYWORDS, cbpy_analog_out__doc__},
+    {"mask",  (PyCFunction)cbpy_mask, METH_VARARGS | METH_KEYWORDS, cbpy_mask__doc__},
+    {"comment",  (PyCFunction)cbpy_comment, METH_VARARGS | METH_KEYWORDS, cbpy_comment__doc__},
+    {"config",  (PyCFunction)cbpy_config, METH_VARARGS | METH_KEYWORDS, cbpy_config__doc__},
+    {"ccf",  (PyCFunction)cbpy_ccf, METH_VARARGS | METH_KEYWORDS, cbpy_ccf__doc__},
+    {"system",  (PyCFunction)cbpy_system, METH_VARARGS | METH_KEYWORDS, cbpy_system__doc__},
     {NULL, NULL, 0, NULL} // This has to be the last
 };
 
@@ -2244,12 +2819,5 @@ extern "C" CBSDKAPI MOD_INIT(cbpy)
         return MOD_ERROR_VAL;
     }
 
-    //TODO: add this for callbacks
-    // Add cbpy specific types to the module
-    //if (cbPyAddTypes(m))
-    //{
-    //    PyErr_SetString(g_cbpyError, "Module; could not add types");
-    //    return MOD_ERROR_VAL;
-    //}
     return MOD_SUCCESS_VAL(m);
 }

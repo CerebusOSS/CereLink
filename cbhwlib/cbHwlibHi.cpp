@@ -77,7 +77,7 @@ bool IsRawProcessingEnabled(UINT32 nChan, UINT32 nInstance)
     UINT32 nainpopts = 0;
     ::cbGetAinpOpts( nChan, &nainpopts, NULL, NULL, nInstance);
 
-    return ((nainpopts & cbAINP_RAWSTREAM) == 0 ? false : true);
+    return ((nainpopts & cbAINP_RAWSTREAM_ENABLED) == 0 ? false : true);
 }
 
 

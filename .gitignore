@@ -1,5 +1,7 @@
 dist/
 
+.*
+*.*~
 *.obj/
 *.dir/
 *.user
@@ -8,6 +10,7 @@ dist/
 *.suo
 *.aps
 *.DS_Store
+*.pyc
 UpgradeLog.XML
 _UpgradeReport_Files/
 
@@ -21,3 +24,9 @@ Win32/
 Debug/
 Release/
 .settings/
+.metadata/
+
+build/temp.macosx*
+
+cerebus/cbpy.so
+cerebus/cbpyw.cpp

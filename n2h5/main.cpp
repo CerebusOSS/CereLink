@@ -34,6 +34,16 @@
 #include "n2h5.h"
 #include "NevNsx.h"
 
+#ifndef WIN32
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
+
+// Keep this after all headers
+#include "compat.h"
+
 #ifdef WIN32                          // Windows needs the different spelling
 #define ftello _ftelli64
 #define fseeko _fseeki64
@@ -46,6 +56,10 @@
 UINT16 g_nCombine = 0; // subchannel combine level
 bool g_bAppend = false;
 bool g_bNoSpikes = false;
+bool g_bSkipEmpty = false;
+
+// Keep last synch packet
+BmiSynch_t g_synch = {0};
 
 // Author & Date:   Ehsan Azar   Jan 16, 2013
 // Purpose: Add created header to the hdf file
@@ -93,8 +107,8 @@ int AddRoot(FILE * pFile, hid_t file, NevHdr & isHdr)
     BmiRootAttr_t header;
     memset(&header, 0, sizeof(header));
     header.nMajorVersion = 1;
-    header.szApplication = isHdr.szApplication;
-    header.szComment = isHdr.szComment;
+    strncpy(header.szApplication, isHdr.szApplication, 32);
+    strncpy(header.szComment, isHdr.szComment, 256);
     header.nGroupCount = 1;
     {
         TIMSTM ts;
@@ -104,7 +118,7 @@ int AddRoot(FILE * pFile, hid_t file, NevHdr & isHdr)
                 st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute,
                 st.wSecond, st.wMilliseconds * 1000); 
         ts.chNull = '\0';
-        header.szDate = (char *)&ts;
+        strncpy(header.szDate, (char *)&ts, sizeof(ts));
     }
 
     return AddRoot(file, header);
@@ -124,8 +138,9 @@ int AddRoot(const char * szSrcFile, FILE * pFile, hid_t file, Nsx21Hdr & isHdr)
     BmiRootAttr_t header;
     memset(&header, 0, sizeof(header));
     header.nMajorVersion = 1;
-    header.szApplication = isHdr.szGroup;
-    header.szComment = "";
+    strncpy(header.szApplication, isHdr.szGroup, 16);
+    char szComment[] = ""; // Old format does not have a comment
+    strncpy(header.szComment, szComment, 1024);
     header.nGroupCount = 1;
     TIMSTM ts;
     memset(&ts, 0, sizeof(ts));
@@ -170,8 +185,8 @@ int AddRoot(FILE * pFile, hid_t file, Nsx22Hdr & isHdr)
     BmiRootAttr_t header;
     memset(&header, 0, sizeof(header));
     header.nMajorVersion = 1;
-    header.szApplication = isHdr.szGroup;
-    header.szComment = isHdr.szComment;
+    strncpy(header.szApplication, isHdr.szGroup, 16);
+    strncpy(header.szComment, isHdr.szComment, 256);
     header.nGroupCount = 1;
     {
         TIMSTM ts;
@@ -181,7 +196,7 @@ int AddRoot(FILE * pFile, hid_t file, Nsx22Hdr & isHdr)
                 st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute,
                 st.wSecond, st.wMilliseconds * 1000); 
         ts.chNull = '\0';
-        header.szDate = (char *)&ts;
+        strncpy(header.szDate, (char *)&ts, sizeof(ts));
     }
 
     return AddRoot(file, header);
@@ -215,7 +230,7 @@ int ConvertNev(FILE * pFile, hid_t file)
     hid_t tid_dig = -1;
     hid_t tid_comment = -1;
     hid_t tid_tracking[cbMAXTRACKOBJ];
-    bool  bFixedLengthTracking[cbMAXTRACKOBJ];
+    int   size_tracking[cbMAXTRACKOBJ] = {0};
     hid_t tid_synch = -1;
     hid_t tid_sampling_attr = -1;
     hid_t tid_filt_attr = -1;
@@ -286,7 +301,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                 return 1;
             }
             id--;
-            chanAttr[id].szLabel = _strdup(isExtHdr.neulabel.label);
+            strncpy(chanAttr[id].szLabel, isExtHdr.neulabel.label, 16);
         }
         else if (0 == strncmp(isExtHdr.achPacketID, "NEUEVFLT", sizeof(isExtHdr.achPacketID)))
         {
@@ -308,7 +323,7 @@ int ConvertNev(FILE * pFile, hid_t file)
         {
             synchAttr.id = isExtHdr.id;
             synchAttr.fFps = isExtHdr.videosyn.fFps;
-            synchAttr.szLabel = _strdup(isExtHdr.videosyn.label);
+            strncpy(synchAttr.szLabel, isExtHdr.videosyn.label, 16);
         }
         else if (0 == strncmp(isExtHdr.achPacketID, "TRACKOBJ", sizeof(isExtHdr.achPacketID)))
         {
@@ -322,7 +337,7 @@ int ConvertNev(FILE * pFile, hid_t file)
             trackingAttr[id].type = isExtHdr.id; // 0-based type
             trackingAttr[id].trackID = isExtHdr.trackobj.trackID;
             trackingAttr[id].maxPoints = isExtHdr.trackobj.maxPoints;
-            trackingAttr[id].szLabel = _strdup(isExtHdr.trackobj.label);
+            strncpy(trackingAttr[id].szLabel, isExtHdr.trackobj.label, 16);
         }
         else if (0 == strncmp(isExtHdr.achPacketID, "MAPFILE", sizeof(isExtHdr.achPacketID)))
         {
@@ -344,7 +359,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                 printf("Invalid digital input mode in source file header\n");
                 return 1;
             }
-            chanAttr[id].szLabel = _strdup(isExtHdr.diglabel.label);
+            strncpy(chanAttr[id].szLabel, isExtHdr.diglabel.label, 16);
         } else {
             printf("Unknown header (%7s) in the source file\n", isExtHdr.achPacketID);
         }
@@ -366,12 +381,14 @@ int ConvertNev(FILE * pFile, hid_t file)
             gid_channel = H5Gcreate(file, "channel", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         if (szMapFile != NULL)
         {
-            hid_t tid_attr_vl_str = H5Tcopy(H5T_C_S1);
-            ret = H5Tset_size(tid_attr_vl_str, H5T_VARIABLE);
-            hid_t aid = H5Acreate(gid_channel, "MapFile", tid_attr_vl_str, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            ret = H5Awrite(aid, tid_attr_vl_str, szMapFile);
+            hid_t tid_attr_map_str = H5Tcopy(H5T_C_S1);
+            ret = H5Tset_size(tid_attr_map_str, 1024);
+            hid_t aid = H5Acreate(gid_channel, "MapFile", tid_attr_map_str, space_attr, H5P_DEFAULT, H5P_DEFAULT);
+            char szMapFileRecord[1024] = {0};
+            strcpy(szMapFileRecord, szMapFile);
+            ret = H5Awrite(aid, tid_attr_map_str, szMapFileRecord);
             ret = H5Aclose(aid);
-            H5Tclose(tid_attr_vl_str);
+            H5Tclose(tid_attr_map_str);
         }
         if (g_bAppend)
         {
@@ -544,7 +561,6 @@ int ConvertNev(FILE * pFile, hid_t file)
         for (int i = 0; i < cbMAXTRACKOBJ; ++i)
         {
             tid_tracking[i] = -1;
-            bFixedLengthTracking[i] = false;
             if (trackingAttr[i].szLabel != NULL)
             {
                 bHasVideo = true;
@@ -570,13 +586,8 @@ int ConvertNev(FILE * pFile, hid_t file)
                     break;
                 }
                 // The only fixed length now is the case for single point tracking
-                if (trackingAttr[i].maxPoints == 1)
-                {
-                    bFixedLengthTracking[i] = true;
-                    tid_tracking[i] = CreateTrackingType(gid_video, dim, width,  1);
-                } else {
-                    tid_tracking[i] = CreateTrackingType(gid_video, dim, width);
-                }
+                tid_tracking[i] = CreateTrackingType(gid_video, dim, width);
+                size_tracking[i] = dim * width; // Size of each tracking element in bytes
                 char szNum[7];
                 std::string strLabel = "tracking";
                 sprintf(szNum, "%05u", trackingAttr[i].trackID);
@@ -809,12 +820,11 @@ int ConvertNev(FILE * pFile, hid_t file)
                             ptid_synch = H5PTcreate_fl(gid, "synch_set", tid_synch, chunk_size, compression);
                             H5Gclose(gid);
                         }
-                        BmiSynch_t synch;
-                        synch.dwTimestamp = nevData.dwTimestamp;
-                        synch.etime = nevData.synch.etime;
-                        synch.frame = nevData.synch.frame;
-                        synch.split = nevData.synch.split;
-                        ret = H5PTappend(ptid_synch, 1, &synch);
+                        g_synch.dwTimestamp = nevData.dwTimestamp;
+                        g_synch.etime = nevData.synch.etime;
+                        g_synch.frame = nevData.synch.frame;
+                        g_synch.split = nevData.synch.split;
+                        ret = H5PTappend(ptid_synch, 1, &g_synch);
                     }
                     break;
                 case 0xFFFD: // found a video tracking event
@@ -850,22 +860,20 @@ int ConvertNev(FILE * pFile, hid_t file)
                             H5Gclose(gid);
                         }
 
-                        if (bFixedLengthTracking[id])
+                        // Flatten tracking array
+                        BmiTracking_fl_t tr;
+                        tr.dwTimestamp = nevData.dwTimestamp;
+                        tr.nodeCount = nevData.track.nodeCount;
+                        tr.parentID = nevData.track.parentID;
+                        // Use last synch packet to augment the data
+                        tr.etime = g_synch.etime;
+                        if (size_tracking[id] > 0)
                         {
-                            BmiTracking_fl_t tr;
-                            tr.dwTimestamp = nevData.dwTimestamp;
-                            tr.nodeCount = nevData.track.nodeCount;
-                            tr.parentID = nevData.track.parentID;
-                            memcpy(tr.coords, &nevData.track.coords[0], sizeof(tr.coords));
-                            ret = H5PTappend(ptid_tracking[id], 1, &tr);
-                        } else {
-                            BmiTracking_t tr;
-                            tr.dwTimestamp = nevData.dwTimestamp;
-                            tr.nodeCount = nevData.track.nodeCount;
-                            tr.parentID = nevData.track.parentID;
-                            tr.coords.len = nevData.track.coordsLength;
-                            tr.coords.p = nevData.track.coords;
-                            ret = H5PTappend(ptid_tracking[id], 1, &tr);
+                            for (int i = 0; i < nevData.track.coordsLength; ++i)
+                            {
+                                memcpy(tr.coords, (char *)&nevData.track.coords[0] + i * size_tracking[id], size_tracking[id]);
+                                ret = H5PTappend(ptid_tracking[id], 1, &tr);
+                            }
                         }
                     }
                     break;
@@ -947,7 +955,7 @@ int ConvertNSx21(const char * szSrcFile, FILE * pFile, hid_t file)
             std::string strLabel = "chan";
             sprintf(szNum, "%u", id);
             strLabel += szNum;
-            chanAttr[i].szLabel = _strdup(strLabel.c_str());
+            strncpy(chanAttr[i].szLabel, strLabel.c_str(), 64);
             samplingAttr[i].fClock = 30000;
             // FIXME: This might be incorrect for really old file recordings
             // TODO: search the file to see if 14 is more accurate
@@ -1147,7 +1155,7 @@ int ConvertNSx22(FILE * pFile, hid_t file)
         filtAttr[i].lpfreq = isExtHdr.lpfreq;
         filtAttr[i].lporder = isExtHdr.lporder;
         filtAttr[i].lptype = isExtHdr.lptype;
-        chanAttr[i].szLabel = _strdup(isExtHdr.label);
+        strncpy(chanAttr[i].szLabel, isExtHdr.label, 16);
 
         chanExt2Attr[i].anamax = isExtHdr.anamax;
         chanExt2Attr[i].anamin = isExtHdr.anamin;
@@ -1254,6 +1262,22 @@ int ConvertNSx22(FILE * pFile, hid_t file)
             printf("Invalid data header in source file\n");
             break;
         }
+        if (isDataHdr.nNumDatapoints == 0)
+        {
+            printf("Data section %d with zero points detected!\n", setCount);
+            if (g_bSkipEmpty)
+            {
+                printf(" Skip this section and assume next in file is new data header\n");
+                nGot = fread(&isDataHdr, sizeof(Nsx22DataHdr), 1, pFile);
+                if (nGot != 1)
+                    break;
+                continue;
+            } else {
+                printf(" Retrieve the rest of the file as one chunk\n"
+                        " Last section may have unaligned trailing data points\n"
+                        " Use --skipempty if instead you want to skip empty headers\n");
+            }
+        }
         for (UINT32 i = 0; i < isHdr.cnChannels; ++i)
         {
             size_t chunk_size = CHUNK_SIZE_CONTINUOUS;
@@ -1309,12 +1333,6 @@ int ConvertNSx22(FILE * pFile, hid_t file)
 
             ret = H5Dclose(dsid);
         }
-        if (isDataHdr.nNumDatapoints == 0)
-        {
-            printf("Data section with zero points detected!\n"
-                    " Retrieve the rest of the file as one chunk\n"
-                    " Last section may have unaligned trailing data points\n");
-        }
         int count = 0;
         INT16 anDataBufferCache[cbNUM_ANALOG_CHANS][CHUNK_SIZE_CONTINUOUS];
         for (UINT32 i = 0; i < isDataHdr.nNumDatapoints || isDataHdr.nNumDatapoints == 0; ++i)
@@ -1326,7 +1344,7 @@ int ConvertNSx22(FILE * pFile, hid_t file)
                 if (isDataHdr.nNumDatapoints == 0)
                     printf("Data section %d may be unaligned\n", setCount);
                 else
-                    printf("Fewer data points than specified in data header at the source file!\n");
+                    printf("Fewer data points (%u) than specified in data header (%u) at the source file!\n", i + 1, isDataHdr.nNumDatapoints);
                 break;
             }
             for (UINT32 j = 0; j < isHdr.cnChannels; ++j)
@@ -1395,6 +1413,11 @@ int main(int argc, char * const argv[])
             g_bNoSpikes = true;
             idxSrcFile++;
         }
+        else if (strcmp(argv[i], "--skipempty") == 0)
+        {
+            g_bSkipEmpty = true;
+            idxSrcFile++;
+        }
         else if (strcmp(argv[i], "--append") == 0)
         {
             g_bAppend = true;
@@ -1433,6 +1456,7 @@ int main(int argc, char * const argv[])
                " --force    : overwrites the destination if it exists, create if not\n"
                " --nocache  : slower but results in smaller file size\n"
                " --nospikes : ignore spikes\n"
+               " --skipempty: skip 0-sized headers (instead of ignoring them)\n"
                " --combine <level> : combine to the existing channels at given subchannel level (level 0 means no subchannel)\n"
                "    same experiment, same channels, different data sets (e.g. different sampling rates or filters)\n"
                " --append   : append channels to the end of current channels\n"
@@ -1473,6 +1497,7 @@ int main(int argc, char * const argv[])
     }
 
     hid_t file;
+    hid_t facpl = H5P_DEFAULT;
     
     if (g_bAppend || bCombine)
     {
@@ -1487,7 +1512,6 @@ int main(int argc, char * const argv[])
         H5Fclose(file);
     }
 
-    hid_t facpl = H5P_DEFAULT;
     if (bCache)
     {
         double rdcc_w0 = 1; // We only write so this should work

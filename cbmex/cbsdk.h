@@ -18,14 +18,14 @@
 // Cerebus SDK
 // This header file is distributed as part of the SDK
 //
-// Notes: 
+// Notes:
 //  Only functions are exported, no data, and no classes
 //  No exception is thrown, every function returns an error code that should be consulted by caller
 //  Each instance will run one light thread that is responsible for networking, buffering and callbacks
 //   Additional threads may be created by Qt based on platforms
 // Note for developers:
 //  Data structure in cbsdk should be decoupled from cbhlib as much as possible because cbhlib may change at any version
-//   for some functions it is easier to just rely on the data structure as defined in cbhwlib (e.g. callbacks and CCF), 
+//   for some functions it is easier to just rely on the data structure as defined in cbhwlib (e.g. callbacks and CCF),
 //   but this may change in future to give cbsdk a more stable and independent API
 //
 
@@ -185,23 +185,23 @@ typedef enum _cbSdkPktType
 
 typedef enum _cbSdkCallbackType
 {
-    CBSDKCALLBACK_ALL = 0,      // Monitor all events
-    CBSDKCALLBACK_INSTINFO,     // Monitor instrument connection information
-    CBSDKCALLBACK_SPIKE,        // Monitor spike events
-    CBSDKCALLBACK_DIGITAL,      // Monitor digital input events
-    CBSDKCALLBACK_SERIAL,       // Monitor serial input events
-    CBSDKCALLBACK_CONTINUOUS,   // Monitor continuous events
-    CBSDKCALLBACK_TRACKING,     // Monitor video tracking events
-    CBSDKCALLBACK_COMMENT,      // Monitor comment or custom events
-    CBSDKCALLBACK_GROUPINFO,    // Monitor channel group info events
-    CBSDKCALLBACK_CHANINFO,     // Monitor channel info events
-    CBSDKCALLBACK_FILECFG,      // Monitor file config events
-    CBSDKCALLBACK_POLL,         // respond to poll
-    CBSDKCALLBACK_SYNCH,        // Monitor video synchronizarion events
-    CBSDKCALLBACK_NM,           // Monitor NeuroMotive events
-    CBSDKCALLBACK_CCF,          // Monitor CCF events
-    CBSDKCALLBACK_IMPEDENCE,    // Monitor impedence events
-    CBSDKCALLBACK_SYSHEARTBEAT, // Monitor system heartbeats (100 times a second)
+    CBSDKCALLBACK_ALL = cbSdkPkt_PACKETLOST,        // Monitor all events
+    CBSDKCALLBACK_INSTINFO = cbSdkPkt_INSTINFO,     // Monitor instrument connection information
+    CBSDKCALLBACK_SPIKE = cbSdkPkt_SPIKE,           // Monitor spike events
+    CBSDKCALLBACK_DIGITAL = cbSdkPkt_DIGITAL,       // Monitor digital input events
+    CBSDKCALLBACK_SERIAL = cbSdkPkt_SERIAL,         // Monitor serial input events
+    CBSDKCALLBACK_CONTINUOUS = cbSdkPkt_CONTINUOUS, // Monitor continuous events
+    CBSDKCALLBACK_TRACKING = cbSdkPkt_TRACKING,     // Monitor video tracking events
+    CBSDKCALLBACK_COMMENT = cbSdkPkt_COMMENT,       // Monitor comment or custom events
+    CBSDKCALLBACK_GROUPINFO = cbSdkPkt_GROUPINFO,   // Monitor channel group info events
+    CBSDKCALLBACK_CHANINFO = cbSdkPkt_CHANINFO,     // Monitor channel info events
+    CBSDKCALLBACK_FILECFG = cbSdkPkt_FILECFG,       // Monitor file config events
+    CBSDKCALLBACK_POLL = cbSdkPkt_POLL,             // respond to poll
+    CBSDKCALLBACK_SYNCH = cbSdkPkt_SYNCH,           // Monitor video synchronizarion events
+    CBSDKCALLBACK_NM = cbSdkPkt_NM,                 // Monitor NeuroMotive events
+    CBSDKCALLBACK_CCF = cbSdkPkt_CCF,               // Monitor CCF events
+    CBSDKCALLBACK_IMPEDENCE = cbSdkPkt_IMPEDANCE,   // Monitor impedence events
+    CBSDKCALLBACK_SYSHEARTBEAT = cbSdkPkt_SYSHEARTBEAT, // Monitor system heartbeats (100 times a second)
     CBSDKCALLBACK_COUNT  // Always the last value
 } cbSdkCallbackType;
 
@@ -221,6 +221,9 @@ typedef void (* cbSdkCallback)(UINT32 nInstance, const cbSdkPktType type, const 
 #define cbSdk_CONTINUOUS_DATA_SAMPLES 102400 // multiple of 4096
 /// The default number of events that will be stored per channel in the trial buffer
 #define cbSdk_EVENT_DATA_SAMPLES (2 * 8192) // multiple of 4096
+
+// Maximum file size (in bytes) that is allowed to upload to NSP
+#define cbSdk_MAX_UPOLOAD_SIZE (1024 * 1024 * 1024)
 
 // TODO: these should become functions as we may introduce different instruments
 /// The number of seconds corresponding to one cb clock tick
@@ -308,6 +311,7 @@ typedef enum _cbSdkWaveformTriggerType
     cbSdkWaveformTrigger_SPIKEUNIT,    // spike unit
     cbSdkWaveformTrigger_COMMENTCOLOR, // custom colored event (e.g. NeuroMotive event)
     cbSdkWaveformTrigger_SOFTRESET,    // Soft-reset trigger (e.g. file recording start)
+    cbSdkWaveformTrigger_EXTENSION,    // Extension trigger
     cbSdkWaveformTrigger_COUNT, // Always the last value
 } cbSdkWaveformTriggerType;
 
@@ -355,13 +359,27 @@ typedef enum _cbSdkSystemType
     cbSdkSystem_STANDBY,
 } cbSdkSystemType;
 
+typedef enum _cbSdkExtCmdType
+{
+    cbSdkExtCmd_RPC = 0,   // RPC command
+    cbSdkExtCmd_UPLOAD,    // Upload the file
+    cbSdkExtCmd_TERMINATE, // Signal last RPC command to terminate
+    cbSdkExtCmd_INPUT,     // Input to RPC command
+} cbSdkExtCmdType;
+
+typedef struct _cbSdkExtCmd
+{
+    cbSdkExtCmdType cmd;
+    char szCmd[cbMAX_LOG];
+} cbSdkExtCmd;
+
 // Can call this even with closed library to get library information
 CBSDKAPI    cbSdkResult cbSdkGetVersion(UINT32 nInstance, cbSdkVersion * version); // Get the library version (and nsp version if library is open)
 
 CBSDKAPI    cbSdkResult cbSdkReadCCF(UINT32 nInstance, cbSdkCCF * pData, const char * szFileName, bool bConvert, bool bSend = false, bool bThreaded = false); // Read batch config from CCF (or nsp if filename is null)
 CBSDKAPI    cbSdkResult cbSdkWriteCCF(UINT32 nInstance, cbSdkCCF * pData, const char * szFileName, bool bThreaded = false); // Write batch config to CCF (or nsp if filename is null)
 
-CBSDKAPI    cbSdkResult cbSdkOpen(UINT32 nInstance, 
+CBSDKAPI    cbSdkResult cbSdkOpen(UINT32 nInstance,
                                   cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT,
                                   cbSdkConnection con = cbSdkConnection());
 
@@ -375,13 +393,13 @@ CBSDKAPI    cbSdkResult cbSdkGetSpkCache(UINT32 nInstance, UINT16 channel, cbSPK
 // Note that spike cache is volatile, thus should not be used for critical operations such as recording
 
 // Get trial setup configuration
-CBSDKAPI    cbSdkResult cbSdkGetTrialConfig(UINT32 nInstance, 
+CBSDKAPI    cbSdkResult cbSdkGetTrialConfig(UINT32 nInstance,
                                          UINT32 * pbActive, UINT16 * pBegchan = NULL, UINT32 * pBegmask = NULL, UINT32 * pBegval = NULL,
                                          UINT16 * pEndchan = NULL, UINT32 * pEndmask = NULL, UINT32 * pEndval = NULL, bool * pbDouble = NULL,
                                          UINT32 * puWaveforms = NULL, UINT32 * puConts = NULL, UINT32 * puEvents = NULL,
                                          UINT32 * puComments = NULL, UINT32 * puTrackings = NULL, bool * pbAbsolute = NULL);
 // Setup a trial
-CBSDKAPI    cbSdkResult cbSdkSetTrialConfig(UINT32 nInstance, 
+CBSDKAPI    cbSdkResult cbSdkSetTrialConfig(UINT32 nInstance,
                                          UINT32 bActive, UINT16 begchan = 0, UINT32 begmask = 0, UINT32 begval = 0,
                                          UINT16 endchan = 0, UINT32 endmask = 0, UINT32 endval = 0, bool bDouble = false,
                                          UINT32 uWaveforms = 0, UINT32 uConts = cbSdk_CONTINUOUS_DATA_SAMPLES, UINT32 uEvents = cbSdk_EVENT_DATA_SAMPLES,
@@ -397,12 +415,12 @@ CBSDKAPI    cbSdkResult cbSdkGetChannelLabel(UINT32 nInstance, UINT16 channel, U
 CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(UINT32 nInstance, UINT16 channel, const char * label, UINT32 userflags, INT32 * position); // Set channel label
 
 // Retrieve data of a trial (NULL means ignore), user should allocate enough buffers beforehand, and trial should not be closed during this call
-CBSDKAPI    cbSdkResult cbSdkGetTrialData(UINT32 nInstance, 
+CBSDKAPI    cbSdkResult cbSdkGetTrialData(UINT32 nInstance,
                                           UINT32 bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                           cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
 
 // Initialize the structures (and fill with information about active channels, comment pointers and samples in the buffer)
-CBSDKAPI    cbSdkResult cbSdkInitTrialData(UINT32 nInstance, 
+CBSDKAPI    cbSdkResult cbSdkInitTrialData(UINT32 nInstance,
                                            cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                            cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
 
@@ -423,7 +441,14 @@ CBSDKAPI    cbSdkResult cbSdkSendPacket(UINT32 nInstance, void * ppckt);
 
 CBSDKAPI    cbSdkResult cbSdkSetSystemRunLevel(UINT32 nInstance, UINT32 runlevel, UINT32 locked, UINT32 resetque);
 
-CBSDKAPI    cbSdkResult cbSdkSetDigitalOutput(UINT32 nInstance, UINT16 channel, UINT16 value); // Send a digital output command
+// Send a digital output command
+CBSDKAPI    cbSdkResult cbSdkSetDigitalOutput(UINT32 nInstance, UINT16 channel, UINT16 value);
+
+// Send a synch output waveform
+CBSDKAPI    cbSdkResult cbSdkSetSynchOutput(UINT32 nInstance, UINT16 channel, UINT32 nFreq, UINT32 nRepeats);
+
+// Send an extension command
+CBSDKAPI    cbSdkResult cbSdkExtDoCommand(UINT32 nInstance, cbSdkExtCmd * extCmd);
 
 // Send a analog output waveform or monitor a given channel, disable channel if both are null
 CBSDKAPI    cbSdkResult cbSdkSetAnalogOutput(UINT32 nInstance, UINT16 channel, cbSdkWaveformData * wf, cbSdkAoutMon * mon);
@@ -438,6 +463,9 @@ CBSDKAPI    cbSdkResult cbSdkGetChannelConfig(UINT32 nInstance, UINT16 channel, 
 
 // Get filter description (proc = 1 for now)
 CBSDKAPI    cbSdkResult cbSdkGetFilterDesc(UINT32 nInstance, UINT32 proc, UINT32 filt, cbFILTDESC * filtdesc);
+
+// Get sample group info (proc = 1 for now)
+CBSDKAPI    cbSdkResult cbSdkGetSampleGroupInfo(UINT32 nInstance, UINT32 proc, UINT32 group, char *label, UINT32 *period, UINT32 *length);
 
 // Get sample group list (proc = 1 for now)
 CBSDKAPI    cbSdkResult cbSdkGetSampleGroupList(UINT32 nInstance, UINT32 proc, UINT32 group, UINT32 *length, UINT32 *list);
@@ -460,6 +488,7 @@ CBSDKAPI    cbSdkResult cbSdkSystem(UINT32 nInstance, cbSdkSystemType cmd); // P
 
 CBSDKAPI    cbSdkResult cbSdkRegisterCallback(UINT32 nInstance, cbSdkCallbackType callbacktype, cbSdkCallback pCallbackFn, void* pCallbackData);
 CBSDKAPI    cbSdkResult cbSdkUnRegisterCallback(UINT32 nInstance, cbSdkCallbackType callbacktype);
+CBSDKAPI    cbSdkResult cbSdkCallbackStatus(UINT32 nInstance, cbSdkCallbackType callbacktype);
 // At most one callback per each callback type per each connection
 
 // Convert volts string (e.g. '5V', '-65mV', ...) to its raw digital value equivalent for given channel

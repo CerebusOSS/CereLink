@@ -32,6 +32,12 @@
 #include <math.h>
 #include <QCoreApplication>
 
+#ifndef WIN32
+#ifndef Sleep
+    #define Sleep(x) usleep((x) * 1000)
+#endif
+#endif
+
 // Keep this after all headers
 #include "compat.h"
 
@@ -613,7 +619,7 @@ CBSDKAPI    cbSdkResult cbSdkWriteCCF(UINT32 nInstance, cbSdkCCF * pData, const 
     // TODO: make it possible to convert even with library closed
     if (g_app[nInstance] == NULL)
         return CBSDKRESULT_CLOSED;
-    
+
     return g_app[nInstance]->SdkWriteCCF(pData, szFileName, bThreaded);
 }
 
@@ -667,9 +673,9 @@ cbSdkResult SdkApp::SdkOpen(UINT32 nInstance, cbSdkConnectionType conType, cbSdk
         // Run cbsdk under Central
         char buf[64] = {0};
         if (nInstance == 0)
-            _snprintf(buf, sizeof(buf), "cbCentralAppMutex");
+            _snprintf(buf, sizeof(buf), "cbSharedDataMutex");
         else
-            _snprintf(buf, sizeof(buf), "cbCentralAppMutex%d", nInstance);
+            _snprintf(buf, sizeof(buf), "cbSharedDataMutex%d", nInstance);
         if (cbCheckApp(buf) == cbRESULT_OK)
         {
             conType = CBSDKCONNECTION_CENTRAL;
@@ -705,7 +711,7 @@ cbSdkResult SdkApp::SdkOpen(UINT32 nInstance, cbSdkConnectionType conType, cbSdk
     m_uTrialStartTime = 0;
 
     // If this is not part of another Qt application, and the-only Qt app intance is not present
-    if (QCoreApplication::instance() == NULL)
+    if (QCoreApplication::instance() == NULL && QAppPriv::pApp == NULL)
         QAppPriv::pApp = new QCoreApplication(QAppPriv::argc, QAppPriv::argv);
 
     if (conType == CBSDKCONNECTION_UDP)
@@ -795,7 +801,7 @@ CBSDKAPI    cbSdkResult cbSdkOpen(UINT32 nInstance, cbSdkConnectionType conType,
     }
     if (g_app[nInstance] == NULL)
         return CBSDKRESULT_ERRMEMORY;
-    
+
     return g_app[nInstance]->SdkOpen(nInstance, conType, con);
 }
 
@@ -1230,7 +1236,7 @@ cbSdkResult SdkApp::SdkGetTrialConfig(UINT32 * pbActive, UINT16 * pBegchan, UINT
 }
 
 // Purpose: sdk stub for SdkApp::SdkGetTrialConfig
-CBSDKAPI    cbSdkResult cbSdkGetTrialConfig(UINT32 nInstance, 
+CBSDKAPI    cbSdkResult cbSdkGetTrialConfig(UINT32 nInstance,
                                             UINT32 * pbActive, UINT16 * pBegchan, UINT32 * pBegmask, UINT32 * pBegval,
                                             UINT16 * pEndchan, UINT32 * pEndmask, UINT32 * pEndval, bool * pbDouble,
                                             UINT32 * puWaveforms, UINT32 * puConts, UINT32 * puEvents,
@@ -1241,7 +1247,7 @@ CBSDKAPI    cbSdkResult cbSdkGetTrialConfig(UINT32 nInstance,
     if (g_app[nInstance] == NULL)
         return CBSDKRESULT_CLOSED;
 
-    return g_app[nInstance]->SdkGetTrialConfig(pbActive, pBegchan, pBegmask, pBegval, 
+    return g_app[nInstance]->SdkGetTrialConfig(pbActive, pBegchan, pBegmask, pBegval,
                                                pEndchan, pEndmask, pEndval, pbDouble,
                                                puWaveforms, puConts, puEvents,
                                                puComments, puTrackings, pbAbsolute);
@@ -1268,7 +1274,7 @@ CBSDKAPI    cbSdkResult cbSdkGetTrialConfig(UINT32 nInstance,
 //   Returns the error code
 cbSdkResult SdkApp::SdkSetTrialConfig(UINT32 bActive, UINT16 begchan, UINT32 begmask, UINT32 begval,
                                       UINT16 endchan, UINT32 endmask, UINT32 endval, bool bDouble,
-                                      UINT32 uWaveforms, UINT32 uConts, UINT32 uEvents, UINT32 uComments, UINT32 uTrackings, 
+                                      UINT32 uWaveforms, UINT32 uConts, UINT32 uEvents, UINT32 uComments, UINT32 uTrackings,
                                       bool bAbsolute)
 {
     if (m_instInfo == 0)
@@ -1528,7 +1534,7 @@ cbSdkResult SdkApp::SdkSetTrialConfig(UINT32 bActive, UINT16 begchan, UINT32 beg
 CBSDKAPI    cbSdkResult cbSdkSetTrialConfig(UINT32 nInstance,
                                             UINT32 bActive, UINT16 begchan, UINT32 begmask, UINT32 begval,
                                             UINT16 endchan, UINT32 endmask, UINT32 endval, bool bDouble,
-                                            UINT32 uWaveforms, UINT32 uConts, UINT32 uEvents, UINT32 uComments, UINT32 uTrackings, 
+                                            UINT32 uWaveforms, UINT32 uConts, UINT32 uEvents, UINT32 uComments, UINT32 uTrackings,
                                             bool bAbsolute)
 {
     if (nInstance >= cbMAXOPEN)
@@ -1537,7 +1543,7 @@ CBSDKAPI    cbSdkResult cbSdkSetTrialConfig(UINT32 nInstance,
         return CBSDKRESULT_CLOSED;
 
     return g_app[nInstance]->SdkSetTrialConfig(bActive, begchan, begmask, begval,
-                                               endchan, endmask, endval, bDouble, 
+                                               endchan, endmask, endval, bDouble,
                                                uWaveforms, uConts, uEvents, uComments, uTrackings,
                                                bAbsolute);
 }
@@ -1584,7 +1590,7 @@ cbSdkResult SdkApp::SdkGetChannelLabel(UINT16 channel, UINT32 * bValid, char * l
 }
 
 // Purpose: sdk stub for SdkApp::SdkGetChannelLabel
-CBSDKAPI    cbSdkResult cbSdkGetChannelLabel(UINT32 nInstance, 
+CBSDKAPI    cbSdkResult cbSdkGetChannelLabel(UINT32 nInstance,
                                              UINT16 channel, UINT32 * bValid, char * label, UINT32 * userflags, INT32 * position)
 {
     if (channel == 0 || channel > cbMAXCHANS)
@@ -1620,7 +1626,7 @@ cbSdkResult SdkApp::SdkSetChannelLabel(UINT16 channel, const char * label, UINT3
 }
 
 // Purpose: sdk stub for SdkApp::SdkSetChannelLabel
-CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(UINT32 nInstance, 
+CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(UINT32 nInstance,
                                              UINT16 channel, const char * label, UINT32 userflags, INT32 * position)
 {
     if (channel == 0 || channel > cbMAXCHANS)
@@ -2001,7 +2007,7 @@ cbSdkResult SdkApp::SdkGetTrialData(UINT32 bActive, cbSdkTrialEvent * trialevent
 }
 
 // Purpose: sdk stub for SdkApp::SdkGetTrialData
-CBSDKAPI    cbSdkResult cbSdkGetTrialData(UINT32 nInstance, 
+CBSDKAPI    cbSdkResult cbSdkGetTrialData(UINT32 nInstance,
                                           UINT32 bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                           cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking)
 {
@@ -2176,7 +2182,7 @@ cbSdkResult SdkApp::SdkInitTrialData(cbSdkTrialEvent * trialevent, cbSdkTrialCon
 }
 
 // Purpose: sdk stub for SdkApp::SdkInitTrialData
-CBSDKAPI    cbSdkResult cbSdkInitTrialData(UINT32 nInstance, 
+CBSDKAPI    cbSdkResult cbSdkInitTrialData(UINT32 nInstance,
                                            cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                            cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking)
 {
@@ -2191,7 +2197,7 @@ CBSDKAPI    cbSdkResult cbSdkInitTrialData(UINT32 nInstance,
 // Author & Date:   Ehsan Azar     25 Feb 2011
 // Purpose: Start or stop file recording
 // Inputs:
-//   filename - the character set of the comment
+//   filename - file name string
 //   comment  - comment string
 //   bStart   - start or stop recording
 //   options  - the recording options
@@ -2235,7 +2241,7 @@ cbSdkResult SdkApp::SdkSetFileConfig(const char * filename, const char * comment
 }
 
 // Purpose: sdk stub for SdkApp::SdkSetFileConfig
-CBSDKAPI    cbSdkResult cbSdkSetFileConfig(UINT32 nInstance, 
+CBSDKAPI    cbSdkResult cbSdkSetFileConfig(UINT32 nInstance,
                                            const char * filename, const char * comment, UINT32 bStart, UINT32 options)
 {
     if (filename == NULL || comment == NULL)
@@ -2261,8 +2267,6 @@ CBSDKAPI    cbSdkResult cbSdkSetFileConfig(UINT32 nInstance,
 //   returns the error code
 cbSdkResult SdkApp::SdkGetFileConfig(char * filename, char * username, bool * pbRecording)
 {
-    return CBSDKRESULT_NOTIMPLEMENTED;
-#if 0
     if (m_instInfo == 0)
         return CBSDKRESULT_CLOSED;
 
@@ -2280,7 +2284,6 @@ cbSdkResult SdkApp::SdkGetFileConfig(char * filename, char * username, bool * pb
         *pbRecording = (filecfg.options == cbFILECFG_OPT_REC);
 
     return CBSDKRESULT_SUCCESS;
-#endif
 }
 
 // Purpose: sdk stub for SdkApp::SdkGetFileConfig
@@ -2308,7 +2311,7 @@ CBSDKAPI    cbSdkResult cbSdkGetFileConfig(UINT32 nInstance,
 //   DOBYear - patient DOB year
 // Outputs:
 //   returns the error code
-cbSdkResult SdkApp::SdkSetPatientInfo(const char * ID, const char * firstname, const char * lastname, 
+cbSdkResult SdkApp::SdkSetPatientInfo(const char * ID, const char * firstname, const char * lastname,
                                       UINT32 DOBMonth, UINT32 DOBDay, UINT32 DOBYear)
 {
     if (m_instInfo == 0)
@@ -2343,8 +2346,8 @@ cbSdkResult SdkApp::SdkSetPatientInfo(const char * ID, const char * firstname, c
 }
 
 // Purpose: sdk stub for SdkApp::SdkSetPatientInfo
-CBSDKAPI    cbSdkResult cbSdkSetPatientInfo(UINT32 nInstance, 
-                                            const char * ID, const char * firstname, const char * lastname, 
+CBSDKAPI    cbSdkResult cbSdkSetPatientInfo(UINT32 nInstance,
+                                            const char * ID, const char * firstname, const char * lastname,
                                             UINT32 DOBMonth, UINT32 DOBDay, UINT32 DOBYear)
 {
     if (ID == NULL || firstname == NULL || lastname == NULL)
@@ -2581,6 +2584,255 @@ CBSDKAPI    cbSdkResult cbSdkSetDigitalOutput(UINT32 nInstance, UINT16 channel, 
     return g_app[nInstance]->SdkSetDigitalOutput(channel, value);
 }
 
+// Author & Date:   Ehsan Azar     25 Feb 2013
+// Purpose: Send a synch output
+// Inputs:
+//   channel    - the channel number (1-based) must be synch output channel
+//   nFreq      - frequency in mHz (0 means stop the clock)
+//   nRepeats   - number of pulses to generate (0 means forever)
+// Outputs:
+//   returns the error code
+cbSdkResult SdkApp::SdkSetSynchOutput(UINT16 channel, UINT32 nFreq, UINT32 nRepeats)
+{
+    if (m_instInfo == 0)
+        return CBSDKRESULT_CLOSED;
+    // Only CerePlex currently supports this, for NSP digital output may be used with simillar results
+    if (!(m_instInfo & cbINSTINFO_CEREPLEX))
+        return CBSDKRESULT_NOTIMPLEMENTED;
+    // Currently only one synch output supported
+    if (channel != 1)
+        return CBSDKRESULT_INVALIDCHANNEL; // Not a synch output channel
+    // Not supported
+    if (nFreq > 100000)
+        return CBSDKRESULT_INVALIDPARAM;
+
+    // declare the packet that will be sent
+    cbPKT_NM nmpkt;
+    nmpkt.chid = 0x8000;
+    nmpkt.type = cbPKTTYPE_NMSET;
+    nmpkt.dlen = cbPKTDLEN_NM;
+    nmpkt.mode = cbNM_MODE_SYNCHCLOCK;
+    nmpkt.value = nFreq;
+    nmpkt.opt[0] = nRepeats;
+
+    // send the packet
+    cbRESULT cbres = cbSendPacket(&nmpkt, m_nInstance);
+    if (cbres)
+        return CBSDKRESULT_UNKNOWN;
+
+    return CBSDKRESULT_SUCCESS;
+}
+
+// Purpose: sdk stub for SdkApp::SdkSetSynchOutput
+CBSDKAPI    cbSdkResult cbSdkSetSynchOutput(UINT32 nInstance, UINT16 channel, UINT32 nFreq, UINT32 nRepeats)
+{
+    if (nInstance >= cbMAXOPEN)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (g_app[nInstance] == NULL)
+        return CBSDKRESULT_CLOSED;
+
+    return g_app[nInstance]->SdkSetSynchOutput(channel, nFreq, nRepeats);
+}
+
+// Author & Date:   Ehsan Azar     5 May 2013
+// Purpose: Upload a file to NSP
+//          This could be used to even update the firmware itself
+//          Warning:
+//           Be very careful in using this mechanism, 
+//           if system files or firmware is overwritten, factory image is needed
+//          Warning:
+//           must not shutdown NSP or communications in midst of operation
+// Inputs:
+//   szSrc     - path to file to be uploaded to NSP
+//   szDstDir  - destination directory (should not include the file name, nor path ending)
+//   nInstance - library instance number
+// Outputs:
+//   returns the error code
+cbSdkResult cbSdkUpload(const char * szSrc, const char * szDstDir, UINT32 nInstance)
+{
+    UINT32 runlevel;
+    cbSdkResult res = CBSDKRESULT_SUCCESS;
+    cbRESULT cbres;
+    cbres = cbGetSystemRunLevel(&runlevel, NULL, NULL);
+    if (cbres)
+        return CBSDKRESULT_UNKNOWN;
+    // If running or even updating do not use this, only when standby this function should be used
+    if (runlevel != cbRUNLEVEL_STANDBY)
+        return CBSDKRESULT_INVALIDINST;
+
+    UINT32 cbRead = 0;
+    UINT32 cbFile = 0;
+    FILE * pFile = fopen(szSrc, "rb");
+    if (pFile == NULL)
+        return CBSDKRESULT_ERROPENFILE;
+
+    fseek(pFile, 0, SEEK_END);
+    cbFile = ftell(pFile);
+    if (cbFile > cbSdk_MAX_UPOLOAD_SIZE)
+    {
+        // Too big of a file to upload
+        fclose(pFile);
+        return CBSDKRESULT_ERRFORMATFILE;
+    }
+    fseek(pFile, 0, SEEK_SET);
+    BYTE * pFileData = NULL;
+    try {
+        pFileData = new BYTE[cbFile];
+    } catch (...) {
+        pFileData = NULL;
+    }
+    if (pFileData == NULL)
+    {
+        fclose(pFile);
+        return CBSDKRESULT_ERRMEMORY;
+    }
+    // Read entire file into memory
+    cbRead = (UINT32)fread(pFileData, sizeof(BYTE), cbFile, pFile);
+    fclose(pFile);
+    if (cbFile != cbRead)
+    {
+        free(pFileData);
+        return CBSDKRESULT_ERRFORMATFILE;
+    }
+    const char * szBaseName = &szSrc[0];
+    // Find the base name and use it on destination too
+    UINT32 nLen = (UINT32)strlen(szSrc);
+    for (int i = nLen - 1; i >= 0; --i)
+    {
+#ifdef WIN32
+        if (szSrc[i] == '/' || szSrc[i] == '\\')
+#else
+        if (szSrc[i] == '/')
+#endif
+        {
+            szBaseName = &szSrc[i + 1];
+            break;
+        }
+        else if (szSrc[i] == ' ')
+        {
+            szBaseName = &szSrc[i];
+            break;
+        }
+    }
+    // Do not accept any space in the file name
+    if (szBaseName[0] == ' ' || szBaseName[0] == 0)
+    {
+        free(pFileData);
+        return CBSDKRESULT_INVALIDFILENAME;
+    }
+    nLen = (UINT32)strlen(szBaseName) + (UINT32)strlen(szDstDir) + 1;
+    if (nLen >= 64)
+    {
+        free(pFileData);
+        return CBSDKRESULT_INVALIDFILENAME;
+    }
+
+    cbPKT_UPDATE upkt;
+    memset(&upkt, 0, sizeof(upkt));
+    upkt.time = 0;
+    upkt.chan = 0x8000;
+    upkt.type = cbPKTTYPE_UPDATESET;
+    upkt.dlen = cbPKTDLEN_UPDATE;
+    sprintf(upkt.filename, "%s/%s", szDstDir, szBaseName);
+
+    UINT32 b, blocks = (cbFile / 512) + 1;
+    for (b = 0; b < blocks; ++b)
+    {
+        upkt.blockseq = b;
+        upkt.blockend = (b == (blocks - 1));
+        upkt.blocksiz = min( cbFile - (b * 512), 512);
+        memcpy(&upkt.block[0], pFileData + (b * 512), upkt.blocksiz);
+        do {
+            cbres = cbSendPacket(&upkt, nInstance);
+        } while (cbres == cbRESULT_MEMORYUNAVAIL);
+        if (cbres)
+        {
+            res = CBSDKRESULT_UNKNOWN;
+            break;
+        }
+    }
+
+    free(pFileData);
+    
+    if (res == CBSDKRESULT_SUCCESS)
+    {
+        // TODO: must wait for cbLOG_MODE_UPLOAD_RES because mount is asynch
+    }
+
+    return res;
+}
+
+// Author & Date:   Ehsan Azar     5 May 2013
+// Purpose: Send an extension command
+// Inputs:
+//   extCmd    - the extension command
+// Outputs:
+//   returns the error code
+cbSdkResult SdkApp::SdkExtDoCommand(cbSdkExtCmd * extCmd)
+{
+    if (m_instInfo == 0)
+        return CBSDKRESULT_CLOSED;
+    // Only NSP1.5 compatible devices currently supports this
+    if (m_instInfo & cbINSTINFO_NSP1)
+        return CBSDKRESULT_NOTIMPLEMENTED;
+
+    cbRESULT cbres;
+    cbPKT_LOG pktLog;
+    memset(&pktLog, 0, sizeof(pktLog));
+    strcpy(pktLog.name, "cbSDK");
+    pktLog.chid = 0x8000;
+    pktLog.type = cbPKTTYPE_LOGSET;
+    pktLog.dlen = cbPKTDLEN_LOG;
+
+    switch (extCmd->cmd)
+    {
+    case cbSdkExtCmd_INPUT:
+        pktLog.mode = cbLOG_MODE_RPC_INPUT;
+        strncpy(pktLog.desc, extCmd->szCmd, sizeof(pktLog.desc));
+        // send the packet
+        cbres = cbSendPacket(&pktLog, m_nInstance);
+        if (cbres)
+            return CBSDKRESULT_UNKNOWN;
+        break;
+    case cbSdkExtCmd_RPC:
+        pktLog.mode = cbLOG_MODE_RPC;
+        strncpy(pktLog.desc, extCmd->szCmd, sizeof(pktLog.desc));
+        // send the packet
+        cbres = cbSendPacket(&pktLog, m_nInstance);
+        if (cbres)
+            return CBSDKRESULT_UNKNOWN;
+        break;
+    case cbSdkExtCmd_UPLOAD:
+        return cbSdkUpload(extCmd->szCmd, "/extnroot/root", m_nInstance);
+        break;
+    case cbSdkExtCmd_TERMINATE:
+        pktLog.mode = cbLOG_MODE_RPC_KILL;
+        // send the packet
+        cbres = cbSendPacket(&pktLog, m_nInstance);
+        if (cbres)
+            return CBSDKRESULT_UNKNOWN;
+        break;
+    default:
+        return CBSDKRESULT_INVALIDPARAM;
+        break;
+    }
+
+    return CBSDKRESULT_SUCCESS;
+}
+
+// Purpose: sdk stub for SdkApp::cbSdkExtCmd
+CBSDKAPI    cbSdkResult cbSdkExtDoCommand(UINT32 nInstance, cbSdkExtCmd * extCmd)
+{
+    if (extCmd == NULL)
+        return CBSDKRESULT_NULLPTR;
+    if (nInstance >= cbMAXOPEN)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (g_app[nInstance] == NULL)
+        return CBSDKRESULT_CLOSED;
+
+    return g_app[nInstance]->SdkExtDoCommand(extCmd);
+}
+
 // Author & Date:   Ehsan Azar     26 Oct 2011
 // Purpose: Send an analog output waveform, or monitor a channel.
 //           if none is given then analog output channel is disabled
@@ -2592,8 +2844,6 @@ CBSDKAPI    cbSdkResult cbSdkSetDigitalOutput(UINT32 nInstance, UINT16 channel, 
 //   returns the error code
 cbSdkResult SdkApp::SdkSetAnalogOutput(UINT16 channel, cbSdkWaveformData * wf, cbSdkAoutMon * mon)
 {
-    return CBSDKRESULT_NOTIMPLEMENTED;
-#if 0
     if (m_instInfo == 0)
         return CBSDKRESULT_CLOSED;
     if (wf != NULL)
@@ -2691,11 +2941,10 @@ cbSdkResult SdkApp::SdkSetAnalogOutput(UINT16 channel, cbSdkWaveformData * wf, c
     }
 
     return CBSDKRESULT_SUCCESS;
-#endif
 }
 
 // Purpose: sdk stub for SdkApp::SdkSetAnalogOutput
-CBSDKAPI    cbSdkResult cbSdkSetAnalogOutput(UINT32 nInstance, 
+CBSDKAPI    cbSdkResult cbSdkSetAnalogOutput(UINT32 nInstance,
                                              UINT16 channel, cbSdkWaveformData * wf, cbSdkAoutMon * mon)
 {
     if (wf != NULL && mon != NULL)
@@ -2865,6 +3114,45 @@ CBSDKAPI    cbSdkResult cbSdkGetChannelConfig(UINT32 nInstance, UINT16 channel, 
     return g_app[nInstance]->SdkGetChannelConfig(channel, chaninfo);
 }
 
+// Author & Date:   Joshua Southerland    31 May 2013
+// Purpose: retrieve group info
+//           wrapper to export cbGetSampleGroupInfo
+//
+// Inputs:
+//   nInsane - cbsdk instance
+//   proc   - processor
+//   group  - group (1-6)
+// Outputs:
+//   label  - return of group label
+//   period - return of group sample period
+//   length - return of length of group list
+//   Returns the error code
+cbSdkResult SdkApp::SdkGetSampleGroupInfo(UINT32 proc, UINT32 group, char *label, UINT32 *period, UINT32 *length)
+{
+    if (m_instInfo == 0)
+        return CBSDKRESULT_CLOSED;
+
+    cbRESULT cbres = cbGetSampleGroupInfo(proc, group, label, period, length, m_nInstance);
+    if (cbres == cbRESULT_INVALIDADDRESS)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (cbres)
+        return CBSDKRESULT_UNKNOWN;
+    return CBSDKRESULT_SUCCESS;
+}
+
+
+// Purpose: sdk stub for SdkApp::SdkGetSampleGroupInfo
+CBSDKAPI    cbSdkResult cbSdkGetSampleGroupInfo(UINT32 nInstance, UINT32 proc, UINT32 group, char *label, UINT32 *period, UINT32 *length)
+{
+    if (nInstance >= cbMAXOPEN)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (g_app[nInstance] == NULL)
+        return CBSDKRESULT_CLOSED;
+
+    return g_app[nInstance]->SdkGetSampleGroupInfo(proc, group, label, period, length);
+}
+
+
 // Author & Date:   Tom Richins     11 Apr 2011
 // Purpose: retrieve group list
 //           wrapper to export cbGetSampleGroupList
@@ -2891,7 +3179,7 @@ cbSdkResult SdkApp::SdkGetSampleGroupList(UINT32 proc, UINT32 group, UINT32 *len
 }
 
 // Purpose: sdk stub for SdkApp::SdkGetSampleGroupList
-CBSDKAPI    cbSdkResult cbSdkGetSampleGroupList(UINT32 nInstance, 
+CBSDKAPI    cbSdkResult cbSdkGetSampleGroupList(UINT32 nInstance,
                                                 UINT32 proc, UINT32 group, UINT32 *length, UINT32 *list)
 {
     if (nInstance >= cbMAXOPEN)
@@ -3139,7 +3427,7 @@ cbSdkResult SdkApp::SdkRegisterCallback(cbSdkCallbackType callbacktype, cbSdkCal
 }
 
 // Purpose: sdk stub for SdkApp::SdkRegisterCallback
-CBSDKAPI    cbSdkResult cbSdkRegisterCallback(UINT32 nInstance, 
+CBSDKAPI    cbSdkResult cbSdkRegisterCallback(UINT32 nInstance,
                                               cbSdkCallbackType callbacktype, cbSdkCallback pCallbackFn, void * pCallbackData)
 {
     if (!pCallbackFn)
@@ -3185,6 +3473,35 @@ CBSDKAPI    cbSdkResult cbSdkUnRegisterCallback(UINT32 nInstance, cbSdkCallbackT
         return CBSDKRESULT_CLOSED;
 
     return g_app[nInstance]->SdkUnRegisterCallback(callbacktype);
+}
+
+// Author & Date:   Ehsan Azar     7 Aug 2013
+// Purpose: Get callback status
+//           if unregistered returns success, and means a register should not fail
+// Inputs:
+//   callbacktype - the calback type to unregister
+// Outputs:
+//   returns the error code
+cbSdkResult SdkApp::SdkCallbackStatus(cbSdkCallbackType callbacktype)
+{
+    if (m_instInfo == 0)
+        return CBSDKRESULT_CLOSED;
+    if (m_pCallback[callbacktype])
+        return CBSDKRESULT_CALLBACKREGFAILED; // Already registered
+    return CBSDKRESULT_SUCCESS;
+}
+
+// Purpose: sdk stub for SdkApp::SdkCallbackStatus
+CBSDKAPI    cbSdkResult cbSdkCallbackStatus(UINT32 nInstance, cbSdkCallbackType callbacktype)
+{
+    if (callbacktype >= CBSDKCALLBACK_COUNT)
+        return CBSDKRESULT_INVALIDCALLBACKTYPE;
+    if (nInstance >= cbMAXOPEN)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (g_app[nInstance] == NULL)
+        return CBSDKRESULT_CLOSED;
+
+    return g_app[nInstance]->SdkCallbackStatus(callbacktype);
 }
 
 // Author & Date:   Ehsan Azar     21 Feb 2013
@@ -3290,10 +3607,10 @@ CBSDKAPI    cbSdkResult cbSdkAnalogToDigital(UINT32 nInstance, UINT16 channel, c
 // Author & Date: Ehsan Azar       29 April 2012
 // Purpose: Sdk app base constructor
 SdkApp::SdkApp() :
-    m_bInitialized(false), m_lastCbErr(cbRESULT_OK), 
+    m_bInitialized(false), m_lastCbErr(cbRESULT_OK),
     m_uTrialBeginChannel(0), m_uTrialBeginMask(0), m_uTrialBeginValue(0), m_uTrialEndChannel(0), m_uTrialEndMask(0), m_uTrialEndValue(0),
     m_bTrialDouble(false), m_bTrialAbsolute(false),
-    m_uTrialWaveforms(0), m_uTrialConts(0), m_uTrialEvents(0), m_uTrialComments(0), m_uTrialTrackings(0), 
+    m_uTrialWaveforms(0), m_uTrialConts(0), m_uTrialEvents(0), m_uTrialComments(0), m_uTrialTrackings(0),
     m_bWithinTrial(FALSE), m_uTrialStartTime(0), m_uCbsdkTime(0),
     m_CD(NULL), m_ED(NULL), m_CMT(NULL), m_TR(NULL)
 {

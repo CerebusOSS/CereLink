@@ -69,7 +69,7 @@ ccfResult CCFUtilsXml_v1::ReadCCF(LPCSTR szFileName, bool bConvert)
         }
         if (!res)
         {
-//            ccf::ReadItem(&xml, m_data.filtinfo, cbNUM_DIGITAL_FILTERS, "FilterInfo");
+            ccf::ReadItem(&xml, m_data.filtinfo, cbNUM_DIGITAL_FILTERS, "FilterInfo");
             ccf::ReadItem(&xml, m_data.isChan, cbMAXCHANS, "ChanInfo");
             if (!xml.beginGroup("Sorting"))
             {
@@ -81,8 +81,8 @@ ccfResult CCFUtilsXml_v1::ReadCCF(LPCSTR szFileName, bool bConvert)
             }
             xml.endGroup(); // Sorting
             ccf::ReadItem(&xml, m_data.isSysInfo, "SysInfo");
-//            ccf::ReadItem(&xml, m_data.isLnc, "LNC");
-//            ccf::ReadItem(&xml, m_data.isWaveform, AOUT_NUM_GAIN_CHANS, cbMAX_AOUT_TRIGGER, "AnalogOutput/Waveforms");
+            ccf::ReadItem(&xml, m_data.isLnc, "LNC");
+            ccf::ReadItem(&xml, m_data.isWaveform, AOUT_NUM_GAIN_CHANS, cbMAX_AOUT_TRIGGER, "AnalogOutput/Waveforms");
             ccf::ReadItem(&xml, m_data.isNTrodeInfo, cbMAXNTRODES, "NTrodeInfo");
             ccf::ReadItem(&xml, m_data.isAdaptInfo, "AdaptInfo");
         } // end if (!res
@@ -135,7 +135,7 @@ ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(LPCSTR szFileName)
     QVariantList lst;
     m_szFileName = szFileName;
     // Digital filters
-//    lst += GetCCFXmlItem(m_data.filtinfo, cbNUM_DIGITAL_FILTERS, "FilterInfo");
+    lst += GetCCFXmlItem(m_data.filtinfo, cbNUM_DIGITAL_FILTERS, "FilterInfo");
     // Chaninfo
     lst += GetCCFXmlItem(m_data.isChan, cbMAXCHANS, "ChanInfo");
     // Sorting
@@ -149,9 +149,9 @@ ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(LPCSTR szFileName)
     // SysInfo
     lst += GetCCFXmlItem(m_data.isSysInfo, "SysInfo");
     // Line Noise Cancellation
-//    lst += GetCCFXmlItem(m_data.isLnc, "LNC");
+    lst += GetCCFXmlItem(m_data.isLnc, "LNC");
     // Analog output waveforms
-//    lst += GetCCFXmlItem(m_data.isWaveform, AOUT_NUM_GAIN_CHANS, cbMAX_AOUT_TRIGGER, "AnalogOutput/Waveforms", "Waveform");
+    lst += GetCCFXmlItem(m_data.isWaveform, AOUT_NUM_GAIN_CHANS, cbMAX_AOUT_TRIGGER, "AnalogOutput/Waveforms", "Waveform");
     // NTrode
     lst += GetCCFXmlItem(m_data.isNTrodeInfo, cbMAXNTRODES, "NTrodeInfo");
     // Adaptive filter
