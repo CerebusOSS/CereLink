@@ -1,10 +1,10 @@
 # CBSDK CMake Build System
 # Author: griffin.milsap@gmail.com
 # Version 1.0 Dec. 2012
-#	Build information for
-#		cbsdk Library (static or shared)
+#   Build information for
+#       cbsdk Library (static or shared)
 #       cbpy  Library
-#		testcbsdk Test Binary
+#       testcbsdk Test Binary
 # Notes:
 #  OSX: may need to specify your Python library as cmake may detect system provided PythonLib (although may detect right Python)! 
 #    e.g. cmake -DPYTHON_LIBRARY=/usr/local/Cellar/python/2.7.3/Frameworks/Python.framework/Versions/2.7/lib/libpython2.7.dylib . 
@@ -92,40 +92,40 @@ ELSE ( MATLAB_INCLUDE_DIR-NOTFOUND )
 ENDIF ( MATLAB_INCLUDE_DIR-NOTFOUND )
 
 INCLUDE_DIRECTORIES(
-	../cbhwlib
-	../Central
-	../Central Common
+    ../cbhwlib
+    ../Central
+    ../Central Common
 )
 
 SET( LIB_SOURCE
-	../cbmex/cbsdk.cpp
-	../cbhwlib/cbhwlib.cpp
-	../cbhwlib/cbHwlibHi.cpp
-	../cbhwlib/CCFUtils.cpp
-	../cbhwlib/CCFUtilsBinary.cpp
-	../cbhwlib/CCFUtilsConcurrent.cpp
-	../cbhwlib/CCFUtilsXml.cpp
-	../cbhwlib/CCFUtilsXmlItems.cpp
-	../cbhwlib/InstNetwork.cpp
-	../cbhwlib/XmlFile.cpp
-	../Central/Instrument.cpp
-	../Central/UDPsocket.cpp
+    ../cbmex/cbsdk.cpp
+    ../cbhwlib/cbhwlib.cpp
+    ../cbhwlib/cbHwlibHi.cpp
+    ../cbhwlib/CCFUtils.cpp
+    ../cbhwlib/CCFUtilsBinary.cpp
+    ../cbhwlib/CCFUtilsConcurrent.cpp
+    ../cbhwlib/CCFUtilsXml.cpp
+    ../cbhwlib/CCFUtilsXmlItems.cpp
+    ../cbhwlib/InstNetwork.cpp
+    ../cbhwlib/XmlFile.cpp
+    ../Central/Instrument.cpp
+    ../Central/UDPsocket.cpp
 )
 
 # Only headers which need MOC'ing
 SET( LIB_HEADERS
-	../cbhwlib/InstNetwork.h
+    ../cbhwlib/InstNetwork.h
 )
 
 SET( LIB_SOURCE_CBPY
-	../cbmex/cbpy.cpp
+    ../cbmex/cbpy.cpp
 )
 SET( LIB_SOURCE_CBMEX
-	../cbmex/cbmex.cpp
+    ../cbmex/cbmex.cpp
 )
 SET( N2H5_SOURCE
-	../n2h5/main.cpp
-	../n2h5/n2h5.cpp
+    ../n2h5/main.cpp
+    ../n2h5/n2h5.cpp
 )
 
 
@@ -139,7 +139,7 @@ ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP )
 ADD_DEFINITIONS( -DCBSDK_EXPORTS )
 
 IF( WIN32 )
-	ADD_DEFINITIONS( -DWIN32 -D_WINDOWS -DWINVER=0x0501 -DNO_AFX )
+    ADD_DEFINITIONS( -DWIN32 -D_WINDOWS -DWINVER=0x0501 -DNO_AFX )
     SET ( LIB_SOURCE ${LIB_SOURCE} ../cbmex/cbMex.rc )
 ENDIF( WIN32 )
 
@@ -168,7 +168,7 @@ IF( WIN32 )
     SET_TARGET_PROPERTIES( ${LIB_NAME} PROPERTIES IMPORT_PREFIX "../")
     SET_TARGET_PROPERTIES (${LIB_NAME_STATIC} PROPERTIES PREFIX "../")
 
-	TARGET_LINK_LIBRARIES( ${LIB_NAME} ws2_32 winmm )
+    TARGET_LINK_LIBRARIES( ${LIB_NAME} ws2_32 winmm )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} ws2_32 winmm )
 ENDIF( WIN32 )
 
@@ -177,10 +177,10 @@ set(HEADERS "../cbmex/cbsdk.h" "../cbhwlib/cbhwlib.h")
 install(FILES ${HEADERS} DESTINATION include)
 
 ADD_CUSTOM_COMMAND(
-	TARGET "${LIB_NAME}"
-	POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_BINARY_DIR}/../cbmex/cbsdk.h" "${PROJECT_BINARY_DIR}/../dist/include/cbsdk.h"
-	COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_BINARY_DIR}/../cbhwlib/cbhwlib.h" "${PROJECT_BINARY_DIR}/../dist/include/cbhwlib.h"
+    TARGET "${LIB_NAME}"
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_BINARY_DIR}/../cbmex/cbsdk.h" "${PROJECT_BINARY_DIR}/../dist/include/cbsdk.h"
+    COMMAND ${CMAKE_COMMAND} -E copy "${PROJECT_BINARY_DIR}/../cbhwlib/cbhwlib.h" "${PROJECT_BINARY_DIR}/../dist/include/cbhwlib.h"
 )
 
 #########################################################################################
@@ -271,9 +271,9 @@ TARGET_LINK_LIBRARIES( ${TEST_NAME} ${LIB_NAME} )
 
 # Install information
 INSTALL( TARGETS ${TEST_NAME} ${LIB_NAME} ${LIB_NAME_STATIC}
-	RUNTIME DESTINATION bin
-	LIBRARY DESTINATION lib${LIB_SUFFIX}
-	ARCHIVE DESTINATION lib${LIB_SUFFIX}
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib${LIB_SUFFIX}
+    ARCHIVE DESTINATION lib${LIB_SUFFIX}
 )
 INSTALL( FILES ../cbmex/cbsdk.h ../cbhwlib/cbhwlib.h DESTINATION include )
 
@@ -283,17 +283,24 @@ IF( HDF5_FOUND )
     MESSAGE ( STATUS "Add n2h5 utility build target")
     # In case it did not find it (seems like a bug in FindHDF5.cmake) 
     IF (NOT HDF5_HL_LIBRARIES)
-        FIND_LIBRARY (HDF5_HL_LIBRARIES libhdf5_hl
-                      HINTS ${HDF5_LIBRARY_DIRS}
+        MESSAGE( "Couldn't locate HDF5 HL Libraries.  Attempting workaround." )
+        MESSAGE( ${HDF5_HL_LIBRARIES} )
+        FIND_LIBRARY (HDF5_HL_LIBRARIES libhdf5_hl.${CMAKE_SHARED_LIBRARY_SUFFIX}
+                      HINTS ${HDF5_LIBRARY_DIR}
+                      PATHS
                       /usr/lib
+                      /usr/lib64
                       /usr/local/lib
+                      /usr/local/lib64
                       /opt/local/lib
+                      /opt/local/lib64
         )
-	ENDIF (NOT HDF5_HL_LIBRARIES)
+    ENDIF (NOT HDF5_HL_LIBRARIES)
+    MESSAGE( ${HDF5_HL_LIBRARIES} )
     INCLUDE_DIRECTORIES( ${HDF5_INCLUDE_DIR} )
     IF( WIN32 )
         SET ( N2H5_SOURCE ${N2H5_SOURCE} ../n2h5/res/n2h5_res.rc )
-	ENDIF( WIN32 )
+    ENDIF( WIN32 )
     ADD_EXECUTABLE( ${N2H5_NAME} ${N2H5_SOURCE} )
     TARGET_LINK_LIBRARIES (${N2H5_NAME} ${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})
     # Install information
@@ -303,3 +310,4 @@ IF( HDF5_FOUND )
         ARCHIVE DESTINATION lib${LIB_SUFFIX}
     )
 ENDIF( HDF5_FOUND )
+
