@@ -1230,7 +1230,7 @@ void OnTrialData(
 
     // 3 - Now get buffered data
 
-    res = cbSdkGetTrialData(nInstance, bFlushBuffer, nlhs == 2 ? NULL : &trialevent, nlhs >= 2 ? &trialcont : NULL, NULL, NULL);
+    res = cbSdkGetTrialData(nInstance, bFlushBuffer, (nlhs == 2 || !uEvents) ? NULL : &trialevent, (nlhs >= 2 && uConts) ? &trialcont : NULL, NULL, NULL);
     PrintErrorSDK(res, "cbSdkGetTrialData()");
 
     // Does the user want event data?
