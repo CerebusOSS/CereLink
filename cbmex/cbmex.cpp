@@ -1134,15 +1134,20 @@ void OnTrialData(
     }
 
     cbSdkTrialEvent trialevent;
+    trialevent.count = 0;
     cbSdkTrialCont trialcont;
+    trialcont.count = 0;
 
     // 1 - Get how many samples are waiting
 
-    res = cbSdkInitTrialData(nInstance, nlhs == 2 ? NULL : &trialevent, nlhs >= 2 ? &trialcont : NULL, NULL, NULL);
+    bool   bTrialDouble    = false;
+    UINT32 uEvents, uConts;
+
+    res = cbSdkGetTrialConfig(nInstance, NULL, NULL, NULL, NULL, NULL, NULL, NULL, &bTrialDouble, NULL, &uConts, &uEvents);
+
+    res = cbSdkInitTrialData(nInstance, (nlhs == 2 && uEvents) ? NULL : &trialevent, (nlhs >= 2 && uConts) ? &trialcont : NULL, NULL, NULL);
     PrintErrorSDK(res, "cbSdkInitTrialData()");
 
-    bool   bTrialDouble    = false;
-    res = cbSdkGetTrialConfig(nInstance, NULL, NULL, NULL, NULL, NULL, NULL, NULL, &bTrialDouble);
 
     // 2 - Allocate buffers for samples
 
