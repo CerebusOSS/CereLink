@@ -1145,7 +1145,7 @@ void OnTrialData(
 
     res = cbSdkGetTrialConfig(nInstance, NULL, NULL, NULL, NULL, NULL, NULL, NULL, &bTrialDouble, NULL, &uConts, &uEvents);
 
-    res = cbSdkInitTrialData(nInstance, (nlhs == 2 && uEvents) ? NULL : &trialevent, (nlhs >= 2 && uConts) ? &trialcont : NULL, NULL, NULL);
+    res = cbSdkInitTrialData(nInstance, (nlhs == 2 || !uEvents) ? NULL : &trialevent, (nlhs >= 2 && uConts) ? &trialcont : NULL, NULL, NULL);
     PrintErrorSDK(res, "cbSdkInitTrialData()");
 
 
