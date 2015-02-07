@@ -3,11 +3,7 @@
 # Version 1.0 Dec. 2012
 #   Build information for
 #       cbsdk Library (static or shared)
-#       cbpy  Library
 #       testcbsdk Test Binary
-# Notes:
-#  OSX: may need to specify your Python library as cmake may detect system provided PythonLib (although may detect right Python)! 
-#    e.g. cmake -DPYTHON_LIBRARY=/usr/local/Cellar/python/2.7.3/Frameworks/Python.framework/Versions/2.7/lib/libpython2.7.dylib . 
 #
 #  MATLAB: First ../Matlab  is looked if mex.h is not found FindMatlab.cmake looks at usual places, 
 #   use -DMATLAB_ROOT if installed in unknown location (or copy to ../Matlab)
@@ -62,7 +58,7 @@ SET( CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR} )
 
 SET( LIB_NAME cbsdk )
 SET( LIB_NAME_STATIC cbsdk_static )
-SET( LIB_NAME_CBPY cbpy )
+#SET( LIB_NAME_CBPY cbpy )
 SET( LIB_NAME_CBMEX cbmex )
 SET( TEST_NAME testcbsdk )
 SET( N2H5_NAME n2h5 )
@@ -71,8 +67,8 @@ SET( N2H5_NAME n2h5 )
 SET(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
 
 FIND_PACKAGE( Qt4 REQUIRED )
-FIND_PACKAGE( PythonLibrary )
-FIND_PACKAGE( NumPy )
+#FIND_PACKAGE( PythonLibrary )
+#FIND_PACKAGE( NumPy )
 FIND_PACKAGE( HDF5 )
 
 # Try MATLAB locally first, then on MATLAB install
@@ -117,9 +113,9 @@ SET( LIB_HEADERS
     ../cbhwlib/InstNetwork.h
 )
 
-SET( LIB_SOURCE_CBPY
-    ../cbmex/cbpy.cpp
-)
+#SET( LIB_SOURCE_CBPY
+#    ../cbmex/cbpy.cpp
+#)
 SET( LIB_SOURCE_CBMEX
     ../cbmex/cbmex.cpp
 )
@@ -185,42 +181,42 @@ ADD_CUSTOM_COMMAND(
 
 #########################################################################################
 # Build cbpy only if both NumPy and Python libraries are found 
-IF( NUMPY_FOUND AND PYTHONLIBRARY_FOUND )
-    MESSAGE ( STATUS "Add cbpy build target using Python found at " ${PYTHON_EXECUTABLE})
-    INCLUDE_DIRECTORIES( ${PYTHON_INCLUDE_PATH} ${NUMPY_INCLUDE_DIRS} )
-    IF( WIN32 )
-        SET ( LIB_SOURCE_CBPY ${LIB_SOURCE_CBPY} ../cbmex/cbMex.rc )
-    ENDIF( WIN32 )
-    ADD_LIBRARY( ${LIB_NAME_CBPY} SHARED MODULE ${LIB_SOURCE_CBPY} )
-        
-    # Want package name to be cbpy without prefix
-    IF( WIN32 )
-        # Do not output to Debug/Release directories on Windows
-        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES PREFIX "../" )
-        # cbpy needs special care
-        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES COMPILE_FLAGS "-DCBPYSDK" )
-        # Target is cbpy.pyd
-        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES SUFFIX pyd)
-    ELSE( WIN32 )
-        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES PREFIX "" )
-        # cbpy needs special care and hide unexported symbols
-        IF( NOT APPLE )
-            SET_TARGET_PROPERTIES( ${LIB_NAME} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
-        ENDIF( NOT APPLE )
-        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES COMPILE_FLAGS "-DCBPYSDK -fvisibility=hidden" )
-    ENDIF( WIN32 )
-    
-    # Use static library to build cbpy
-    ADD_DEPENDENCIES( ${LIB_NAME_CBPY} ${LIB_NAME_STATIC} )
-    TARGET_LINK_LIBRARIES( ${LIB_NAME_CBPY} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${PYTHON_LIBRARIES} )
-    
-    INSTALL( TARGETS ${LIB_NAME_CBPY}
-        RUNTIME DESTINATION ${PYTHON_SITE_PACKAGES_INSTALL_DIR}/CereLink 
-        LIBRARY DESTINATION ${PYTHON_SITE_PACKAGES_INSTALL_DIR}/CereLink 
-        ARCHIVE DESTINATION ${PYTHON_SITE_PACKAGES_INSTALL_DIR}/CereLink 
-    )
-    INSTALL( FILES ../cbmex/__init__.py DESTINATION ${PYTHON_SITE_PACKAGES_INSTALL_DIR}/CereLink  )
-ENDIF( NUMPY_FOUND AND PYTHONLIBRARY_FOUND )
+#IF( NUMPY_FOUND AND PYTHONLIBRARY_FOUND )
+#    MESSAGE ( STATUS "Add cbpy build target using Python found at " ${PYTHON_EXECUTABLE})
+#    INCLUDE_DIRECTORIES( ${PYTHON_INCLUDE_PATH} ${NUMPY_INCLUDE_DIRS} )
+#    IF( WIN32 )
+#        SET ( LIB_SOURCE_CBPY ${LIB_SOURCE_CBPY} ../cbmex/cbMex.rc )
+#    ENDIF( WIN32 )
+#    ADD_LIBRARY( ${LIB_NAME_CBPY} SHARED MODULE ${LIB_SOURCE_CBPY} )
+#        
+#    # Want package name to be cbpy without prefix
+#    IF( WIN32 )
+#        # Do not output to Debug/Release directories on Windows
+#        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES PREFIX "../" )
+#        # cbpy needs special care
+#        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES COMPILE_FLAGS "-DCBPYSDK" )
+#        # Target is cbpy.pyd
+#        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES SUFFIX pyd)
+#    ELSE( WIN32 )
+#        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES PREFIX "" )
+#        # cbpy needs special care and hide unexported symbols
+#        IF( NOT APPLE )
+#            SET_TARGET_PROPERTIES( ${LIB_NAME} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
+#        ENDIF( NOT APPLE )
+#        SET_TARGET_PROPERTIES( ${LIB_NAME_CBPY} PROPERTIES COMPILE_FLAGS "-DCBPYSDK -fvisibility=hidden" )
+#    ENDIF( WIN32 )
+#    
+#    # Use static library to build cbpy
+#    ADD_DEPENDENCIES( ${LIB_NAME_CBPY} ${LIB_NAME_STATIC} )
+#    TARGET_LINK_LIBRARIES( ${LIB_NAME_CBPY} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${PYTHON_LIBRARIES} )
+#    
+#    INSTALL( TARGETS ${LIB_NAME_CBPY}
+#        RUNTIME DESTINATION ${PYTHON_SITE_PACKAGES_INSTALL_DIR}/CereLink 
+#        LIBRARY DESTINATION ${PYTHON_SITE_PACKAGES_INSTALL_DIR}/CereLink 
+#        ARCHIVE DESTINATION ${PYTHON_SITE_PACKAGES_INSTALL_DIR}/CereLink 
+#    )
+#    INSTALL( FILES ../cbmex/__init__.py DESTINATION ${PYTHON_SITE_PACKAGES_INSTALL_DIR}/CereLink  )
+#ENDIF( NUMPY_FOUND AND PYTHONLIBRARY_FOUND )
 
 #########################################################################################
 # Build cbmex only if MATLAB found 
