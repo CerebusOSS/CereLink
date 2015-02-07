@@ -137,6 +137,7 @@ ADD_DEFINITIONS( -DCBSDK_EXPORTS )
 IF( WIN32 )
     ADD_DEFINITIONS( -DWIN32 -D_WINDOWS -DWINVER=0x0501 -DNO_AFX )
     SET ( LIB_SOURCE ${LIB_SOURCE} ../cbmex/cbMex.rc )
+    INCLUDE_DIRECTORIES( "../compat/" )
 ENDIF( WIN32 )
 
 #########################################################################################
