@@ -62,6 +62,10 @@ elif "win32" in sys.platform:
                       os.path.join(qt_path, 'include'),
                       os.path.join(cur, 'compat')]
     libraries = ["cbsdk_static", "QtCore4", "QtXml4"]
+    # add winsock, timer, and system libraries
+    libraries = libraries + ["ws2_32", "winmm"]
+    libraries = libraries + ["kernel32", "user32", "gdi32", "winspool", "shell32", 
+                             "ole32", "oleaut32", "uuid", "comdlg32", "advapi32"]
 else:
     extra_link_args= []
     libraries = ["cbsdk_static", "QtCore", "QtXml"]
