@@ -11,6 +11,7 @@ dist/
 *.aps
 *.DS_Store
 *.pyc
+*.orig
 UpgradeLog.XML
 _UpgradeReport_Files/
 
@@ -29,4 +30,3 @@ Release/
 build/temp.macosx*
 
 cerebus/cbpy.so
-cerebus/cbpyw.cpp

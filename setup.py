@@ -18,6 +18,53 @@ else:
     extra_link_args= []
     libraries = ["cbsdk_static", "QtCore", "QtXml"]
 
+extra_includes = []
+if "win32" in sys.platform:
+    # Windows does not have a canonical install place, so try some known locations
+    import platform
+    import _winreg
+    def _get_qt_path():
+        path = ''
+        try:
+            path = os.environ['QTDIR']
+        except:
+            pass
+        if not path:
+            try:
+                hk = _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE, r'SOFTWARE\Trolltech\Versions', 0)
+                ver = _winreg.EnumKey(hk, 0)
+                _winreg.CloseKey(hk)
+                print('Using installed Qt{ver}'.format(ver=ver))
+                hk = _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE, r'SOFTWARE\Trolltech\Versions\{ver}'.format(ver=ver), 0)
+                ii = 0
+                while True:
+                    try:
+                        install = _winreg.EnumValue(hk, ii)
+                        if install[0].lower() == 'installdir':
+                            path = install[1]
+                            break 
+                    except:
+                        break
+                _winreg.CloseKey(hk)
+                if not path:
+                    raise ValueError("InstallDir not found")
+            except:
+                raise RuntimeError("Cannot find Qt in registry nor QTDIR is set")
+        
+        return path
+    
+    arch = '64' if '64bit' in platform.architecture() else ''
+    cur = os.path.dirname(os.path.abspath(__file__))
+    qt_path = _get_qt_path()
+    extra_link_args= ['/LIBPATH:{path}'.format(
+                        path=os.path.join(cur, 'dist\\lib{arch}'.format(arch=arch))),
+                      '/LIBPATH:{path}'.format(
+                        path=os.path.join(qt_path, 'lib'))]
+    extra_includes = [os.path.join(cur, 'dist\\include'), os.path.join(qt_path, 'include')]
+    
+    print(extra_link_args)
+    print(extra_includes)
+
 CYTHON_REQUIREMENT = 'Cython==0.19.1'
 
 if build_ext:
@@ -28,7 +75,7 @@ if build_ext:
                             ],
                             libraries=libraries,
                             extra_link_args=extra_link_args,
-                            include_dirs=[numpy.get_include()],
+                            include_dirs=[numpy.get_include()] + extra_includes,
                             language="c++",             # generate C++ code
     )
 else:
@@ -39,7 +86,7 @@ else:
                             ],
                             libraries=libraries,
                             extra_link_args=extra_link_args,
-                            include_dirs=[numpy.get_include()],
+                            include_dirs=[numpy.get_include()] + extra_includes,
     )
     
     class build_ext(_build_ext.build_ext):
@@ -68,7 +115,7 @@ else:
                 cython=CYTHON_REQUIREMENT,
             ))
             assert os.path.exists(
-                os.path.join(self.cwd, 'cerebus', 'cbpyw.c')), \
+                os.path.join(self.cwd, 'cerebus', 'cbpyw.cpp')), \
                 'Source file not found!'
             return _build_ext.build_ext.run(self)
 
