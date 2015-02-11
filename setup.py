@@ -10,16 +10,13 @@ except ImportError:
 import numpy
 import sys
 
+extra_includes = []
+
 # Make sure on OSX we bring in the framework
 if sys.platform == "darwin":
     extra_link_args=['-F', '/usr/local/lib/', '-framework', 'QtCore', '-framework', 'QtXml']
     libraries = ["cbsdk_static"]
-else:
-    extra_link_args= []
-    libraries = ["cbsdk_static", "QtCore", "QtXml"]
-
-extra_includes = []
-if "win32" in sys.platform:
+elif "win32" in sys.platform:
     # Windows does not have a canonical install place, so try some known locations
     import platform
     import _winreg
@@ -60,10 +57,14 @@ if "win32" in sys.platform:
                         path=os.path.join(cur, 'dist\\lib{arch}'.format(arch=arch))),
                       '/LIBPATH:{path}'.format(
                         path=os.path.join(qt_path, 'lib'))]
-    extra_includes = [os.path.join(cur, 'dist\\include'), os.path.join(qt_path, 'include')]
-    
-    print(extra_link_args)
-    print(extra_includes)
+    # include cbsdk, qt and stdinit (V2008 does not have it!)
+    extra_includes = [os.path.join(cur, 'dist\\include'), 
+                      os.path.join(qt_path, 'include'),
+                      os.path.join(cur, 'compat')]
+    libraries = ["cbsdk_static", "QtCore4", "QtXml4"]
+else:
+    extra_link_args= []
+    libraries = ["cbsdk_static", "QtCore", "QtXml"]
 
 CYTHON_REQUIREMENT = 'Cython==0.19.1'
 
