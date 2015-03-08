@@ -128,7 +128,7 @@ else:
 
 setup(
     name='cerelink',
-    version='0.0.1',
+    version='0.0.2',
     description='Cerebus Link',
     long_description='Cerebus Link Python Package',
     author='dashesy',
