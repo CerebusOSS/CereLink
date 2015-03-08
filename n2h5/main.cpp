@@ -793,7 +793,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                         cmt.flags = nevData.comment.flags;
                         strncpy(cmt.szComment, nevData.comment.comment, min(BMI_COMMENT_LEN, sizeof(nevData.comment.comment)));
                         ret = H5PTappend(ptid_comment[id], 1, &cmt);
-                    }                    
+                    }
                     break;
                 case 0xFFFE: // found a synchronization event
                     {
@@ -888,6 +888,13 @@ int ConvertNev(FILE * pFile, hid_t file)
             // Read more packets
             nGot = fread(&nevData, isHdr.dwBytesPerPacket, 1, pFile);
         } while (nGot == 1);
+
+        // H5Close SIGSEVs if I do not close the PT manually!
+        for (int i = 0; i < cbNUM_ANALOG_CHANS; ++i) {
+            if (ptid_spike[i] >= 0) {
+                H5PTclose(ptid_spike[i]);
+            }
+        }
     }
 
     //
