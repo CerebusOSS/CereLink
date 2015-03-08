@@ -117,3 +117,10 @@ int cbpy_get_time(int instance, int * pcbtime) {
 
     return sdkres;
 }
+
+int cbpy_set_digital_output(int nInstance, int channel, int value)
+{
+    cbSdkResult sdkres = cbSdkSetDigitalOutput(nInstance, channel, value);
+
+    return sdkres;
+}

@@ -444,3 +444,24 @@ def time(instance=0, unit='samples'):
     time = float(cbtime) / factor
     
     return res, time
+
+
+def digital_out(channel, value='low', instance=0):
+    '''Digital output command.
+    Inputs:
+    channel - integer, digital output channel number (1-based)
+               On NSP, 153 (dout1), 154 (dout2), 155 (dout3), 156 (dout4)
+    value - (optional), depends on the command
+           for command of 'set_value':
+               string, can be 'high' or 'low' (default)
+    instance - (optional) library instance number'''
+    
+    values = ['low', 'high']
+    if value not in values:
+        raise RuntimeError("Invalid value %s" % value)
+    
+    cdef int int_val = values.index('value')
+    res = cbpy_set_digital_output(<int>instance, <int>channel, int_val)
+    
+    return res
+

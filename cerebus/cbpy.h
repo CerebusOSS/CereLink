@@ -51,5 +51,6 @@ int cbpy_get_file_config(int instance,  char * filename, char * username, int * 
 int cbpy_file_config(int instance,  const char * filename, const char * comment, int start, unsigned int options);
 
 int cbpy_get_time(int instance, int * pcbtime);
+int cbpy_set_digital_output(int nInstance, int channel, int value);
 
 #endif // include guard
