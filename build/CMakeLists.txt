@@ -281,8 +281,7 @@ IF( HDF5_FOUND )
     # In case it did not find it (seems like a bug in FindHDF5.cmake) 
     IF (NOT HDF5_HL_LIBRARIES)
         MESSAGE( "Couldn't locate HDF5 HL Libraries.  Attempting workaround." )
-        MESSAGE( ${HDF5_HL_LIBRARIES} )
-        FIND_LIBRARY (HDF5_HL_LIBRARIES libhdf5_hl.${CMAKE_SHARED_LIBRARY_SUFFIX}
+        FIND_LIBRARY (HDF5_HL_LIBRARIES libhdf5_hl${CMAKE_SHARED_LIBRARY_SUFFIX}
                       HINTS ${HDF5_LIBRARY_DIR}
                       PATHS
                       /usr/lib
