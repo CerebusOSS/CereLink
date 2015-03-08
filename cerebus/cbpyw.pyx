@@ -460,7 +460,7 @@ def digital_out(channel, value='low', instance=0):
     if value not in values:
         raise RuntimeError("Invalid value %s" % value)
     
-    cdef int int_val = values.index('value')
+    cdef int int_val = values.index(value)
     res = cbpy_set_digital_output(<int>instance, <int>channel, int_val)
     
     return res
