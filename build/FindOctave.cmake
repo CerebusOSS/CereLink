@@ -5,10 +5,9 @@
 # This module defines: 
 #  OCTAVE_EXECUTABLE           - octave interpreter
 #  OCTAVE_INCLUDE_DIRS         - include path for mex.h, mexproto.h
-#  OCTAVE_LIBRARIES            - required libraries: octinterp, octave, cruft
+#  OCTAVE_LIBRARIES            - required libraries: octinterp, octave
 #  OCTAVE_OCTINTERP_LIBRARY    - path to the library octinterp
 #  OCTAVE_OCTAVE_LIBRARY       - path to the library octave
-#  OCTAVE_CRUFT_LIBRARY        - path to the library cruft
 #  OCTAVE_VERSION_STRING       - octave version string
 #  OCTAVE_MAJOR_VERSION        - major version
 #  OCTAVE_MINOR_VERSION        - minor version
@@ -121,14 +120,9 @@ find_library( OCTAVE_OCTAVE_LIBRARY
               NAMES octave liboctave
               HINTS ${OCTAVE_LIBRARIES_PATHS}
             )
-find_library( OCTAVE_CRUFT_LIBRARY
-              NAMES cruft libcruft
-              HINTS ${OCTAVE_LIBRARIES_PATHS}
-            )
     
 set ( OCTAVE_LIBRARIES ${OCTAVE_OCTINTERP_LIBRARY} )
 list ( APPEND OCTAVE_LIBRARIES ${OCTAVE_OCTAVE_LIBRARY} ) 
-list ( APPEND OCTAVE_LIBRARIES ${OCTAVE_CRUFT_LIBRARY} ) 
     
 find_path ( OCTAVE_INCLUDE_DIR 
             NAMES mex.h
@@ -185,7 +179,6 @@ mark_as_advanced (
   OCTAVE_OCT_LIB_DIR
   OCTAVE_OCTINTERP_LIBRARY
   OCTAVE_OCTAVE_LIBRARY
-  OCTAVE_CRUFT_LIBRARY
   OCTAVE_LIBRARIES
   OCTAVE_INCLUDE_DIR
   OCTAVE_INCLUDE_DIRS
