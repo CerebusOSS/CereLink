@@ -88,7 +88,6 @@ ELSE ( MATLAB_INCLUDE_DIR-NOTFOUND )
 ENDIF ( MATLAB_INCLUDE_DIR-NOTFOUND )
 
 FIND_PACKAGE( Octave )
-MESSAGE (${OCTAVE_LIBRARIES})
 
 INCLUDE_DIRECTORIES(
     ../cbhwlib
@@ -184,7 +183,7 @@ ADD_CUSTOM_COMMAND(
 )
 
 #########################################################################################
-# Build cbmex only if MATLAB found 
+# Build cbmex if MATLAB found 
 IF( MATLAB_FOUND )
     MESSAGE ( STATUS "Add cbmex build target using MATLAB libs at " ${MATLAB_ROOT})
     INCLUDE_DIRECTORIES( ${MATLAB_INCLUDE_DIR} )
@@ -224,6 +223,49 @@ IF( MATLAB_FOUND )
         ARCHIVE DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
     )
 ENDIF( MATLAB_FOUND )
+
+#########################################################################################
+# Build cbmex if Octave found 
+IF( OCTAVE_FOUND )
+
+    MESSAGE ( STATUS "Add cbmex build target using Octave libs at " ${OCTAVE_OCT_LIB_DIR})
+    INCLUDE_DIRECTORIES( ${OCTAVE_INCLUDE_DIR} )
+    IF( WIN32 )
+        SET ( LIB_SOURCE_CBMEX ${LIB_SOURCE_CBMEX} ../cbmex/cbMex.rc )
+    ENDIF( WIN32 )
+    ADD_LIBRARY( ${LIB_NAME_CBMEX} SHARED ${LIB_SOURCE_CBMEX} )
+    
+    # Want package name to be cbmex without prefix
+    IF( WIN32 )
+        # Do not output to Debug/Release directories on Windows
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "../" )
+        # Manually export mexFunction because __declspec(dllexport) conflicts with its definition in mex.h
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES LINK_FLAGS "/EXPORT:mexFunction" )
+    ELSEIF( APPLE )
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "" )
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden" )
+        # This is for normal users of MATLAB on OSX without homebrew 
+        #  so we try to use relative paths to be able to bundle shared libraries 
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES BUILD_WITH_INSTALL_RPATH 1 INSTALL_NAME_DIR "@rpath")
+    ELSE( WIN32 )
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "" )
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden" )
+    ENDIF( WIN32 )
+    
+    SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES SUFFIX .${MEXTENSION})
+    IF( NOT CBMEX_INSTALL_PREFIX )
+        SET( CBMEX_INSTALL_PREFIX .)
+    ENDIF( NOT CBMEX_INSTALL_PREFIX )
+    # Use static library to build cbmex
+    ADD_DEPENDENCIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} )
+    TARGET_LINK_LIBRARIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${OCTAVE_LIBRARIES} )
+    INSTALL( TARGETS ${LIB_NAME_CBMEX}
+        RUNTIME DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
+        LIBRARY DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
+        ARCHIVE DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
+    )
+ENDIF( OCTAVE_FOUND )
 
 #########################################################################################
 # Build Test executable

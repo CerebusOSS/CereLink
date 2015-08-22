@@ -21,7 +21,10 @@
 #ifndef CBMEX_H_INCLUDED
 #define CBMEX_H_INCLUDED
 
+#include "stdint.h"
 #include "mex.h"
+#include "mex_compat.h"
+
 
 ///////////////////////////// Prototypes for all of the Matlab events ////////
 void OnHelp          (int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] );
