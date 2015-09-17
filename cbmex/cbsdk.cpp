@@ -728,7 +728,7 @@ cbSdkResult SdkApp::SdkOpen(UINT32 nInstance, cbSdkConnectionType conType, cbSdk
         return CBSDKRESULT_NOTIMPLEMENTED;
 
     // Wait for (dis)connection to happen
-    bool bWait = m_connectWait.wait(&m_connectLock, 15000);
+    bool bWait = m_connectWait.wait(&m_connectLock, 25000);
     m_connectLock.unlock();
     if (!bWait)
         return CBSDKRESULT_TIMEOUT;
