@@ -3668,6 +3668,12 @@ void SdkApp::Open(UINT32 nInstance, int nInPort, int nOutPort, LPCSTR szInIP, LP
     m_strInIP = szInIP;
     m_strOutIP = szOutIP;
 
+#ifndef WIN32
+    // On Linux bind ot broadcast
+    if (m_strInIP.endsWith(".255"))
+        m_bBroadcast = true;
+#endif
+
     // Restart networking thread
     start(QThread::HighPriority);
 }
