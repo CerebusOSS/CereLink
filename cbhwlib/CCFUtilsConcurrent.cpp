@@ -37,7 +37,7 @@ using namespace ccf;
 void ReadCCFHelper(QString strFileName, bool bSend, cbCCF * pCCF, cbCCFCallback pCallbackFn, UINT32 nInstance)
 {
     // make sure byte array is constructed, thus we can use the internal pointer to character data
-    const QByteArray tmp = strFileName.toAscii();
+    const QByteArray tmp = strFileName.toLatin1();
     LPCSTR szFileName = tmp;
     if (pCallbackFn)
         pCallbackFn(nInstance, CCFRESULT_SUCCESS, szFileName, CCFSTATE_THREADREAD, 0);
@@ -66,7 +66,7 @@ void ccf::ConReadCCF(LPCSTR szFileName, bool bSend, cbCCF * pCCF, cbCCFCallback 
 void WriteCCFHelper(QString strFileName, cbCCF ccf, cbCCFCallback pCallbackFn, UINT32 nInstance)
 {
     // make sure byte array is constructed, thus we can use the internal pointer to character data
-    const QByteArray tmp = strFileName.toAscii();
+    const QByteArray tmp = strFileName.toLatin1();
     LPCSTR szFileName = tmp;
     QThread::currentThread()->setPriority(QThread::LowestPriority);
     if (pCallbackFn)

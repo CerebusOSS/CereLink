@@ -712,8 +712,8 @@ void InstNetwork::run()
         bool bHighLatency = (m_instInfo & (cbINSTINFO_NPLAY | cbINSTINFO_CEREPLEX));
         m_icInstrument.Reset(bHighLatency ? (int)INST_TICK_COUNT : (int)Instrument::TICK_COUNT);
         // Set network connection details
-        const QByteArray inIP = m_strInIP.toAscii();
-        const QByteArray outIP = m_strOutIP.toAscii();
+        const QByteArray inIP = m_strInIP.toLatin1();
+        const QByteArray outIP = m_strOutIP.toLatin1();
         m_icInstrument.SetNetwork(m_nInPort, m_nOutPort, inIP, outIP);
         // Open UDP
         cbRESULT cbres = m_icInstrument.Open(startupOption, m_bBroadcast, m_bDontRoute, m_bNonBlocking, m_nRecBufSize);

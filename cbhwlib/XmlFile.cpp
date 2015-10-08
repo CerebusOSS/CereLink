@@ -369,9 +369,9 @@ bool XmlFile::endGroup(bool bSave /* = true */)
         }
 #ifdef DEBUG_XMLFILE
         if (bSave)
-            TRACE("save doc: %s\n", m_doc.toString().toAscii().constData());
+            TRACE("save doc: %s\n", m_doc.toString().toLatin1().constData());
         else
-            TRACE("load doc: %s\n", m_doc.toString().toAscii().constData());
+            TRACE("load doc: %s\n", m_doc.toString().toLatin1().constData());
 #endif
     }
 
