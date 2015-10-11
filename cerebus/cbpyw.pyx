@@ -28,6 +28,8 @@ def version(instance=0):
              nsp_minor - minor NSP firmware version
              nsp_release - release NSP firmware version
              nsp_beta - beta NSP firmware version (0 if non-beta))
+             nsp_protocol_major - major NSP protocol version
+             nsp_protocol_minor - minor NSP protocol version
     '''
 
     cdef int res
@@ -41,7 +43,8 @@ def version(instance=0):
     
     ver_dict = {'major':ver.major, 'minor':ver.minor, 'release':ver.release, 'beta':ver.beta,
                 'protocol_major':ver.majorp, 'protocol_minor':ver.majorp,
-                'nsp_major':ver.nspmajor, 'nsp_minor':ver.nspminor, 'nsp_release':ver.nsprelease, 'nsp_beta':ver.nspbeta
+                'nsp_major':ver.nspmajor, 'nsp_minor':ver.nspminor, 'nsp_release':ver.nsprelease, 'nsp_beta':ver.nspbeta,
+                'nsp_protocol_major':ver.nspmajorp, 'nsp_protocol_minor':ver.nspmajorp
                 }
     return res, ver_dict
 
