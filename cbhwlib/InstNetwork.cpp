@@ -675,16 +675,16 @@ void InstNetwork::run()
     }
 
     m_nIdx = cb_library_index[m_nInstance];
-
-    if (cbOpen(FALSE, m_nInstance) == cbRESULT_OK)
+    
+    // Open the cbhwlib library and create the shared objects
+    cbRESULT cbRet = cbOpen(FALSE, m_nInstance);
+    if (cbRet == cbRESULT_OK)
     {
         m_nIdx = cb_library_index[m_nInstance];
         m_bStandAlone = false;
         InstNetworkEvent(NET_EVENT_NETCLIENT); // Client to the Central application
-    } else { // If Central is not running run as stand alone
+    } else if (cbRet == cbRESULT_NOCENTRALAPP) { // If Central is not running run as stand alone
         m_bStandAlone = true; // Run stand alone without Central
-        // Open the cbhwlib library and create the shared objects
-        cbRESULT cbRet;
         // Run as stand-alone application
         cbRet = cbOpen(TRUE, m_nInstance);
         if (cbRet)
@@ -694,6 +694,10 @@ void InstNetwork::run()
         }
         m_nIdx = cb_library_index[m_nInstance];
         InstNetworkEvent(NET_EVENT_NETSTANDALONE); // Stand-alone application
+    } else {
+        // Report error and quit
+        InstNetworkEvent(NET_EVENT_CBERR, cbRet);
+        return;
     }
 
     STARTUP_OPTIONS startupOption = m_nStartupOptionsFlags;
