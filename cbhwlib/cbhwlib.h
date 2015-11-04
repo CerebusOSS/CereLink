@@ -1249,7 +1249,7 @@ typedef struct {
 typedef struct {
     UINT32 time;        // system clock timestamp
     UINT16 chid;        // channel identifier
-    UINT8 unit;      // unit identification (0=unclassified, 31=artifact, 30=background)
+    UINT8 unit;      // unit identification (0=unclassified, 1-5=classified, 255=artifact, 254=background)
     UINT8 dlen;      // length of what follows ... always  cbPKTDLEN_SPK
 
     float  fPattern[3]; // values of the pattern space (Normal uses only 2, PCA uses third)
