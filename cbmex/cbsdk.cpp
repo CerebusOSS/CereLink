@@ -773,6 +773,12 @@ cbSdkResult SdkApp::SdkOpen(UINT32 nInstance, cbSdkConnectionType conType, cbSdk
             case cbRESULT_BUFSPKALLOCERR:
                 sdkres = CBSDKRESULT_ERRMEMORY;
                 break;
+            case cbRESULT_INSTOUTDATED:
+                sdkres = CBSDKRESULT_INSTOUTDATED;
+                break;
+            case cbRESULT_LIBOUTDATED:
+                sdkres = CBSDKRESULT_LIBOUTDATED;
+                break;
             case cbRESULT_OK:
                 sdkres = CBSDKRESULT_ERROFFLINE;
                 break;

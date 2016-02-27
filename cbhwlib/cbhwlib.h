@@ -352,6 +352,8 @@ typedef unsigned int cbRESULT;
 #define cbRESULT_INSTINVALID       24   // Invalid range or instrument address
 #define cbRESULT_SOCKBIND          25   // Cannot bind to any address (possibly no Instrument network)
 #define cbRESULT_SYSLOCK           26   // Cannot (un)lock the system resources (possiblly resource busy)
+#define cbRESULT_INSTOUTDATED      27   // The instrument runs an outdated protocol version
+#define cbRESULT_LIBOUTDATED       28   // The library is outdated
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -382,7 +384,7 @@ UINT32 cbVersion(void);
 cbRESULT cbOpen(BOOL bStandAlone = FALSE, UINT32 nInstance = 0);
 // Initializes the Neuromatic library (and establishes a link to the Central Control Application if bStandAlone is FALSE).
 // This function must be called before any other functions are called from this library.
-// Returns OK, NOCENTRALAPP, LIBINITERROR, MEMORYUNVAIL, or HARDWAREOFFLINE
+// Returns OK, NOCENTRALAPP, LIBINITERROR, MEMORYUNVAIL, HARDWAREOFFLINE, INSTOUTDATED or LIBOUTDATED
 
 cbRESULT cbClose(BOOL bStandAlone = FALSE, UINT32 nInstance = 0);
 // Close the library (must match how library is openned)

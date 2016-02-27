@@ -113,6 +113,8 @@ typedef enum _cbSdkResult
     CBSDKRESULT_TIMEOUT                =   -28, // Conection timeout error
     CBSDKRESULT_BUSY                   =   -29, // Resource is busy
     CBSDKRESULT_ERROFFLINE             =   -30, // Instrument is offline
+    CBSDKRESULT_INSTOUTDATED           =   -31, // The instrument runs an outdated protocol version
+    CBSDKRESULT_LIBOUTDATED            =   -32, // The library is outdated
 } cbSdkResult;
 
 typedef enum _cbSdkConnectionType

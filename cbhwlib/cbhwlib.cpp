@@ -359,6 +359,18 @@ cbRESULT cbOpen(BOOL bStandAlone, UINT32 nInstance)
     cb_cfg_buffer_ptr[nIdx] = (cbCFGBUFF*)GetSharedBuffer(cb_cfg_buffer_hnd[nIdx], true);
     if (cb_cfg_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
 
+    // Check version of hardware protocol if available
+    if (cb_cfg_buffer_ptr[nIdx]->procinfo[0].chid != 0) {
+        if (cb_cfg_buffer_ptr[nIdx]->procinfo[0].version > cbVersion()) {
+            cbClose(false, nInstance);
+            return cbRESULT_LIBOUTDATED;
+        }
+        if (cb_cfg_buffer_ptr[nIdx]->procinfo[0].version < cbVersion()) {
+            cbClose(false, nInstance);
+            return cbRESULT_INSTOUTDATED;
+        }
+    }
+
     if (nInstance == 0)
         _snprintf(buf, sizeof(buf), "%s", STATUS_BUF_NAME);
     else
