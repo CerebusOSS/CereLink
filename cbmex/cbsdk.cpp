@@ -3664,7 +3664,7 @@ void SdkApp::Open(UINT32 nInstance, int nInPort, int nOutPort, LPCSTR szInIP, LP
         m_bInitialized = true;
         // connect the network events and commands
         QObject::connect(this, SIGNAL(InstNetworkEvent(NetEventType, unsigned int)),
-                this, SLOT(OnInstNetworkEvent(NetEventType, unsigned int)), Qt::DirectConnection);
+                this, SLOT(OnInstNetworkEvent(NetEventType, unsigned int)), Qt::BlockingQueuedConnection);
         // Add myself as the sole listener
         InstNetwork::Open(this);
     }
