@@ -399,12 +399,12 @@ def file_config(instance=0, command='info', comment='', filename=''):
     elif command == 'close':
         options = cbFILECFG_OPT_CLOSE
     elif command == 'start':
-        if not filename or not comment:
-            raise RuntimeError('filename and comment should be specified for start')
+        if not filename:
+            raise RuntimeError('filename should be specified for start')
         start = 1
     elif command == 'stop':
-        if not filename or not comment:
-            raise RuntimeError('filename and comment should be specified for stop')
+        if not filename:
+            raise RuntimeError('filename should be specified for stop')
         start = 0
     else:
         raise RuntimeError("invalid file config command %s" % command)
