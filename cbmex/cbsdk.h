@@ -218,6 +218,20 @@ typedef enum _cbSdkTrialType
     CBSDKTRIAL_TRACKING,
 } cbSdkTrialType;
 
+// Central uses them for their file name extensions (ns1, ns2, ..., ns5)
+enum DefaultSampleGroup {
+    NONE = 0,
+    RATE_500 = 1,
+    RATE_1K = 2,
+    RATE_2K = 3,
+    RATE_10k = 4,
+    RATE_30k = 5,
+    RAW = 6
+};
+
+// Sample rate for above sample groups
+unsigned int DEFAULT_SAMPLE_RATE_GROUPS[] = { 0, 500, 1000, 2000, 10000, 30000, 30000 };
+
 typedef void (* cbSdkCallback)(UINT32 nInstance, const cbSdkPktType type, const void* pEventData, void* pCallbackData);
 // pEventData points to a cbPkt_* structure depending on the type
 // pCallbackData is what is used to register the callback
