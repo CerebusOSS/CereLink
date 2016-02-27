@@ -10,7 +10,7 @@ Purpose: C interface for cbpy wrapper
 from libc.stdint cimport uint32_t, uint16_t
 
 cdef extern from "cbpy.h":
-    
+
     ctypedef struct cbSdkVersion:
         # Library version
         uint32_t major
@@ -72,10 +72,9 @@ cdef extern from "cbpy.h":
         uint32_t uTrackings
         int bAbsolute
     
-    cdef enum sdk_bufer_range:
-        cbSdk_CONTINUOUS_DATA_SAMPLES = 102400
-        cbSdk_EVENT_DATA_SAMPLES = (2 * 8192)
-                    
+    cdef int cbSdk_CONTINUOUS_DATA_SAMPLES = 102400
+    cdef int cbSdk_EVENT_DATA_SAMPLES = (2 * 8192)
+
     int cbpy_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param)
     int cbpy_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
 
