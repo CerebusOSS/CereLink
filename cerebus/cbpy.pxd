@@ -45,7 +45,7 @@ cdef extern from "cbpy.h":
         char * szOutIP       # Instrument IPv4 address
         
         
-    int cbpy_open(int nInstance, cbSdkConnectionType conType, cbSdkConnection con)
+    int cbpy_open(int nInstance, cbSdkConnectionType conType, cbSdkConnection con) nogil
     int cbpy_close(int nInstance)
     
     ctypedef enum cbSdkInstrumentType:
