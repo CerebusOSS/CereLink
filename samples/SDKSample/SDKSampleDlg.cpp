@@ -86,7 +86,7 @@ BOOL CAboutDlg::OnInitDialog()
     strNew.Format("%s v%u.%02u", strOld, ver.majorp, ver.minorp);
     SetDlgItemText(IDC_STATIC_LIB_VERSION, strNew);
 
-    GetDlgItemText(IDC_STATIC_NSP_VERSION, strOld);
+    GetDlgItemText(IDC_STATIC_NSP_APP_VERSION, strOld);
 
     cbSdkConnectionType conType;
     cbSdkInstrumentType instType;
@@ -102,9 +102,14 @@ BOOL CAboutDlg::OnInitDialog()
                 strOld += "(Central)";
         }
         strNew.Format("%s v%u.%02u.%02u.%02u", strOld, ver.nspmajor, ver.nspminor, ver.nsprelease, ver.nspbeta);
-        SetDlgItemText(IDC_STATIC_NSP_VERSION, strNew);
+        SetDlgItemText(IDC_STATIC_NSP_APP_VERSION, strNew);
+
+        GetDlgItemText(IDC_STATIC_NSP_LIB_VERSION, strOld);
+        strNew.Format("%s v%u.%02u", strOld, ver.nspmajorp, ver.nspminorp);
+        SetDlgItemText(IDC_STATIC_NSP_LIB_VERSION, strNew);
     } else {
-        SetDlgItemText(IDC_STATIC_NSP_VERSION, strOld + " not connected");
+        SetDlgItemText(IDC_STATIC_NSP_APP_VERSION, strOld + " not connected");
+        SetDlgItemText(IDC_STATIC_NSP_LIB_VERSION, "");
     }
 
     return TRUE;

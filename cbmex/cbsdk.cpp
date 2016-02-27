@@ -440,6 +440,8 @@ cbSdkResult SdkApp::SdkGetVersion(cbSdkVersion *version)
     version->nspminor   = (isInfo.idcode & 0x0000ff00) >> 8;
     version->nsprelease = (isInfo.idcode & 0x00ff0000) >> 16;
     version->nspbeta    = (isInfo.idcode & 0xff000000) >> 24;
+    version->nspmajorp  = (isInfo.version & 0xffff0000) >> 16;
+    version->nspminorp  = (isInfo.version & 0x0000ffff);
     return CBSDKRESULT_SUCCESS;
 }
 

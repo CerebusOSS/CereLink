@@ -74,6 +74,9 @@ typedef struct _cbSdkVersion
     UINT32 nspminor;
     UINT32 nsprelease;
     UINT32 nspbeta;
+    // NSP protocol version
+    UINT32 nspmajorp;
+    UINT32 nspminorp;
 } cbSdkVersion;
 
 /* cbSdk return values */

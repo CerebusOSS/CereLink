@@ -1,7 +1,7 @@
 /* =STS=> resource.h[4269].aa01   open     SMID:1 */
 //{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ generated include file.
-// Used by Example.rc
+// Used by SDKSample.rc
 //
 #define IDM_ABOUTBOX                    0x0010
 #define IDS_ABOUTBOX                    101
@@ -13,8 +13,9 @@
 #define IDS_APPNAME                     996
 #define IDC_STATIC_APP_VERSION          997
 #define IDC_STATIC_LIB_VERSION          998
-#define IDC_STATIC_NSP_VERSION          999
+#define IDC_STATIC_NSP_APP_VERSION      999
 #define IDC_STATIC_STATUS               1000
+#define IDC_STATIC_NSP_LIB_VERSION      1001
 #define IDC_BTN_CONNECT                 1003
 #define IDC_BTN_DISCONNECT              1004
 #define IDC_BTN_SPIKES                  1005

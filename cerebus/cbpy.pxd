@@ -25,8 +25,10 @@ cdef extern from "cbpy.h":
         uint32_t nspminor
         uint32_t nsprelease
         uint32_t nspbeta
-        
-    
+        uint32_t nspmajorp
+        uint32_t nspminorp
+
+
     int cbpy_version(int nInstance, cbSdkVersion * ver)
 
     ctypedef enum cbSdkConnectionType:
