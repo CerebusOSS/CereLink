@@ -2233,7 +2233,8 @@ cbSdkResult SdkApp::SdkSetFileConfig(const char * filename, const char * comment
     DWORD cchBuff = sizeof(fcpkt.username);
     GetComputerName(fcpkt.username, &cchBuff) ;
 #else
-    strncpy(fcpkt.username, getenv("HOSTNAME"), sizeof(fcpkt.username));
+    char * szHost = getenv("HOSTNAME");
+    strncpy(fcpkt.username, szHost == NULL ? "" : szHost, sizeof(fcpkt.username));
 #endif
     fcpkt.username[sizeof(fcpkt.username) - 1] = 0;
 
