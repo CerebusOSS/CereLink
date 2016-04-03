@@ -7,7 +7,7 @@ The software develoment kit for Blackrock Microsystems neural signal processing 
 
 c++ library (cbsdk): cross platform library for two-way communication with hardware
 
-MATLAB/Octave wrapper (cbmex): MATLAB executable (mex) to configure and pull data using cbsdk
+MATLAB/Octave wrapper (cbmex/cboct): MATLAB executable (mex) to configure and pull data using cbsdk
 
 Python wrapper (cbpy): Python binding for cbsdk to configure, pull data, and receive callbacks
 
