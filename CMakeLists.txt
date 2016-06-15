@@ -67,6 +67,7 @@ SET( N2H5_NAME n2h5 )
 # Make sure debug builds are recognized
 SET(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
 
+LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 FIND_PACKAGE( Qt4 REQUIRED )
 #FIND_PACKAGE( PythonLibrary )
 #FIND_PACKAGE( NumPy )
@@ -75,12 +76,12 @@ FIND_PACKAGE( HDF5 )
 # Try MATLAB locally first, then on MATLAB install
 FIND_PATH( MATLAB_INCLUDE_DIR
     "mex.h"
-    "../Matlab/include"
+    "${PROJECT_SOURCE_DIR}/Matlab/include"
 )
 IF ( MATLAB_INCLUDE_DIR-NOTFOUND )
     FIND_PACKAGE( Matlab )
 ELSE ( MATLAB_INCLUDE_DIR-NOTFOUND )
-    SET( MATLAB_ROOT "../Matlab" )
+    SET( MATLAB_ROOT "${PROJECT_SOURCE_DIR}/Matlab" )
     MESSAGE ( STATUS "Search mex libraries at " ${MATLAB_INCLUDE_DIR}/../lib/${PLATFORM_NAME} )
     FILE( GLOB_RECURSE MATLAB_LIBRARIES ${MATLAB_INCLUDE_DIR}/../lib/${PLATFORM_NAME}/libm*.* )
     IF( MATLAB_LIBRARIES )
@@ -91,40 +92,40 @@ ENDIF ( MATLAB_INCLUDE_DIR-NOTFOUND )
 FIND_PACKAGE( Octave )
 
 INCLUDE_DIRECTORIES(
-    ../cbhwlib
-    ../Central
-    ../Central Common
+    ${PROJECT_SOURCE_DIR}/cbhwlib
+    ${PROJECT_SOURCE_DIR}/Central
+    ${PROJECT_SOURCE_DIR}/Central Common
 )
 
 SET( LIB_SOURCE
-    ../cbmex/cbsdk.cpp
-    ../cbhwlib/cbhwlib.cpp
-    ../cbhwlib/cbHwlibHi.cpp
-    ../cbhwlib/CCFUtils.cpp
-    ../cbhwlib/CCFUtilsBinary.cpp
-    ../cbhwlib/CCFUtilsConcurrent.cpp
-    ../cbhwlib/CCFUtilsXml.cpp
-    ../cbhwlib/CCFUtilsXmlItems.cpp
-    ../cbhwlib/InstNetwork.cpp
-    ../cbhwlib/XmlFile.cpp
-    ../Central/Instrument.cpp
-    ../Central/UDPsocket.cpp
+    ${PROJECT_SOURCE_DIR}/cbmex/cbsdk.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/cbHwlibHi.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtils.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsBinary.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsConcurrent.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXml.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXmlItems.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/XmlFile.cpp
+    ${PROJECT_SOURCE_DIR}/Central/Instrument.cpp
+    ${PROJECT_SOURCE_DIR}/Central/UDPsocket.cpp
 )
 
 # Only headers which need MOC'ing
 SET( LIB_HEADERS
-    ../cbhwlib/InstNetwork.h
+    ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.h
 )
 
 #SET( LIB_SOURCE_CBPY
-#    ../cbmex/cbpy.cpp
+#    ${PROJECT_SOURCE_DIR}/cbmex/cbpy.cpp
 #)
 SET( LIB_SOURCE_CBMEX
-    ../cbmex/cbmex.cpp
+    ${PROJECT_SOURCE_DIR}/cbmex/cbmex.cpp
 )
 SET( N2H5_SOURCE
-    ../n2h5/main.cpp
-    ../n2h5/n2h5.cpp
+    ${PROJECT_SOURCE_DIR}/n2h5/main.cpp
+    ${PROJECT_SOURCE_DIR}/n2h5/n2h5.cpp
 )
 
 
@@ -139,8 +140,8 @@ ADD_DEFINITIONS( -DCBSDK_EXPORTS )
 
 IF( WIN32 )
     ADD_DEFINITIONS( -DWIN32 -D_WINDOWS -DWINVER=0x0501 -DNO_AFX )
-    SET ( LIB_SOURCE ${LIB_SOURCE} ../cbmex/cbMex.rc )
-    INCLUDE_DIRECTORIES( "../compat/" )
+    SET ( LIB_SOURCE ${LIB_SOURCE} ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc )
+    INCLUDE_DIRECTORIES( "${PROJECT_SOURCE_DIR}/compat/" )
 ENDIF( WIN32 )
 
 #########################################################################################
@@ -173,7 +174,7 @@ IF( WIN32 )
 ENDIF( WIN32 )
 
 # Install headers
-set(HEADERS "../cbmex/cbsdk.h" "../cbhwlib/cbhwlib.h")
+set(HEADERS "${PROJECT_SOURCE_DIR}/cbmex/cbsdk.h" "${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h")
 install(FILES ${HEADERS} DESTINATION include)
 
 ADD_CUSTOM_COMMAND(
@@ -189,7 +190,7 @@ IF( MATLAB_FOUND )
     MESSAGE ( STATUS "Add cbmex build target using MATLAB libs at " ${MATLAB_ROOT})
     INCLUDE_DIRECTORIES( ${MATLAB_INCLUDE_DIR} )
     IF( WIN32 )
-        SET ( LIB_SOURCE_CBMEX ${LIB_SOURCE_CBMEX} ../cbmex/cbMex.rc )
+        SET ( LIB_SOURCE_CBMEX ${LIB_SOURCE_CBMEX} ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc )
     ENDIF( WIN32 )
     ADD_LIBRARY( ${LIB_NAME_CBMEX} SHARED ${LIB_SOURCE_CBMEX} )
     
@@ -270,7 +271,7 @@ ENDIF( OCTAVE_FOUND )
 
 #########################################################################################
 # Build Test executable
-ADD_EXECUTABLE( ${TEST_NAME} ../cbmex/testcbsdk.cpp )
+ADD_EXECUTABLE( ${TEST_NAME} ${PROJECT_SOURCE_DIR}/cbmex/testcbsdk.cpp )
 TARGET_LINK_LIBRARIES( ${TEST_NAME} ${LIB_NAME} )
 
 # Install information
@@ -279,7 +280,7 @@ INSTALL( TARGETS ${TEST_NAME} ${LIB_NAME} ${LIB_NAME_STATIC}
     LIBRARY DESTINATION lib${LIB_SUFFIX}
     ARCHIVE DESTINATION lib${LIB_SUFFIX}
 )
-INSTALL( FILES ../cbmex/cbsdk.h ../cbhwlib/cbhwlib.h DESTINATION include )
+INSTALL( FILES ${PROJECT_SOURCE_DIR}/cbmex/cbsdk.h ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h DESTINATION include )
 
 #########################################################################################
 # Build n2h5 executable only if HDF5 found
@@ -302,7 +303,7 @@ IF( HDF5_FOUND )
     MESSAGE( ${HDF5_HL_LIBRARIES} )
     INCLUDE_DIRECTORIES( ${HDF5_INCLUDE_DIR} )
     IF( WIN32 )
-        SET ( N2H5_SOURCE ${N2H5_SOURCE} ../n2h5/res/n2h5_res.rc )
+        SET ( N2H5_SOURCE ${N2H5_SOURCE} ${PROJECT_SOURCE_DIR}/n2h5/res/n2h5_res.rc )
     ENDIF( WIN32 )
     ADD_EXECUTABLE( ${N2H5_NAME} ${N2H5_SOURCE} )
     TARGET_LINK_LIBRARIES (${N2H5_NAME} ${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})
