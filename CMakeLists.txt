@@ -68,10 +68,18 @@ SET( N2H5_NAME n2h5 )
 SET(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
 
 LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
+
 # QT5 ships with its own cmake config files. We need to tell CMake where to find this.
-# On make, run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt5)
+# On Mac OS, assuming qt installed with homebrew,
+# run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt5)
+# On Windows, set CMAKE_PREFIX_PATH with the Qt path matching your compiler.
+# For example, cmake .. -G "Visual Studio 14 2015" -DCMAKE_PREFIX_PATH="C:\Qt\Qt5.6.0\5.6\msvc2015\"
+
+#We could use a variable to make this editable by GUI, but then we have to clear Qt4 variables for reconfigure.
+#SET(CMAKE_PREFIX_PATH "." CACHE PATH "Qt path. e.g., C:\\Qt\\Qt5.6.0\\5.6\\msvc2015\\")
+
 SET(USING_QT5 OFF)
-FIND_PACKAGE( Qt5Core QUIET)
+FIND_PACKAGE( Qt5Core QUIET )
 IF(Qt5Core_FOUND)
     MESSAGE(STATUS "Found Qt ${Qt5Core_VERSION_STRING}")
     SET(USING_QT5 ON)
