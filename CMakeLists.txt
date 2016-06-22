@@ -93,20 +93,22 @@ ENDIF(Qt5Core_FOUND)
 FIND_PACKAGE( HDF5 )
 
 # Try MATLAB locally first, then on MATLAB install
-FIND_PATH( MATLAB_INCLUDE_DIR
+FIND_PATH( Matlab_INCLUDE_DIRS
     "mex.h"
     "${PROJECT_SOURCE_DIR}/Matlab/include"
 )
-IF ( MATLAB_INCLUDE_DIR-NOTFOUND )
-    FIND_PACKAGE( Matlab )
-ELSE ( MATLAB_INCLUDE_DIR-NOTFOUND )
+IF ( Matlab_INCLUDE_DIRS )
     SET( MATLAB_ROOT "${PROJECT_SOURCE_DIR}/Matlab" )
-    MESSAGE ( STATUS "Search mex libraries at " ${MATLAB_INCLUDE_DIR}/../lib/${PLATFORM_NAME} )
-    FILE( GLOB_RECURSE MATLAB_LIBRARIES ${MATLAB_INCLUDE_DIR}/../lib/${PLATFORM_NAME}/libm*.* )
+    MESSAGE ( STATUS "Search mex libraries at " ${Matlab_INCLUDE_DIRS}/../lib/${PLATFORM_NAME} )
+    FILE( GLOB_RECURSE MATLAB_LIBRARIES ${Matlab_INCLUDE_DIRS}/../lib/${PLATFORM_NAME}/libm*.* )
     IF( MATLAB_LIBRARIES )
         SET( MATLAB_FOUND 1 )
     ENDIF( MATLAB_LIBRARIES )
-ENDIF ( MATLAB_INCLUDE_DIR-NOTFOUND )
+ELSE ( Matlab_INCLUDE_DIRS )
+    #SET( MATLAB_FIND_DEBUG 1 )
+    FIND_PACKAGE( Matlab )
+    #On my Mac OS it didn’t search correctly without -DMatlab_ROOT_DIR=/Applications/MATLAB_R2016a.app/
+ENDIF ( Matlab_INCLUDE_DIRS )
 
 FIND_PACKAGE( Octave )
 
@@ -212,7 +214,7 @@ ADD_CUSTOM_COMMAND(
 # Build cbmex if MATLAB found 
 IF( MATLAB_FOUND )
     MESSAGE ( STATUS "Add cbmex build target using MATLAB libs at " ${MATLAB_ROOT})
-    INCLUDE_DIRECTORIES( ${MATLAB_INCLUDE_DIR} )
+    INCLUDE_DIRECTORIES( ${Matlab_INCLUDE_DIRS} )
     IF( WIN32 )
         SET ( LIB_SOURCE_CBMEX ${LIB_SOURCE_CBMEX} ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc )
     ENDIF( WIN32 )
