@@ -165,7 +165,7 @@ int AddRoot(const char * szSrcFile, FILE * pFile, hid_t file, Nsx21Hdr & isHdr)
         printf("Cannot get file attributes\n");
         return 1;
     }
-    time_t t = st.st_mtime;
+//unused    time_t t = st.st_mtime;
     // TODO: use strftime to convert to st
 #endif
 
@@ -537,7 +537,7 @@ int ConvertNev(FILE * pFile, hid_t file)
         hid_t tid_synch_attr = CreateSynchAttrType(gid_video);
         tid_synch = CreateSynchType(gid_video);
         // Add synchronization groups
-        if (synchAttr.szLabel != NULL)
+        if (synchAttr.szLabel != NULL)  // Warning: Always true!
         {
             bHasVideo = true;
             char szNum[7];
@@ -561,7 +561,7 @@ int ConvertNev(FILE * pFile, hid_t file)
         for (int i = 0; i < cbMAXTRACKOBJ; ++i)
         {
             tid_tracking[i] = -1;
-            if (trackingAttr[i].szLabel != NULL)
+            if (trackingAttr[i].szLabel != NULL)  // Warning: Always true!
             {
                 bHasVideo = true;
                 int dim = 2, width = 2;
@@ -1089,7 +1089,7 @@ int ConvertNSx22(FILE * pFile, hid_t file)
     // Read the header
     fseeko(pFile, 0, SEEK_SET);    // read header from beginning of file
     fread(&isHdr, sizeof(isHdr), 1, pFile);
-    UINT64 dataStart = isHdr.nBytesInHdrs + sizeof(Nsx22DataHdr);
+    //UINT64 dataStart = isHdr.nBytesInHdrs + sizeof(Nsx22DataHdr);
 
     if (isHdr.cnChannels > cbNUM_ANALOG_CHANS)
     {
