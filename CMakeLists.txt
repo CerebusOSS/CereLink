@@ -90,7 +90,7 @@ ELSE(Qt5Core_FOUND)
 ENDIF(Qt5Core_FOUND)
 #FIND_PACKAGE( PythonLibrary )
 #FIND_PACKAGE( NumPy )
-FIND_PACKAGE( HDF5 )
+FIND_PACKAGE( HDF5 COMPONENTS C HL)
 
 # Try MATLAB locally first, then on MATLAB install
 FIND_PATH( Matlab_INCLUDE_DIRS
@@ -312,21 +312,6 @@ INSTALL( FILES ${PROJECT_SOURCE_DIR}/cbmex/cbsdk.h ${PROJECT_SOURCE_DIR}/cbhwlib
 # Build n2h5 executable only if HDF5 found
 IF( HDF5_FOUND )
     MESSAGE ( STATUS "Add n2h5 utility build target")
-    # In case it did not find it (seems like a bug in FindHDF5.cmake) 
-    IF (NOT HDF5_HL_LIBRARIES)
-        MESSAGE( "Couldn't locate HDF5 HL Libraries.  Attempting workaround." )
-        FIND_LIBRARY (HDF5_HL_LIBRARIES libhdf5_hl${CMAKE_SHARED_LIBRARY_SUFFIX}
-                      HINTS ${HDF5_LIBRARY_DIR}
-                      PATHS
-                      /usr/lib
-                      /usr/lib64
-                      /usr/local/lib
-                      /usr/local/lib64
-                      /opt/local/lib
-                      /opt/local/lib64
-        )
-    ENDIF (NOT HDF5_HL_LIBRARIES)
-    MESSAGE( ${HDF5_HL_LIBRARIES} )
     INCLUDE_DIRECTORIES( ${HDF5_INCLUDE_DIR} )
     IF( WIN32 )
         SET ( N2H5_SOURCE ${N2H5_SOURCE} ${PROJECT_SOURCE_DIR}/n2h5/res/n2h5_res.rc )
