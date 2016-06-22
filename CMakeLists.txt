@@ -6,7 +6,7 @@
 #       testcbsdk Test Binary
 #
 #  MATLAB: First ../Matlab  is looked if mex.h is not found FindMatlab.cmake looks at usual places, 
-#   use -DMATLAB_ROOT if installed in unknown location (or copy to ../Matlab)
+#   use -DMatlab_ROOT_DIR if installed in unknown location (or copy to ../Matlab)
 #  If -DCBMEX_INSTALL_PREFIX can be used to install cbmex to given directory
 #
 
@@ -33,23 +33,6 @@ ELSE( CMAKE_SIZEOF_VOID_P EQUAL 4 )
     SET( LIB_SUFFIX 64 )
     SET( PLATFORM_NAME ${PLATFORM_NAME}64 )
 ENDIF( CMAKE_SIZEOF_VOID_P EQUAL 4 )
-
-# Decide platform specific distinctions here
-IF( ${PLATFORM_NAME} STREQUAL win32 )
-    SET( MEXTENSION "mexw32" )
-ELSEIF( ${PLATFORM_NAME} STREQUAL win64 )
-    SET( MEXTENSION "mexw64" )
-ELSEIF( ${PLATFORM_NAME} STREQUAL linux32 )
-    SET( MEXTENSION "mexglx" )
-ELSEIF( ${PLATFORM_NAME} STREQUAL linux64 )
-    SET( MEXTENSION "mexa64" )
-ELSEIF( ${PLATFORM_NAME} STREQUAL osx64 )
-    SET( MEXTENSION "mexmaci64" )
-    SET( LIB_SUFFIX "" )
-ELSE( ${PLATFORM_NAME} STREQUAL win32 )
-    MESSAGE( STATUS "Platform not supported for cbmex" )
-    SET( MEXTENSION "" )
-ENDIF( ${PLATFORM_NAME} STREQUAL win32 )
 
 SET( CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/../dist/lib${LIB_SUFFIX} )
 SET( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/../dist/lib${LIB_SUFFIX} )
@@ -106,7 +89,7 @@ IF ( Matlab_INCLUDE_DIRS )
     ENDIF( MATLAB_LIBRARIES )
 ELSE ( Matlab_INCLUDE_DIRS )
     #SET( MATLAB_FIND_DEBUG 1 )
-    FIND_PACKAGE( Matlab )
+    FIND_PACKAGE( Matlab COMPONENTS MX_LIBRARY)
     #On my Mac OS it didn’t search correctly without -DMatlab_ROOT_DIR=/Applications/MATLAB_R2016a.app/
 ENDIF ( Matlab_INCLUDE_DIRS )
 
@@ -213,7 +196,7 @@ ADD_CUSTOM_COMMAND(
 #########################################################################################
 # Build cbmex if MATLAB found 
 IF( MATLAB_FOUND )
-    MESSAGE ( STATUS "Add cbmex build target using MATLAB libs at " ${MATLAB_ROOT})
+    MESSAGE ( STATUS "Add cbmex build target using MATLAB libs at " ${Matlab_ROOT_DIR})
     INCLUDE_DIRECTORIES( ${Matlab_INCLUDE_DIRS} )
     IF( WIN32 )
         SET ( LIB_SOURCE_CBMEX ${LIB_SOURCE_CBMEX} ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc )
@@ -238,13 +221,13 @@ IF( MATLAB_FOUND )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden" )
     ENDIF( WIN32 )
     
-    SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES SUFFIX .${MEXTENSION})
+    SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES SUFFIX .${Matlab_MEX_EXTENSION})
     IF( NOT CBMEX_INSTALL_PREFIX )
         SET( CBMEX_INSTALL_PREFIX .)
     ENDIF( NOT CBMEX_INSTALL_PREFIX )
     # Use static library to build cbmex
     ADD_DEPENDENCIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} )
-    TARGET_LINK_LIBRARIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${MATLAB_LIBRARIES} )
+    TARGET_LINK_LIBRARIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${Matlab_LIBRARIES} )
     INSTALL( TARGETS ${LIB_NAME_CBMEX}
         RUNTIME DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
         LIBRARY DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
