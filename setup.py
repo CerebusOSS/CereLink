@@ -14,7 +14,25 @@ extra_includes = []
 
 # Make sure on OSX we bring in the framework
 if sys.platform == "darwin":
-    extra_link_args=['-F', '/usr/local/lib/', '-framework', 'QtCore', '-framework', 'QtXml']
+    qtfwdir = '/usr/local/opt'  # Default search dir
+    import subprocess
+    p = subprocess.Popen('brew ls --versions qt5', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    hasqt5 = len(p.stdout.read()) > 0
+    if hasqt5:
+        p = subprocess.Popen('brew --prefix qt5', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        qtfwdir = str(p.stdout.read().decode("utf-8")[:-1]) + "/Frameworks"
+    else:
+        p = subprocess.Popen('brew ls --versions qt', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        hasqt4 = len(p.stdout.read()) > 0
+        if hasqt4:
+            p = subprocess.Popen('brew --prefix qt', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            qtfwdir = str(p.stdout.read().decode("utf-8")[:-1]) + "/Frameworks"
+    print(qtfwdir)
+    extra_link_args=['-F', qtfwdir,
+                     '-framework', 'QtCore',
+                     '-framework', 'QtXml']
+    if hasqt5:
+        extra_link_args += ['-framework', 'QtConcurrent']
     libraries = ["cbsdk_static"]
 elif "win32" in sys.platform:
     # Windows does not have a canonical install place, so try some known locations
@@ -61,14 +79,18 @@ elif "win32" in sys.platform:
     extra_includes = [os.path.join(cur, 'dist\\include'), 
                       os.path.join(qt_path, 'include'),
                       os.path.join(cur, 'compat')]
-    libraries = ["cbsdk_static", "QtCore4", "QtXml4"]
+    hasqt5 = False  # TODO: Parse qt_path to see if it is qt5
+    if hasqt5:
+        libraries = ["cbsdk_static", "QtCore", "QtXml", "QtConcurrent"]
+    else:
+         libraries = ["cbsdk_static", "QtCore4", "QtXml4"]
     # add winsock, timer, and system libraries
     libraries = libraries + ["ws2_32", "winmm"]
     libraries = libraries + ["kernel32", "user32", "gdi32", "winspool", "shell32", 
                              "ole32", "oleaut32", "uuid", "comdlg32", "advapi32"]
 else:
     extra_link_args= []
-    libraries = ["cbsdk_static", "QtCore", "QtXml"]
+    libraries = ["cbsdk_static", "QtCore", "QtXml"] #TODO Qt5: + "QtConcurrent"
 
 CYTHON_REQUIREMENT = 'Cython==0.19.1'
 

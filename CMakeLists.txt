@@ -6,11 +6,11 @@
 #       testcbsdk Test Binary
 #
 #  MATLAB: First ../Matlab  is looked if mex.h is not found FindMatlab.cmake looks at usual places, 
-#   use -DMATLAB_ROOT if installed in unknown location (or copy to ../Matlab)
+#   use -DMatlab_ROOT_DIR if installed in unknown location (or copy to ../Matlab)
 #  If -DCBMEX_INSTALL_PREFIX can be used to install cbmex to given directory
 #
 
-CMAKE_MINIMUM_REQUIRED( VERSION 2.8 )
+CMAKE_MINIMUM_REQUIRED( VERSION 3.1.0 )
 
 PROJECT( CBSDK )
 
@@ -34,23 +34,6 @@ ELSE( CMAKE_SIZEOF_VOID_P EQUAL 4 )
     SET( PLATFORM_NAME ${PLATFORM_NAME}64 )
 ENDIF( CMAKE_SIZEOF_VOID_P EQUAL 4 )
 
-# Decide platform specific distinctions here
-IF( ${PLATFORM_NAME} STREQUAL win32 )
-    SET( MEXTENSION "mexw32" )
-ELSEIF( ${PLATFORM_NAME} STREQUAL win64 )
-    SET( MEXTENSION "mexw64" )
-ELSEIF( ${PLATFORM_NAME} STREQUAL linux32 )
-    SET( MEXTENSION "mexglx" )
-ELSEIF( ${PLATFORM_NAME} STREQUAL linux64 )
-    SET( MEXTENSION "mexa64" )
-ELSEIF( ${PLATFORM_NAME} STREQUAL osx64 )
-    SET( MEXTENSION "mexmaci64" )
-    SET( LIB_SUFFIX "" )
-ELSE( ${PLATFORM_NAME} STREQUAL win32 )
-    MESSAGE( STATUS "Platform not supported for cbmex" )
-    SET( MEXTENSION "" )
-ENDIF( ${PLATFORM_NAME} STREQUAL win32 )
-
 SET( CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/../dist/lib${LIB_SUFFIX} )
 SET( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/../dist/lib${LIB_SUFFIX} )
 SET( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/../dist/bin )
@@ -67,80 +50,106 @@ SET( N2H5_NAME n2h5 )
 # Make sure debug builds are recognized
 SET(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
 
-FIND_PACKAGE( Qt4 REQUIRED )
+LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
+
+# QT5 ships with its own cmake config files. We need to tell CMake where to find this.
+# On Mac OS, assuming qt installed with homebrew,
+# run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt5)
+# On Windows, set CMAKE_PREFIX_PATH with the Qt path matching your compiler.
+# For example, cmake .. -G "Visual Studio 14 2015" -DCMAKE_PREFIX_PATH="C:\Qt\Qt5.6.0\5.6\msvc2015\"
+
+#We could use a variable to make this editable by GUI, but then we have to clear Qt4 variables for reconfigure.
+#SET(CMAKE_PREFIX_PATH "." CACHE PATH "Qt path. e.g., C:\\Qt\\Qt5.6.0\\5.6\\msvc2015\\")
+
+SET(USING_QT5 OFF)
+FIND_PACKAGE( Qt5Core QUIET )
+IF(Qt5Core_FOUND)
+    MESSAGE(STATUS "Found Qt ${Qt5Core_VERSION_STRING}")
+    SET(USING_QT5 ON)
+    FIND_PACKAGE( Qt5Xml REQUIRED )
+    FIND_PACKAGE( Qt5Concurrent REQUIRED )
+ELSE(Qt5Core_FOUND)
+    FIND_PACKAGE( Qt4 REQUIRED QtCore QtXml)
+ENDIF(Qt5Core_FOUND)
 #FIND_PACKAGE( PythonLibrary )
 #FIND_PACKAGE( NumPy )
-FIND_PACKAGE( HDF5 )
+FIND_PACKAGE( HDF5 COMPONENTS C HL)
 
 # Try MATLAB locally first, then on MATLAB install
-FIND_PATH( MATLAB_INCLUDE_DIR
+FIND_PATH( Matlab_INCLUDE_DIRS
     "mex.h"
-    "../Matlab/include"
+    "${PROJECT_SOURCE_DIR}/Matlab/include"
 )
-IF ( MATLAB_INCLUDE_DIR-NOTFOUND )
-    FIND_PACKAGE( Matlab )
-ELSE ( MATLAB_INCLUDE_DIR-NOTFOUND )
-    SET( MATLAB_ROOT "../Matlab" )
-    MESSAGE ( STATUS "Search mex libraries at " ${MATLAB_INCLUDE_DIR}/../lib/${PLATFORM_NAME} )
-    FILE( GLOB_RECURSE MATLAB_LIBRARIES ${MATLAB_INCLUDE_DIR}/../lib/${PLATFORM_NAME}/libm*.* )
+IF ( Matlab_INCLUDE_DIRS )
+    SET( MATLAB_ROOT "${PROJECT_SOURCE_DIR}/Matlab" )
+    MESSAGE ( STATUS "Search mex libraries at " ${Matlab_INCLUDE_DIRS}/../lib/${PLATFORM_NAME} )
+    FILE( GLOB_RECURSE MATLAB_LIBRARIES ${Matlab_INCLUDE_DIRS}/../lib/${PLATFORM_NAME}/libm*.* )
     IF( MATLAB_LIBRARIES )
         SET( MATLAB_FOUND 1 )
     ENDIF( MATLAB_LIBRARIES )
-ENDIF ( MATLAB_INCLUDE_DIR-NOTFOUND )
+ELSE ( Matlab_INCLUDE_DIRS )
+    #SET( MATLAB_FIND_DEBUG 1 )
+    FIND_PACKAGE( Matlab COMPONENTS MX_LIBRARY)
+    #On my Mac OS it didn’t search correctly without -DMatlab_ROOT_DIR=/Applications/MATLAB_R2016a.app/
+ENDIF ( Matlab_INCLUDE_DIRS )
 
 FIND_PACKAGE( Octave )
 
 INCLUDE_DIRECTORIES(
-    ../cbhwlib
-    ../Central
-    ../Central Common
+    ${PROJECT_SOURCE_DIR}/cbhwlib
+    ${PROJECT_SOURCE_DIR}/Central
+    ${PROJECT_SOURCE_DIR}/Central Common
 )
 
 SET( LIB_SOURCE
-    ../cbmex/cbsdk.cpp
-    ../cbhwlib/cbhwlib.cpp
-    ../cbhwlib/cbHwlibHi.cpp
-    ../cbhwlib/CCFUtils.cpp
-    ../cbhwlib/CCFUtilsBinary.cpp
-    ../cbhwlib/CCFUtilsConcurrent.cpp
-    ../cbhwlib/CCFUtilsXml.cpp
-    ../cbhwlib/CCFUtilsXmlItems.cpp
-    ../cbhwlib/InstNetwork.cpp
-    ../cbhwlib/XmlFile.cpp
-    ../Central/Instrument.cpp
-    ../Central/UDPsocket.cpp
+    ${PROJECT_SOURCE_DIR}/cbmex/cbsdk.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/cbHwlibHi.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtils.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsBinary.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsConcurrent.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXml.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXmlItems.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/XmlFile.cpp
+    ${PROJECT_SOURCE_DIR}/Central/Instrument.cpp
+    ${PROJECT_SOURCE_DIR}/Central/UDPsocket.cpp
 )
 
 # Only headers which need MOC'ing
 SET( LIB_HEADERS
-    ../cbhwlib/InstNetwork.h
+    ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.h
 )
 
 #SET( LIB_SOURCE_CBPY
-#    ../cbmex/cbpy.cpp
+#    ${PROJECT_SOURCE_DIR}/cbmex/cbpy.cpp
 #)
 SET( LIB_SOURCE_CBMEX
-    ../cbmex/cbmex.cpp
+    ${PROJECT_SOURCE_DIR}/cbmex/cbmex.cpp
 )
 SET( N2H5_SOURCE
-    ../n2h5/main.cpp
-    ../n2h5/n2h5.cpp
+    ${PROJECT_SOURCE_DIR}/n2h5/main.cpp
+    ${PROJECT_SOURCE_DIR}/n2h5/n2h5.cpp
 )
 
 
 # Handle Qt
-QT4_WRAP_CPP( LIB_HEADERS_MOC ${LIB_HEADERS} )
-SET( QT_USE_QTXML TRUE )
-SET( QT_DONT_USE_QTGUI TRUE )
-INCLUDE( ${QT_USE_FILE} )
+IF(${USING_QT5})
+    QT5_WRAP_CPP( LIB_HEADERS_MOC ${LIB_HEADERS} )
+    SET(QT_LIBRARIES Qt5::Core Qt5::Xml Qt5::Concurrent)
+ELSE(${USING_QT5})
+    QT4_WRAP_CPP( LIB_HEADERS_MOC ${LIB_HEADERS} )
+    INCLUDE( ${QT_USE_FILE} )
+ENDIF(${USING_QT5})
 ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP )
+
 
 ADD_DEFINITIONS( -DCBSDK_EXPORTS )
 
 IF( WIN32 )
     ADD_DEFINITIONS( -DWIN32 -D_WINDOWS -DWINVER=0x0501 -DNO_AFX )
-    SET ( LIB_SOURCE ${LIB_SOURCE} ../cbmex/cbMex.rc )
-    INCLUDE_DIRECTORIES( "../compat/" )
+    SET ( LIB_SOURCE ${LIB_SOURCE} ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc )
+    INCLUDE_DIRECTORIES( "${PROJECT_SOURCE_DIR}/compat/" )
 ENDIF( WIN32 )
 
 #########################################################################################
@@ -162,6 +171,7 @@ ENDIF( WIN32)
 TARGET_LINK_LIBRARIES( ${LIB_NAME} ${QT_LIBRARIES} )
 TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} ${QT_LIBRARIES} )
 
+
 IF( WIN32 )
     # Do not output to Debug/Release directories on Windows
     SET_TARGET_PROPERTIES (${LIB_NAME} PROPERTIES PREFIX "../")
@@ -173,7 +183,7 @@ IF( WIN32 )
 ENDIF( WIN32 )
 
 # Install headers
-set(HEADERS "../cbmex/cbsdk.h" "../cbhwlib/cbhwlib.h")
+set(HEADERS "${PROJECT_SOURCE_DIR}/cbmex/cbsdk.h" "${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h")
 install(FILES ${HEADERS} DESTINATION include)
 
 ADD_CUSTOM_COMMAND(
@@ -186,10 +196,10 @@ ADD_CUSTOM_COMMAND(
 #########################################################################################
 # Build cbmex if MATLAB found 
 IF( MATLAB_FOUND )
-    MESSAGE ( STATUS "Add cbmex build target using MATLAB libs at " ${MATLAB_ROOT})
-    INCLUDE_DIRECTORIES( ${MATLAB_INCLUDE_DIR} )
+    MESSAGE ( STATUS "Add cbmex build target using MATLAB libs at " ${Matlab_ROOT_DIR})
+    INCLUDE_DIRECTORIES( ${Matlab_INCLUDE_DIRS} )
     IF( WIN32 )
-        SET ( LIB_SOURCE_CBMEX ${LIB_SOURCE_CBMEX} ../cbmex/cbMex.rc )
+        SET ( LIB_SOURCE_CBMEX ${LIB_SOURCE_CBMEX} ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc )
     ENDIF( WIN32 )
     ADD_LIBRARY( ${LIB_NAME_CBMEX} SHARED ${LIB_SOURCE_CBMEX} )
     
@@ -211,13 +221,13 @@ IF( MATLAB_FOUND )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES COMPILE_FLAGS "-fvisibility=hidden" )
     ENDIF( WIN32 )
     
-    SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES SUFFIX .${MEXTENSION})
+    SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES SUFFIX .${Matlab_MEX_EXTENSION})
     IF( NOT CBMEX_INSTALL_PREFIX )
         SET( CBMEX_INSTALL_PREFIX .)
     ENDIF( NOT CBMEX_INSTALL_PREFIX )
     # Use static library to build cbmex
     ADD_DEPENDENCIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} )
-    TARGET_LINK_LIBRARIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${MATLAB_LIBRARIES} )
+    TARGET_LINK_LIBRARIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${Matlab_LIBRARIES} )
     INSTALL( TARGETS ${LIB_NAME_CBMEX}
         RUNTIME DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
         LIBRARY DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
@@ -270,7 +280,7 @@ ENDIF( OCTAVE_FOUND )
 
 #########################################################################################
 # Build Test executable
-ADD_EXECUTABLE( ${TEST_NAME} ../cbmex/testcbsdk.cpp )
+ADD_EXECUTABLE( ${TEST_NAME} ${PROJECT_SOURCE_DIR}/cbmex/testcbsdk.cpp )
 TARGET_LINK_LIBRARIES( ${TEST_NAME} ${LIB_NAME} )
 
 # Install information
@@ -279,30 +289,15 @@ INSTALL( TARGETS ${TEST_NAME} ${LIB_NAME} ${LIB_NAME_STATIC}
     LIBRARY DESTINATION lib${LIB_SUFFIX}
     ARCHIVE DESTINATION lib${LIB_SUFFIX}
 )
-INSTALL( FILES ../cbmex/cbsdk.h ../cbhwlib/cbhwlib.h DESTINATION include )
+INSTALL( FILES ${PROJECT_SOURCE_DIR}/cbmex/cbsdk.h ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h DESTINATION include )
 
 #########################################################################################
 # Build n2h5 executable only if HDF5 found
 IF( HDF5_FOUND )
     MESSAGE ( STATUS "Add n2h5 utility build target")
-    # In case it did not find it (seems like a bug in FindHDF5.cmake) 
-    IF (NOT HDF5_HL_LIBRARIES)
-        MESSAGE( "Couldn't locate HDF5 HL Libraries.  Attempting workaround." )
-        FIND_LIBRARY (HDF5_HL_LIBRARIES libhdf5_hl${CMAKE_SHARED_LIBRARY_SUFFIX}
-                      HINTS ${HDF5_LIBRARY_DIR}
-                      PATHS
-                      /usr/lib
-                      /usr/lib64
-                      /usr/local/lib
-                      /usr/local/lib64
-                      /opt/local/lib
-                      /opt/local/lib64
-        )
-    ENDIF (NOT HDF5_HL_LIBRARIES)
-    MESSAGE( ${HDF5_HL_LIBRARIES} )
     INCLUDE_DIRECTORIES( ${HDF5_INCLUDE_DIR} )
     IF( WIN32 )
-        SET ( N2H5_SOURCE ${N2H5_SOURCE} ../n2h5/res/n2h5_res.rc )
+        SET ( N2H5_SOURCE ${N2H5_SOURCE} ${PROJECT_SOURCE_DIR}/n2h5/res/n2h5_res.rc )
     ENDIF( WIN32 )
     ADD_EXECUTABLE( ${N2H5_NAME} ${N2H5_SOURCE} )
     TARGET_LINK_LIBRARIES (${N2H5_NAME} ${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})
