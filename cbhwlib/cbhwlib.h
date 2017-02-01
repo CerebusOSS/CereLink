@@ -68,9 +68,13 @@
 #pragma pack(push, 1)
 
 #define cbVERSION_MAJOR  3
-#define cbVERSION_MINOR  9
+#define cbVERSION_MINOR  10
 
 // Version history:
+// 3.10 - 23 Oct 2014 hls - Added reboot capability for extension loader
+//        26 Jul 2014 js  - Added analog output to extension
+//        18 Mar 2014 sa  - Add triggered digital output
+//         3 Mar 2013 eaz - Adjust MTU
 //  3.9 - 23 Jan 2012 eaz - Expanded Analogout Waveform packet
 //        29 Apr 2012 eaz - Added cross-platform glue
 //        06 Nov 2012 eaz - Added multiple library instance handling
@@ -1970,6 +1974,9 @@ typedef struct {
             INT32               offset;         // output value
         };
     };
+    UINT8               trigtype;       // trigger type (see cbDOUT_TRIGGER_*)
+    UINT16              trigchan;       // trigger channel
+    UINT16				trigval;		// trigger value
     UINT32              ainpopts;       // analog input options (composed of cbAINP* flags)
     UINT32              lncrate;          // line noise cancellation filter adaptation rate
     UINT32              smpfilter;        // continuous-time pathway filter id
