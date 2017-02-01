@@ -52,9 +52,12 @@
 #endif // _MSC_VER > 1000
 
 #ifdef WIN32
+#pragma warning (push)
+#pragma warning (disable : 4005)
 #define _CRT_SECURE_NO_DEPRECATE
 #define _CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES 1
 #define _CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES_COUNT 1
+#pragma warning (pop)
 #else
 #ifdef CBPYSDK
 // Python is picky in its requirements

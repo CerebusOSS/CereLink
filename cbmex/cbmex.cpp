@@ -22,6 +22,7 @@
 
 */
 
+#include <algorithm>  // Use C++ default min and max implementation.
 #include "StdAfx.h"
 #include <map>
 #include <string>
@@ -538,9 +539,9 @@ void OnOpen(
         instType = CBSDKINSTRUMENT_COUNT;
     if (nlhs > 0)
     {
-        plhs[0] = mxCreateScalarDouble(conType);
+        plhs[0] = mxCreateDoubleScalar(conType);
         if (nlhs > 1)
-            plhs[1] = mxCreateScalarDouble(instType);
+            plhs[1] = mxCreateDoubleScalar(instType);
     }
 
     char strConnection[CBSDKCONNECTION_COUNT + 1][8] = {"Default", "Central", "Udp", "Closed", "Unknown"};

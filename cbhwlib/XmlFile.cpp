@@ -565,7 +565,7 @@ QDomDocumentFragment XmlFile::getFragment()
         node = m_nodes.last();
     QDomDocumentFragment frag = m_doc.createDocumentFragment();
     QDomNodeList list = node.childNodes();
-    for (uint i = 0; i < list.length(); ++i)
+    for (int i = 0; i < list.length(); ++i)
     {
         QDomNode node = list.item(i).cloneNode();
         frag.appendChild(node);

@@ -24,6 +24,7 @@
 * \brief Cerebus SDK main file.
 */
 
+#include <algorithm>  // Use C++ default min and max implementation.
 #include "StdAfx.h"
 #include "SdkApp.h"
 #include "../CentralCommon/BmiVersion.h"
@@ -38,9 +39,6 @@
     #define Sleep(x) usleep((x) * 1000)
 #endif
 #endif
-
-// Keep this after all headers
-#include "compat.h"
 
 // The sdk instances
 SdkApp * g_app[cbMAXOPEN] = {NULL};
@@ -1841,7 +1839,7 @@ cbSdkResult SdkApp::SdkGetTrialData(UINT32 bActive, cbSdkTrialEvent * trialevent
             if (num_samples < 0)
                 num_samples += m_CD->size;
             // See which one finishes first
-            num_samples = min((UINT32)num_samples, trialcont->num_samples[channel]);
+            num_samples = std::min((UINT32)num_samples, trialcont->num_samples[channel]);
             // retrieved number of samples
             trialcont->num_samples[channel] = num_samples;
 
@@ -1988,7 +1986,7 @@ cbSdkResult SdkApp::SdkGetTrialData(UINT32 bActive, cbSdkTrialEvent * trialevent
         if (num_samples < 0)
             num_samples += m_CMT->size;
         // See which one finishes first
-        num_samples = min((UINT32)num_samples, trialcomment->num_samples);
+        num_samples = std::min((UINT16)num_samples, trialcomment->num_samples);
         // retrieved number of samples
         trialcomment->num_samples = num_samples;
 
@@ -2053,7 +2051,7 @@ cbSdkResult SdkApp::SdkGetTrialData(UINT32 bActive, cbSdkTrialEvent * trialevent
             if (num_samples < 0)
                 num_samples += m_TR->size;
             // See which one finishes first
-            num_samples = min((UINT32)num_samples, trialtracking->num_samples[id]);
+            num_samples = std::min((UINT16)num_samples, trialtracking->num_samples[id]);
             // retrieved number of samples
             trialtracking->num_samples[id] = num_samples;
 
@@ -2102,7 +2100,7 @@ cbSdkResult SdkApp::SdkGetTrialData(UINT32 bActive, cbSdkTrialEvent * trialevent
                 }
                 {
                     UINT16 * dataptr = trialtracking->point_counts[id];
-                    UINT16 pointCount = min(m_TR->point_counts[id][read_index], m_TR->max_point_counts[id]);
+                    UINT16 pointCount = std::min(m_TR->point_counts[id][read_index], m_TR->max_point_counts[id]);
                     if (dataptr)
                         *(dataptr + i) = pointCount;
                     if (trialtracking->coords[id])
@@ -2960,7 +2958,7 @@ cbSdkResult cbSdkUpload(const char * szSrc, const char * szDstDir, UINT32 nInsta
     {
         upkt.blockseq = b;
         upkt.blockend = (b == (blocks - 1));
-        upkt.blocksiz = min( cbFile - (b * 512), 512);
+        upkt.blocksiz = std::min((INT32) (cbFile - (b * 512)), 512);
         memcpy(&upkt.block[0], pFileData + (b * 512), upkt.blocksiz);
         do {
             cbres = cbSendPacket(&upkt, nInstance);

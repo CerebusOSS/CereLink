@@ -271,7 +271,11 @@ typedef struct _cbSdkConnection
     {
         nInPort = cbNET_UDP_PORT_BCAST;
         nOutPort = cbNET_UDP_PORT_CNT;
-        nRecBufSize = (4096 * 2048); // 8MB default needed for best performance
+        #ifdef __APPLE__
+			nRecBufSize = (6 * 1024 * 1024); // Despite setting kern.ipc.maxsockbuf=8388608, 8MB is still too much.
+        #else
+			nRecBufSize = (8 * 1024 * 1024); // 8MB default needed for best performance
+        #endif
         szInIP = "";
         szOutIP = "";
     }
