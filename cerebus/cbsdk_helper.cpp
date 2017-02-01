@@ -1,6 +1,5 @@
 /*
- * Cerebus Python
- *  C wrapper to use cbsdk in Cython
+ * Implementation of helper API for easy Cython wrapping.
  *
  * @date March 9, 2014
  * @author: dashesy
@@ -8,37 +7,9 @@
 
 #include <string.h>
 
-#include "cbpy.h"
+#include "cbsdk_helper.h"
 
-int cbpy_version(int nInstance, cbSdkVersion *ver)
-{
-    cbSdkResult sdkres = cbSdkGetVersion(nInstance, ver);
-
-    return sdkres;
-}
-
-int cbpy_open(int nInstance, cbSdkConnectionType conType, cbSdkConnection con)
-{
-    cbSdkResult sdkres = cbSdkOpen(nInstance, conType, con);
-
-    return sdkres;
-}
-
-int cbpy_close(int nInstance)
-{
-    cbSdkResult sdkres = cbSdkClose(nInstance);
-
-    return sdkres;
-}
-
-int cbpy_gettype(int nInstance, cbSdkConnectionType * conType, cbSdkInstrumentType * instType)
-{
-    cbSdkResult sdkres = cbSdkGetType(nInstance, conType, instType);
-
-    return sdkres;
-}
-
-int cbpy_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param)
+int cbsdk_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param)
 {
     cbSdkResult sdkres = cbSdkGetTrialConfig(nInstance, &pcfg_param->bActive,
             &pcfg_param->Begchan,&pcfg_param->Begmask, &pcfg_param->Begval,
@@ -51,7 +22,7 @@ int cbpy_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param)
     return sdkres;
 }
 
-int cbpy_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
+int cbsdk_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
 {
     cbSdkResult sdkres = cbSdkSetTrialConfig(nInstance, pcfg_param->bActive,
             pcfg_param->Begchan,pcfg_param->Begmask, pcfg_param->Begval,
@@ -64,7 +35,8 @@ int cbpy_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
     return sdkres;
 }
 
-int cbpy_init_trial_event(int nInstance, cbSdkTrialEvent * trialevent)
+
+int cbsdk_init_trial_event(int nInstance, cbSdkTrialEvent * trialevent)
 {
     memset(trialevent, 0, sizeof(*trialevent));
     cbSdkResult sdkres = cbSdkInitTrialData(nInstance, trialevent, 0, 0, 0);
@@ -72,14 +44,14 @@ int cbpy_init_trial_event(int nInstance, cbSdkTrialEvent * trialevent)
     return sdkres;
 }
 
-int cbpy_get_trial_event(int nInstance, bool reset, cbSdkTrialEvent * trialevent)
+int cbsdk_get_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
 {
     cbSdkResult sdkres = cbSdkGetTrialData(nInstance, reset, trialevent, 0, 0, 0);
 
     return sdkres;
 }
 
-int cbpy_init_trial_cont(int nInstance, cbSdkTrialCont * trialcont)
+int cbsdk_init_trial_cont(int nInstance, cbSdkTrialCont * trialcont)
 {
     memset(trialcont, 0, sizeof(*trialcont));
     cbSdkResult sdkres = cbSdkInitTrialData(nInstance, 0, trialcont, 0, 0);
@@ -87,40 +59,15 @@ int cbpy_init_trial_cont(int nInstance, cbSdkTrialCont * trialcont)
     return sdkres;
 }
 
-int cbpy_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
+int cbsdk_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
 {
     cbSdkResult sdkres = cbSdkGetTrialData(nInstance, reset, 0, trialcont, 0, 0);
 
     return sdkres;
 }
 
-int cbpy_get_file_config(int instance,  char * filename, char * username, int * pbRecording)
-{
-    bool bRecording;
-    cbSdkResult sdkres = cbSdkGetFileConfig(instance, filename, username, &bRecording);
-    *pbRecording = bRecording;
-
-    return sdkres;
-}
-
-int cbpy_file_config(int instance, const char * filename, const char * comment, int start, unsigned int options)
+int cbsdk_file_config(int instance, const char * filename, const char * comment, int start, unsigned int options)
 {
     cbSdkResult sdkres = cbSdkSetFileConfig(instance, filename == NULL ? "" : filename, comment == NULL ? "" : comment, start, options);
-    return sdkres;
-}
-
-
-int cbpy_get_time(int instance, int * pcbtime) {
-    UINT32 cbtime;
-    cbSdkResult sdkres = cbSdkGetTime(instance, &cbtime);
-    *pcbtime = (int)cbtime;
-
-    return sdkres;
-}
-
-int cbpy_set_digital_output(int nInstance, int channel, int value)
-{
-    cbSdkResult sdkres = cbSdkSetDigitalOutput(nInstance, channel, value);
-
     return sdkres;
 }
