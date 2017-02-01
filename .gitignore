@@ -29,5 +29,5 @@ Release/
 .metadata/
 
 cerebus/cbpy.so
-cerebus/cbpyw.cpp
+cerebus/cbpy.cpp
 cerelink.egg-info

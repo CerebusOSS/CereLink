@@ -123,7 +123,7 @@ def get_extras():
 extra_includes, extra_libs, extra_link_args = get_extras()
 
 extension_kwargs = {
-    'sources': ['cerebus/cbpyw.pyx', 'cerebus/cbpy.cpp'],
+    'sources': ['cerebus/cbpy.pyx', 'cerebus/cbsdk_helper.cpp'],
     'libraries': ["cbsdk_static"] + extra_libs,
     'extra_link_args': extra_link_args,
     'include_dirs': [numpy.get_include()] + extra_includes}
