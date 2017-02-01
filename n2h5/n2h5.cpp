@@ -409,7 +409,6 @@ hid_t CreateTrackingType(hid_t loc, int dim, int width)
 
     switch (width)
     {
-    hid_t tid;
     case 1:
         strLabel += "8";
         tid_coords = H5Tcopy(H5T_NATIVE_UINT8);

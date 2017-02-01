@@ -3042,8 +3042,8 @@ private:
 
 public:
     cbPcStatus() :
-        m_iBlockRecording(0),
-        isSelection(1)
+        isSelection(1),
+        m_iBlockRecording(0)
         {
         }
     bool IsRecordingBlocked() { return m_iBlockRecording != 0; }

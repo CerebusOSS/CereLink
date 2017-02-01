@@ -32,9 +32,16 @@ using namespace ccf;
 // Purpose: CCF base constructor
 CCFUtils::CCFUtils(bool bSend, bool bThreaded, cbCCF * pCCF, cbCCFCallback pCallbackFn, UINT32 nInstance) :
     m_pImpl(NULL),
-    m_nInternalVersion(0), m_nInternalOriginalVersion(0),
-    m_szFileName(NULL), m_bAutoSort(FALSE), m_bBinaryOriginal(FALSE),
-    m_bSend(bSend), m_bThreaded(bThreaded), m_pCCF(pCCF), m_pCallbackFn(pCallbackFn), m_nInstance(nInstance)
+    m_bSend(bSend),
+    m_pCallbackFn(pCallbackFn),
+    m_bThreaded(bThreaded),
+    m_pCCF(pCCF),
+    m_nInternalVersion(0),
+    m_nInternalOriginalVersion(0),
+    m_nInstance(nInstance),
+    m_szFileName(NULL),
+    m_bAutoSort(FALSE),
+    m_bBinaryOriginal(FALSE)
 {
     // Initial copy
     if (pCCF)
