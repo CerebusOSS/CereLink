@@ -1,6 +1,7 @@
 # CBSDK CMake Build System
 # Author: griffin.milsap@gmail.com
-# Version 1.0 Dec. 2012
+#         chadwick.boulay@gmail.com
+# Version 1.1 Jan. 2017
 #   Build information for
 #       cbsdk Library (static or shared)
 #       testcbsdk Test Binary
@@ -9,6 +10,13 @@
 #   use -DMatlab_ROOT_DIR if installed in unknown location (or copy to ../Matlab)
 #  If -DCBMEX_INSTALL_PREFIX can be used to install cbmex to given directory
 #
+#  QT:
+# QT5 ships with its own cmake config files. We need to tell CMake where to find this.
+# On Mac OS, assuming qt installed with homebrew,
+# run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt5)
+# On Windows, set CMAKE_PREFIX_PATH with the Qt path matching your compiler.
+# For example, cmake .. -G "Visual Studio 14 2015 Win64" -DCMAKE_PREFIX_PATH="C:\Qt\Qt5.6.0\5.6\msvc2015_64\"
+
 
 CMAKE_MINIMUM_REQUIRED( VERSION 3.1.0 )
 
@@ -52,15 +60,10 @@ SET(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
 
 LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
-# QT5 ships with its own cmake config files. We need to tell CMake where to find this.
-# On Mac OS, assuming qt installed with homebrew,
-# run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt5)
-# On Windows, set CMAKE_PREFIX_PATH with the Qt path matching your compiler.
-# For example, cmake .. -G "Visual Studio 14 2015" -DCMAKE_PREFIX_PATH="C:\Qt\Qt5.6.0\5.6\msvc2015\"
-
+## QT ##
+#
 #We could use a variable to make this editable by GUI, but then we have to clear Qt4 variables for reconfigure.
 #SET(CMAKE_PREFIX_PATH "." CACHE PATH "Qt path. e.g., C:\\Qt\\Qt5.6.0\\5.6\\msvc2015\\")
-
 SET(USING_QT5 OFF)
 FIND_PACKAGE( Qt5Core QUIET )
 IF(Qt5Core_FOUND)
@@ -121,9 +124,7 @@ SET( LIB_HEADERS
     ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.h
 )
 
-#SET( LIB_SOURCE_CBPY
-#    ${PROJECT_SOURCE_DIR}/cbmex/cbpy.cpp
-#)
+
 SET( LIB_SOURCE_CBMEX
     ${PROJECT_SOURCE_DIR}/cbmex/cbmex.cpp
 )
@@ -181,10 +182,6 @@ IF( WIN32 )
     TARGET_LINK_LIBRARIES( ${LIB_NAME} ws2_32 winmm )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} ws2_32 winmm )
 ENDIF( WIN32 )
-
-# Install headers
-set(HEADERS "${PROJECT_SOURCE_DIR}/cbmex/cbsdk.h" "${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h")
-install(FILES ${HEADERS} DESTINATION include)
 
 ADD_CUSTOM_COMMAND(
     TARGET "${LIB_NAME}"
@@ -283,19 +280,23 @@ ENDIF( OCTAVE_FOUND )
 ADD_EXECUTABLE( ${TEST_NAME} ${PROJECT_SOURCE_DIR}/cbmex/testcbsdk.cpp )
 TARGET_LINK_LIBRARIES( ${TEST_NAME} ${LIB_NAME} )
 
-# Install information
+# Install libraries and test executable
 INSTALL( TARGETS ${TEST_NAME} ${LIB_NAME} ${LIB_NAME_STATIC}
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib${LIB_SUFFIX}
     ARCHIVE DESTINATION lib${LIB_SUFFIX}
 )
+# Install headers
 INSTALL( FILES ${PROJECT_SOURCE_DIR}/cbmex/cbsdk.h ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h DESTINATION include )
+
+
+
 
 #########################################################################################
 # Build n2h5 executable only if HDF5 found
 IF( HDF5_FOUND )
     MESSAGE ( STATUS "Add n2h5 utility build target")
-    INCLUDE_DIRECTORIES( ${HDF5_INCLUDE_DIR} )
+    INCLUDE_DIRECTORIES( ${HDF5_INCLUDE_DIRS} )
     IF( WIN32 )
         SET ( N2H5_SOURCE ${N2H5_SOURCE} ${PROJECT_SOURCE_DIR}/n2h5/res/n2h5_res.rc )
     ENDIF( WIN32 )
