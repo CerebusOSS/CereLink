@@ -28,6 +28,6 @@ Release/
 .settings/
 .metadata/
 
-build/temp.macosx*
-
 cerebus/cbpy.so
+cerebus/cbpyw.cpp
+cerelink.egg-info
