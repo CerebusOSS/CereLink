@@ -3,11 +3,13 @@ Created on March 9, 2013
 
 @author: dashesy
 
-Purpose: Python wrapper for cbsdk  
+Purpose: Python module for cbsdk_cython
 
 '''
 
-from cbpy cimport *
+from cbsdk_cython cimport *
+from libcpp cimport bool
+import sys
 import numpy as np
 cimport numpy as np
 cimport cython
@@ -32,14 +34,11 @@ def version(instance=0):
              nsp_protocol_minor - minor NSP protocol version
     '''
 
-    cdef int res
+    cdef cbSdkResult res
     cdef cbSdkVersion ver
-    
-    res = cbpy_version(<int>instance, &ver)
-    
-    if res < 0:
-        # Make this raise error classes
-        raise RuntimeError("error %d" % res)
+
+    res = cbSdkGetVersion(<uint32_t>instance, &ver)
+    handle_result(res)
     
     ver_dict = {'major':ver.major, 'minor':ver.minor, 'release':ver.release, 'beta':ver.beta,
                 'protocol_major':ver.majorp, 'protocol_minor':ver.majorp,
@@ -48,6 +47,17 @@ def version(instance=0):
                 }
     return res, ver_dict
 
+def defaultConParams():
+    #Note: Defaulting to 255.255.255.255 assumes the client is connected to the NSP via a switch.
+    #A direct connection might require the client-addr to be "192.168.137.1"
+    con_parms = {
+        'client-addr': str(cbNET_UDP_ADDR_BCAST.decode("utf-8")) if sys.platform == 'linux2' else '255.255.255.255',
+        'client-port': cbNET_UDP_PORT_BCAST,
+        'inst-addr': cbNET_UDP_ADDR_CNT.decode("utf-8"),
+        'inst-port': cbNET_UDP_PORT_CNT,
+        'receive-buffer-size': (8 * 1024 * 1024) if sys.platform == 'win32' else (6 * 1024 * 1024)
+    }
+    return con_parms
 
 def open(instance=0, connection='default', parameter={}):
     '''Open library.
@@ -65,31 +75,33 @@ def open(instance=0, connection='default', parameter={}):
        instance - (optional) library instance number
     Outputs:
         Same as "get_connection_type" command output
+
+    Test with:
+from cerebus import cbpy
+cbpy.open(parameter=cbpy.defaultConParams())
     '''
     
-    cdef int res
+    cdef cbSdkResult res
     
     wconType = {'default': CBSDKCONNECTION_DEFAULT, 'slave': CBSDKCONNECTION_CENTRAL, 'master': CBSDKCONNECTION_UDP} 
     if not connection in wconType.keys():
         raise RuntimeError("invalid connection %s" % connection)
-     
+
     cdef cbSdkConnectionType conType = wconType[connection]
     cdef cbSdkConnection con
-    
-    cdef bytes szOutIP = parameter.get('inst-addr', '').encode()
+
+    cdef bytes szOutIP = parameter.get('inst-addr', cbNET_UDP_ADDR_CNT).encode()
     cdef bytes szInIP  = parameter.get('client-addr', '').encode()
     
     con.szOutIP = szOutIP
-    con.nOutPort = parameter.get('inst-port', 51001)
+    con.nOutPort = parameter.get('inst-port', cbNET_UDP_PORT_CNT)
     con.szInIP = szInIP
-    con.nInPort = parameter.get('client-port', 51002)
+    con.nInPort = parameter.get('client-port', cbNET_UDP_PORT_BCAST)
     con.nRecBufSize = parameter.get('receive-buffer-size', 0)
-    
-    res = cbpy_open(<int>instance, conType, con)
 
-    if res < 0:
-        # Make this raise error classes
-        raise RuntimeError("error %d" % res)
+    res = cbSdkOpen(<uint32_t>instance, conType, con)
+
+    handle_result(res)
     
     return res, get_connection_type(instance=instance)
 
@@ -98,16 +110,7 @@ def close(instance=0):
     Inputs:
        instance - (optional) library instance number
     '''
-    
-    cdef int res
-    
-    res = cbpy_close(<int>instance)
-
-    if res < 0:
-        # Make this raise error classes
-        raise RuntimeError("error %d" % res)
-    
-    return res
+    return handle_result(cbSdkClose(<uint32_t>instance))
     
 def get_connection_type(instance=0):
     ''' Get connection type
@@ -121,16 +124,14 @@ def get_connection_type(instance=0):
                           'NSP', 'nPlay', 'Local NSP', 'Remote nPlay', 'Unknown')
     '''
     
-    cdef int res
+    cdef cbSdkResult res
     
     cdef cbSdkConnectionType conType
     cdef cbSdkInstrumentType instType
-    
-    res = cbpy_gettype(<int>instance, &conType, &instType)
 
-    if res < 0:
-        # Make this raise error classes
-        raise RuntimeError("error %d" % res)
+    res = cbSdkGetType(<uint32_t>instance, &conType, &instType)
+
+    handle_result(res)
     
     connections = ["Default", "Slave", "Master", "Closed", "Unknown"]
     instruments = ["NSP", "nPlay", "Local NSP", "Remote nPlay", "Unknown"]
@@ -177,23 +178,21 @@ def trial_config(instance=0, reset=True,
     cdef cbSdkConfigParam cfg_param
     
     # retrieve old values
-    res = cbpy_get_trial_config(<int>instance, &cfg_param)
-    if res < 0:
-        # Make this raise error classes
-        raise RuntimeError("error %d" % res)
+    res = cbsdk_get_trial_config(<int>instance, &cfg_param)
+    handle_result(<cbSdkResult>res)
     
     cfg_param.bActive = reset
     
-
+    # Fill cfg_param with provided buffer_parameter values or default.
     cfg_param.bDouble = buffer_parameter.get('double', cfg_param.bDouble)
-    cfg_param.uWaveforms = 0 # does not work ayways
+    cfg_param.uWaveforms = 0 # does not work anyways
     cfg_param.uConts = 0 if nocontinuous else buffer_parameter.get('continuous_length', cbSdk_CONTINUOUS_DATA_SAMPLES)
     cfg_param.uEvents = 0 if noevent else buffer_parameter.get('event_length', cbSdk_EVENT_DATA_SAMPLES)
     cfg_param.uComments = buffer_parameter.get('comment_length', 0)
     cfg_param.uTrackings = buffer_parameter.get('tracking_length', 0)
     cfg_param.bAbsolute = buffer_parameter.get('absolute', 0)
     
-    
+    # Fill cfg_param mask-related parameters with provided range_parameter or default.
     cfg_param.Begchan = range_parameter.get('begin_channel', 0)
     cfg_param.Begmask = range_parameter.get('begin_mask', 0)
     cfg_param.Begval = range_parameter.get('begin_value', 0)
@@ -201,10 +200,9 @@ def trial_config(instance=0, reset=True,
     cfg_param.Endmask = range_parameter.get('end_mask', 0)
     cfg_param.Endval = range_parameter.get('end_value', 0)
     
-    res = cbpy_set_trial_config(<int>instance, &cfg_param)
-    if res < 0:
-        # Make this raise error classes
-        raise RuntimeError("error %d" % res)
+    res = cbsdk_set_trial_config(<int>instance, &cfg_param)
+
+    handle_result(<cbSdkResult>res)
     
     return res, reset
     
@@ -229,21 +227,16 @@ def trial_event(instance=0, reset=False):
     trial = []
     
     # retrieve old values
-    res = cbpy_get_trial_config(<int>instance, &cfg_param)
-    if res < 0:
-        # Make this raise error classes
-        raise RuntimeError("error %d" % res)
+    res = cbsdk_get_trial_config(<int>instance, &cfg_param)
+    handle_result(<cbSdkResult>res)
     
     # get how many samples are avaialble
-    res = cbpy_init_trial_event(<int>instance, &trialevent)
-    if res < 0:
-        # Make this raise error classes
-        raise RuntimeError("error %d" % res)
+    res = cbsdk_init_trial_event(<int>instance, &trialevent)
+    handle_result(<cbSdkResult>res)
     
     if trialevent.count == 0:
         return res, trial
-    
-    
+
     cdef np.double_t[:] mxa_d
     cdef np.uint32_t[:] mxa_u32
     cdef np.uint16_t[:] mxa_u16
@@ -287,7 +280,8 @@ def trial_event(instance=0, reset=False):
         trial.append([ch, {'timestamps':timestamps, 'events':dig_events}])
     
     # get the trial
-    res = cbpy_get_trial_event(<int>instance, <int>reset, &trialevent) 
+    res = cbsdk_get_trial_event(<int>instance, <int>reset, &trialevent)
+    handle_result(<cbSdkResult>res)
 
     return res, trial
 
@@ -311,16 +305,12 @@ def trial_continuous(instance=0, reset=False):
     trial = []
     
     # retrieve old values
-    res = cbpy_get_trial_config(<int>instance, &cfg_param)
-    if res < 0:
-        # Make this raise error classes
-        raise RuntimeError("error %d" % res)
+    res = cbsdk_get_trial_config(<int>instance, &cfg_param)
+    handle_result(<cbSdkResult>res)
     
     # get how many samples are avaialble
-    res = cbpy_init_trial_cont(<int>instance, &trialcont)
-    if res < 0:
-        # Make this raise error classes
-        raise RuntimeError("error %d" % res)
+    res = cbsdk_init_trial_cont(<int>instance, &trialcont)
+    handle_result(<cbSdkResult>res)
     
     if trialcont.count == 0:
         return res, trial
@@ -351,7 +341,8 @@ def trial_continuous(instance=0, reset=False):
         trial.append(row)
         
     # get the trial
-    res = cbpy_get_trial_cont(<int>instance, <int>reset, &trialcont) 
+    res = cbsdk_get_trial_cont(<int>instance, <int>reset, &trialcont)
+    handle_result(<cbSdkResult>res)
 
     return res, trial
     
@@ -376,18 +367,16 @@ def file_config(instance=0, command='info', comment='', filename=''):
     '''
     
     
-    cdef int res
+    cdef cbSdkResult res
     cdef char fname[256]
     cdef char username[256]
-    cdef int bRecording = 0
+    cdef bool bRecording = False
     
     if command == 'info':
 
-        res = cbpy_get_file_config(<int>instance, fname, username, &bRecording)
-        if res < 0:
-            # Make this raise error classes
-            raise RuntimeError("error %d" % res)
-        info = {'Recording':(bRecording != 0), 'FileName':<bytes>fname, 'UserName':<bytes>username}
+        res = cbSdkGetFileConfig(<uint32_t>instance, fname, username, &bRecording)
+        handle_result(res)
+        info = {'Recording':bRecording, 'FileName':<bytes>fname, 'UserName':<bytes>username}
         return res, info
    
     cdef int start = 0 
@@ -408,12 +397,13 @@ def file_config(instance=0, command='info', comment='', filename=''):
         start = 0
     else:
         raise RuntimeError("invalid file config command %s" % command)
-    
+
+    cdef int set_res
     filename_string = filename.encode('UTF-8')
     comment_string = comment.encode('UTF-8')
-    res = cbpy_file_config(<int>instance, <const char *>filename_string, <char *>comment_string, start, options)
+    set_res = cbsdk_file_config(<int>instance, <const char *>filename_string, <char *>comment_string, start, options)
     
-    return res
+    return set_res
 
 
 def time(instance=0, unit='samples'):
@@ -429,7 +419,7 @@ def time(instance=0, unit='samples'):
     '''
 
 
-    cdef int res
+    cdef cbSdkResult res
 
     if unit == 'samples':
         factor = 1
@@ -439,17 +429,16 @@ def time(instance=0, unit='samples'):
         raise NotImplementedError("Use time unit of samples for now")
     else:
         raise RuntimeError("Invalid time unit %s" % unit)
-    
 
-    cdef int cbtime
-    res = cbpy_get_time(<int>instance, &cbtime)
+    cdef uint32_t cbtime
+    res = cbSdkGetTime(<uint32_t>instance, &cbtime)
 
     time = float(cbtime) / factor
     
     return res, time
 
 
-def digital_out(channel, value='low', instance=0):
+def digital_out(channel, instance=0, value='low'):
     '''Digital output command.
     Inputs:
     channel - integer, digital output channel number (1-based)
@@ -462,9 +451,33 @@ def digital_out(channel, value='low', instance=0):
     values = ['low', 'high']
     if value not in values:
         raise RuntimeError("Invalid value %s" % value)
-    
+
+    cdef cbSdkResult res
     cdef int int_val = values.index(value)
-    res = cbpy_set_digital_output(<int>instance, <int>channel, int_val)
+    res = cbSdkSetDigitalOutput(<uint32_t>instance, <uint16_t>channel, int_val)
     
     return res
 
+def get_channel_config(channel, instance=0):
+    '''
+    '''
+    cdef cbSdkResult res
+    cdef cbPKT_CHANINFO chan_info
+    res = cbSdkGetChannelConfig(<uint32_t>instance, <uint16_t>channel, &chan_info)
+    print(chan_info)
+    print(chan_info.time, chan_info.chid, chan_info.dlen,
+        chan_info.chan, chan_info.proc, chan_info.bank, chan_info.term,
+        chan_info.chancaps, chan_info.doutcaps)
+
+cdef cbSdkResult handle_result(cbSdkResult res):
+    if (res == CBSDKRESULT_WARNCLOSED):
+        print("Library is already closed.")
+    if (res < 0):
+        errtext = ""
+        if (res == CBSDKRESULT_ERROFFLINE):
+            errtext = "Instrument is offline."
+        elif (res == CBSDKRESULT_CLOSED):
+            errtext = "Interface is closed; cannot do this operation."
+
+        raise RuntimeError(("%d, " + errtext) % res)
+    return res
