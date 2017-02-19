@@ -1008,7 +1008,7 @@ cbRESULT cbSetComment(UINT8 charset, UINT8 flags, UINT32 data, const char * comm
     if (comment)
         strncpy(pktComment.comment, comment, cbMAX_COMMENT);
     pktComment.comment[cbMAX_COMMENT - 1] = 0;
-    nLen = (UINT32)strlen(pktComment.comment);
+    nLen = (UINT32)strlen(pktComment.comment) + 1;      // include terminating null
     pktComment.dlen           = (UINT32)cbPKTDLEN_COMMENTSHORT + (nLen + 3) / 4;
 
     // Enter the packet into the XMT buffer queue
@@ -1793,7 +1793,8 @@ cbRESULT cbGetDoutCaps(UINT32 chan, UINT32 *doutcaps, UINT32 nInstance)
 
 // Purpose: Digital Output Inquiry and Configuration Functions
 //
-cbRESULT cbGetDoutOptions(UINT32 chan, UINT32 *options, UINT32 *monchan, UINT32 *value, UINT32 nInstance)
+cbRESULT cbGetDoutOptions(UINT32 chan, UINT32 *options, UINT32 *monchan, UINT32 *value,
+						  UINT8 *triggertype, UINT16 *trigchan, UINT16 *trigval, UINT32 nInstance)
 {
     UINT32 nIdx = cb_library_index[nInstance];
 
@@ -1806,16 +1807,20 @@ cbRESULT cbGetDoutOptions(UINT32 chan, UINT32 *options, UINT32 *monchan, UINT32 
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_DOUT)) return cbRESULT_INVALIDFUNCTION;
 
     // Return the requested data from the rec buffer
-    if (options) *options = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].doutopts;
-    if (monchan) *monchan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].monsource;
-    if (value)   *value   = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].outvalue;
+    if (options)		*options		= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].doutopts;
+    if (monchan)		*monchan		= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].monsource;
+    if (value)			*value			= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].outvalue;
+    if (triggertype)    *triggertype	= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].trigtype;
+    if (trigchan)		*trigchan		= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].trigchan;
+    if (trigval)        *trigval		= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].trigval;
 
     return cbRESULT_OK;
 }
 
 // Purpose: Digital Output Inquiry and Configuration Functions
 //
-cbRESULT cbSetDoutOptions(UINT32 chan, UINT32 options, UINT32 monchan, UINT32 value, UINT32 nInstance)
+cbRESULT cbSetDoutOptions(UINT32 chan, UINT32 options, UINT32 monchan, UINT32 value,
+                          UINT8 triggertype, UINT16 trigchan, UINT16 trigval, UINT32 nInstance)
 {
     UINT32 nIdx = cb_library_index[nInstance];
 
@@ -1837,6 +1842,9 @@ cbRESULT cbSetDoutOptions(UINT32 chan, UINT32 options, UINT32 monchan, UINT32 va
     chaninfo.doutopts  = options;
     chaninfo.monsource = monchan;
     chaninfo.outvalue  = value;
+    chaninfo.trigtype  = triggertype;	
+    chaninfo.trigchan  = trigchan;
+    chaninfo.trigval   = trigval;
 
     // Enter the packet into the XMT buffer queue
     return cbSendPacket(&chaninfo, nInstance);

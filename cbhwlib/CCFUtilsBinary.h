@@ -520,6 +520,71 @@ typedef struct {
 #define cbPKTDLEN_CHANINFO_CB2005_37      ((sizeof(cbPKT_CHANINFO_CB2005_37)/4)-2)
 
 typedef struct {
+    UINT32     time;           // system clock timestamp
+    UINT16     chid;           // 0x8000
+    UINT8   type;           // cbPKTTYPE_AINP*
+    UINT8   dlen;           // cbPKT_DLENCHANINFO
+
+    UINT32     chan;           // actual channel id of the channel being configured
+    UINT32     proc;           // the address of the processor on which the channel resides
+    UINT32     bank;           // the address of the bank on which the channel resides
+    UINT32     term;           // the terminal number of the channel within it's bank
+    UINT32     chancaps;       // general channel capablities (given by cbCHAN_* flags)
+    UINT32     doutcaps;       // digital output capablities (composed of cbDOUT_* flags)
+    UINT32     dinpcaps;       // digital input capablities (composed of cbDINP_* flags)
+    UINT32     aoutcaps;       // analog output capablities (composed of cbAOUT_* flags)
+    UINT32     ainpcaps;       // analog input capablities (composed of cbAINP_* flags)
+    UINT32     spkcaps;        // spike processing capabilities
+    cbSCALING  physcalin;      // physical channel scaling information
+    cbFILTDESC phyfiltin;      // physical channel filter definition
+    cbSCALING  physcalout;     // physical channel scaling information
+    cbFILTDESC phyfiltout;     // physical channel filter definition
+    char       label[cbLEN_STR_LABEL];   // Label of the channel (null terminated if <16 characters)
+    UINT32     userflags;      // User flags for the channel state
+    INT32      position[4];    // reserved for future position information
+    cbSCALING  scalin;         // user-defined scaling information for AINP
+    cbSCALING  scalout;        // user-defined scaling information for AOUT
+    UINT32     doutopts;       // digital output options (composed of cbDOUT_* flags)
+    UINT32     dinpopts;       // digital input options (composed of cbDINP_* flags)
+    UINT32     aoutopts;       // analog output options
+    UINT32     eopchar;        // digital input capablities (given by cbDINP_* flags)
+    union {
+        struct {
+            UINT32              monsource;      // address of channel to monitor
+            INT32               outvalue;       // output value
+        };
+        struct {
+            UINT16              lowsamples;     // address of channel to monitor
+            UINT16              highsamples;    // address of channel to monitor
+            INT32               offset;         // output value
+        };
+    };
+    UINT8				trigtype;		// trigger type (see cbDOUT_TRIGGER_*)
+    UINT16				trigchan;		// trigger channel
+    UINT16				trigval;		// trigger value
+    UINT32              ainpopts;       // analog input options (composed of cbAINP* flags)
+    UINT32              lncrate;          // line noise cancellation filter adaptation rate
+    UINT32              smpfilter;        // continuous-time pathway filter id
+    UINT32              smpgroup;         // continuous-time pathway sample group
+    INT32               smpdispmin;       // continuous-time pathway display factor
+    INT32               smpdispmax;       // continuous-time pathway display factor
+    UINT32              spkfilter;        // spike pathway filter id
+    INT32               spkdispmax;       // spike pathway display factor
+    INT32               lncdispmax;       // Line Noise pathway display factor
+    UINT32              spkopts;          // spike processing options
+    INT32               spkthrlevel;      // spike threshold level
+    INT32               spkthrlimit;      //
+    UINT32              spkgroup;         // NTrodeGroup this electrode belongs to - 0 is single unit, non-0 indicates a multi-trode grouping
+    INT16               amplrejpos;       // Amplitude rejection positive value
+    INT16               amplrejneg;       // Amplitude rejection negative value
+    UINT32              refelecchan;      // Software reference electrode channel
+    cbMANUALUNITMAPPING unitmapping[cbMAXUNITS];            // manual unit mapping
+    cbHOOP              spkhoops[cbMAXUNITS][cbMAXHOOPS];   // spike hoop sorting set
+} cbPKT_CHANINFO_CB2005_310;
+#define cbPKTDLEN_CHANINFO_CB2005_310     ((sizeof(cbPKT_CHANINFO_CB2005_310)/4)-2)
+
+
+typedef struct {
     UINT32 time;           // system clock timestamp
     UINT16 chid;           // 0x8000
     UINT8 type;            // cbPKTTYPE_REPNTRODEINFO or cbPKTTYPE_SETNTRODEINFO
@@ -783,7 +848,7 @@ typedef struct {
 } cbPKT_ADAPTFILTINFO_CB2005_37;
 
 typedef struct {
-    cbPKT_CHANINFO_CB2005_37 isChan[cbLEGACY_MAXCHANS];
+    cbPKT_CHANINFO isChan[cbLEGACY_MAXCHANS];
     cbPKT_ADAPTFILTINFO_CB2005_37 isAdaptInfo;
     cbPKT_SS_DETECT_CB2005_37 isSS_Detect;
     cbPKT_SS_ARTIF_REJECT_CB2005_37 isSS_ArtifactReject;
@@ -823,7 +888,7 @@ private:
     static const char m_szConfigFileVersion[11];
     static const int m_iPreviousHeaderSize = 9;
 
-    inline void cpyScaling(ccf::cbSCALING_30 &dest, ccf::cbSCALING_NO_ANAGAIN &src)
+    inline void cpyScaling(cbSCALING &dest, ccf::cbSCALING_NO_ANAGAIN &src)
     {
         dest.anagain = 1;
         dest.anamax = src.anamax;
@@ -833,7 +898,7 @@ private:
         dest.digmin = src.digmin;
     }
 
-    void SetChannelDefaults(ccf::cbPKT_CHANINFO_CB2005_37 &isChan);
+    void SetChannelDefaults(cbPKT_CHANINFO &isChan);
     UINT32 TranslateAutoFilter(UINT32 filter);
     void ReadSpikeSortingPackets(ccf::cbPKT_GENERIC_CB2003_10 *pPkt);
     // Purpose: after reading channel info from the config file, read the rest of the
@@ -850,6 +915,7 @@ private:
     ccf::ccfResult ReadCCFData_cb2005_35(FILE * hFile);
     ccf::ccfResult ReadCCFData_cb2005_36(FILE * hFile);
     ccf::ccfResult ReadCCFData_cb2005_37(FILE * hFile);
+    ccf::ccfResult ReadCCFData_cb2005_310(FILE * hFile);
 };
 
 #endif // include guard

@@ -1,21 +1,11 @@
 from __future__ import print_function
 import os
-from os.path import join, dirname
 import sys
 import numpy
-import warnings
 from setuptools import find_packages
-try:
-    from setuptools import setup, Extension
-    from Cython.Distutils import build_ext
-    HAVE_CYTHON = True
-except ImportError as e:
-    HAVE_CYTHON = False
-    warnings.warn(e.message)
-    from distutils.core import setup, Extension
-    from distutils.command import build_ext
+from setuptools import setup, Extension
+from Cython.Distutils import build_ext
 
-CYTHON_REQUIREMENT = 'Cython>=0.19.1'
 
 def get_extras():
     # Find all the extra include files, libraries, and link arguments we need to install.
@@ -47,13 +37,13 @@ def get_extras():
     elif "win32" in sys.platform:
         import platform
 
+        cur = os.path.dirname(os.path.abspath(__file__))
         # Must include cbsdk headers
         extra_includes += [os.path.join(cur, 'dist\\include')]
         # Must include stdinit (V2008 does not have it!)
         extra_includes += [os.path.join(cur, 'compat')]
         # Must be explicit about cbsdk link path
         arch = '64' if '64bit' in platform.architecture() else ''
-        cur = os.path.dirname(os.path.abspath(__file__))
         extra_link_args += ['/LIBPATH:{path}'.format(path=os.path.join(cur, 'dist\\lib{arch}'.format(arch=arch)))]
         # add winsock, timer, and system libraries
         extra_libs += ["ws2_32", "winmm"]
@@ -126,28 +116,26 @@ extension_kwargs = {
     'sources': ['cerebus/cbpy.pyx', 'cerebus/cbsdk_helper.cpp'],
     'libraries': ["cbsdk_static"] + extra_libs,
     'extra_link_args': extra_link_args,
-    'include_dirs': [numpy.get_include()] + extra_includes}
-if HAVE_CYTHON:
-    extension_kwargs['language'] = 'c++'
+    'include_dirs': [numpy.get_include()] + extra_includes,
+    'language': 'c++'
+}
 
 cbpy_module = Extension('cerebus.cbpy', **extension_kwargs)
 
-configuration = {
-    'name': 'cerelink',
-    'version': '0.0.2',
-    'description': 'Cerebus Link',
-    'long_description':'Cerebus Link Python Package',
-    'author': 'dashesy',
-    'author_email': 'dashesy@gmail.com',
-    'url': 'https://github.com/dashesy/CereLink',
-    'packages': find_packages(),
-    'install_requires': [CYTHON_REQUIREMENT],
-    'ext_modules': [cbpy_module],
-    'cmdclass': {'build_ext': build_ext}}
-
-if not HAVE_CYTHON:
-    # If the user does not have Cython then they can use cbpyw.cpp if it is distributed (currently not)
-    cbpy_module.sources[0] = 'cerebus/cbpyw.cpp'
-    configuration.pop('install_requires')
-
-setup(**configuration)
+setup(
+    name='cerelink',
+    version='0.0.2',
+    description='Cerebus Link',
+    long_description='Cerebus Link Python Package',
+    author='dashesy',
+    author_email='dashesy@gmail.com',
+    install_requires=['Cython>=0.19.1', 'numpy'],
+    url='https://github.com/dashesy/CereLink',
+    packages=find_packages(),
+    cmdclass={
+        'build_ext': build_ext,
+    },
+    ext_modules=[
+        cbpy_module,
+    ],
+)

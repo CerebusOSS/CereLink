@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="Windows-1252"?>
 <VisualStudioProject
 	ProjectType="Visual C++"
-	Version="8.00"
+	Version="9.00"
 	Name="cbmex"
 	ProjectGUID="{38E1DEC0-D57E-4F17-ABDC-6E7947E945D2}"
 	RootNamespace="cbmex"
+	TargetFrameworkVersion="131072"
 	>
 	<Platforms>
 		<Platform
@@ -19,21 +20,22 @@
 	<Configurations>
 		<Configuration
 			Name="Debug|Win32"
-			OutputDirectory="$(PlatformName)\$(ConfigurationName)"
+			OutputDirectory="..\$(PlatformName)\$(ConfigurationName)"
 			IntermediateDirectory="$(PlatformName)\$(ConfigurationName)"
 			ConfigurationType="2"
-			InheritedPropertySheets="..\properties.vsprops"
+			InheritedPropertySheets="..\Project Files\properties.vsprops"
 			UseOfMFC="0"
-			CharacterSet="0"
+			CharacterSet="2"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
+				CommandLine=""
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
 				Description="Creating Mex File"
-				CommandLine="copy /Y &quot;..\$(OutDir)\cbsdk.dll&quot; &quot;..\$(OutDir)\cbmex.mexw32&quot;&#x0D;&#x0A;"
-				Outputs="..\$(OutDir)\cbsdk.lib;..\$(OutDir)\cbmex.mexw32"
+				CommandLine="copy /Y &quot;$(OutDir)\cbsdk.dll&quot; &quot;$(OutDir)\cbmex.mexw32&quot;&#x0D;&#x0A;"
+				Outputs="$(OutDir)\cbsdk.lib;$(OutDir)\cbmex.mexw32"
 			/>
 			<Tool
 				Name="VCXMLDataGeneratorTool"
@@ -48,7 +50,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="../cbhwlib;../Central;../matlab/include;&quot;$(QTDIR)\include\QtCore&quot;;&quot;$(QTDIR)\include\QtXml&quot;;&quot;$(QTDIR)\include&quot;;&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot;"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS;QT_APP"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS"
 				MinimalRebuild="false"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
@@ -56,7 +58,7 @@
 				ObjectFile="$(PlatformName)\$(ConfigurationName)/"
 				ProgramDataBaseFileName="$(PlatformName)\$(ConfigurationName)/"
 				WarningLevel="3"
-				DebugInformationFormat="4"
+				DebugInformationFormat="3"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -72,6 +74,7 @@
 				AdditionalOptions="/EXPORT:mexFunction"
 				AdditionalDependencies="ws2_32.lib winmm.lib libmx.lib libmex.lib libmat.lib QtXmld4.lib QtCored4.lib"
 				OutputFile="../$(PlatformName)\$(ConfigurationName)\cbsdk.dll"
+				LinkIncremental="1"
 				AdditionalLibraryDirectories="..\Matlab\lib\win32\microsoft\msvc60;&quot;$(QTDIR)\lib&quot;"
 				IgnoreDefaultLibraryNames=""
 				ModuleDefinitionFile=""
@@ -80,6 +83,8 @@
 				OptimizeReferences="0"
 				EnableCOMDATFolding="0"
 				ResourceOnlyDLL="false"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
 				ImportLibrary="$(TargetDir)cbsdk.lib"
 				TargetMachine="1"
 			/>
@@ -102,18 +107,15 @@
 				Name="VCAppVerifierTool"
 			/>
 			<Tool
-				Name="VCWebDeploymentTool"
-			/>
-			<Tool
 				Name="VCPostBuildEventTool"
 			/>
 		</Configuration>
 		<Configuration
 			Name="Debug|x64"
-			OutputDirectory="$(PlatformName)\$(ConfigurationName)"
+			OutputDirectory="..\$(PlatformName)\$(ConfigurationName)"
 			IntermediateDirectory="$(PlatformName)\$(ConfigurationName)"
 			ConfigurationType="2"
-			InheritedPropertySheets="..\properties.vsprops"
+			InheritedPropertySheets="..\Project Files\properties.vsprops"
 			UseOfMFC="0"
 			CharacterSet="0"
 			>
@@ -123,8 +125,8 @@
 			<Tool
 				Name="VCCustomBuildTool"
 				Description="Creating Mex File"
-				CommandLine="copy /Y &quot;..\$(OutDir)\cbsdkx64.dll&quot; &quot;..\$(OutDir)\cbmex.mexw64&quot;&#x0D;&#x0A;"
-				Outputs="..\$(OutDir)\cbsdkx64.lib;..\$(OutDir)\cbmex.mexw64"
+				CommandLine="copy /Y &quot;$(OutDir)\cbsdkx64.dll&quot; &quot;$(OutDir)\cbmex.mexw64&quot;&#x0D;&#x0A;"
+				Outputs="$(OutDir)\cbsdkx64.lib;$(OutDir)\cbmex.mexw64"
 			/>
 			<Tool
 				Name="VCXMLDataGeneratorTool"
@@ -140,7 +142,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="../cbhwlib;../Central;../matlab/include;&quot;$(QTDIR)\include\QtCore&quot;;&quot;$(QTDIR)\include\QtXml&quot;;&quot;$(QTDIR)\include&quot;;&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot;"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS;QT_APP"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
@@ -165,6 +167,7 @@
 				AdditionalOptions="/EXPORT:mexFunction"
 				AdditionalDependencies="ws2_32.lib winmm.lib libmx.lib libmex.lib libmat.lib QtXmlx64d4.lib QtCorex64d4.lib"
 				OutputFile="../$(PlatformName)\$(ConfigurationName)\cbsdkx64.dll"
+				LinkIncremental="1"
 				AdditionalLibraryDirectories="..\Matlab\lib\win64\microsoft;&quot;$(QTDIR)\lib&quot;"
 				IgnoreDefaultLibraryNames=""
 				ModuleDefinitionFile=""
@@ -173,6 +176,8 @@
 				OptimizeReferences="0"
 				EnableCOMDATFolding="0"
 				ResourceOnlyDLL="false"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
 				ImportLibrary="$(TargetDir)cbsdkx64.lib"
 				TargetMachine="17"
 			/>
@@ -195,30 +200,28 @@
 				Name="VCAppVerifierTool"
 			/>
 			<Tool
-				Name="VCWebDeploymentTool"
-			/>
-			<Tool
 				Name="VCPostBuildEventTool"
 			/>
 		</Configuration>
 		<Configuration
 			Name="Release|Win32"
-			OutputDirectory="$(PlatformName)\$(ConfigurationName)"
+			OutputDirectory="..\$(PlatformName)\$(ConfigurationName)"
 			IntermediateDirectory="$(PlatformName)\$(ConfigurationName)"
 			ConfigurationType="2"
-			InheritedPropertySheets="..\properties.vsprops"
+			InheritedPropertySheets="..\Project Files\properties.vsprops"
 			UseOfMFC="0"
-			CharacterSet="0"
+			CharacterSet="2"
 			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
+				CommandLine=""
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
 				Description="Creating Mex File"
-				CommandLine="copy /Y &quot;..\$(OutDir)\cbsdk.dll&quot; &quot;..\$(OutDir)\cbmex.mexw32&quot;&#x0D;&#x0A;"
-				Outputs="..\$(OutDir)\cbsdk.lib;..\$(OutDir)\cbmex.mexw32"
+				CommandLine="copy /Y &quot;$(OutDir)\cbsdk.dll&quot; &quot;$(OutDir)\cbmex.mexw32&quot;&#x0D;&#x0A;"
+				Outputs="$(OutDir)\cbsdk.lib;$(OutDir)\cbmex.mexw32"
 			/>
 			<Tool
 				Name="VCXMLDataGeneratorTool"
@@ -232,7 +235,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="../cbhwlib;../Central;../matlab/include;&quot;$(QTDIR)\include\QtCore&quot;;&quot;$(QTDIR)\include\QtXml&quot;;&quot;$(QTDIR)\include&quot;;&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot;"
-				PreprocessorDefinitions="WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS;QT_APP"
+				PreprocessorDefinitions="WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS"
 				RuntimeLibrary="2"
 				UsePrecompiledHeader="0"
 				AssemblerListingLocation="$(PlatformName)\$(ConfigurationName)/"
@@ -261,6 +264,8 @@
 				DelayLoadDLLs="libmx.dll;libmex.dll"
 				EntryPointSymbol=""
 				ResourceOnlyDLL="false"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
 				ImportLibrary="$(TargetDir)cbsdk.lib"
 				TargetMachine="1"
 			/>
@@ -283,18 +288,15 @@
 				Name="VCAppVerifierTool"
 			/>
 			<Tool
-				Name="VCWebDeploymentTool"
-			/>
-			<Tool
 				Name="VCPostBuildEventTool"
 			/>
 		</Configuration>
 		<Configuration
 			Name="Release|x64"
-			OutputDirectory="$(PlatformName)\$(ConfigurationName)"
+			OutputDirectory="..\$(PlatformName)\$(ConfigurationName)"
 			IntermediateDirectory="$(PlatformName)\$(ConfigurationName)"
 			ConfigurationType="2"
-			InheritedPropertySheets="..\properties.vsprops"
+			InheritedPropertySheets="..\Project Files\properties.vsprops"
 			UseOfMFC="0"
 			CharacterSet="0"
 			WholeProgramOptimization="1"
@@ -305,8 +307,8 @@
 			<Tool
 				Name="VCCustomBuildTool"
 				Description="Creating Mex File"
-				CommandLine="copy /Y &quot;..\$(OutDir)\cbsdkx64.dll&quot; &quot;..\$(OutDir)\cbmex.mexw64&quot;&#x0D;&#x0A;"
-				Outputs="..\$(OutDir)\cbsdkx64.lib;..\$(OutDir)\cbmex.mexw64"
+				CommandLine="copy /Y &quot;$(OutDir)\cbsdkx64.dll&quot; &quot;$(OutDir)\cbmex.mexw64&quot;&#x0D;&#x0A;"
+				Outputs="$(OutDir)\cbsdkx64.lib;$(OutDir)\cbmex.mexw64"
 			/>
 			<Tool
 				Name="VCXMLDataGeneratorTool"
@@ -321,7 +323,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="../cbhwlib;../Central;../matlab/include;&quot;$(QTDIR)\include\QtCore&quot;;&quot;$(QTDIR)\include\QtXml&quot;;&quot;$(QTDIR)\include&quot;;&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot;"
-				PreprocessorDefinitions="WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS;QT_APP"
+				PreprocessorDefinitions="WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS"
 				RuntimeLibrary="2"
 				BufferSecurityCheck="false"
 				AssemblerListingLocation="$(PlatformName)\$(ConfigurationName)/"
@@ -350,6 +352,8 @@
 				DelayLoadDLLs="libmx.dll;libmex.dll"
 				EntryPointSymbol=""
 				ResourceOnlyDLL="false"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
 				ImportLibrary="$(TargetDir)cbsdkx64.lib"
 				TargetMachine="17"
 			/>
@@ -372,7 +376,358 @@
 				Name="VCAppVerifierTool"
 			/>
 			<Tool
-				Name="VCWebDeploymentTool"
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
+			Name="ReleaseBuild|Win32"
+			OutputDirectory="..\$(PlatformName)\$(ConfigurationName)"
+			IntermediateDirectory="$(PlatformName)\$(ConfigurationName)"
+			ConfigurationType="2"
+			InheritedPropertySheets="..\Project Files\properties.vsprops"
+			UseOfMFC="0"
+			CharacterSet="2"
+			WholeProgramOptimization="1"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+				CommandLine="&quot;$(SolutionDir)IncBuildNumber.exe&quot; &quot;$(ProjectPath)&quot; &quot;$(ProjectDir)res\$(ProjectName).rc2&quot; &quot;$(ConfigurationName)&quot; &quot;$(ProjectDir)..\CentralCommon\BmiVersion.h&quot;"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+				Description="Creating Mex File"
+				CommandLine="copy /Y &quot;$(OutDir)\cbsdk.dll&quot; &quot;$(OutDir)\cbmex.mexw32&quot;&#x0D;&#x0A;"
+				Outputs="$(OutDir)\cbsdk.lib;$(OutDir)\cbmex.mexw32"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+				AdditionalIncludeDirectories="../cbhwlib;../Central;../matlab/include;&quot;$(QTDIR)\include\QtCore&quot;;&quot;$(QTDIR)\include\QtXml&quot;;&quot;$(QTDIR)\include&quot;;&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot;"
+				PreprocessorDefinitions="WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS"
+				RuntimeLibrary="2"
+				UsePrecompiledHeader="0"
+				AssemblerListingLocation="$(PlatformName)\$(ConfigurationName)/"
+				ObjectFile="$(PlatformName)\$(ConfigurationName)/"
+				ProgramDataBaseFileName="$(PlatformName)\$(ConfigurationName)/"
+				WarningLevel="3"
+				DebugInformationFormat="0"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+				AdditionalOptions="/EXPORT:mexFunction"
+				AdditionalDependencies="ws2_32.lib winmm.lib libmx.lib libmex.lib libmat.lib QtXml4.lib QtCore4.lib"
+				OutputFile="../$(PlatformName)\$(ConfigurationName)\cbsdk.dll"
+				AdditionalLibraryDirectories="..\Matlab\lib\win32\microsoft\msvc60;&quot;$(QTDIR)\lib&quot;"
+				IgnoreDefaultLibraryNames=""
+				ModuleDefinitionFile=""
+				DelayLoadDLLs="libmx.dll;libmex.dll"
+				EntryPointSymbol=""
+				ResourceOnlyDLL="false"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
+				ImportLibrary="$(TargetDir)cbsdk.lib"
+				TargetMachine="1"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
+			Name="ReleaseBuild|x64"
+			OutputDirectory="..\$(PlatformName)\$(ConfigurationName)"
+			IntermediateDirectory="$(PlatformName)\$(ConfigurationName)"
+			ConfigurationType="2"
+			InheritedPropertySheets="..\Project Files\properties.vsprops"
+			UseOfMFC="0"
+			CharacterSet="0"
+			WholeProgramOptimization="1"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+				CommandLine="&quot;$(SolutionDir)IncBuildNumber.exe&quot; &quot;$(ProjectPath)&quot; &quot;$(ProjectDir)res\$(ProjectName).rc2&quot; &quot;$(ConfigurationName)&quot; &quot;$(ProjectDir)..\CentralCommon\BmiVersion.h&quot;"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+				Description="Creating Mex File"
+				CommandLine="copy /Y &quot;$(OutDir)\cbsdkx64.dll&quot; &quot;$(OutDir)\cbmex.mexw64&quot;&#x0D;&#x0A;"
+				Outputs="$(OutDir)\cbsdkx64.lib;$(OutDir)\cbmex.mexw64"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+				TargetEnvironment="3"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+				AdditionalIncludeDirectories="../cbhwlib;../Central;../matlab/include;&quot;$(QTDIR)\include\QtCore&quot;;&quot;$(QTDIR)\include\QtXml&quot;;&quot;$(QTDIR)\include&quot;;&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot;"
+				PreprocessorDefinitions="WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS"
+				RuntimeLibrary="2"
+				BufferSecurityCheck="false"
+				AssemblerListingLocation="$(PlatformName)\$(ConfigurationName)/"
+				ObjectFile="$(PlatformName)\$(ConfigurationName)/"
+				ProgramDataBaseFileName="$(PlatformName)\$(ConfigurationName)/"
+				WarningLevel="3"
+				DebugInformationFormat="3"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+				AdditionalOptions="/EXPORT:mexFunction"
+				AdditionalDependencies="ws2_32.lib winmm.lib libmx.lib libmex.lib libmat.lib QtXmlx644.lib QtCorex644.lib"
+				OutputFile="../$(PlatformName)\$(ConfigurationName)\cbsdkx64.dll"
+				AdditionalLibraryDirectories="..\Matlab\lib\win64\microsoft;;&quot;$(QTDIR)\lib&quot;"
+				IgnoreDefaultLibraryNames=""
+				ModuleDefinitionFile=""
+				DelayLoadDLLs="libmx.dll;libmex.dll"
+				EntryPointSymbol=""
+				ResourceOnlyDLL="false"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
+				ImportLibrary="$(TargetDir)cbsdkx64.lib"
+				TargetMachine="17"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
+			Name="ReleaseFinal|Win32"
+			OutputDirectory="..\$(PlatformName)\$(ConfigurationName)"
+			IntermediateDirectory="$(PlatformName)\$(ConfigurationName)"
+			ConfigurationType="2"
+			InheritedPropertySheets="..\Project Files\properties.vsprops"
+			UseOfMFC="0"
+			CharacterSet="2"
+			WholeProgramOptimization="1"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+				CommandLine="&quot;$(SolutionDir)IncBuildNumber.exe&quot; &quot;$(ProjectPath)&quot; &quot;$(ProjectDir)res\$(ProjectName).rc2&quot; &quot;$(ConfigurationName)&quot; &quot;$(ProjectDir)..\CentralCommon\BmiVersion.h&quot;"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+				Description="Creating Mex File"
+				CommandLine="copy /Y &quot;$(OutDir)\cbsdk.dll&quot; &quot;$(OutDir)\cbmex.mexw32&quot;&#x0D;&#x0A;"
+				Outputs="$(OutDir)\cbsdk.lib;$(OutDir)\cbmex.mexw32"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+				AdditionalIncludeDirectories="../cbhwlib;../Central;../matlab/include;&quot;$(QTDIR)\include\QtCore&quot;;&quot;$(QTDIR)\include\QtXml&quot;;&quot;$(QTDIR)\include&quot;;&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot;"
+				PreprocessorDefinitions="WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS"
+				RuntimeLibrary="2"
+				UsePrecompiledHeader="0"
+				AssemblerListingLocation="$(PlatformName)\$(ConfigurationName)/"
+				ObjectFile="$(PlatformName)\$(ConfigurationName)/"
+				ProgramDataBaseFileName="$(PlatformName)\$(ConfigurationName)/"
+				WarningLevel="3"
+				DebugInformationFormat="0"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+				AdditionalOptions="/EXPORT:mexFunction"
+				AdditionalDependencies="ws2_32.lib winmm.lib libmx.lib libmex.lib libmat.lib QtXml4.lib QtCore4.lib"
+				OutputFile="../$(PlatformName)\$(ConfigurationName)\cbsdk.dll"
+				AdditionalLibraryDirectories="..\Matlab\lib\win32\microsoft\msvc60;&quot;$(QTDIR)\lib&quot;"
+				IgnoreDefaultLibraryNames=""
+				ModuleDefinitionFile=""
+				DelayLoadDLLs="libmx.dll;libmex.dll"
+				EntryPointSymbol=""
+				ResourceOnlyDLL="false"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
+				ImportLibrary="$(TargetDir)cbsdk.lib"
+				TargetMachine="1"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
+			Name="ReleaseFinal|x64"
+			OutputDirectory="..\$(PlatformName)\$(ConfigurationName)"
+			IntermediateDirectory="$(PlatformName)\$(ConfigurationName)"
+			ConfigurationType="2"
+			InheritedPropertySheets="..\Project Files\properties.vsprops"
+			UseOfMFC="0"
+			CharacterSet="0"
+			WholeProgramOptimization="1"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+				CommandLine="&quot;$(SolutionDir)IncBuildNumber.exe&quot; &quot;$(ProjectPath)&quot; &quot;$(ProjectDir)res\$(ProjectName).rc2&quot; &quot;$(ConfigurationName)&quot; &quot;$(ProjectDir)..\CentralCommon\BmiVersion.h&quot;"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+				Description="Creating Mex File"
+				CommandLine="copy /Y &quot;$(OutDir)\cbsdkx64.dll&quot; &quot;$(OutDir)\cbmex.mexw64&quot;&#x0D;&#x0A;"
+				Outputs="$(OutDir)\cbsdkx64.lib;$(OutDir)\cbmex.mexw64"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+				TargetEnvironment="3"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+				AdditionalIncludeDirectories="../cbhwlib;../Central;../matlab/include;&quot;$(QTDIR)\include\QtCore&quot;;&quot;$(QTDIR)\include\QtXml&quot;;&quot;$(QTDIR)\include&quot;;&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot;"
+				PreprocessorDefinitions="WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS"
+				RuntimeLibrary="2"
+				BufferSecurityCheck="false"
+				AssemblerListingLocation="$(PlatformName)\$(ConfigurationName)/"
+				ObjectFile="$(PlatformName)\$(ConfigurationName)/"
+				ProgramDataBaseFileName="$(PlatformName)\$(ConfigurationName)/"
+				WarningLevel="3"
+				DebugInformationFormat="3"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+				AdditionalOptions="/EXPORT:mexFunction"
+				AdditionalDependencies="ws2_32.lib winmm.lib libmx.lib libmex.lib libmat.lib QtXmlx644.lib QtCorex644.lib"
+				OutputFile="../$(PlatformName)\$(ConfigurationName)\cbsdkx64.dll"
+				AdditionalLibraryDirectories="..\Matlab\lib\win64\microsoft;;&quot;$(QTDIR)\lib&quot;"
+				IgnoreDefaultLibraryNames=""
+				ModuleDefinitionFile=""
+				DelayLoadDLLs="libmx.dll;libmex.dll"
+				EntryPointSymbol=""
+				ResourceOnlyDLL="false"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
+				ImportLibrary="$(TargetDir)cbsdkx64.lib"
+				TargetMachine="17"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
@@ -397,6 +752,10 @@
 			</File>
 			<File
 				RelativePath=".\cbmex.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\cbMex.rc"
 				>
 			</File>
 			<File
@@ -502,9 +861,9 @@
 					<Tool
 						Name="VCCustomBuildTool"
 						Description="Moc&apos;ing $(InputFileName)..."
-						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I&quot;.&quot; -I&quot;$(QTDIR)\include\QtCore&quot; -I&quot;$(QTDIR)\include\QtXml&quot; -I&quot;$(QTDIR)\include&quot; -I&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot; -I&quot;$(ConfigurationName)&quot; &quot;..\cbhwlib\InstNetwork.h&quot; -o &quot;$(ConfigurationName)\moc_$(InputName).cpp&quot;&#x0D;&#x0A;"
+						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I&quot;.&quot; -I&quot;$(QTDIR)\include\QtCore&quot; -I&quot;$(QTDIR)\include\QtXml&quot; -I&quot;$(QTDIR)\include&quot; -I&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot; &quot;..\cbhwlib\InstNetwork.h&quot; -o &quot;Generated Files\moc_$(InputName).cpp&quot;&#x0D;&#x0A;"
 						AdditionalDependencies="&quot;$(QTDIR)\bin\moc.exe&quot;;$(InputPath)"
-						Outputs="&quot;$(ConfigurationName)\moc_$(InputName).cpp&quot;"
+						Outputs="&quot;Generated Files\moc_$(InputName).cpp&quot;"
 					/>
 				</FileConfiguration>
 				<FileConfiguration
@@ -513,9 +872,9 @@
 					<Tool
 						Name="VCCustomBuildTool"
 						Description="Moc&apos;ing $(InputFileName)..."
-						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I&quot;.&quot; -I&quot;$(QTDIR)\include\QtCore&quot; -I&quot;$(QTDIR)\include\QtXml&quot; -I&quot;$(QTDIR)\include&quot; -I&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot; -I&quot;$(ConfigurationName)&quot; &quot;..\cbhwlib\InstNetwork.h&quot; -o &quot;$(ConfigurationName)\moc_$(InputName).cpp&quot;&#x0D;&#x0A;"
+						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I&quot;.&quot; -I&quot;$(QTDIR)\include\QtCore&quot; -I&quot;$(QTDIR)\include\QtXml&quot; -I&quot;$(QTDIR)\include&quot; -I&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot; &quot;..\cbhwlib\InstNetwork.h&quot; -o &quot;Generated Files\moc_$(InputName).cpp&quot;&#x0D;&#x0A;"
 						AdditionalDependencies="&quot;$(QTDIR)\bin\moc.exe&quot;;$(InputPath)"
-						Outputs="&quot;$(ConfigurationName)\moc_$(InputName).cpp&quot;"
+						Outputs="&quot;Generated Files\moc_$(InputName).cpp&quot;"
 					/>
 				</FileConfiguration>
 				<FileConfiguration
@@ -524,9 +883,9 @@
 					<Tool
 						Name="VCCustomBuildTool"
 						Description="Moc&apos;ing $(InputFileName)..."
-						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I&quot;.&quot; -I&quot;$(QTDIR)\include\QtCore&quot; -I&quot;$(QTDIR)\include\QtXml&quot; -I&quot;$(QTDIR)\include&quot; -I&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot; -I&quot;$(ConfigurationName)&quot; &quot;..\cbhwlib\InstNetwork.h&quot; -o &quot;$(ConfigurationName)\moc_$(InputName).cpp&quot;&#x0D;&#x0A;"
+						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I&quot;.&quot; -I&quot;$(QTDIR)\include\QtCore&quot; -I&quot;$(QTDIR)\include\QtXml&quot; -I&quot;$(QTDIR)\include&quot; -I&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot; &quot;..\cbhwlib\InstNetwork.h&quot; -o &quot;Generated Files\moc_$(InputName).cpp&quot;&#x0D;&#x0A;"
 						AdditionalDependencies="&quot;$(QTDIR)\bin\moc.exe&quot;;$(InputPath)"
-						Outputs="&quot;$(ConfigurationName)\moc_$(InputName).cpp&quot;"
+						Outputs="&quot;Generated Files\moc_$(InputName).cpp&quot;"
 					/>
 				</FileConfiguration>
 				<FileConfiguration
@@ -535,9 +894,53 @@
 					<Tool
 						Name="VCCustomBuildTool"
 						Description="Moc&apos;ing $(InputFileName)..."
-						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I&quot;.&quot; -I&quot;$(QTDIR)\include\QtCore&quot; -I&quot;$(QTDIR)\include\QtXml&quot; -I&quot;$(QTDIR)\include&quot; -I&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot; -I&quot;$(ConfigurationName)&quot; &quot;..\cbhwlib\InstNetwork.h&quot; -o &quot;$(ConfigurationName)\moc_$(InputName).cpp&quot;&#x0D;&#x0A;"
+						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I&quot;.&quot; -I&quot;$(QTDIR)\include\QtCore&quot; -I&quot;$(QTDIR)\include\QtXml&quot; -I&quot;$(QTDIR)\include&quot; -I&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot; &quot;..\cbhwlib\InstNetwork.h&quot; -o &quot;Generated Files\moc_$(InputName).cpp&quot;&#x0D;&#x0A;"
 						AdditionalDependencies="&quot;$(QTDIR)\bin\moc.exe&quot;;$(InputPath)"
-						Outputs="&quot;$(ConfigurationName)\moc_$(InputName).cpp&quot;"
+						Outputs="&quot;Generated Files\moc_$(InputName).cpp&quot;"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="ReleaseBuild|Win32"
+					>
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Moc&apos;ing $(InputFileName)..."
+						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I&quot;.&quot; -I&quot;$(QTDIR)\include\QtCore&quot; -I&quot;$(QTDIR)\include\QtXml&quot; -I&quot;$(QTDIR)\include&quot; -I&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot; &quot;..\cbhwlib\InstNetwork.h&quot; -o &quot;Generated Files\moc_$(InputName).cpp&quot;&#x0D;&#x0A;"
+						AdditionalDependencies="&quot;$(QTDIR)\bin\moc.exe&quot;;$(InputPath)"
+						Outputs="&quot;Generated Files\moc_$(InputName).cpp&quot;"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="ReleaseBuild|x64"
+					>
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Moc&apos;ing $(InputFileName)..."
+						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I&quot;.&quot; -I&quot;$(QTDIR)\include\QtCore&quot; -I&quot;$(QTDIR)\include\QtXml&quot; -I&quot;$(QTDIR)\include&quot; -I&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot; &quot;..\cbhwlib\InstNetwork.h&quot; -o &quot;Generated Files\moc_$(InputName).cpp&quot;&#x0D;&#x0A;"
+						AdditionalDependencies="&quot;$(QTDIR)\bin\moc.exe&quot;;$(InputPath)"
+						Outputs="&quot;Generated Files\moc_$(InputName).cpp&quot;"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="ReleaseFinal|Win32"
+					>
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Moc&apos;ing $(InputFileName)..."
+						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I&quot;.&quot; -I&quot;$(QTDIR)\include\QtCore&quot; -I&quot;$(QTDIR)\include\QtXml&quot; -I&quot;$(QTDIR)\include&quot; -I&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot; &quot;..\cbhwlib\InstNetwork.h&quot; -o &quot;Generated Files\moc_$(InputName).cpp&quot;&#x0D;&#x0A;"
+						AdditionalDependencies="&quot;$(QTDIR)\bin\moc.exe&quot;;$(InputPath)"
+						Outputs="&quot;Generated Files\moc_$(InputName).cpp&quot;"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="ReleaseFinal|x64"
+					>
+					<Tool
+						Name="VCCustomBuildTool"
+						Description="Moc&apos;ing $(InputFileName)..."
+						CommandLine="&quot;$(QTDIR)\bin\moc.exe&quot;   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I&quot;.&quot; -I&quot;$(QTDIR)\include\QtCore&quot; -I&quot;$(QTDIR)\include\QtXml&quot; -I&quot;$(QTDIR)\include&quot; -I&quot;$(QTDIR)\mkspecs\win32-msvc2005&quot; &quot;..\cbhwlib\InstNetwork.h&quot; -o &quot;Generated Files\moc_$(InputName).cpp&quot;&#x0D;&#x0A;"
+						AdditionalDependencies="&quot;$(QTDIR)\bin\moc.exe&quot;;$(InputPath)"
+						Outputs="&quot;Generated Files\moc_$(InputName).cpp&quot;"
 					/>
 				</FileConfiguration>
 			</File>
@@ -572,7 +975,7 @@
 			UniqueIdentifier="{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}"
 			>
 			<File
-				RelativePath=".\cbMex.rc"
+				RelativePath=".\res\cbmex.rc2"
 				>
 			</File>
 		</Filter>
@@ -580,80 +983,10 @@
 			Name="Generated Files"
 			Filter="cpp;c;cxx;moc;h;def;odl;idl;res;"
 			>
-			<Filter
-				Name="Debug"
-				Filter="cpp;moc"
-				SourceControlFiles="false"
+			<File
+				RelativePath=".\Generated Files\moc_InstNetwork.cpp"
 				>
-				<File
-					RelativePath=".\Debug\moc_InstNetwork.cpp"
-					>
-					<FileConfiguration
-						Name="Debug|Win32"
-						>
-						<Tool
-							Name="VCCLCompilerTool"
-							ObjectFile="$(IntDir)\$(InputName)1.obj"
-							XMLDocumentationFileName="$(IntDir)\$(InputName)1.xdc"
-						/>
-					</FileConfiguration>
-					<FileConfiguration
-						Name="Debug|x64"
-						>
-						<Tool
-							Name="VCCLCompilerTool"
-							ObjectFile="$(IntDir)\$(InputName)1.obj"
-							XMLDocumentationFileName="$(IntDir)\$(InputName)1.xdc"
-						/>
-					</FileConfiguration>
-					<FileConfiguration
-						Name="Release|Win32"
-						ExcludedFromBuild="true"
-						>
-						<Tool
-							Name="VCCLCompilerTool"
-							ObjectFile="$(IntDir)\$(InputName)1.obj"
-							XMLDocumentationFileName="$(IntDir)\$(InputName)1.xdc"
-						/>
-					</FileConfiguration>
-					<FileConfiguration
-						Name="Release|x64"
-						ExcludedFromBuild="true"
-						>
-						<Tool
-							Name="VCCLCompilerTool"
-							ObjectFile="$(IntDir)\$(InputName)1.obj"
-							XMLDocumentationFileName="$(IntDir)\$(InputName)1.xdc"
-						/>
-					</FileConfiguration>
-				</File>
-			</Filter>
-			<Filter
-				Name="Release"
-				Filter="cpp;moc"
-				SourceControlFiles="false"
-				>
-				<File
-					RelativePath=".\Release\moc_InstNetwork.cpp"
-					>
-					<FileConfiguration
-						Name="Debug|Win32"
-						ExcludedFromBuild="true"
-						>
-						<Tool
-							Name="VCCLCompilerTool"
-						/>
-					</FileConfiguration>
-					<FileConfiguration
-						Name="Debug|x64"
-						ExcludedFromBuild="true"
-						>
-						<Tool
-							Name="VCCLCompilerTool"
-						/>
-					</FileConfiguration>
-				</File>
-			</Filter>
+			</File>
 		</Filter>
 	</Files>
 	<Globals>

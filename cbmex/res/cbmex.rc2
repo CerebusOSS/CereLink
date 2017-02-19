@@ -1,0 +1,30 @@
+//
+// CBMEX.RC2 - resources Microsoft Visual C++ does not edit directly
+//
+
+#ifdef APSTUDIO_INVOKED
+	#error this file is not editable by Microsoft Visual C++
+#endif //APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+// Add manually edited resources here...
+
+/////////////////////////////////////////////////////////////////////////////
+#define BMI_VERSION_BUILD_NUMBER    19
+#define BMI_VERSION_BUILD_DATE      9/6/2016 4:54:11 PM
+#define BMI_COPYRIGHT_FROM          2008
+#define BMI_COPYRIGHT_TO            2016
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
+#ifdef APSTUDIO_INVOKED
+STRINGTABLE
+BEGIN
+    IDS_COPYRIGHT       "Copyright (C) " STRINGIFY(BMI_COPYRIGHT_FROM) " - " STRINGIFY(BMI_COPYRIGHT_TO) " Blackrock Microsystems"
+    IDS_DATEBUILT       "on " STRINGIFY(BMI_VERSION_DATE_BUILT)
+END
+#endif //APSTUDIO_INVOKED

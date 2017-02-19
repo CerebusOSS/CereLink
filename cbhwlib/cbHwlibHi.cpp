@@ -266,7 +266,7 @@ bool IsSerialEnabled(UINT32 nChannel, UINT32 nInstance)
 bool IsDigitalOutEnabled(UINT32 nChannel, UINT32 nInstance)
 {
     UINT32 nOptions;
-    cbGetDoutOptions(nChannel, &nOptions, NULL, NULL, nInstance);
+    cbGetDoutOptions(nChannel, &nOptions, NULL, NULL, NULL, NULL, NULL, nInstance);
 
     return (nOptions & cbDOUT_1BIT) ? true : false;
 }
@@ -363,12 +363,15 @@ cbRESULT cbSetSpikeSorting(UINT32 dwChan, UINT32 spkSrtOpt, UINT32 nInstance)
 // Input:   nChannel = channel to track   1 - based
 void TrackChannel(UINT32 nChannel, UINT32 nInstance)
 {
-    // Only do this if the channel is a analog input channel
+    INT32 smpdispmax = 0;
+    INT32 spkdispmax = 0;
+
+    // Only do this if the channel is an analog input channel
     if ( (nChannel >= MIN_CHANS) && (nChannel <= MAX_CHANS_ANALOG_IN) )
     {
         // scan through the analog output channels
         // if channel exists and is set to track, update its source channel
-        {for (int aoutch = MIN_CHANS_ANALOG_OUT; aoutch <= MAX_CHANS_AUDIO; ++aoutch)
+        for (int aoutch = MIN_CHANS_ANALOG_OUT; aoutch <= MAX_CHANS_AUDIO; ++aoutch)
         {
             UINT32 options, monchan, value;
             if (cbGetAoutOptions(aoutch, &options, &monchan, &value, nInstance)==cbRESULT_OK)
@@ -376,20 +379,51 @@ void TrackChannel(UINT32 nChannel, UINT32 nInstance)
                 if (options & cbAOUT_TRACK)
                 {
                     cbSetAoutOptions(aoutch, options, nChannel, value, nInstance);
+
+                    ///// Now adjust any of the analog output monitoring /////
+                    // Get the input scaling
+                    cbSCALING isInScaling;
+                    ::cbGetAinpDisplay(nChannel, NULL, &smpdispmax, &spkdispmax, NULL);
+                    ::cbGetAinpScaling(nChannel, &isInScaling, nInstance);
+
+                    if (options & cbAOUT_MONITORSMP)      // Monitoring the continuous signal
+                    {
+                        INT32 nAnaMax = smpdispmax * isInScaling.anamax / isInScaling.digmax;
+                        cbSCALING isOutScaling;
+
+                        isOutScaling.digmin = -smpdispmax;
+                        isOutScaling.digmax =  smpdispmax;
+                        isOutScaling.anamin = -nAnaMax;
+                        isOutScaling.anamax =  nAnaMax;
+                        strncpy(isOutScaling.anaunit, isInScaling.anaunit, sizeof(isOutScaling.anaunit));
+                        ::cbSetAoutScaling(aoutch, &isOutScaling, nInstance);
+                    }
+                    if (options & cbAOUT_MONITORSPK) // Monitoring the spikes
+                    {
+                        INT32 nAnaMax = spkdispmax * isInScaling.anamax / isInScaling.digmax;
+                        cbSCALING isOutScaling;
+
+                        isOutScaling.digmin = -spkdispmax;
+                        isOutScaling.digmax =  spkdispmax;
+                        isOutScaling.anamin = -nAnaMax;
+                        isOutScaling.anamax =  nAnaMax;
+                        strncpy(isOutScaling.anaunit, isInScaling.anaunit, sizeof(isOutScaling.anaunit));
+                        ::cbSetAoutScaling(aoutch, &isOutScaling, nInstance);
+                    }
                 }
             }
-        }}
+        }
 
         // Now scan through the Digital Out channels and set them
         for (int nChan = MIN_CHANS_DIGITAL_OUT; nChan <= MAX_CHANS_DIGITAL_OUT; ++nChan)
         {
             UINT32 nOptions, nVal;
-            if (cbRESULT_OK == ::cbGetDoutOptions(nChan, &nOptions, NULL, &nVal, nInstance))
+            if (cbRESULT_OK == ::cbGetDoutOptions(nChan, &nOptions, NULL, &nVal, NULL, NULL, NULL, nInstance))
             {
                 // Now if we are set to track, then change the monitored channel
                 if (nOptions & cbDOUT_TRACK)
                 {
-                    ::cbSetDoutOptions(nChan, nOptions, nChannel, nVal, nInstance);
+                    ::cbSetDoutOptions(nChan, nOptions, nChannel, nVal, cbDOUT_TRIGGER_NONE, 0, 0, nInstance);
                 }
             }
         }

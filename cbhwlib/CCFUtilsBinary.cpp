@@ -83,6 +83,8 @@ ccfResult CCFUtilsBinary::ReadVersion(LPCSTR szFileName)
         m_nInternalOriginalVersion = 11;
     else if ((strcmp("cbCCF ", szID) == 0) && (strcmp("3.9", szVersion) == 0))
         m_nInternalOriginalVersion = 11;
+    else if ((strcmp("cbCCF ", szID) == 0) && (strcmp("3.10", szVersion) == 0))
+        m_nInternalOriginalVersion = 12;
     else
         m_nInternalOriginalVersion = 0;
 
@@ -123,8 +125,8 @@ ccfResult CCFUtilsBinary::ReadCCF(LPCSTR szFileName, bool bConvert)
     fread(&szVersion, sizeof(szVersion) - 1, 1, hSettingsFile);     // -1 'cuz of NULL termination
 
 
-    // These versions require conversion to 3.7
-    if (m_nInternalOriginalVersion >= 1 && m_nInternalOriginalVersion <= 9)
+    // These versions require conversion to 3.10
+    if (m_nInternalOriginalVersion >= 1 && m_nInternalOriginalVersion <= 11)
     {
         if (!bConvert)
         {
@@ -173,6 +175,9 @@ ccfResult CCFUtilsBinary::ReadCCF(LPCSTR szFileName, bool bConvert)
     case 11:
         res = ReadCCFData_cb2005_37(hSettingsFile);       // chaninfo packets are the same as 3.7, so call it...
         break;
+    case 12:
+        res = ReadCCFData_cb2005_310(hSettingsFile);      // added trigtype, trigchan, and trigval
+        break;
     default:
         res = CCFRESULT_ERR_FORMAT;
         break;
@@ -193,7 +198,7 @@ CCFUtils * CCFUtilsBinary::Convert(CCFUtils * pOldConfig)
 // Author & Date:   Hyrum L. Sessions   9 June 2008
 // Purpose: load the default channel information
 // Inputs:  isChan - structure to fill with the default information
-void CCFUtilsBinary::SetChannelDefaults(cbPKT_CHANINFO_CB2005_37 &isChan)
+void CCFUtilsBinary::SetChannelDefaults(cbPKT_CHANINFO &isChan)
 {
     memset(&isChan, 0, sizeof(isChan));
 
@@ -251,7 +256,7 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2003_10_a(FILE * hFile)
     // Read configuration
     for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
     {
-        cbPKT_CHANINFO_CB2005_37 & isChan = m_data.isChan[i];
+        cbPKT_CHANINFO & isChan = m_data.isChan[i];
         SetChannelDefaults(isChan);
         memset(&isChanFile, 0, sizeof(isChanFile));
         fread(&isChanFile, 1, sizeof(isChanFile), hFile);
@@ -307,7 +312,7 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2003_10_a(FILE * hFile)
     {
         for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
         {
-            cbPKT_CHANINFO_CB2005_37 & isChan = m_data.isChan[i];
+            cbPKT_CHANINFO & isChan = m_data.isChan[i];
             if (isChan.chan)
             {
                 isChan.smpfilter   = TranslateAutoFilter(isChanFile.smpfilter);
@@ -342,7 +347,7 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_25(FILE * hFile)
     // Read configuration to Cerebus
     for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
     {
-        cbPKT_CHANINFO_CB2005_37 & isChan = m_data.isChan[i];
+        cbPKT_CHANINFO & isChan = m_data.isChan[i];
         SetChannelDefaults(isChan);
         memset(&isChanFile, 0, sizeof(isChanFile));
         fread(&isChanFile, 1, sizeof(isChanFile), hFile);
@@ -397,7 +402,7 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_25(FILE * hFile)
     {
         for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
         {
-            cbPKT_CHANINFO_CB2005_37 & isChan = m_data.isChan[i];
+            cbPKT_CHANINFO & isChan = m_data.isChan[i];
             if (isChan.chan)
             {
                 isChan.smpfilter   = TranslateAutoFilter(isChanFile.smpfilter);
@@ -421,7 +426,7 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_30(FILE * hFile)
     // Read configuration to Cerebus
     for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
     {
-        cbPKT_CHANINFO_CB2005_37 & isChan = m_data.isChan[i];
+        cbPKT_CHANINFO & isChan = m_data.isChan[i];
         SetChannelDefaults(isChan);
         memset(&isChanFile, 0, sizeof(isChanFile));
         fread(&isChanFile, 1, sizeof(isChanFile), hFile);
@@ -476,7 +481,7 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_30(FILE * hFile)
     {
         for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
         {
-            cbPKT_CHANINFO_CB2005_37 & isChan = m_data.isChan[i];
+            cbPKT_CHANINFO & isChan = m_data.isChan[i];
             if (isChan.chan)
             {
                 isChan.smpfilter   = TranslateAutoFilter(isChanFile.smpfilter);
@@ -500,7 +505,7 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_31(FILE * hFile)
     // Read configuration to Cerebus
     for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
     {
-        cbPKT_CHANINFO_CB2005_37 & isChan = m_data.isChan[i];
+        cbPKT_CHANINFO & isChan = m_data.isChan[i];
         SetChannelDefaults(isChan);
         memset(&isChanFile, 0, sizeof(isChanFile));
         fread(&isChanFile, 1, sizeof(isChanFile), hFile);
@@ -572,7 +577,7 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_31(FILE * hFile)
     {
         for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
         {
-            cbPKT_CHANINFO_CB2005_37 & isChan = m_data.isChan[i];
+            cbPKT_CHANINFO & isChan = m_data.isChan[i];
             if (isChan.chan)
             {
                 isChan.smpfilter   = TranslateAutoFilter(isChanFile.smpfilter);
@@ -596,7 +601,7 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_34(FILE * hFile)
     // Read configuration to Cerebus
     for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
     {
-        cbPKT_CHANINFO_CB2005_37 & isChan = m_data.isChan[i];
+        cbPKT_CHANINFO & isChan = m_data.isChan[i];
         SetChannelDefaults(isChan);
         memset(&isChanFile, 0, sizeof(isChanFile));
         fread(&isChanFile, 1, sizeof(isChanFile), hFile);
@@ -667,7 +672,7 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_34(FILE * hFile)
     {
         for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
         {
-            cbPKT_CHANINFO_CB2005_37 & isChan = m_data.isChan[i];
+            cbPKT_CHANINFO & isChan = m_data.isChan[i];
             if (isChan.chan)
             {
                 isChan.smpfilter   = TranslateAutoFilter(isChanFile.smpfilter);
@@ -691,7 +696,7 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_35(FILE * hFile)
     // Read configuration to Cerebus
     for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
     {
-        cbPKT_CHANINFO_CB2005_37 & isChan = m_data.isChan[i];
+        cbPKT_CHANINFO & isChan = m_data.isChan[i];
         SetChannelDefaults(isChan);
         memset(&isChanFile, 0, sizeof(isChanFile));
         fread(&isChanFile, 1, sizeof(isChanFile), hFile);
@@ -762,7 +767,7 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_35(FILE * hFile)
     {
         for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
         {
-            cbPKT_CHANINFO_CB2005_37 & isChan = m_data.isChan[i];
+            cbPKT_CHANINFO & isChan = m_data.isChan[i];
             if (isChan.chan)
             {
                 isChan.smpfilter   = TranslateAutoFilter(isChanFile.smpfilter);
@@ -786,7 +791,93 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_36(FILE * hFile)
     // Read configuration to Cerebus
     for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
     {
-        cbPKT_CHANINFO_CB2005_37 & isChan = m_data.isChan[i];
+        cbPKT_CHANINFO & isChan = m_data.isChan[i];
+        SetChannelDefaults(isChan);
+        memset(&isChanFile, 0, sizeof(isChanFile));
+        fread(&isChanFile, 1, sizeof(isChanFile), hFile);
+
+        // We only need to read packets for valid channels. There could be an
+        // error reading the file, or we could be past the end of valid chans
+        if (isChanFile.chan != 0)
+        {
+            // copy the data from the structure read from the file to the current chaninfo structure
+            isChan.chan         = isChanFile.chan;
+            isChan.proc         = isChanFile.proc;
+            isChan.bank         = isChanFile.bank;
+            isChan.term         = isChanFile.term;
+            isChan.chancaps     = isChanFile.chancaps;
+            isChan.doutcaps     = isChanFile.doutcaps;
+            isChan.dinpcaps     = isChanFile.dinpcaps;
+            isChan.aoutcaps     = isChanFile.aoutcaps;
+            isChan.ainpcaps     = isChanFile.ainpcaps;
+            isChan.spkcaps      = isChanFile.spkcaps;
+            memcpy(&isChan.physcalin, &isChanFile.physcalin, sizeof(isChan.physcalin));
+            memcpy(&isChan.phyfiltin, &isChanFile.phyfiltin, sizeof(isChan.phyfiltin));
+            memcpy(&isChan.physcalout, &isChanFile.physcalout, sizeof(isChan.phyfiltout));
+            memcpy(&isChan.phyfiltout, &isChanFile.phyfiltout, sizeof(isChan.phyfiltout));
+            memcpy(&isChan.label, &isChanFile.label, sizeof(isChan.label));
+            isChan.userflags    = isChanFile.userflags;
+            memcpy(isChan.position, isChanFile.position, sizeof(isChan.position));
+            memcpy(&isChan.scalin, &isChanFile.scalin, sizeof(isChan.scalin));
+            memcpy(&isChan.scalout, &isChanFile.scalout, sizeof(isChan.scalout));
+            isChan.doutopts    = isChanFile.doutopts;
+            isChan.dinpopts    = isChanFile.dinpopts;
+            isChan.aoutopts    = isChanFile.aoutopts;
+            isChan.eopchar     = isChanFile.eopchar;
+            isChan.monsource   = isChanFile.monsource;
+            isChan.outvalue    = isChanFile.outvalue;
+            isChan.ainpopts    = isChanFile.ainpopts;
+            isChan.lncrate     = isChanFile.lncrate;
+            isChan.smpfilter   = isChanFile.smpfilter;
+            isChan.smpgroup    = isChanFile.smpgroup;
+            isChan.smpdispmin  = isChanFile.smpdispmin;
+            isChan.smpdispmax  = isChanFile.smpdispmax;
+            isChan.spkfilter   = isChanFile.spkfilter;
+            isChan.spkdispmax  = isChanFile.spkdispmax;
+            isChan.spkopts     = isChanFile.spkopts;
+            isChan.spkthrlevel = isChanFile.spkthrlevel;
+            isChan.spkthrlimit = isChanFile.spkthrlimit;
+            memcpy(isChan.spkhoops, isChanFile.spkhoops, sizeof(isChan.spkhoops));
+
+            for (int unit = 0; unit < cbLEGACY_MAXUNITS; ++unit)
+            {
+                isChan.unitmapping[unit].nOverride   = isChanFile.unitmapping[unit].nOverride;
+                isChan.unitmapping[unit].afOrigin[0] = INT16(isChanFile.unitmapping[unit].afOrigin[0]);
+                isChan.unitmapping[unit].afOrigin[1] = INT16(isChanFile.unitmapping[unit].afOrigin[1]);
+                isChan.unitmapping[unit].afOrigin[2] = INT16(isChanFile.unitmapping[unit].afOrigin[2]);
+                isChan.unitmapping[unit].afShape[0][0] = INT16(isChanFile.unitmapping[unit].afShape[0][0]);
+                isChan.unitmapping[unit].afShape[0][1] = INT16(isChanFile.unitmapping[unit].afShape[0][1]);
+                isChan.unitmapping[unit].afShape[0][2] = INT16(isChanFile.unitmapping[unit].afShape[0][2]);
+                isChan.unitmapping[unit].afShape[1][0] = INT16(isChanFile.unitmapping[unit].afShape[1][0]);
+                isChan.unitmapping[unit].afShape[1][1] = INT16(isChanFile.unitmapping[unit].afShape[1][1]);
+                isChan.unitmapping[unit].afShape[1][2] = INT16(isChanFile.unitmapping[unit].afShape[1][2]);
+                isChan.unitmapping[unit].afShape[2][0] = INT16(isChanFile.unitmapping[unit].afShape[2][0]);
+                isChan.unitmapping[unit].afShape[2][1] = INT16(isChanFile.unitmapping[unit].afShape[2][1]);
+                isChan.unitmapping[unit].afShape[2][2] = INT16(isChanFile.unitmapping[unit].afShape[2][2]);
+                isChan.unitmapping[unit].aPhi        = INT16(isChanFile.unitmapping[unit].aPhi);
+                isChan.unitmapping[unit].bValid      = INT16(isChanFile.unitmapping[unit].bValid);
+            }
+        }
+    }
+    // now read the rest of the file as individual packets and transmit it to the NSP
+    ReadAsPackets(hFile);
+    return CCFRESULT_SUCCESS;
+}
+
+
+// Author & Date:   Hyrum L. Sessions   29 Nov 2010
+// Purpose: load the channel configuration from the file
+//          convert the data from cb2005 v3.7 to the current
+// Inputs:  hFile - the file, positioned at the beginning of the channel data
+ccfResult CCFUtilsBinary::ReadCCFData_cb2005_37(FILE * hFile)
+{
+    // Copy data into buffer
+    cbPKT_CHANINFO_CB2005_37 isChanFile;
+
+    // Read configuration to Cerebus
+    for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
+    {
+        cbPKT_CHANINFO & isChan = m_data.isChan[i];
         SetChannelDefaults(isChan);
         memset(&isChanFile, 0, sizeof(isChanFile));
         fread(&isChanFile, 1, sizeof(isChanFile), hFile);
@@ -864,12 +955,12 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_36(FILE * hFile)
 // Purpose: load the channel configuration from the file
 //          v3.7 is the last binary CCF
 // Inputs:  hFile - the file, positioned at the beginning of the channel data
-ccfResult CCFUtilsBinary::ReadCCFData_cb2005_37(FILE * hFile)
+ccfResult CCFUtilsBinary::ReadCCFData_cb2005_310(FILE * hFile)
 {
     // Copy data into buffer
     for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
     {
-        cbPKT_CHANINFO_CB2005_37 & isChanFile = m_data.isChan[i];
+        cbPKT_CHANINFO & isChanFile = m_data.isChan[i];
         memset(&isChanFile, 0, sizeof(isChanFile));
         fread(&isChanFile, 1, sizeof(isChanFile), hFile);
         // We only need to read packets for valid channels. There could be an

@@ -12,12 +12,10 @@
 // $NoKeywords: $
 //
 //////////////////////////////////////////////////////////////////////////////
-//
-// PURPOSE:
-//
-// MATLAB executable (MEX) interface for cbsdk
-//
-
+/*! \file cbmex.h
+	\brief MATLAB executable (MEX) interface for cbsdk.
+	
+*/
 #ifndef CBMEX_H_INCLUDED
 #define CBMEX_H_INCLUDED
 

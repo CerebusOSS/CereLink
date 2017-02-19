@@ -366,7 +366,7 @@ void CCFUtils::ReadCCFOfNSP()
 
     cbCCF & data = dynamic_cast<ccfXml *>(m_pImpl)->m_data;
     for (int i = 0; i < cbNUM_DIGITAL_FILTERS; ++i)
-        data.filtinfo[i] = cb_cfg_buffer_ptr[nIdx]->filtinfo[0][cbFIRST_DIGITAL_FILTER + i];
+        data.filtinfo[i] = cb_cfg_buffer_ptr[nIdx]->filtinfo[0][cbFIRST_DIGITAL_FILTER + i - 1];    // First is 1 based, but index is 0 based
     for (int i = 0; i < cbMAXCHANS; ++i)
         data.isChan[i] = cb_cfg_buffer_ptr[nIdx]->chaninfo[i];
     data.isAdaptInfo = cb_cfg_buffer_ptr[nIdx]->adaptinfo;

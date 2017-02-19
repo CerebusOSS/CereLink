@@ -1,25 +1,26 @@
-// =STS=> cbmex.cpp[4264].aa22   open     SMID:24 
+// =STS=> cbmex.cpp[4264].aa38   submit   SMID:41 
 ///////////////////////////////////////////////////////////////////////
 //
 // Cerebus MATLAB executable SDK
 //
 // Copyright (C) 2001-2003 Bionic Technologies, Inc.
-// (c) Copyright 2003-2008 Cyberkinetics, Inc
-// (c) Copyright 2008-2011 Blackrock Microsystems
+// (c) Copyright 2003 - 2008 Cyberkinetics, Inc
+// (c) Copyright 2008 - 2014 Blackrock Microsystems, LLC
 //
 // $Workfile: cbmex.cpp $
 // $Archive: /Cerebus/Human/WindowsApps/cbmex/cbmex.cpp $
 //
-// Purpose:
-//  This is the gateway routine for a MATLAB Math/Graphics Library-based
-//   C MATLAB MEX File.
 //
 //  Note:
 //   Make sure only the SDK is used here, and not cbhwlib directly
-//    this will ensure SDK is capable of whatever MATLAB interface can do
+//   this will ensure SDK is capable of whatever MATLAB interface can do
 //   Do not throw exceptions, catch possible exceptions and handle them the earliest possible in this library
 //   Only functions are exported, no data
 //
+/*! \file cbmex.cpp
+    \brief This is the gateway routine for a MATLAB Math/Graphics Library-based C MATLAB MEX File.
+
+*/
 
 #include "StdAfx.h"
 #include <map>
@@ -68,17 +69,29 @@ namespace
         CBMEX_FUNCTION_COUNT,  // This must be the last item
     } MexFxnIndex;
 
-    // This is the look up table for the command to function list
+    /**
+    * This is the look up table for the command to function list.
+    */
     typedef void(*PMexFxn)(	
-                            int nlhs,              // Number of left hand side (output) arguments
-                            mxArray *plhs[],       // Array of left hand side arguments
-                            int nrhs,              // Number of right hand side (input) arguments
-                            const mxArray *prhs[]);// Array of right hand side arguments
+                            int nlhs,              ///< Number of left hand side (output) arguments
+                            mxArray *plhs[],       ///< Array of left hand side arguments
+                            int nrhs,              ///< Number of right hand side (input) arguments
+                            const mxArray *prhs[]);///< Array of right hand side arguments
 
+    /**
+    * Contains the Function and Function Index to use.
+    */
     typedef std::pair<PMexFxn, MexFxnIndex> NAME_PAIR;
 
-    //        NAME    FXN   FXN_IDX to use
-    typedef std::map<std::string, NAME_PAIR> NAME_LUT; // LUT = Look Up Table
+    /**
+    * Defines a table entry with NAME,FXN and FXN_IDX to use.
+    * \n LUT = Look Up Table
+    */
+    typedef std::map<std::string, NAME_PAIR> NAME_LUT;
+
+   /**
+    * Creates the look-up table for function lists and commands.
+    */
     NAME_LUT CreateLut()
     {
         NAME_LUT table;
@@ -105,8 +118,9 @@ namespace
     };
 };
 
-//////////////////////////////////////////////////////////////////////////////////////
-// Cleanup function to be called at exit of the extension
+/**
+* Cleanup function to be called at exit of the extension
+*/
 static void matexit()
 {
     if (g_bMexCall)
@@ -123,11 +137,14 @@ static void matexit()
 }
 
 // Author & Date:   Ehsan Azar     8 Nov 2012
-// Purpose: Print the error message for sdk returned values
-//          All non-success results are treated as error, and will drop to MATLAB prompt
-//          Note: Command should handle special cases temselves
-// Inputs:
-//   sdkerr   - the returned value by SDK
+/**
+* Prints the error message for sdk returned values.
+* All non-success results are treated as error, and will drop to MATLAB prompt.
+* Command should handle special cases themselves.
+*
+* @param[in] res		Returned result value by SDK
+* @param[in] szCustom	Custom error message to print (Optional)
+*/
 void PrintErrorSDK(cbSdkResult res, const char * szCustom = NULL)
 {
     if (szCustom != NULL && res != CBSDKRESULT_SUCCESS)
@@ -258,11 +275,13 @@ void PrintErrorSDK(cbSdkResult res, const char * szCustom = NULL)
 }
 
 // Author & Date:   Ehsan Azar     8 Nov 2012
-// Purpose: Print the help for given command
-// Inputs:
-//   fxnidx   - the cbmex command index
-//   bErr     - if it is an error message (terminate and fall into MATLAB prompt)
-//   szCustom - if specified will be printed before the usage message
+/**
+* Prints the help for given command.
+*
+* @param[in]	fxnidx		the cbmex command index
+* @param[in]	bErr		indicates if it is an error message, will terminate and fall into MATLAB prompt if true
+* @param[in]	szCustom	if specified will be printed before the usage message
+*/
 void PrintHelp(MexFxnIndex fxnidx, bool bErr = false, const char * szCustom = NULL)
 {
     if (szCustom != NULL)
@@ -295,9 +314,9 @@ void PrintHelp(MexFxnIndex fxnidx, bool bErr = false, const char * szCustom = NU
         // Keep this in the end
         CBMEX_USAGE_CBMEX
     };
-
-    // TODO: for CBMEX_USAGE_CBMEX, iterate all comamnds names, instead of hard-coded names help string
-
+    /**
+    * \todo For CBMEX_USAGE_CBMEX, iterate all command names, instead of hard-coded names help string
+    */
     if (bErr)
         mexErrMsgTxt(szUsage[fxnidx]);
     else
@@ -305,12 +324,19 @@ void PrintHelp(MexFxnIndex fxnidx, bool bErr = false, const char * szCustom = NU
 }
 
 // Author & Date:   Ehsan Azar     8 Nov 2012
-// Purpose: Processing to do with the command "help command-name"
+/**
+* Processing to do with the command "help command-name".
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnHelp(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     static NAME_LUT lut = CreateLut();        // The actual look up table
     if (nrhs == 1)
@@ -320,35 +346,44 @@ void OnHelp(
     }
     // make sure there is at least one output argument
     if (nlhs > 0)
-        PrintHelp(CBMEX_FUNCTION_HELP, true, "Too many outputs requested");
+        PrintHelp(CBMEX_FUNCTION_HELP, true, "Too many outputs requested\n");
     if (nrhs > 2)
-        PrintHelp(CBMEX_FUNCTION_HELP, true, "Too many inputs provided");
+        PrintHelp(CBMEX_FUNCTION_HELP, true, "Too many inputs provided\n");
 
     MexFxnIndex fxnidx = CBMEX_FUNCTION_COUNT;
 
     char cmdstr[128];
     if (mxGetString(prhs[1], cmdstr, 16))
     {
-        PrintHelp(CBMEX_FUNCTION_HELP, true, "invalid command name");
+        PrintHelp(CBMEX_FUNCTION_HELP, true, "Invalid command name\n");
     }
 
     NAME_LUT::iterator it = lut.find(cmdstr);
     if (it == lut.end())
     {
-        PrintHelp(CBMEX_FUNCTION_HELP, true, "invalid command name");
-    } else {
-        fxnidx = (*it).second.second;
+        PrintHelp(CBMEX_FUNCTION_HELP, true, "Invalid command name\n");
     }
-    PrintHelp(fxnidx);
+    else
+    {
+        fxnidx = (*it).second.second;
+        PrintHelp(fxnidx);
+    }
 }
 
 // Author & Date:   Kirk Korver     13 Jun 2005
-// Purpose: Processing to do with the command "interface = open interface"
+/**
+* Processing to do with the command "interface = open interface".
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnOpen(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
     int nFirstParam = 1;
@@ -361,11 +396,11 @@ void OnOpen(
         if (mxIsNumeric(prhs[nFirstParam]))
         {
             if (mxGetNumberOfElements(prhs[nFirstParam]) != 1)
-                PrintHelp(CBMEX_FUNCTION_OPEN, true, "Invalid interface parameter");
+                PrintHelp(CBMEX_FUNCTION_OPEN, true, "Invalid interface parameter\n");
             int type = 3;
             type = (UINT32)mxGetScalar(prhs[nFirstParam]);
             if (type > 2)
-                PrintHelp(CBMEX_FUNCTION_OPEN, true, "Invalid input interface value");
+                PrintHelp(CBMEX_FUNCTION_OPEN, true, "Invalid input interface value\n");
             conType = (cbSdkConnectionType)type;
             nFirstParam++; // skip the optional
         }
@@ -391,7 +426,7 @@ void OnOpen(
             if (mxGetString(prhs[i], cmdstr, 32))
             {
                 char errstr[128];
-                sprintf(errstr, "Parameter %d is invalid", i);
+                sprintf(errstr, "Parameter %d is invalid\n", i);
                 PrintHelp(CBMEX_FUNCTION_OPEN, true, errstr);
             }
             if (_strcmpi(cmdstr, "instance") == 0)
@@ -400,7 +435,7 @@ void OnOpen(
             }
             else if (_strcmpi(cmdstr, "receive-buffer-size") == 0)
             {
-            	param = PARAM_RECBUFSIZE;
+                param = PARAM_RECBUFSIZE;
             }
             else if (_strcmpi(cmdstr, "inst-addr") == 0)
             {
@@ -417,12 +452,16 @@ void OnOpen(
             else if (_strcmpi(cmdstr, "central-port") == 0)
             {
                 param = PARAM_CENTRAL_PORT;
-            } else {
+            }
+            else
+            {
                 char errstr[128];
-                sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
+                sprintf(errstr, "Parameter %d (%s) is invalid\n", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_OPEN, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_INSTANCE:
@@ -499,9 +538,9 @@ void OnOpen(
         instType = CBSDKINSTRUMENT_COUNT;
     if (nlhs > 0)
     {
-        plhs[0] = mxCreateDoubleScalar(conType);
+        plhs[0] = mxCreateScalarDouble(conType);
         if (nlhs > 1)
-            plhs[1] = mxCreateDoubleScalar(instType);
+            plhs[1] = mxCreateScalarDouble(instType);
     }
 
     char strConnection[CBSDKCONNECTION_COUNT + 1][8] = {"Default", "Central", "Udp", "Closed", "Unknown"};
@@ -511,12 +550,19 @@ void OnOpen(
 
 
 // Author & Date:   Kirk Korver     13 Jun 2005
-// Purpose: Processing to do with the command "close"
+/**
+* Processing to do with the command "close".
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnClose(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
 
@@ -548,7 +594,9 @@ void OnClose(
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_CLOSE, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_INSTANCE:
@@ -581,13 +629,20 @@ void OnClose(
 }
 
 // Author & Date:   Kirk Korver     13 Jun 2005
-// Purpose: Processing to do with the command "time"
-//  IN MATLAB =>  time = cbmex('time')
+/**
+* Processing to do with the command "time".
+*
+* \n IN MATLAB =>  time = cbmex('time')
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnTime(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
 
@@ -625,7 +680,9 @@ void OnTime(
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_TIME, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_INSTANCE:
@@ -653,18 +710,25 @@ void OnTime(
 }
 
 // Author & Date:   Kirk Korver     13 Jun 2005
-// Purpose: Processing to do with the command "chanlabel"
-//           Set/Get channel label
-//  IN MATLAB =>
-//    cbmex( 'chanlabel', [channels], [new_label_cell_array])
-//    label_cell_array = cbmex( 'chanlabel', channels_vector, [new_label_cell_array])
-//    label_cell_array = cbmex( 'chanlabel', channels_vector)
-//    label_cell_array = cbmex( 'chanlabel')
+/**
+* Processing to do with the command "chanlabel". Set/Get channel label.
+*
+* \n IN MATLAB =>
+* \n   cbmex( 'chanlabel', [channels], [new_label_cell_array])
+* \n   label_cell_array = cbmex( 'chanlabel', channels_vector, [new_label_cell_array])
+* \n   label_cell_array = cbmex( 'chanlabel', channels_vector)
+* \n   label_cell_array = cbmex( 'chanlabel')
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
+
 void OnChanLabel(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
 
@@ -709,7 +773,9 @@ void OnChanLabel(
             if (channels[i] == 0|| channels[i] > cbMAXCHANS)
                 mexErrMsgTxt("Invalid channel number specified");
         }
-    } else {
+    }
+    else
+    {
         for (UINT32 i = 0; i < count; ++i)
         {
             channels[i] = i + 1;
@@ -745,12 +811,16 @@ void OnChanLabel(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
-            } else {
+            }
+            else
+            {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_CHANLABEL, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_INSTANCE:
@@ -809,7 +879,9 @@ void OnChanLabel(
                 mexErrMsgTxt("Invalid channel label");
             cbSdkResult res = cbSdkSetChannelLabel(nInstance, channels[0], label, 0, NULL);
             PrintErrorSDK(res, "cbSdkSetChannelLabel()");
-        } else {
+        }
+        else
+        {
             for (UINT32 i = 0; i < count; ++i)
             {
                 const mxArray * cell_element_ptr = mxGetCell(prhs[idxNewLabels], i);
@@ -826,19 +898,26 @@ void OnChanLabel(
 }
 
 // Author & Date:   Kirk Korver     13 Jun 2005
-// Purpose: Processing to do with the command "trialconfig"
-//  IN MATLAB =>
-//    [ active, [ begchan begmask begval endchan endmask endval double waveform continuous event ] ] = cbmex('trialconfig')
-//    cbmex('trialconfig', bActive )
-//    cbmex('trialconfig', bActive, [ begchan begmask begval endchan endmask endval ] )
-//    cbmex('trialconfig', bActive, [ begchan begmask begval endchan endmask endval ], 'double')
-//    cbmex('trialconfig', bActive, [ begchan begmask begval endchan endmask endval ], 'double', 'waveform', 400)
-//    cbmex('trialconfig', bActive, [ begchan begmask begval endchan endmask endval ], 'double', 'nocontinuous')
+/**
+* Processing to do with the command "trialconfig".
+*
+* \n IN MATLAB =>
+* \n   [ active, [ begchan begmask begval endchan endmask endval double waveform continuous event ] ] = cbmex('trialconfig')
+* \n   cbmex('trialconfig', bActive )
+* \n   cbmex('trialconfig', bActive, [ begchan begmask begval endchan endmask endval ] )
+* \n   cbmex('trialconfig', bActive, [ begchan begmask begval endchan endmask endval ], 'double')
+* \n   cbmex('trialconfig', bActive, [ begchan begmask begval endchan endmask endval ], 'double', 'waveform', 400)
+* \n   cbmex('trialconfig', bActive, [ begchan begmask begval endchan endmask endval ], 'double', 'nocontinuous')
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnTrialConfig(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
     int nFirstParam = 2;
@@ -918,7 +997,7 @@ void OnTrialConfig(
             {
                 bDouble = true;
             }
-            if (_strcmpi(cmdstr, "absolute") == 0)
+            else if (_strcmpi(cmdstr, "absolute") == 0)
             {
                 bAbsolute = true;
             }
@@ -953,12 +1032,16 @@ void OnTrialConfig(
             else if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
-            } else {
+            }
+            else
+            {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_TRIALCONFIG, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_WAVEFORM:
@@ -1032,35 +1115,43 @@ void OnTrialConfig(
 }
 
 // Author & Date:   Kirk Korver     13 Jun 2005
-// Purpose: Processing to do with the command "trialdata"
-//  IN MATLAB =>
-// timestamps_cell_array = cbmex('trialdata')
-// timestamps_cell_array = cbmex('trialdata', 1)
-// [timestamps_cell_array, time, continuous_cell_array] = cbmex('trialdata')
-// [timestamps_cell_array, time, continuous_cell_array] = cbmex('trialdata',  1)
-// [time, continuous_cell_array] = cbmex('trialdata')
-// [time, continuous_cell_array] = cbmex('trialdata',  1)
-//
-// Inputs:
-// the 2nd parameter == 0 means to NOT flush the buffer
-//                   == 1 means to flush the buffer
-//
-// Outputs:
-// timestamps_cell_array =
-//   for neural channel rows 1 - 144,
-//   { 'label' u0ts u1ts u2ts u3ts u4ts u5ts [waveform]} where u0ts = unit0 timestamps, etc.
-//   for channels 151 and 152, the digital channels, each row is defined as
-//   { 'label'  timestamps  values  [empty] [empty] [empty] [empty] }
-//
-// continuous_cell_array =
-//    for each channel with continuous recordings
-//    { channel_number, sample rate, data_points[] }
-//
+/**
+* Processing to do with the command "trialdata".
+*
+* \n IN MATLAB =>
+* \n timestamps_cell_array = cbmex('trialdata')
+* \n timestamps_cell_array = cbmex('trialdata', 1)
+* \n [timestamps_cell_array, time, continuous_cell_array] = cbmex('trialdata')
+* \n [timestamps_cell_array, time, continuous_cell_array] = cbmex('trialdata',  1)
+* \n [time, continuous_cell_array] = cbmex('trialdata')
+* \n [time, continuous_cell_array] = cbmex('trialdata',  1)
+* \n
+* \n Inputs in Matlab:
+* \n the 2nd parameter == 0 means to NOT flush the buffer
+* \n                  == 1 means to flush the buffer
+* \n
+* \n Outputs in Matlab:
+* \n timestamps_cell_array =
+* \n   for neural channel rows 1 - 144,
+* \n   { 'label' u0ts u1ts u2ts u3ts u4ts u5ts [waveform]} where u0ts = unit0 timestamps, etc.
+* \n   for channels 151 and 152, the digital channels, each row is defined as
+* \n   { 'label'  timestamps  values  [empty] [empty] [empty] [empty] }
+* \n
+* \n continuous_cell_array =
+* \n    for each channel with continuous recordings
+* \n    { channel_number, sample rate, data_points[] }
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments*
+*/
+
 void OnTrialData(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
     int nFirstParam = 1;
@@ -1108,12 +1199,16 @@ void OnTrialData(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
-            } else {
+            }
+            else
+            {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_TRIALDATA, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_INSTANCE:
@@ -1145,7 +1240,7 @@ void OnTrialData(
 
     res = cbSdkGetTrialConfig(nInstance, NULL, NULL, NULL, NULL, NULL, NULL, NULL, &bTrialDouble, NULL, &uConts, &uEvents);
 
-    res = cbSdkInitTrialData(nInstance, (nlhs == 2 || !uEvents) ? NULL : &trialevent, (nlhs >= 2 && uConts) ? &trialcont : NULL, NULL, NULL);
+    res = cbSdkInitTrialData(nInstance, bFlushBuffer, (nlhs == 2 || !uEvents) ? NULL : &trialevent, (nlhs >= 2 && uConts) ? &trialcont : NULL, NULL, NULL);
     PrintErrorSDK(res, "cbSdkInitTrialData()");
 
 
@@ -1248,23 +1343,32 @@ void OnTrialData(
 }
 
 // Author & Date:   Ehsan Azar     26 Oct 2011
-// Purpose: Processing to do with the command "trialcomment"
-//  IN MATLAB =>
-// [comments_cell_array ts] = cbmex('trialcomment')
-// [comments_cell_array ts] = cbmex('trialcomment', 1)
-//
-// Inputs:
-// the 2nd parameter == 0 means to NOT flush the buffer
-//                   == 1 means to flush the buffer
-//
-// Outputs:
-// comments_cell_array: is an array of the variable-sized comments, each row is a comment
-// ts: is the timestamps
+/**
+* Processing to do with the command "trialcomment".
+*
+* \n IN MATLAB =>
+* \n [comments_cell_array ts] = cbmex('trialcomment')
+* \n [comments_cell_array ts] = cbmex('trialcomment', 1)
+* \n
+* \n Inputs:
+* \n the 2nd parameter == 0 means to NOT flush the buffer
+* \n                   == 1 means to flush the buffer
+* \n
+* \n Outputs:
+* \n comments_cell_array: is an array of the variable-sized comments, each row is a comment
+* \n ts: is the timestamps
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
+
 void OnTrialComment(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
     int nFirstParam = 1;
@@ -1312,12 +1416,16 @@ void OnTrialComment(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
-            } else {
+            }
+            else
+            {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_TRIALCOMMENT, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_INSTANCE:
@@ -1345,7 +1453,7 @@ void OnTrialComment(
 
     // 1 - Get how many samples are waiting
 
-    res = cbSdkInitTrialData(nInstance, NULL, NULL, &trialcomment, NULL);
+    res = cbSdkInitTrialData(nInstance, bFlushBuffer, NULL, NULL, &trialcomment, NULL);
     PrintErrorSDK(res, "cbSdkInitTrialData()");
 
     trialcomment.comments = NULL;
@@ -1398,27 +1506,46 @@ void OnTrialComment(
     res = cbSdkGetTrialData(nInstance, bFlushBuffer, NULL, NULL, &trialcomment, NULL);
     PrintErrorSDK(res, "cbSdkGetTrialData()");
 
+    // NSP returns strings as char, but Matlab wants wide characters.  The following function
+    // converts the char string to wchar_t string to return to Matlab
+    wchar_t szTempWcString[cbMAX_COMMENT];
+    for (unsigned int i = 0; i < trialcomment.num_samples; ++i)
+    {
+        memset(szTempWcString, 0, sizeof(szTempWcString));
+        for (unsigned int j = 0; j < strlen((char*)trialcomment.comments[i]); ++j)
+        {
+            szTempWcString[j] = trialcomment.comments[i][j];
+        }
+        wcscpy((wchar_t*)trialcomment.comments[i], szTempWcString);
+    }
+
     // free memory
     if (trialcomment.comments)
         mxFree(trialcomment.comments);
 }
 
 // Author & Date:   Ehsan Azar     26 Oct 2011
-// Purpose: Processing to do with the command "trialtracking"
-//  IN MATLAB =>
-// tracking_cell_array = cbmex('trialtracking')
-// tracking_cell_array = cbmex('trialtracking', 1)
-//
-// Inputs:
-// the 2nd parameter == 0 means to NOT flush the buffer
-//                   == 1 means to flush the buffer
-//
-//
+/**
+* Processing to do with the command "trialtracking".
+*
+* \n IN MATLAB =>
+* \n tracking_cell_array = cbmex('trialtracking')
+* \n tracking_cell_array = cbmex('trialtracking', 1)
+* \n
+* \n Inputs:
+* \n the 2nd parameter == 0 means to NOT flush the buffer
+* \n                  == 1 means to flush the buffer
+* \n
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnTrialTracking(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
     int nFirstParam = 1;
@@ -1465,12 +1592,16 @@ void OnTrialTracking(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
-            } else {
+            }
+            else
+            {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_TRIALTRACKING, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_INSTANCE:
@@ -1494,7 +1625,7 @@ void OnTrialTracking(
 
     // 1 - Get how many samples are waiting
 
-    res = cbSdkInitTrialData(nInstance, NULL, NULL, NULL, &trialtracking);
+    res = cbSdkInitTrialData(nInstance, bFlushBuffer, NULL, NULL, NULL, &trialtracking);
     PrintErrorSDK(res, "cbSdkInitTrialData()");
 
     bool   bTrialDouble    = false;
@@ -1566,7 +1697,9 @@ void OnTrialTracking(
             {
                 mxa = mxCreateNumericMatrix(trialtracking.max_point_counts[i], dim_count, mxUINT32_CLASS, mxREAL);
                 trialtracking.coords[i][j] = (UINT32 *)mxGetData(mxa);
-            } else {
+            }
+            else
+            {
                 mxa = mxCreateNumericMatrix(trialtracking.max_point_counts[i], dim_count, mxUINT16_CLASS, mxREAL);
                 trialtracking.coords[i][j] = (UINT16 *)mxGetData(mxa);
             }
@@ -1593,28 +1726,84 @@ void OnTrialTracking(
 }
 
 // Author & Date:   Kirk Korver     13 Jun 2005
-// Purpose: Processing to do with the command "fileconfig"
-//  IN MATLAB =>
-//      cbmex('fileconfig', filename, comments, 1)      // start recording
-//          -or-
-//      cbmex('fileconfig', filename, comments, 0)      // stop recording
+/**
+* Processing to do with the command "fileconfig".
+*
+* \n In MATLAB use =>
+* \n      cbmex('fileconfig', filename, comments, 1)      to start recording
+* \n         -or-
+* \n     cbmex('fileconfig', filename, comments, 0)      to stop recording
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnFileConfig(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
+    bool bInstanceFound = false;
     int nFirstParam = 4;
     bool bGetFileInfo = false;
     cbSdkResult res;
 
-    if (nrhs == 1 || nlhs > 0)
+    enum
+    {
+        PARAM_NONE,
+        PARAM_INSTANCE,
+        PARAM_OPTION,
+    } param = PARAM_NONE;
+
+    // Do a quick look at the options just to find the instance if specified
+    for (int i = 1; i < nrhs; ++i)
+    {
+        if (param == PARAM_NONE)
+        {
+            char cmdstr[128];
+            if (mxGetString(prhs[i], cmdstr, 16))
+            {
+                char errstr[128];
+                sprintf(errstr, "Parameter %d is invalid", i);
+                PrintHelp(CBMEX_FUNCTION_COMMENT, true, errstr);
+            }
+            if (_strcmpi(cmdstr, "instance") == 0)
+            {
+                param = PARAM_INSTANCE;
+            }
+            else
+            {
+                param = PARAM_OPTION; // Just something valid but instance
+            }
+        }
+        else
+        {
+            switch(param)
+            {
+            case PARAM_INSTANCE:
+                if (!mxIsNumeric(prhs[i]))
+                    PrintHelp(CBMEX_FUNCTION_COMMENT, true, "Invalid instance number");
+                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                bInstanceFound = true;
+                break;
+            default:
+                break;
+            }
+            param = PARAM_NONE;
+        }
+    } // end for (int i = nFirstParam
+
+    if ((nlhs > 0) && ((!bInstanceFound && (nrhs == 1)) || (bInstanceFound && (nrhs == 3))))
     {
         if (nlhs > 3)
             PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Too many outputs requested");
         bGetFileInfo = true;
-    } else {
+    }
+    else
+    {
         if (nlhs > 0)
             PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Too many outputs requested");
     }
@@ -1632,7 +1821,7 @@ void OnFileConfig(
         if (nlhs > 2)
             plhs[2] = mxCreateString(username);
         // If no inputs given, nothing else to do
-        if (nrhs == 1)
+        if ((!bInstanceFound && (nrhs == 1)) || (bInstanceFound && (nrhs == 3)))
             return;
     }
 
@@ -1656,13 +1845,6 @@ void OnFileConfig(
     UINT32 bStart = (UINT32) mxGetScalar(prhs[3]);
     UINT32 options = cbFILECFG_OPT_NONE;
 
-    enum
-    {
-        PARAM_NONE,
-        PARAM_INSTANCE,
-        PARAM_OPTION,
-    } param = PARAM_NONE;
-
     // Process remaining input arguments if available
     for (int i = nFirstParam; i < nrhs; ++i)
     {
@@ -1682,12 +1864,16 @@ void OnFileConfig(
             else if (_strcmpi(cmdstr, "option") == 0)
             {
                 param = PARAM_OPTION;
-            } else {
+            }
+            else
+            {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_INSTANCE:
@@ -1712,7 +1898,9 @@ void OnFileConfig(
                     else if (_strcmpi(cmdstr, "open") == 0)
                     {
                         options = cbFILECFG_OPT_OPEN;
-                    } else {
+                    }
+                    else
+                    {
                         PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Invalid option parameter");
                     }
                 }
@@ -1735,93 +1923,559 @@ void OnFileConfig(
 
 
 // Author & Date:   Hyrum L. Sessions       1 Apr 2008
-// Purpose: Processing to do with the command "digitalout"
-//  IN MATLAB =>
-//      cbmex('digitalout', channel, 1)      // set digital out
-//          -or-
-//      cbmex('digitalout', channel, 0)      // clear digital out
+/**
+* Processing to do with the command "digitalout".
+*
+* \n In MATLAB use =>
+* \n      cbmex('digitalout', channel, 1)      to set digital out
+* \n        -or-
+* \n      cbmex('digitalout', channel, 0)      to clear digital out
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnDigitalOut(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
     int nFirstParam = 3;
+    UINT16 nChannel = 0;
+    UINT16 nValue = 99;
+    bool bHasNewParams = false;
+    cbSdkResult res = CBSDKRESULT_SUCCESS;
+    cbPKT_CHANINFO chaninfo;
 
-    if (nrhs < 3)
+    if (nrhs < 2)
         PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Too few inputs provided");
-    if (nlhs > 0)
+    if (nlhs > 1)
         PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Too many outputs requested");
 
     if (!mxIsNumeric(prhs[1]) || mxGetNumberOfElements(prhs[1]) != 1)
         PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid channel parameter");
+    nChannel = (UINT16) mxGetScalar(prhs[1]);
 
-    if (!mxIsNumeric(prhs[2]) || mxGetNumberOfElements(prhs[2]) != 1)
-        PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid default_value parameter");
-
-    UINT16 nChannel = (UINT16) mxGetScalar(prhs[1]);
-    UINT16 nValue = (UINT16) mxGetScalar(prhs[2]);
-
-    enum
+    if (2 < nrhs)
     {
-        PARAM_NONE,
-        PARAM_INSTANCE,
-    } param = PARAM_NONE;
+        if (mxGetNumberOfElements(prhs[2]) != 1)
+            nFirstParam = 2;
+        else
+            nValue = (UINT16) mxGetScalar(prhs[2]);
 
-    // Process remaining input arguments if available
-    for (int i = nFirstParam; i < nrhs; ++i)
-    {
-        if (param == PARAM_NONE)
+        enum
+        {
+            PARAM_NONE,
+            PARAM_MONITOR,
+            PARAM_TRACK,
+            PARAM_TRIGGER,
+            PARAM_TIMED,
+            PARAM_OFFSET,
+            PARAM_VALUE,
+            PARAM_INPUT,
+            PARAM_INSTANCE,
+        } param = PARAM_NONE;
+
+        bool bDisable = false;
+        int nIdxTimed = 0;
+        int nIdxMonitor = 0;
+        int nIdxTrigger = 0;
+        UINT16  nTrigChan = 0;
+        UINT16  nTrigValue = 0;
+        UINT32  nOffset = 0;
+
+        // Do a quick look at the options just to find the instance if specified
+        for (int i = nFirstParam; i < nrhs; ++i)
+        {
+            if (param == PARAM_NONE)
+            {
+                char cmdstr[128];
+                if (mxGetString(prhs[i], cmdstr, 16))
+                {
+                    char errstr[128];
+                    sprintf(errstr, "Parameter %d is invalid", i);
+                    PrintHelp(CBMEX_FUNCTION_COMMENT, true, errstr);
+                }
+                if (_strcmpi(cmdstr, "instance") == 0)
+                {
+                    param = PARAM_INSTANCE;
+                }
+                else if (_strcmpi(cmdstr, "disable") == 0)
+                {
+                    param = PARAM_NONE;
+                }
+                else if (_strcmpi(cmdstr, "track") == 0)
+                {
+                    param = PARAM_NONE;
+                }
+                else
+                {
+                    param = PARAM_MONITOR; // Just something valid but instance
+                }
+            }
+            else
+            {
+                switch(param)
+                {
+                case PARAM_INSTANCE:
+                    if (!mxIsNumeric(prhs[i]))
+                        PrintHelp(CBMEX_FUNCTION_COMMENT, true, "Invalid instance number");
+                    nInstance = (UINT32)mxGetScalar(prhs[i]);
+                    break;
+                default:
+                    break;
+                }
+                param = PARAM_NONE;
+            }
+        } // end for (int i = nFirstParam
+        if (param != PARAM_NONE)
+        {
+            // Some parameter did not have a value, and value is non-optional
+            PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Last parameter requires value");
+        }
+
+        // Get old config, so that we would only change the bits requested
+        res = cbSdkGetChannelConfig(nInstance, nChannel, &chaninfo);
+        PrintErrorSDK(res, "cbSdkGetChannelConfig()");
+
+        // Process remaining input arguments if available
+        for (int i = nFirstParam; i < nrhs; ++i)
+        {
+            if (param == PARAM_NONE)
+            {
+                char cmdstr[128];
+                if (mxGetString(prhs[i], cmdstr, 16))
+                {
+                    char errstr[128];
+                    sprintf(errstr, "Parameter %d is invalid", i);
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, errstr);
+                }
+                else if (_strcmpi(cmdstr, "monitor") == 0)
+                {
+                    param = PARAM_MONITOR;
+                }
+                else if (_strcmpi(cmdstr, "track") == 0)
+                {
+                    if (nIdxMonitor == 0)
+                        mexErrMsgTxt("Cannot track with no monitor channel specified");
+                    chaninfo.doutopts |= cbDOUT_TRACK;
+                    bHasNewParams = true;
+                }
+                else if (_strcmpi(cmdstr, "trigger") == 0)
+                {
+                    param = PARAM_TRIGGER;
+                }
+                else if (_strcmpi(cmdstr, "value") == 0)
+                {
+                    param = PARAM_VALUE;
+                }
+                else if (_strcmpi(cmdstr, "input") == 0)
+                {
+                    param = PARAM_INPUT;
+                }
+                else if (_strcmpi(cmdstr, "disable") == 0)
+                {
+                    bDisable = true;
+                    if (i != 2)
+                        mexErrMsgTxt("Cannot specify any other parameters with 'disable' command");
+                    chaninfo.doutopts &= ~(cbDOUT_FREQUENCY | cbDOUT_TRIGGERED | cbDOUT_TRACK);
+                    chaninfo.monsource = 0;
+                    bHasNewParams = true;
+                }
+                else if (_strcmpi(cmdstr, "timed") == 0)
+                {
+                    param = PARAM_TIMED;
+                }
+                else if (_strcmpi(cmdstr, "offset") == 0)
+                {
+                    param = PARAM_OFFSET;
+                }
+                else if (_strcmpi(cmdstr, "instance") == 0)
+                {
+                    param = PARAM_INSTANCE;
+                }
+                else
+                {
+                    char errstr[128];
+                    sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, errstr);
+                }
+            }
+            else
+            {
+                switch(param)
+                {
+                case PARAM_MONITOR:
+                    if (nIdxMonitor)
+                        mexErrMsgTxt("Cannot specify multiple monitor commands");
+                    if (nIdxTimed)
+                        mexErrMsgTxt("Cannot specify monitor and timed commands together");
+                    if (nIdxTrigger)
+                        mexErrMsgTxt("Cannot specify monitor and trigger commands together");
+                    nIdxMonitor = i;
+                    chaninfo.doutopts &= ~(cbDOUT_FREQUENCY | cbDOUT_TRIGGERED);
+                    bHasNewParams = true;
+                    break;
+                case PARAM_TRIGGER:
+                    if (nIdxTrigger)
+                        mexErrMsgTxt("Cannot specify multiple waveform triggers");
+                    if (nIdxMonitor)
+                        mexErrMsgTxt("Cannot specify trigger and monitor commands together");
+                    if (nIdxTimed)
+                        mexErrMsgTxt("Cannot specify trigger and timed commands together");
+                    nIdxTrigger = i;
+                    chaninfo.doutopts &= ~(cbDOUT_FREQUENCY | cbDOUT_TRACK);
+                    chaninfo.doutopts |= cbDOUT_TRIGGERED;
+                    bHasNewParams = true;
+                    break;
+                case PARAM_TIMED:
+                    if (nIdxTimed)
+                        mexErrMsgTxt("Cannot specify multiple timed commands");
+                    if (nIdxMonitor)
+                        mexErrMsgTxt("Cannot specify timed and monitor commands together");
+                    if (nIdxTrigger)
+                        mexErrMsgTxt("Cannot specify timed and trigger commands together");
+                    nIdxTimed = i;
+                    chaninfo.doutopts &= ~(cbDOUT_TRACK | cbDOUT_TRIGGERED);
+                    chaninfo.doutopts |= cbDOUT_FREQUENCY;
+                    bHasNewParams = true;
+                    break;
+                case PARAM_OFFSET:
+                    if (!mxIsNumeric(prhs[i]))
+                        PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid offset number");
+                    nOffset = (UINT16)(*mxGetPr(prhs[i]));
+                    bHasNewParams = true;
+                    break;
+                case PARAM_VALUE:
+                    if (!mxIsNumeric(prhs[i]))
+                        PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid value number");
+                    nTrigValue = (UINT16)(*mxGetPr(prhs[i]));
+                    bHasNewParams = true;
+                    break;
+                case PARAM_INPUT:
+                    if (!mxIsNumeric(prhs[i]))
+                        PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid input number");
+                    nTrigChan = (UINT16)(*mxGetPr(prhs[i]));
+                    bHasNewParams = true;
+                    break;
+                case PARAM_INSTANCE:
+                    if (!mxIsNumeric(prhs[i]))
+                        PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid instance number");
+                    nInstance = (UINT32)mxGetScalar(prhs[i]);
+                    break;
+                default:
+                    break;
+                }
+                param = PARAM_NONE;
+            }
+        } // end for (int i = nFirstParam
+
+        if (param != PARAM_NONE)
+        {
+            // Some parameter did not have a value, and value is non-optional
+            PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Last parameter requires value");
+        }
+
+        if (nIdxTrigger == 0 && nIdxMonitor == 0 && !nIdxTimed == 0 && !bDisable && !nValue)
+        {
+            PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true,
+                "No action specified\n"
+                "specify monitor, trigger, timed or disable");
+        }
+
+        // If any trigger is specified, parse it
+        if (nIdxTimed)
         {
             char cmdstr[128];
-            if (mxGetString(prhs[i], cmdstr, 16))
+
+            // check for proper data structure
+            if (mxGetClassID(prhs[nIdxTimed]) != mxCHAR_CLASS || mxGetString(prhs[nIdxTimed], cmdstr, 10))
+                PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Invalid timed parameters");
+
+            if (_strcmpi(cmdstr, "frequency") == 0)
             {
-                char errstr[128];
-                sprintf(errstr, "Parameter %d is invalid", i);
-                PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, errstr);
+                if (nTrigChan == 0 || nTrigChan > 15000)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid timer frequency");
+                if (nTrigValue == 0 || nTrigValue > 99)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid timer duty cycle");
+                if (nOffset > 30000)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid timer offset");
+                int nTotalSamples = 30000 / nTrigChan;
+                chaninfo.highsamples = std::max(1, (int)((float)nTotalSamples * (nTrigValue / 100.0)));
+                chaninfo.lowsamples = nTotalSamples - chaninfo.highsamples;
+                chaninfo.offset = nOffset;
             }
-            if (_strcmpi(cmdstr, "instance") == 0)
+            if (_strcmpi(cmdstr, "samples") == 0)
             {
-                param = PARAM_INSTANCE;
-            } else {
-                char errstr[128];
-                sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
-                PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, errstr);
+                if (nTrigChan == 0 || nTrigChan > 15000)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid high sample value");
+                if (nTrigValue == 0 || nTrigValue > 15000)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid low sample value");
+                chaninfo.lowsamples = nTrigValue;
+                chaninfo.highsamples = nTrigChan;
+                if (nTrigValue > 30000)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid timer offset");
+                chaninfo.offset = nOffset;
             }
-        } else {
-            switch(param)
-            {
-            case PARAM_INSTANCE:
-                if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
-                break;
-            default:
-                break;
-            }
-            param = PARAM_NONE;
         }
-    } // end for (int i = nFirstParam
-    if (param != PARAM_NONE)
-    {
-        // Some parameter did not have a value, and value is non-optional
-        PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Last parameter requires value");
+
+        // If any trigger is specified, parse it
+        if (nIdxTrigger)
+        {
+            char cmdstr[128];
+            // check for proper data structure
+            if (mxGetClassID(prhs[nIdxTrigger]) != mxCHAR_CLASS || mxGetString(prhs[nIdxTrigger], cmdstr, 10))
+                PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Invalid trigger");
+
+            if (_strcmpi(cmdstr, "dinrise") == 0)
+            {
+                chaninfo.trigtype = cbSdkWaveformTrigger_DINPREG;
+                if (nTrigChan == 0 || nTrigChan > 16)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Only bits 1-16 (first digital input) trigger is supported");
+                chaninfo.trigchan = nTrigChan;
+                if (nOffset  == 0 || nOffset > 65535)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid samples high");
+                chaninfo.highsamples = nOffset;
+            }
+            else if (_strcmpi(cmdstr, "dinfall") == 0)
+            {
+                chaninfo.trigtype = cbSdkWaveformTrigger_DINPFEG;
+                if (nTrigChan == 0 || nTrigChan > 16)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Only bits 1-16 (first digital input) trigger is supported");
+                chaninfo.trigchan = nTrigChan;
+                if (nOffset  == 0 || nOffset > 65535)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid samples high");
+                chaninfo.highsamples = nOffset;
+            }
+            else if (_strcmpi(cmdstr, "spike") == 0)
+            {
+                chaninfo.trigtype = cbSdkWaveformTrigger_SPIKEUNIT;
+                if (nTrigChan == 0 || nTrigChan > cbMAXCHANS)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid channel number");
+                chaninfo.trigchan = nTrigChan;
+                if (nTrigValue == 0 || nTrigValue > cbMAXUNITS)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid unit number");
+                chaninfo.trigval = nTrigValue;
+                if (nOffset  == 0 || nOffset > 65535)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid samples high");
+                chaninfo.highsamples = nOffset;
+            }
+            else if (_strcmpi(cmdstr, "roi") == 0)
+            {
+                chaninfo.trigtype = cbSdkWaveformTrigger_COMMENTCOLOR;
+                if (nTrigChan == 0 || nTrigChan > 4)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid ROI");
+                chaninfo.trigval = nTrigChan;
+                if (nTrigValue == 0 || nTrigValue > 2)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid NeuroMotive Event");
+                    chaninfo.trigval += nTrigValue * 256;
+                if (nOffset  == 0 || nOffset > 65535)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid samples high");
+                chaninfo.highsamples = nOffset;
+            }
+            else if (_strcmpi(cmdstr, "cmtcolor") == 0)
+            {
+                chaninfo.trigtype = cbSdkWaveformTrigger_COMMENTCOLOR;
+                if (nTrigChan == 0 || nTrigChan > 65535)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid color");
+                chaninfo.trigchan = nTrigChan;
+                if (nTrigValue == 0 || nTrigValue > 65535)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid color");
+                chaninfo.trigval = nTrigValue;
+                if (nOffset  == 0 || nOffset > 65535)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid samples high");
+                chaninfo.highsamples = nOffset;
+            }
+            else if (_strcmpi(cmdstr, "softreset") == 0)
+            {
+                chaninfo.trigtype = cbSdkWaveformTrigger_SOFTRESET;
+                if (nOffset  == 0 || nOffset > 65535)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid samples high");
+                chaninfo.highsamples = nOffset;
+            }
+            else if (_strcmpi(cmdstr, "extension") == 0)
+            {
+                chaninfo.trigtype = cbSdkWaveformTrigger_EXTENSION;
+                if (nOffset  == 0 || nOffset > 65535)
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid samples high");
+                chaninfo.highsamples = nOffset;
+            }
+            else
+            {
+                PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid trigger");
+            }
+        }
+
+        if (nIdxMonitor)
+        {
+            char cmdstr[128];
+            // check for proper data structure
+            chaninfo.monsource = nTrigChan;
+            chaninfo.doutopts &= ~cbDOUT_MONITOR_UNIT_ALL;
+            if (mxGetClassID(prhs[nIdxMonitor]) != mxCHAR_CLASS || mxGetString(prhs[nIdxMonitor], cmdstr, sizeof(cmdstr)))
+                PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid monitor");
+            if (strstr(cmdstr, "unclass") != 0)
+            {
+                chaninfo.doutopts |= cbDOUT_MONITOR_UNIT0;
+            }
+            if (strstr(cmdstr, "unit1") != 0)
+            {
+                chaninfo.doutopts |= cbDOUT_MONITOR_UNIT1;
+            }
+            if (strstr(cmdstr, "unit2") != 0)
+            {
+                chaninfo.doutopts |= cbDOUT_MONITOR_UNIT2;
+            }
+            if (strstr(cmdstr, "unit3") != 0)
+            {
+                chaninfo.doutopts |= cbDOUT_MONITOR_UNIT3;
+            }
+            if (strstr(cmdstr, "unit4") != 0)
+            {
+                chaninfo.doutopts |= cbDOUT_MONITOR_UNIT4;
+            }
+            if (strstr(cmdstr, "unit5") != 0)
+            {
+                chaninfo.doutopts |= cbDOUT_MONITOR_UNIT5;
+            }
+            if (strstr(cmdstr, "all") != 0)
+            {
+                chaninfo.doutopts |= cbDOUT_MONITOR_UNIT_ALL;
+            }
+            if (0 == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT_ALL))
+            {
+                PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid monitor unit");
+            }
+            if (chaninfo.monsource == 0 || chaninfo.monsource > cbNUM_ANALOG_CHANS)
+                PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid input channel number");
+        }
     }
 
-    cbSdkResult res = cbSdkSetDigitalOutput(nInstance, nChannel, nValue);
-    PrintErrorSDK(res, "cbSdkSetDigitalOutput()");
+    // if output specifically requested, or if no new configuration specified
+    // build the cell structure to get previous values
+    if (nlhs > 0 || ! bHasNewParams)
+    {
+        int count = 4; // number of parameters
+        char   string[128];
+        mxArray *pca = mxCreateCellMatrix(count, 2);
+        plhs[0] = pca;
+
+        // describe the monitoring mode and parameters
+        mxSetCell(pca, 0, mxCreateString("monitor"));
+        if ((0 == (cbDOUT_FREQUENCY & chaninfo.doutopts)) && (0 == (cbDOUT_TRIGGERED & chaninfo.doutopts)) && (0 != chaninfo.monsource))
+        {
+            sprintf(string, "monitor chan %d", chaninfo.monsource);
+            if (cbDOUT_MONITOR_UNIT_ALL == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT_ALL))
+                strncat(string, " all units", sizeof(string));
+            else
+            {
+                if (cbDOUT_MONITOR_UNIT0 == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT0))
+                    strncat(string, " unclass ", sizeof(string));
+                if (cbDOUT_MONITOR_UNIT1 == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT1))
+                    strncat(string, " unit1 ", sizeof(string));
+                if (cbDOUT_MONITOR_UNIT2 == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT2))
+                    strncat(string, " unit2 ", sizeof(string));
+                if (cbDOUT_MONITOR_UNIT3 == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT3))
+                    strncat(string, " unit3 ", sizeof(string));
+                if (cbDOUT_MONITOR_UNIT4 == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT4))
+                    strncat(string, " unit4 ", sizeof(string));
+                if (cbDOUT_MONITOR_UNIT5 == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT5))
+                    strncat(string, " unit5 ", sizeof(string));
+            }
+        }
+        else
+            strncpy(string, "disable", sizeof(string));
+        mxSetCell(pca, count + 0, mxCreateString(string));
+
+        // describe if track recently selected channel is on of off
+        mxSetCell(pca, 1, mxCreateString("track"));
+        if (cbDOUT_TRACK == (chaninfo.doutopts & cbDOUT_TRACK))
+            strncpy(string, "yes", sizeof(string));
+        else
+            strncpy(string, "no", sizeof(string));
+        mxSetCell(pca, count + 1, mxCreateString(string));
+
+        // describe the timed mode and parameters
+        mxSetCell(pca, 2, mxCreateString("timed"));
+        memset(string, 0, sizeof(string));
+        if (cbDOUT_FREQUENCY == (chaninfo.doutopts & cbDOUT_FREQUENCY))
+            sprintf(string, "Timed %dHz %d%% Duty Cycle - Samples High %d, Low %d, Offset %d", 
+                    (int)(30000.0 / ((float)chaninfo.highsamples + (float)chaninfo.lowsamples) + 0.5),
+                    (int)((float)chaninfo.highsamples / (float)(chaninfo.highsamples + chaninfo.lowsamples) * 100.0),
+                    chaninfo.highsamples, chaninfo.lowsamples, chaninfo.offset);
+        else
+            sprintf(string, "disable");
+        mxSetCell(pca, count + 2, mxCreateString(string));
+
+        // describe the trigger mode and parameters
+        mxSetCell(pca, 3, mxCreateString("trigger"));
+        memset(string, 0, sizeof(string));
+        if (cbDOUT_TRIGGERED == (chaninfo.doutopts & cbDOUT_TRIGGERED))
+        {
+            switch(chaninfo.trigtype)
+            {
+            case cbSdkWaveformTrigger_DINPREG:
+                sprintf(string, "dinrise bit %d for %d samples", chaninfo.trigchan, chaninfo.highsamples);
+                break;
+            case cbSdkWaveformTrigger_DINPFEG:
+                sprintf(string, "dinfall bit %d for %d samples", chaninfo.trigchan, chaninfo.highsamples);
+                break;
+            case cbSdkWaveformTrigger_SPIKEUNIT:
+                sprintf(string, "spike on chan %d unit %d for %d samples", chaninfo.trigchan, chaninfo.trigval, chaninfo.highsamples);
+                break;
+            case cbSdkWaveformTrigger_COMMENTCOLOR:
+                sprintf(string, "roi ROI %d %s for %d samples", chaninfo.trigval & 0xFF, (1 == chaninfo.trigval / 256) ? "Enter" : "Exit", chaninfo.highsamples);
+                break;
+            case cbSdkWaveformTrigger_SOFTRESET:
+                sprintf(string, "softreset for %d samples", chaninfo.highsamples);
+                break;
+            case cbSdkWaveformTrigger_EXTENSION:
+                sprintf(string, "extension for %d samples", chaninfo.highsamples);
+                break;
+            default:
+                sprintf(string, "off");
+            }
+        }
+        else
+            sprintf(string, "disable");
+        mxSetCell(pca, count + 3, mxCreateString(string));
+    }
+
+    // if new configuration to send
+    if (bHasNewParams)
+    {
+        res = cbSdkSetChannelConfig(nInstance, nChannel, &chaninfo);
+        PrintErrorSDK(res, "cbSdkSetChannelConfig()");
+    }
+
+    // set the output value if specified
+    if (99 != nValue)
+    {
+        res = cbSdkSetDigitalOutput(nInstance, nChannel, nValue);
+        PrintErrorSDK(res, "cbSdkSetDigitalOutput()");
+    }
 }
 
 // Author & Date:   Ehsan Azar       26 Oct 2011
-// Purpose: Processing to do with the command "analogout", to set specified waveform
-//  IN MATLAB =>
-//      cbmex('analogout', channel, [<parameter>, [value]])
+/**
+* Processing to do with the command "analogout", to set specified waveform.
+*
+* \n In MATLAB use =>
+* \n      cbmex('analogout', channel, [<parameter>, [value]])
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnAnalogOut(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
     int nFirstParam = 2;
@@ -1851,7 +2505,7 @@ void OnAnalogOut(
     bool bUnitMv = false; // mv voltage units
     bool bUnitMs = false; // ms interval units
     bool bPulses = false;
-    bool bDisable = true;
+    bool bDisable = false;
     double dOffset = 0;
     UINT16 duration[cbMAX_WAVEFORM_PHASES];
     INT16  amplitude[cbMAX_WAVEFORM_PHASES];
@@ -1951,10 +2605,14 @@ void OnAnalogOut(
             else if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
-            } else {
+            }
+            else
+            {
                 mexErrMsgTxt("Invalid parameter");
             }
-        } else {
+        }
+        else
+        {
             // parameters are checked here
             switch (param)
             {
@@ -2081,7 +2739,9 @@ void OnAnalogOut(
                 dAmplitude[1] = 0;
                 dAmplitude[2] = dPhase2Amplitude;
                 dAmplitude[3] = 0;
-            } else {
+            }
+            else
+            {
                 UINT32 count = (UINT32)mxGetNumberOfElements(prhs[nIdxWave]);
                 // check for proper data structure
                 if (mxGetClassID(prhs[nIdxWave]) != mxDOUBLE_CLASS || count < 2 || (count & 0x01))
@@ -2094,7 +2754,7 @@ void OnAnalogOut(
                     sprintf(cmdstr, "Maximum of %u phases can be specified for each sequence", (UINT32)cbMAX_WAVEFORM_PHASES);
                     PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, cmdstr);
                 }
-                // TODO: use sequence to pump larger number of phases in NSP1.5
+                /// \todo use sequence to pump larger number of phases in NSP1.5
                 wf.phases = count / 2;
                 double *pcfgvals = mxGetPr(prhs[nIdxWave]);
                 for (UINT16 i = 0; i < wf.phases; ++i)
@@ -2214,7 +2874,9 @@ void OnAnalogOut(
                 wf.trig = cbSdkWaveformTrigger_NONE;
                 if (wf.type != cbSdkWaveform_NONE)
                     PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Trigger off is incompatible with specifying a waveform");
-            } else {
+            }
+            else
+            {
                 PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Invalid trigger");
             }
         }
@@ -2233,7 +2895,9 @@ void OnAnalogOut(
         else if (_strcmpi(cmdstr, "continuous") == 0)
         {
             mon.bSpike = FALSE;
-        } else {
+        }
+        else
+        {
             PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Invalid monitor");
         }
         if (mon.chan == 0 || mon.chan > cbMAXCHANS)
@@ -2245,14 +2909,22 @@ void OnAnalogOut(
 }
 
 // Author & Date:   Ehsan Azar       11 March 2011
-// Purpose: Set a channel mask
-//  IN MATLAB =>
-//      cbmex('mask', channel, [bActive])
+/**
+* Set a channel mask.
+*
+* \n In MATLAB use =>
+* \n      cbmex('mask', channel, [bActive])
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnMask(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
     int nFirstParam = 2;
@@ -2303,12 +2975,16 @@ void OnMask(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
-            } else {
+            }
+            else
+            {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_MASK, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_INSTANCE:
@@ -2333,14 +3009,22 @@ void OnMask(
 }
 
 // Author & Date:   Ehsan Azar       25 Feb 2011
-// Purpose: Send a comment or custom event
-//  IN MATLAB =>
-//      cbmex('comment', rgba, charset, comment)      // send a comment
+/**
+* Send a comment or custom event.
+*
+* \n In MATLAB use =>
+* \n     cbmex('comment', rgba, charset, comment)       to send a comment
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnComment(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
     int nFirstParam = 4;
@@ -2385,12 +3069,16 @@ void OnComment(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
-            } else {
+            }
+            else
+            {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_COMMENT, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_INSTANCE:
@@ -2415,14 +3103,22 @@ void OnComment(
 }
 
 // Author & Date:   Ehsan Azar       25 Feb 2011
-// Purpose: Send a channel config, and return values
-//  IN MATLAB =>
-//      [config_cell_aray] = cbmex('config', channel, [<parameter>, value], ...)      // set one or more parameters
+/**
+* Send a channel configuration, and return values.
+*
+* \n In MATLAB use =>
+* \n      [config_cell_aray] = cbmex('config', channel, [<parameter>, value], ...)      to set one or more parameters
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnConfig(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
     int nFirstParam = 2;
@@ -2469,10 +3165,14 @@ void OnConfig(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
-            } else {
+            }
+            else
+            {
                 param = PARAM_USERFLAGS; // Just something valid but instance
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_INSTANCE:
@@ -2548,12 +3248,16 @@ void OnConfig(
             else if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
-            } else {
+            }
+            else
+            {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_CONFIG, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             char cmdstr[128];
             switch(param)
             {
@@ -2588,7 +3292,7 @@ void OnConfig(
                 bHasNewParams = true;
                 break;
             case PARAM_SPKTHRLEVEL:
-                if (mxGetString(prhs[i], cmdstr, 16))
+                if (!mxGetString(prhs[i], cmdstr, 16))
                 {
                     INT32 nValue = 0;
                     res = cbSdkAnalogToDigital(nInstance, channel, cmdstr, &nValue);
@@ -2598,7 +3302,9 @@ void OnConfig(
                 else if (mxIsNumeric(prhs[i]))
                 {
                     chaninfo.spkthrlevel = (UINT32)mxGetScalar(prhs[i]);
-                } else {
+                }
+                else
+                {
                     PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid spkthrlevel value");
                 }
                 bHasNewParams = true;
@@ -2610,7 +3316,7 @@ void OnConfig(
                 bHasNewParams = true;
                 break;
             case PARAM_AMPLREJPOS:
-                if (mxGetString(prhs[i], cmdstr, 16))
+                if (!mxGetString(prhs[i], cmdstr, 16))
                 {
                     INT32 nValue = 0;
                     res = cbSdkAnalogToDigital(nInstance, channel, cmdstr, &nValue);
@@ -2620,13 +3326,15 @@ void OnConfig(
                 else if (mxIsNumeric(prhs[i]))
                 {
                     chaninfo.amplrejpos = (UINT32)mxGetScalar(prhs[i]);
-                } else {
+                }
+                else
+                {
                     PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid amprejpos number");
                 }
                 bHasNewParams = true;
                 break;
             case PARAM_AMPLREJNEG:
-                if (mxGetString(prhs[i], cmdstr, 16))
+                if (!mxGetString(prhs[i], cmdstr, 16))
                 {
                     INT32 nValue = 0;
                     res = cbSdkAnalogToDigital(nInstance, channel, cmdstr, &nValue);
@@ -2636,7 +3344,9 @@ void OnConfig(
                 else if (mxIsNumeric(prhs[i]))
                 {
                     chaninfo.amplrejneg = (UINT32)mxGetScalar(prhs[i]);
-                } else {
+                }
+                else
+                {
                     PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid amprejneg number");
                 }
                 bHasNewParams = true;
@@ -2663,8 +3373,8 @@ void OnConfig(
     }
 
 
-    // TODO: use map for parameter names
-    // TODO: add more parameters
+    /// \todo use map for parameter names
+    /// \todo add more parameters
 
     // if output specifically requested, or if no new configuration specified
     // build the cell structure to get previous values
@@ -2725,14 +3435,22 @@ void OnConfig(
 }
 
 // Author & Date:   Ehsan Azar       13 April 2012
-// Purpose: Read or convert CCF
-//  IN MATLAB =>
-//      cbmex('ccf', filename, [<parameter>, value], ...)
+/**
+* Read or convert CCF - Cerebus Configuration File.
+*
+* \n In MATLAB use =>
+* \n      cbmex('ccf', filename, [<parameter>, value], ...)
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnCCF(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
     int nFirstParam = 1;
@@ -2793,12 +3511,16 @@ void OnCCF(
             else if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
-            } else {
+            }
+            else
+            {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_CCF, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_SEND:
@@ -2872,14 +3594,22 @@ void OnCCF(
     }
 }
 // Author & Date:   Ehsan Azar       11 May 2012
-// Purpose: Send a system runlevel command
-//  IN MATLAB =>
-//      cbmex('system', <command>)      // send a runelvel command
+/**
+* Send a system runlevel command.
+*
+* \n In MATLAB use =>
+* \n      cbmex('system', <command>)      to send a runelvel command
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnSystem(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
     int nFirstParam = 2;
@@ -2916,12 +3646,16 @@ void OnSystem(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
-            } else {
+            }
+            else
+            {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_SYSTEM, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_INSTANCE:
@@ -2956,12 +3690,19 @@ void OnSystem(
 }
 
 // Author & Date:   Ehsan Azar       23 April 2013
-// Purpose: Send a synch output command
+/**
+* Send a synch output command.
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnSynchOut(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
     UINT32 nFreq = 0;
@@ -2997,7 +3738,7 @@ void OnSynchOut(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
-            } 
+            }
             else if (_strcmpi(cmdstr, "freq") == 0)
             {
                 param = PARAM_FREQ;
@@ -3005,12 +3746,16 @@ void OnSynchOut(
             else if (_strcmpi(cmdstr, "repeats") == 0)
             {
                 param = PARAM_REPEATS;
-            } else {
+            }
+            else
+            {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             switch(param)
             {
             case PARAM_INSTANCE:
@@ -3047,12 +3792,19 @@ void OnSynchOut(
 }
 
 // Author & Date:   Ehsan Azar       14 May 2013
-// Purpose: Send an extension command
+/**
+* Send an extension command.
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
 void OnExtCmd(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
     UINT32 nInstance = 0;
     cbSdkResult res = CBSDKRESULT_SUCCESS;
@@ -3088,7 +3840,7 @@ void OnExtCmd(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
-            } 
+            }
             else if (_strcmpi(cmdstr, "upload") == 0)
             {
                 param = PARAM_UPLOAD;
@@ -3109,12 +3861,16 @@ void OnExtCmd(
                 // On error just get out of the for-loop
                 if (res != CBSDKRESULT_SUCCESS)
                     break;
-            } else {
+            }
+            else
+            {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d (%s) is invalid", i, cmdstr);
                 PrintHelp(CBMEX_FUNCTION_EXT, true, errstr);
             }
-        } else {
+        }
+        else
+        {
             char cmdstr[cbMAX_LOG] = {'\0'};
             switch(param)
             {
@@ -3178,12 +3934,20 @@ void OnExtCmd(
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
-// The one and only mexFunction
+/**
+* The one and only mexFunction.
+*
+* @param[in] nlhs	Number of left hand side (output) arguments
+* @param[in] plhs	Array of left hand side arguments
+* @param[in] nrhs	Number of right hand side (input) arguments
+* @param[in] prhs	Array of right hand side arguments
+*/
+
 extern "C" MEX_EXPORT void mexFunction(
-    int nlhs,              // Number of left hand side (output) arguments
-    mxArray *plhs[],       // Array of left hand side arguments
-    int nrhs,              // Number of right hand side (input) arguments
-    const mxArray *prhs[] )// Array of right hand side arguments
+    int nlhs,
+    mxArray *plhs[],
+    int nrhs,
+    const mxArray *prhs[] )
 {
 #ifdef DEBUG_CONSOLE
 #ifdef WIN32

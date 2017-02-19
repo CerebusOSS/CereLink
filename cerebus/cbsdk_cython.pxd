@@ -378,10 +378,10 @@ cdef extern from "cbsdk_helper.h":
     int cbsdk_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param)
     int cbsdk_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
 
-    int cbsdk_init_trial_event(int nInstance, cbSdkTrialEvent * trialevent)
+    int cbsdk_init_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
     int cbsdk_get_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
 
-    int cbsdk_init_trial_cont(int nInstance, cbSdkTrialCont * trialcont)
+    int cbsdk_init_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
     int cbsdk_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
 
     int cbsdk_file_config(int instance, const char * filename, const char * comment, int start, unsigned int options)

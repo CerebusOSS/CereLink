@@ -105,7 +105,7 @@ cbSdkResult testOpen(void)
     }
 
     if (res >= 0)
-    {    
+    {
         // Return the actual openned connection
         res = cbSdkGetType(INST, &conType, &instType);
         if (res != CBSDKRESULT_SUCCESS)
@@ -118,12 +118,12 @@ cbSdkResult testOpen(void)
             conType = CBSDKCONNECTION_COUNT;
         if (instType < 0 || instType > CBSDKINSTRUMENT_COUNT)
             instType = CBSDKINSTRUMENT_COUNT;
-        
+
         char strConnection[CBSDKCONNECTION_COUNT + 1][8] = {"Default", "Central", "Udp", "Closed", "Unknown"};
         char strInstrument[CBSDKINSTRUMENT_COUNT + 1][13] = {"NSP", "nPlay", "Local NSP", "Remote nPlay", "Unknown"};
         printf("%s real-time interface to %s (%d.%02d.%02d.%02d) successfully initialized\n", strConnection[conType], strInstrument[instType], ver.nspmajor, ver.nspminor, ver.nsprelease, ver.nspbeta);
     }
-    
+
     return res;
 }
 
@@ -144,7 +144,7 @@ cbSdkResult testClose(void)
         printf("Unexpected error in closing the library!\n");
         break;
     }
-    
+
     return res;
 }
 
@@ -162,6 +162,6 @@ int main(int argc, char *argv[])
         printf("testClose failed (%d)!\n", res);
     else
         printf("testClose succeeded\n");
-    
+
     return 0;
 }

@@ -773,6 +773,7 @@ cbRESULT cbSetDinpOptions(UINT32 chan, UINT32 options, UINT32 eopchar, UINT32 nI
 #define  cbDOUT_VALUE               0x00010000  // Port can be manually configured
 #define  cbDOUT_TRACK               0x00020000  // Port should track the most recently selected channel
 #define  cbDOUT_FREQUENCY           0x00040000  // Port can output a frequency
+#define  cbDOUT_TRIGGERED           0x00080000  // Port can be triggered
 #define  cbDOUT_MONITOR_UNIT0       0x01000000  // Can monitor unit 0 = UNCLASSIFIED
 #define  cbDOUT_MONITOR_UNIT1       0x02000000  // Can monitor unit 1
 #define  cbDOUT_MONITOR_UNIT2       0x04000000  // Can monitor unit 2
@@ -781,6 +782,14 @@ cbRESULT cbSetDinpOptions(UINT32 chan, UINT32 options, UINT32 eopchar, UINT32 nI
 #define  cbDOUT_MONITOR_UNIT5       0x20000000  // Can monitor unit 5
 #define  cbDOUT_MONITOR_UNIT_ALL    0x3F000000  // Can monitor ALL units
 #define  cbDOUT_MONITOR_SHIFT_TO_FIRST_UNIT 24  // This tells us how many bit places to get to unit 1
+// Trigger types for Digital Output channels
+#define  cbDOUT_TRIGGER_NONE          0   // instant software trigger
+#define  cbDOUT_TRIGGER_DINPRISING    1   // digital input rising edge trigger
+#define  cbDOUT_TRIGGER_DINPFALLING   2   // digital input falling edge trigger
+#define  cbDOUT_TRIGGER_SPIKEUNIT     3   // spike unit
+#define  cbDOUT_TRIGGER_NM			  4   // comment RGBA color (A being big byte)
+#define  cbDOUT_TRIGGER_SOFTRESET     5   // soft-reset trigger
+#define  cbDOUT_TRIGGER_EXTENSION     6   // extension trigger
 
 #ifdef __cplusplus
 
@@ -793,8 +802,10 @@ cbRESULT cbGetDoutCaps(UINT32 chan, UINT32 *doutcaps, UINT32 nInstance = 0);
 //          cbRESULT_NOLIBRARY if the library was not properly initialized.
 
 
-cbRESULT cbGetDoutOptions(UINT32 chan, UINT32 *options, UINT32 *monchan, UINT32 *doutval, UINT32 nInstance = 0);
-cbRESULT cbSetDoutOptions(UINT32 chan, UINT32 options, UINT32 monchan, UINT32 doutval, UINT32 nInstance = 0);
+cbRESULT cbGetDoutOptions(UINT32 chan, UINT32 *options, UINT32 *monchan, UINT32 *doutval,
+                          UINT8 *triggertype = NULL, UINT16 *trigchan = NULL, UINT16 *trigval = NULL, UINT32 nInstance = 0);
+cbRESULT cbSetDoutOptions(UINT32 chan, UINT32 options, UINT32 monchan, UINT32 doutval,
+                          UINT8 triggertype = cbDOUT_TRIGGER_NONE, UINT16 trigchan = 0, UINT16 trigval = 0, UINT32 nInstance = 0);
 // Get/Set the Digital Output Port options for the specified channel.
 //
 // The only changable DOUT options in this version of the interface libraries are baud rates for
@@ -1087,7 +1098,10 @@ cbRESULT cbSetAinpSpikeHoops(UINT32 chan, cbHOOP *hoops, UINT32 nInstance = 0);
 #define  cbAOUT_MONITORSPK   0x00000080  // Monitor an analog signal line - spike
 #define  cbAOUT_STIMULATE    0x00000100  // Stimulation waveform functions are available.
 #define  cbAOUT_WAVEFORM     0x00000200  // Custom Waveform
+#define  cbAOUT_EXTENSION    0x00000400  // Output Waveform from Extension
 
+#define  cbAOUT_EXTENSIONDOFS 356        // Special value for having analog out use values from a plugin.
+                                         // Basically we're placing the analog output values back into their own spots in the IO buffer.
 #ifdef __cplusplus
 cbRESULT cbGetAoutCaps(UINT32 chan, UINT32 *aoutcaps, cbSCALING *physcalout, cbFILTDESC *phyfiltout, UINT32 nInstance = 0);
 // Get/Set the spike template capabilities and options.  The nunits and nhoops values detail the
@@ -1377,16 +1391,18 @@ typedef struct {
 } cbPKT_VIDEOTRACK;
 
 
-#define cbLOG_MODE_NONE         0  // Normal log
-#define cbLOG_MODE_CRITICAL     1  // Critical log
-#define cbLOG_MODE_RPC          2  // PC->NSP: Remote Procedure Call (RPC)
-#define cbLOG_MODE_PLUGINFO     3  // NSP->PC: Plugin information
-#define cbLOG_MODE_RPC_RES      4  // NSP->PC: Remote Procedure Call Results
-#define cbLOG_MODE_PLUGINERR    5  // NSP->PC: Plugin error information
-#define cbLOG_MODE_RPC_END      6  // NSP->PC: Last RPC packet 
-#define cbLOG_MODE_RPC_KILL     7  // PC->NSP: terminate last RPC
-#define cbLOG_MODE_RPC_INPUT    8  // PC->NSP: RPC command input
-#define cbLOG_MODE_UPLOAD_RES   9  // NSP->PC: Upload result
+#define cbLOG_MODE_NONE         0   // Normal log
+#define cbLOG_MODE_CRITICAL     1   // Critical log
+#define cbLOG_MODE_RPC          2   // PC->NSP: Remote Procedure Call (RPC)
+#define cbLOG_MODE_PLUGINFO     3   // NSP->PC: Plugin information
+#define cbLOG_MODE_RPC_RES      4   // NSP->PC: Remote Procedure Call Results
+#define cbLOG_MODE_PLUGINERR    5   // NSP->PC: Plugin error information
+#define cbLOG_MODE_RPC_END      6   // NSP->PC: Last RPC packet
+#define cbLOG_MODE_RPC_KILL     7   // PC->NSP: terminate last RPC
+#define cbLOG_MODE_RPC_INPUT    8   // PC->NSP: RPC command input
+#define cbLOG_MODE_UPLOAD_RES   9   // NSP->PC: Upload result
+#define cbLOG_MODE_ENDPLUGIN   10   // PC->NSP: Signal the plugin to end
+#define cbLOG_MODE_NSP_REBOOT  11   // PC->NSP: Reboot the NSP
 
 // Reconfiguration log event
 #define cbMAX_LOG          128  // Maximum log description
@@ -1974,8 +1990,8 @@ typedef struct {
             INT32               offset;         // output value
         };
     };
-    UINT8               trigtype;       // trigger type (see cbDOUT_TRIGGER_*)
-    UINT16              trigchan;       // trigger channel
+    UINT8				trigtype;		// trigger type (see cbDOUT_TRIGGER_*)
+    UINT16				trigchan;		// trigger channel
     UINT16				trigval;		// trigger value
     UINT32              ainpopts;       // analog input options (composed of cbAINP* flags)
     UINT32              lncrate;          // line noise cancellation filter adaptation rate
@@ -3039,6 +3055,9 @@ typedef struct {
 
 } cbSPIKE_SORTING;
 
+#define PCSTAT_TYPE_CERVELLO        0x00000001      // Cervello type system
+#define PCSTAT_DISABLE_RAW          0x00000002      // Disable recording of raw data
+
 class cbPcStatus
 {
 public:
@@ -3046,15 +3065,19 @@ public:
 
 private:
     INT32 m_iBlockRecording;
+    UINT32 m_nPCStatusFlags;
 
 public:
     cbPcStatus() :
         isSelection(1),
-        m_iBlockRecording(0)
+        m_iBlockRecording(0),
+        m_nPCStatusFlags(0)
         {
         }
     bool IsRecordingBlocked() { return m_iBlockRecording != 0; }
     void SetBlockRecording(bool bBlockRecording) { m_iBlockRecording += bBlockRecording ? 1 : -1; }
+    UINT32 cbGetPCStatusFlags() { return m_nPCStatusFlags; }
+    void cbSetPCStatusFlags(UINT32 nPCStatusFlags) { m_nPCStatusFlags = nPCStatusFlags; }
 };
 
 typedef struct {

@@ -1,4 +1,4 @@
-/* =STS=> SdkApp.h[5022].aa01   open     SMID:1 */
+/* =STS=> SdkApp.h[5022].aa11   submit   SMID:12 */
 //////////////////////////////////////////////////////////////////////
 //
 // (c) Copyright 2012 - 2013 Blackrock Microsystems
@@ -12,7 +12,10 @@
 // $NoKeywords: $
 //
 //////////////////////////////////////////////////////////////////////
-
+/**
+* \file SdkApp.h
+* \brief Cerebus SDK - This header file is distributed as part of the SDK.
+*/
 #ifndef SDKAPP_H_INCLUDED
 #define SDKAPP_H_INCLUDED
 
@@ -22,7 +25,7 @@
 #include <QMutex>
 #include <QWaitCondition>
 
-// Wrapper class for SDK Qt application
+/// Wrapper class for SDK Qt application
 class SdkApp : public InstNetwork, public InstNetwork::Listener
 {
 public:
@@ -38,6 +41,7 @@ private:
     void OnPktGroup(const cbPKT_GROUP * const pkt);
     void OnPktEvent(const cbPKT_GENERIC * const pPkt);
     void OnPktComment(const cbPKT_COMMENT * const pPkt);
+    void OnPktLog(const cbPKT_LOG * const pPkt);
     void OnPktTrack(const cbPKT_VIDEOTRACK * const pPkt);
 
     void LateBindCallback(cbSdkCallbackType callbacktype);
@@ -72,7 +76,7 @@ public:
     cbSdkResult SdkSetChannelLabel(UINT16 channel, const char * label, UINT32 userflags, INT32 * position);
     cbSdkResult SdkGetTrialData(UINT32 bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                 cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
-    cbSdkResult SdkInitTrialData(cbSdkTrialEvent* trialevent, cbSdkTrialCont * trialcont,
+    cbSdkResult SdkInitTrialData(UINT32 bActive, cbSdkTrialEvent* trialevent, cbSdkTrialCont * trialcont,
                                  cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
     cbSdkResult SdkSetFileConfig(const char * filename, const char * comment, UINT32 bStart, UINT32 options);
     cbSdkResult SdkGetFileConfig(char * filename, char * username, bool * pbRecording);
@@ -82,6 +86,7 @@ public:
     cbSdkResult SdkSendPoll(const char* appname, UINT32 mode, UINT32 flags, UINT32 extra);
     cbSdkResult SdkSendPacket(void * ppckt);
     cbSdkResult SdkSetSystemRunLevel(UINT32 runlevel, UINT32 locked, UINT32 resetque);
+    cbSdkResult SdkGetSystemRunLevel(UINT32 * runlevel, UINT32 * runflags, UINT32 * resetque);
     cbSdkResult SdkSetDigitalOutput(UINT16 channel, UINT16 value);
     cbSdkResult SdkSetSynchOutput(UINT16 channel, UINT32 nFreq, UINT32 nRepeats);
     cbSdkResult SdkExtDoCommand(cbSdkExtCmd * extCmd);
@@ -90,8 +95,8 @@ public:
     cbSdkResult SdkSetComment(UINT32 rgba, UINT8 charset, const char * comment);
     cbSdkResult SdkSetChannelConfig(UINT16 channel, cbPKT_CHANINFO * chaninfo);
     cbSdkResult SdkGetChannelConfig(UINT16 channel, cbPKT_CHANINFO * chaninfo);
-    cbSdkResult SdkGetSampleGroupInfo(UINT32 proc, UINT32 group, char *label, UINT32 *period, UINT32 *length);
     cbSdkResult SdkGetSampleGroupList(UINT32 proc, UINT32 group, UINT32 *length, UINT32 *list);
+    cbSdkResult SdkGetSampleGroupInfo(UINT32 proc, UINT32 group, char *label, UINT32 *period, UINT32 *length);
     cbSdkResult SdkGetFilterDesc(UINT32 proc, UINT32 filt, cbFILTDESC * filtdesc);
     cbSdkResult SdkGetTrackObj(char * name, UINT16 * type, UINT16 * pointCount, UINT32 id);
     cbSdkResult SdkGetVideoSource(char * name, float * fps, UINT32 id);
@@ -137,6 +142,19 @@ private:
     QMutex m_lockTrialComment;
     QMutex m_lockTrialTracking;
 
+    // For synchronization of threads
+    QMutex m_lockGetPacketsEvent;
+    QWaitCondition m_waitPacketsEvent;
+    bool m_bPacketsEvent;
+
+    QMutex m_lockGetPacketsCmt;
+    QWaitCondition m_waitPacketsCmt;
+    bool m_bPacketsCmt;
+
+    QMutex m_lockGetPacketsTrack;
+    QWaitCondition m_waitPacketsTrack;
+    bool m_bPacketsTrack;
+
     UINT16 m_uTrialBeginChannel;  // Channel ID that is watched for the trial begin notification
     UINT32 m_uTrialBeginMask;     // Mask ANDed with channel data to check for trial beginning
     UINT32 m_uTrialBeginValue;    // Value the masked data is compared to identify trial beginning
@@ -154,6 +172,7 @@ private:
     UINT32 m_bWithinTrial;        // True is we are within a trial, False if not within a trial
 
     UINT32 m_uTrialStartTime;     // Holds the 32-bit Cerebus timestamp of the trial start time
+    UINT32 m_uPrevTrialStartTime;
 
     UINT32 m_uCbsdkTime;            // Holds the 32-bit Cerebus timestamp of the last packet received
 

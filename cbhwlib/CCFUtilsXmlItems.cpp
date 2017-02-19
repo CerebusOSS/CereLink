@@ -124,6 +124,9 @@ CCFXmlItem::CCFXmlItem(cbPKT_CHANINFO & pkt, QString strName)
     lst += ccf::GetCCFXmlItem(pkt.refelecchan, "refelecchan");
     lst += ccf::GetCCFXmlItem(pkt.unitmapping, cbMAXUNITS, "unitmapping");
     lst += ccf::GetCCFXmlItem(pkt.spkhoops, cbMAXUNITS, cbMAXHOOPS, "spike/hoops", "hoop");
+	lst += ccf::GetCCFXmlItem(pkt.trigtype, "douttrig/type");
+    lst += ccf::GetCCFXmlItem(pkt.trigchan, "douttrig/chan");
+    lst += ccf::GetCCFXmlItem(pkt.trigval, "douttrig/val");
 
     // Now use the list
     m_xmlValue = lst;
@@ -774,6 +777,9 @@ void ccf::ReadItem(XmlFile * const xml, cbPKT_CHANINFO & item)
     ccf::ReadItem(xml, item.refelecchan, "refelecchan");
     ccf::ReadItem(xml, item.unitmapping, cbMAXUNITS, "unitmapping");
     ccf::ReadItem(xml, item.spkhoops, cbMAXUNITS, cbMAXHOOPS, "spike/hoops");
+	ccf::ReadItem(xml, item.trigtype, "douttrig/type");
+    ccf::ReadItem(xml, item.trigchan, "douttrig/chan");
+    ccf::ReadItem(xml, item.trigval, "douttrig/val");
 }
 
 // Author & Date: Ehsan Azar       16 April 2012

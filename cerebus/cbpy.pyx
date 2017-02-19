@@ -231,7 +231,7 @@ def trial_event(instance=0, reset=False):
     handle_result(<cbSdkResult>res)
     
     # get how many samples are avaialble
-    res = cbsdk_init_trial_event(<int>instance, &trialevent)
+    res = cbsdk_init_trial_event(<int>instance, <int>reset, &trialevent)
     handle_result(<cbSdkResult>res)
     
     if trialevent.count == 0:
@@ -309,7 +309,7 @@ def trial_continuous(instance=0, reset=False):
     handle_result(<cbSdkResult>res)
     
     # get how many samples are avaialble
-    res = cbsdk_init_trial_cont(<int>instance, &trialcont)
+    res = cbsdk_init_trial_cont(<int>instance, <int>reset, &trialcont)
     handle_result(<cbSdkResult>res)
     
     if trialcont.count == 0:
