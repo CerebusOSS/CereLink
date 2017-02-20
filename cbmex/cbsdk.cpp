@@ -3870,15 +3870,18 @@ CBSDKAPI    cbSdkResult cbSdkAnalogToDigital(UINT32 nInstance, UINT16 channel, c
     return g_app[nInstance]->SdkAnalogToDigital(channel, szVoltsUnitString, digital);
 }
 
+
 // Author & Date: Ehsan Azar       29 April 2012
 /// Sdk app base constructor
-SdkApp::SdkApp() :
-    m_bInitialized(false), m_lastCbErr(cbRESULT_OK),
-    m_uTrialBeginChannel(0), m_uTrialBeginMask(0), m_uTrialBeginValue(0), m_uTrialEndChannel(0), m_uTrialEndMask(0), m_uTrialEndValue(0),
-    m_bTrialDouble(false), m_bTrialAbsolute(false),
-    m_uTrialWaveforms(0), m_uTrialConts(0), m_uTrialEvents(0), m_uTrialComments(0), m_uTrialTrackings(0),
-    m_bWithinTrial(FALSE), m_uTrialStartTime(0), m_uCbsdkTime(0), m_bPacketsEvent(false), m_bPacketsCmt(false), m_bPacketsTrack(false),
-    m_CD(NULL), m_ED(NULL), m_CMT(NULL), m_TR(NULL)
+SdkApp::SdkApp()
+    : m_bInitialized(false), m_lastCbErr(cbRESULT_OK)
+    , m_bPacketsEvent(false), m_bPacketsCmt(false), m_bPacketsTrack(false)
+    , m_uTrialBeginChannel(0), m_uTrialBeginMask(0), m_uTrialBeginValue(0)
+    , m_uTrialEndChannel(0), m_uTrialEndMask(0), m_uTrialEndValue(0)
+    , m_bTrialDouble(false), m_bTrialAbsolute(false), m_uTrialWaveforms(0)
+    , m_uTrialConts(0), m_uTrialEvents(0), m_uTrialComments(0)
+    , m_uTrialTrackings(0), m_bWithinTrial(FALSE), m_uTrialStartTime(0)
+    , m_uCbsdkTime(0), m_CD(NULL), m_ED(NULL), m_CMT(NULL), m_TR(NULL)
 {
     memset(&m_lastPktVideoSynch, 0, sizeof(m_lastPktVideoSynch));
     memset(&m_bChannelMask, 0, sizeof(m_bChannelMask));
