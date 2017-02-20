@@ -97,7 +97,6 @@ private:
     void UpdateSortModel(const cbPKT_SS_MODELSET & rUnitModel);
     void UpdateBasisModel(const cbPKT_FS_BASIS & rBasisModel);
 private:
-    static const UINT32 MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS = 5000;
     cbLevelOfConcern m_enLOC; // level of concern
     STARTUP_OPTIONS m_nStartupOptionsFlags;
     QVector<Listener *> m_listener;   // instrument network listeners
@@ -109,6 +108,7 @@ private:
     UINT32 m_nLastNumberOfPacketsReceived;
     UINT32 m_runlevel; // Last runlevel
 protected:
+    static const UINT32 MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS;
     bool m_bStandAlone;  // If it is stand-alone
     Instrument m_icInstrument;   // The instrument
     UINT32 m_instInfo; // Last instrument state

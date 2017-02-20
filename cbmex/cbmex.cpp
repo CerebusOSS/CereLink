@@ -23,6 +23,7 @@
 */
 
 #include "StdAfx.h"
+#include <algorithm>  // Use C++ default min and max implementation.
 #include <map>
 #include <string>
 #include <vector>
@@ -538,9 +539,9 @@ void OnOpen(
         instType = CBSDKINSTRUMENT_COUNT;
     if (nlhs > 0)
     {
-        plhs[0] = mxCreateScalarDouble(conType);
+        plhs[0] = mxCreateDoubleScalar(conType);
         if (nlhs > 1)
-            plhs[1] = mxCreateScalarDouble(instType);
+            plhs[1] = mxCreateDoubleScalar(instType);
     }
 
     char strConnection[CBSDKCONNECTION_COUNT + 1][8] = {"Default", "Central", "Udp", "Closed", "Unknown"};
@@ -2369,21 +2370,21 @@ void OnDigitalOut(
         {
             sprintf(string, "monitor chan %d", chaninfo.monsource);
             if (cbDOUT_MONITOR_UNIT_ALL == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT_ALL))
-                strncat(string, " all units", sizeof(string));
+                strncat(string, " all units", sizeof(string) - strlen(string) - 1);
             else
             {
                 if (cbDOUT_MONITOR_UNIT0 == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT0))
-                    strncat(string, " unclass ", sizeof(string));
+                    strncat(string, " unclass ", sizeof(string) - strlen(string) - 1);
                 if (cbDOUT_MONITOR_UNIT1 == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT1))
-                    strncat(string, " unit1 ", sizeof(string));
+                    strncat(string, " unit1 ", sizeof(string) - strlen(string) - 1);
                 if (cbDOUT_MONITOR_UNIT2 == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT2))
-                    strncat(string, " unit2 ", sizeof(string));
+                    strncat(string, " unit2 ", sizeof(string) - strlen(string) - 1);
                 if (cbDOUT_MONITOR_UNIT3 == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT3))
-                    strncat(string, " unit3 ", sizeof(string));
+                    strncat(string, " unit3 ", sizeof(string) - strlen(string) - 1);
                 if (cbDOUT_MONITOR_UNIT4 == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT4))
-                    strncat(string, " unit4 ", sizeof(string));
+                    strncat(string, " unit4 ", sizeof(string) - strlen(string) - 1);
                 if (cbDOUT_MONITOR_UNIT5 == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT5))
-                    strncat(string, " unit5 ", sizeof(string));
+                    strncat(string, " unit5 ", sizeof(string) - strlen(string) - 1);
             }
         }
         else

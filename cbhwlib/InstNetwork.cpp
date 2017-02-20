@@ -18,13 +18,13 @@
 // Common xPlatform instrument network
 //
 #include "StdAfx.h"
+#include <algorithm>  // Use C++ default min and max implementation.
 #include "InstNetwork.h"
 #ifndef WIN32
     #include <semaphore.h>
 #endif
 
-// Keep this after all headers
-#include "compat.h"
+const UINT32 InstNetwork::MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS = 5000;  // This is not exported correctly unless redefined here.
 
 // Author & Date: Ehsan Azar       15 March 2010
 // Purpose: Constructor for instrument networking thread
@@ -816,7 +816,7 @@ void InstNetwork::OnWaitEvent()
         return;
     }
     // Limit how many we can look at
-    pktstogo = min(pktstogo, MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS);
+    pktstogo = std::min(pktstogo, MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS);
 
     // process any available packets
     for(UINT p = 0; p < pktstogo; ++p)

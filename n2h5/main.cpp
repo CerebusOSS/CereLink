@@ -28,8 +28,8 @@
 //  for example the raw recording of /channel/channel00001 can go to /channel/channel00001_1
 //
 //////////////////////////////////////////////////////////////////////////////
-
 #include "stdafx.h"
+#include <algorithm>
 
 #include "n2h5.h"
 #include "NevNsx.h"
@@ -40,9 +40,6 @@
 #include <unistd.h>
 #endif
 
-
-// Keep this after all headers
-#include "compat.h"
 
 #ifdef WIN32                          // Windows needs the different spelling
 #define ftello _ftelli64
@@ -791,7 +788,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                         cmt.dwTimestamp = nevData.dwTimestamp;
                         cmt.data = nevData.comment.data;
                         cmt.flags = nevData.comment.flags;
-                        strncpy(cmt.szComment, nevData.comment.comment, min(BMI_COMMENT_LEN, sizeof(nevData.comment.comment)));
+                        strncpy(cmt.szComment, nevData.comment.comment, std::min((std::size_t)BMI_COMMENT_LEN, sizeof(nevData.comment.comment)));
                         ret = H5PTappend(ptid_comment[id], 1, &cmt);
                     }
                     break;
