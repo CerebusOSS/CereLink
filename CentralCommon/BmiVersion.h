@@ -33,7 +33,7 @@
 
 #define BMI_VERSION           BMI_VERSION_MAJOR,BMI_VERSION_MINOR,BMI_VERSION_BUILD_NUMBER
 
-#define BMI_COPYRIGHT_S       "Copyright (C) " STRINGIFY(BMI_COPYRIGHT_FROM) " - " STRINGIFY(BMI_COPYRIGHT_TO) " Blackrock Microsystems"
+#define BMI_COPYRIGHT_S       "Copyright (C) Blackrock Microsystems"
 #define BMI_COPYRIGHT_STR       BMI_COPYRIGHT_S
 
 #if BMI_VERSION_BUILD == 0
