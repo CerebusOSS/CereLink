@@ -41,8 +41,8 @@
 //  8- Giving above rules higher precedence, use filed-name keeping its captial/lower case the same
 //
 
-#include <algorithm>  // Use C++ default min and max implementation.
 #include "StdAfx.h"
+#include <algorithm>  // Use C++ default min and max implementation.
 #include "CCFUtilsXmlItems.h"
 #include "CCFUtilsXmlItemsGenerate.h"
 #include "CCFUtilsXmlItemsParse.h"

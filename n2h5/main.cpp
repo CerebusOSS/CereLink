@@ -28,8 +28,8 @@
 //  for example the raw recording of /channel/channel00001 can go to /channel/channel00001_1
 //
 //////////////////////////////////////////////////////////////////////////////
-#include <algorithm>
 #include "stdafx.h"
+#include <algorithm>
 
 #include "n2h5.h"
 #include "NevNsx.h"

@@ -17,8 +17,8 @@
 //
 // Common xPlatform instrument network
 //
-#include <algorithm>  // Use C++ default min and max implementation.
 #include "StdAfx.h"
+#include <algorithm>  // Use C++ default min and max implementation.
 #include "InstNetwork.h"
 #ifndef WIN32
     #include <semaphore.h>

@@ -24,8 +24,8 @@
 * \brief Cerebus SDK main file.
 */
 
-#include <algorithm>  // Use C++ default min and max implementation.
 #include "StdAfx.h"
+#include <algorithm>  // Use C++ default min and max implementation.
 #include "SdkApp.h"
 #include "../CentralCommon/BmiVersion.h"
 #include "cbHwlibHi.h"
