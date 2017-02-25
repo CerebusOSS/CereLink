@@ -753,6 +753,8 @@ cbSdkResult SdkApp::SdkOpen(UINT32 nInstance, cbSdkConnectionType conType, cbSdk
     {
 #ifdef WIN32
         con.szInIP = cbNET_UDP_ADDR_INST;
+#elif __APPLE__
+        con.szInIP = "255.255.255.255";
 #else
         // On Linux bind to bcast
         con.szInIP = cbNET_UDP_ADDR_BCAST;
