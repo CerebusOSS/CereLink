@@ -36,7 +36,7 @@ int cbsdk_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
 }
 
 
-int cbsdk_init_trial_event(int nInstance, bool reset, cbSdkTrialEvent * trialevent)
+int cbsdk_init_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
 {
     memset(trialevent, 0, sizeof(*trialevent));
     cbSdkResult sdkres = cbSdkInitTrialData(nInstance, reset, trialevent, 0, 0, 0);
@@ -51,7 +51,7 @@ int cbsdk_get_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent
     return sdkres;
 }
 
-int cbsdk_init_trial_cont(int nInstance, bool reset, cbSdkTrialCont * trialcont)
+int cbsdk_init_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
 {
     memset(trialcont, 0, sizeof(*trialcont));
     cbSdkResult sdkres = cbSdkInitTrialData(nInstance, reset, 0, trialcont, 0, 0);
