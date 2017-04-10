@@ -24,7 +24,7 @@
     #include <semaphore.h>
 #endif
 
-const UINT32 InstNetwork::MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS = 5000;  // This is not exported correctly unless redefined here.
+const uint32_t InstNetwork::MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS = 5000;  // This is not exported correctly unless redefined here.
 
 // Author & Date: Ehsan Azar       15 March 2010
 // Purpose: Constructor for instrument networking thread
@@ -147,7 +147,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 if (m_bStandAlone)
                 {
                     const cbPKT_CHANINFO * pNew = reinterpret_cast<const cbPKT_CHANINFO *>(pPkt);
-                    UINT32 chan = pNew->chan;
+                    uint32_t chan = pNew->chan;
                     if (chan > 0 && chan <= cbMAXCHANS)
                     {
                         memcpy(&(cb_cfg_buffer_ptr[m_nIdx]->chaninfo[chan - 1]), pPkt, sizeof(cbPKT_CHANINFO));
@@ -173,7 +173,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 if (pPkt->type == cbPKTTYPE_SYSREP)
                 {
                     // Any change to the instrument will be reported here, including initial connection as stand-alone
-                    UINT32 instInfo;
+                    uint32_t instInfo;
                     cbGetInstInfo(&instInfo, m_nInstance);
                     // If instrument connection state has changed
                     if (instInfo != m_instInfo)
@@ -338,8 +338,8 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                         if (pPktNm->flags > 0 && pPktNm->flags <= cbMAXTRACKOBJ)
                         {
                             memcpy(cb_cfg_buffer_ptr[m_nIdx]->isTrackObj[pPktNm->flags - 1].name, pPktNm->name, cbLEN_STR_LABEL);
-                            cb_cfg_buffer_ptr[m_nIdx]->isTrackObj[pPktNm->flags - 1].type = (UINT16)(pPktNm->value & 0xff);
-                            cb_cfg_buffer_ptr[m_nIdx]->isTrackObj[pPktNm->flags - 1].pointCount = (UINT16)((pPktNm->value >> 16) & 0xff);
+                            cb_cfg_buffer_ptr[m_nIdx]->isTrackObj[pPktNm->flags - 1].type = (uint16_t)(pPktNm->value & 0xff);
+                            cb_cfg_buffer_ptr[m_nIdx]->isTrackObj[pPktNm->flags - 1].pointCount = (uint16_t)((pPktNm->value >> 16) & 0xff);
                             // type>0 means valid trackable
                         }
                     }
@@ -356,13 +356,13 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 if (m_bStandAlone)
                 {
                     const cbPKT_AOUT_WAVEFORM * pPktAoutWave = reinterpret_cast<const cbPKT_AOUT_WAVEFORM *>(pPkt);
-                    UINT16 nChan = pPktAoutWave->chan;
+                    uint16_t nChan = pPktAoutWave->chan;
                     if (nChan > cbFIRST_ANAOUT_CHAN)
                     {
                         nChan -= (cbFIRST_ANAOUT_CHAN + 1);
                         if (nChan < AOUT_NUM_GAIN_CHANS)
                         {
-                            UINT8 trigNum = pPktAoutWave->trigNum;
+                            uint8_t trigNum = pPktAoutWave->trigNum;
                             if (trigNum < cbMAX_AOUT_TRIGGER)
                                 cb_cfg_buffer_ptr[m_nIdx]->isWaveform[nChan][trigNum] = *pPktAoutWave;
                         }
@@ -397,7 +397,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
             cb_spk_buffer_ptr[m_nIdx]->cache[pPkt->chid - 1].valid++;
 
             // increment the head pointer of the packet and check for wraparound
-            UINT32 head = cb_spk_buffer_ptr[m_nIdx]->cache[(pPkt->chid)-1].head + 1;
+            uint32_t head = cb_spk_buffer_ptr[m_nIdx]->cache[(pPkt->chid)-1].head + 1;
             if (head >= cbPKT_SPKCACHEPKTCNT)
                 head = 0;
             cb_spk_buffer_ptr[m_nIdx]->cache[pPkt->chid - 1].head = head;
@@ -415,8 +415,8 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
 //  rUnitModel - the unit model packet of interest
 inline void InstNetwork::UpdateSortModel(const cbPKT_SS_MODELSET & rUnitModel)
 {
-    UINT32 nChan = rUnitModel.chan;
-    UINT32 nUnit = rUnitModel.unit_number;
+    uint32_t nChan = rUnitModel.chan;
+    uint32_t nUnit = rUnitModel.unit_number;
 
     // Unit 255 == noise, put it into the last slot
     if (nUnit == 255)
@@ -435,7 +435,7 @@ inline void InstNetwork::UpdateBasisModel(const cbPKT_FS_BASIS & rBasisModel)
     if (0 == rBasisModel.chan)
         return;         // special packet request to get all basis, don't save it
 
-    UINT32 nChan = rBasisModel.chan - 1;
+    uint32_t nChan = rBasisModel.chan - 1;
 
     if (cb_library_initialized[m_nIdx] && cb_cfg_buffer_ptr[m_nIdx])
         cb_cfg_buffer_ptr[m_nIdx]->isSortingOptions.asBasis[nChan] = rBasisModel;
@@ -448,7 +448,7 @@ inline void InstNetwork::UpdateBasisModel(const cbPKT_FS_BASIS & rBasisModel)
 //  nTicks - the ever growing number of times that the mmtimer has been called
 //  rParent - the parent window
 //  nCurrentPacketCount - the number of packets that we have ever received
-inline void InstNetwork::CheckForLinkFailure(UINT32 nTicks, UINT32 nCurrentPacketCount)
+inline void InstNetwork::CheckForLinkFailure(uint32_t nTicks, uint32_t nCurrentPacketCount)
 {
     if ((nTicks % 250) == 0) // Check every 2.5 seconds
     {
@@ -554,7 +554,7 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
         // get pointer to the first packet in received data block
         cbPKT_GENERIC *pktptr = (cbPKT_GENERIC*) &(cb_rec_buffer_ptr[m_nIdx]->buffer[cb_rec_buffer_ptr[m_nIdx]->headindex]);
 
-        UINT32 bytes_to_process = recv_returned;
+        uint32_t bytes_to_process = recv_returned;
         do {
             if (bLoopbackPacket)
             {
@@ -566,8 +566,8 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
             }
 
             // make sure that the next packet in the data block that we are processing fits.
-            UINT32 quadlettotal = (pktptr->dlen) + 2;
-            UINT32 packetsize = quadlettotal << 2;
+            uint32_t quadlettotal = (pktptr->dlen) + 2;
+            uint32_t packetsize = quadlettotal << 2;
             if (packetsize > bytes_to_process)
             {
                 // TODO: complain about bad packet
@@ -640,7 +640,7 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
         while ((xmtpacket->time) && (nPacketsLeftInBurst--))
         {
             // find the length of the packet
-            UINT32 quadlettotal = (xmtpacket->dlen) + 2;
+            uint32_t quadlettotal = (xmtpacket->dlen) + 2;
 
             if (m_icInstrument.OkToSend() == false)
                 continue;
@@ -806,7 +806,7 @@ void InstNetwork::run()
 void InstNetwork::OnWaitEvent()
 {
     // Look to see how much there is to process
-    UINT32 pktstogo;
+    uint32_t pktstogo;
     cbCheckforData(m_enLOC, &pktstogo, m_nInstance);
 
     if (m_enLOC == LOC_CRITICAL)

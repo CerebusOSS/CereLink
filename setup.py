@@ -8,8 +8,9 @@ from Cython.Distutils import build_ext
 
 
 def get_extras():
+    cur = os.path.dirname(os.path.abspath(__file__))
     # Find all the extra include files, libraries, and link arguments we need to install.
-    x_includes = []
+    x_includes = [os.path.join(cur, 'dist', 'include')]  # Must include cbsdk headers
     x_libs = []
     x_link_args = []
 
@@ -38,9 +39,6 @@ def get_extras():
     elif "win32" in sys.platform:
         import platform
 
-        cur = os.path.dirname(os.path.abspath(__file__))
-        # Must include cbsdk headers
-        x_includes += [os.path.join(cur, 'dist\\include')]
         # Must include stdinit (V2008 does not have it!)
         x_includes += [os.path.join(cur, 'compat')]
         # Must be explicit about cbsdk link path

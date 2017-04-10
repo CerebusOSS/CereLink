@@ -12,7 +12,7 @@
 int cbsdk_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param)
 {
     cbSdkResult sdkres = cbSdkGetTrialConfig(nInstance, &pcfg_param->bActive,
-            &pcfg_param->Begchan,&pcfg_param->Begmask, &pcfg_param->Begval,
+            &pcfg_param->Begchan, &pcfg_param->Begmask, &pcfg_param->Begval,
             &pcfg_param->Endchan, &pcfg_param->Endmask, &pcfg_param->Endval,
             &pcfg_param->bDouble, &pcfg_param->uWaveforms,
             &pcfg_param->uConts, &pcfg_param->uEvents, &pcfg_param->uComments,

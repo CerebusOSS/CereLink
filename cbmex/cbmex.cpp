@@ -386,7 +386,7 @@ void OnOpen(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
     int nFirstParam = 1;
     char szInstIp[16] = "";
     char szCentralIp[16] = "";
@@ -399,7 +399,7 @@ void OnOpen(
             if (mxGetNumberOfElements(prhs[nFirstParam]) != 1)
                 PrintHelp(CBMEX_FUNCTION_OPEN, true, "Invalid interface parameter\n");
             int type = 3;
-            type = (UINT32)mxGetScalar(prhs[nFirstParam]);
+            type = (uint32_t)mxGetScalar(prhs[nFirstParam]);
             if (type > 2)
                 PrintHelp(CBMEX_FUNCTION_OPEN, true, "Invalid input interface value\n");
             conType = (cbSdkConnectionType)type;
@@ -468,7 +468,7 @@ void OnOpen(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_OPEN, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             case PARAM_RECBUFSIZE:
                 if (!mxIsNumeric(prhs[i]))
@@ -565,7 +565,7 @@ void OnClose(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
 
     int nFirstParam = 1;
     enum
@@ -603,7 +603,7 @@ void OnClose(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_CLOSE, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:
                 break;
@@ -645,7 +645,7 @@ void OnTime(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
 
     int nFirstParam = 1;
 
@@ -689,7 +689,7 @@ void OnTime(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_TIME, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:
                 break;
@@ -703,7 +703,7 @@ void OnTime(
         PrintHelp(CBMEX_FUNCTION_TIME, true, "Last parameter requires value");
     }
 
-    UINT32 cbtime;
+    uint32_t cbtime;
     cbSdkResult res = cbSdkGetTime(nInstance, &cbtime);
     PrintErrorSDK(res, "cbSdkGetTime()");
 
@@ -731,17 +731,17 @@ void OnChanLabel(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
 
     int nFirstParam = 1;
     int idxNewLabels = 0;
 
-    UINT16 channels[cbMAXCHANS];
-    UINT32 count = cbMAXCHANS;
+    uint16_t channels[cbMAXCHANS];
+    uint32_t count = cbMAXCHANS;
     if (nrhs > 1 && mxIsNumeric(prhs[1]))
     {
         nFirstParam++; // skip the optional
-        count = (UINT32)mxGetNumberOfElements(prhs[1]);
+        count = (uint32_t)mxGetNumberOfElements(prhs[1]);
         if (nrhs > 2)
         {
             bool bIsString = (mxGetClassID(prhs[2]) == mxCHAR_CLASS);
@@ -768,16 +768,16 @@ void OnChanLabel(
         }
         if (count > cbMAXCHANS)
             mexErrMsgTxt("Maximum of 156 channels is possible");
-        for (UINT32 i = 0; i < count; ++i)
+        for (uint32_t i = 0; i < count; ++i)
         {
-            channels[i] = (UINT16)(*(mxGetPr(prhs[1]) + i));
+            channels[i] = (uint16_t)(*(mxGetPr(prhs[1]) + i));
             if (channels[i] == 0|| channels[i] > cbMAXCHANS)
                 mexErrMsgTxt("Invalid channel number specified");
         }
     }
     else
     {
-        for (UINT32 i = 0; i < count; ++i)
+        for (uint32_t i = 0; i < count; ++i)
         {
             channels[i] = i + 1;
         }
@@ -827,7 +827,7 @@ void OnChanLabel(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_CHANLABEL, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:
                 break;
@@ -849,7 +849,7 @@ void OnChanLabel(
         for (UINT ch = 1; ch <= count; ch++)
         {
             char   label[32];
-            UINT32 bValid[cbMAXUNITS + 1];
+            uint32_t bValid[cbMAXUNITS + 1];
             cbSdkResult res = cbSdkGetChannelLabel(nInstance, channels[ch - 1], bValid, label, NULL, NULL);
             PrintErrorSDK(res, "cbSdkGetChannelLabel()");
 
@@ -883,7 +883,7 @@ void OnChanLabel(
         }
         else
         {
-            for (UINT32 i = 0; i < count; ++i)
+            for (uint32_t i = 0; i < count; ++i)
             {
                 const mxArray * cell_element_ptr = mxGetCell(prhs[idxNewLabels], i);
                 if (mxGetClassID(cell_element_ptr) != mxCHAR_CLASS || mxGetString(cell_element_ptr, label, 16))
@@ -920,32 +920,32 @@ void OnTrialConfig(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
     int nFirstParam = 2;
     // check the number of input arguments
     if (nrhs < 2)
         PrintHelp(CBMEX_FUNCTION_TRIALCONFIG, true, "At least one input is required");
 
-    UINT32 bActive;
+    uint32_t bActive;
     // Process first input argument if available
-    bActive = ((UINT32)mxGetScalar(prhs[1]) > 0);
+    bActive = ((uint32_t)mxGetScalar(prhs[1]) > 0);
 
     cbSdkResult res;
 
-    UINT16 uBegChan   = 0;
-    UINT32 uBegMask   = 0;
-    UINT32 uBegVal    = 0;
-    UINT16 uEndChan   = 0;
-    UINT32 uEndMask   = 0;
-    UINT32 uEndVal    = 0;
+    uint16_t uBegChan   = 0;
+    uint32_t uBegMask   = 0;
+    uint32_t uBegVal    = 0;
+    uint16_t uEndChan   = 0;
+    uint32_t uEndMask   = 0;
+    uint32_t uEndVal    = 0;
     bool   bDouble    = false;
     bool   bAbsolute  = false;
-    UINT32 uWaveforms = 0;
-    UINT32 uConts     = cbSdk_CONTINUOUS_DATA_SAMPLES;
-    UINT32 uEvents    = cbSdk_EVENT_DATA_SAMPLES;
-    UINT32 uComments  = 0;
-    UINT32 uTrackings = 0;
-    UINT32 bWithinTrial = false;
+    uint32_t uWaveforms = 0;
+    uint32_t uConts     = cbSdk_CONTINUOUS_DATA_SAMPLES;
+    uint32_t uEvents    = cbSdk_EVENT_DATA_SAMPLES;
+    uint32_t uComments  = 0;
+    uint32_t uTrackings = 0;
+    uint32_t bWithinTrial = false;
 
     res = cbSdkGetTrialConfig(nInstance, &bWithinTrial, &uBegChan, &uBegMask, &uBegVal, &uEndChan, &uEndMask, &uEndVal,
             &bDouble, &uWaveforms, &uConts, &uEvents, &uComments, &uTrackings);
@@ -960,12 +960,12 @@ void OnTrialConfig(
 
             // Trim them to 8-bit and 16-bit values
             double * pcfgvals = mxGetPr(prhs[nFirstParam]);
-            uBegChan = ((UINT32)(*(pcfgvals+0))) & 0x00FF;
-            uBegMask = ((UINT32)(*(pcfgvals+1))) & 0xFFFF;
-            uBegVal  = ((UINT32)(*(pcfgvals+2))) & 0xFFFF;
-            uEndChan = ((UINT32)(*(pcfgvals+3))) & 0x00FF;
-            uEndMask = ((UINT32)(*(pcfgvals+4))) & 0xFFFF;
-            uEndVal  = ((UINT32)(*(pcfgvals+5))) & 0xFFFF;
+            uBegChan = ((uint32_t)(*(pcfgvals+0))) & 0x00FF;
+            uBegMask = ((uint32_t)(*(pcfgvals+1))) & 0xFFFF;
+            uBegVal  = ((uint32_t)(*(pcfgvals+2))) & 0xFFFF;
+            uEndChan = ((uint32_t)(*(pcfgvals+3))) & 0x00FF;
+            uEndMask = ((uint32_t)(*(pcfgvals+4))) & 0xFFFF;
+            uEndVal  = ((uint32_t)(*(pcfgvals+5))) & 0xFFFF;
 
             nFirstParam++; // skip the optional
         }
@@ -1048,32 +1048,32 @@ void OnTrialConfig(
             case PARAM_WAVEFORM:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_TRIALCONFIG, true, "Invalid waveform count");
-                uWaveforms = (UINT32)mxGetScalar(prhs[i]);
+                uWaveforms = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             case PARAM_CONTINUOUS:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_TRIALCONFIG, true, "Invalid continuous count");
-                uConts = (UINT32)mxGetScalar(prhs[i]);
+                uConts = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             case PARAM_EVENT:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_TRIALCONFIG, true, "Invalid event count");
-                uEvents = (UINT32)mxGetScalar(prhs[i]);
+                uEvents = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             case PARAM_COMMENT:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_TRIALCONFIG, true, "Invalid comment count");
-                uComments = (UINT32)mxGetScalar(prhs[i]);
+                uComments = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             case PARAM_TRACKING:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_TRIALCONFIG, true, "Invalid tracking count");
-                uTrackings = (UINT32)mxGetScalar(prhs[i]);
+                uTrackings = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_TRIALCONFIG, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:
                 break;
@@ -1154,7 +1154,7 @@ void OnTrialData(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
     int nFirstParam = 1;
     bool bFlushBuffer = false;
     cbSdkResult res;
@@ -1215,7 +1215,7 @@ void OnTrialData(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_TRIALDATA, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:
                 break;
@@ -1237,7 +1237,7 @@ void OnTrialData(
     // 1 - Get how many samples are waiting
 
     bool   bTrialDouble    = false;
-    UINT32 uEvents, uConts;
+    uint32_t uEvents, uConts;
 
     res = cbSdkGetTrialConfig(nInstance, NULL, NULL, NULL, NULL, NULL, NULL, NULL, &bTrialDouble, NULL, &uConts, &uEvents);
 
@@ -1253,21 +1253,21 @@ void OnTrialData(
         // For back-ward compatibility all channels are returned no matter if empty or not
         mxArray *pca = mxCreateCellMatrix(152, 7);
         plhs[0] = pca;
-        for (UINT32 channel = 0; channel < 152; channel++)
+        for (uint32_t channel = 0; channel < 152; channel++)
         {
             char label[32] = {0};
             cbSdkGetChannelLabel(nInstance, channel + 1, NULL, label, NULL, NULL);
             mxSetCell(pca, channel, mxCreateString(label));
         }
 
-        for (UINT32 channel = 0; channel < trialevent.count; channel++)
+        for (uint32_t channel = 0; channel < trialevent.count; channel++)
         {
-            UINT16 ch = trialevent.chan[channel]; // Actual channel number
+            uint16_t ch = trialevent.chan[channel]; // Actual channel number
             // Fill timestamps for non-empty channels
             for(UINT u = 0; u <= cbMAXUNITS; u++)
             {
                 trialevent.timestamps[channel][u] = NULL;
-                UINT32 num_samples = trialevent.num_samples[channel][u];
+                uint32_t num_samples = trialevent.num_samples[channel][u];
                 if (num_samples)
                 {
                     mxArray *mxa;
@@ -1282,7 +1282,7 @@ void OnTrialData(
             // Fill values for non-empty digital or serial channels
             if (ch == MAX_CHANS_DIGITAL_IN || ch == MAX_CHANS_SERIAL)
             {
-                UINT32 num_samples = trialevent.num_samples[channel][0];
+                uint32_t num_samples = trialevent.num_samples[channel][0];
                 if (num_samples)
                 {
                     mxArray *mxa;
@@ -1308,10 +1308,10 @@ void OnTrialData(
 
         mxArray *pca = mxCreateCellMatrix(trialcont.count, 3);
         plhs[nlhs - 1] = pca;
-        for (UINT32 channel = 0; channel < trialcont.count; channel++)
+        for (uint32_t channel = 0; channel < trialcont.count; channel++)
         {
             trialcont.samples[channel] = NULL;
-            UINT32 num_samples = trialcont.num_samples[channel];
+            uint32_t num_samples = trialcont.num_samples[channel];
             mxSetCell(pca, channel, mxCreateDoubleScalar(trialcont.chan[channel]));
             mxSetCell(pca, channel + trialcont.count, mxCreateDoubleScalar(trialcont.sample_rates[channel]));
             mxArray *mxa;
@@ -1371,7 +1371,7 @@ void OnTrialComment(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
     int nFirstParam = 1;
     bool bFlushBuffer = false;
     cbSdkResult res;
@@ -1432,7 +1432,7 @@ void OnTrialComment(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_TRIALCOMMENT, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:
                 break;
@@ -1464,13 +1464,13 @@ void OnTrialComment(
         plhs[0] = pca;
         if (trialcomment.num_samples)
         {
-            trialcomment.comments = (UINT8 * *)mxMalloc(trialcomment.num_samples * sizeof(UINT8 *));
+            trialcomment.comments = (uint8_t * *)mxMalloc(trialcomment.num_samples * sizeof(uint8_t *));
             for (int i = 0; i < trialcomment.num_samples; ++i)
             {
                 const mwSize dims[2] = {1, cbMAX_COMMENT + 1};
                 mxArray *mxa = mxCreateCharArray(2, dims);
                 mxSetCell(pca, i, mxa);
-                trialcomment.comments[i] = (UINT8 *)mxGetData(mxa);
+                trialcomment.comments[i] = (uint8_t *)mxGetData(mxa);
             }
         }
     }
@@ -1491,7 +1491,7 @@ void OnTrialComment(
         mxArray *mxa;
         mxa = mxCreateNumericMatrix(trialcomment.num_samples, 1, mxUINT32_CLASS, mxREAL);
         plhs[2] = mxa;
-        trialcomment.rgbas = (UINT32 *)mxGetData(mxa);
+        trialcomment.rgbas = (uint32_t *)mxGetData(mxa);
     }
     trialcomment.charsets = NULL;
     if (nlhs > 3)
@@ -1499,7 +1499,7 @@ void OnTrialComment(
         mxArray *mxa;
         mxa = mxCreateNumericMatrix(trialcomment.num_samples, 1, mxUINT8_CLASS, mxREAL);
         plhs[3] = mxa;
-        trialcomment.charsets = (UINT8 *)mxGetData(mxa);
+        trialcomment.charsets = (uint8_t *)mxGetData(mxa);
     }
 
     // 3 - Now get buffered data
@@ -1548,7 +1548,7 @@ void OnTrialTracking(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
     int nFirstParam = 1;
     bool bFlushBuffer = false;
     cbSdkResult res;
@@ -1608,7 +1608,7 @@ void OnTrialTracking(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_TRIALTRACKING, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:
                 break;
@@ -1643,7 +1643,7 @@ void OnTrialTracking(
         mxArray *mxa;
         mxa = mxCreateNumericMatrix(3, 1, mxUINT16_CLASS, mxREAL);
         mxSetCell(pca, i * 6 + 1, mxa);
-        UINT16 * pvals = (UINT16 *)mxGetData(mxa);
+        uint16_t * pvals = (uint16_t *)mxGetData(mxa);
         *(pvals + 0) = trialtracking.types[i];
         *(pvals + 1) = trialtracking.ids[i];
         *(pvals + 2) = trialtracking.max_point_counts[i];
@@ -1656,13 +1656,13 @@ void OnTrialTracking(
 
         mxa = mxCreateNumericMatrix(trialtracking.num_samples[i], 1, mxUINT32_CLASS, mxREAL);
         mxSetCell(pca, i * 6 + 3, mxa);
-        trialtracking.synch_timestamps[i] = (UINT32 *)mxGetData(mxa);
+        trialtracking.synch_timestamps[i] = (uint32_t *)mxGetData(mxa);
 
         mxa = mxCreateNumericMatrix(trialtracking.num_samples[i], 1, mxUINT32_CLASS, mxREAL);
         mxSetCell(pca, i * 5 + 4, mxa);
-        trialtracking.synch_frame_numbers[i]= (UINT32 *)mxGetData(mxa);
+        trialtracking.synch_frame_numbers[i]= (uint32_t *)mxGetData(mxa);
 
-        trialtracking.point_counts[i] = (UINT16 *)mxMalloc(trialtracking.num_samples[i] * sizeof(UINT16));
+        trialtracking.point_counts[i] = (uint16_t *)mxMalloc(trialtracking.num_samples[i] * sizeof(uint16_t));
 
         bool bWordData = false; // if data is of word-length
         int dim_count = 2; // number of dimensionf for each point
@@ -1683,9 +1683,9 @@ void OnTrialTracking(
         }
 
         if (bWordData)
-            trialtracking.coords[i] = (void * *)mxMalloc(trialtracking.num_samples[i] * sizeof(UINT32 *));
+            trialtracking.coords[i] = (void * *)mxMalloc(trialtracking.num_samples[i] * sizeof(uint32_t *));
         else
-            trialtracking.coords[i] = (void * *)mxMalloc(trialtracking.num_samples[i] * sizeof(UINT16 *));
+            trialtracking.coords[i] = (void * *)mxMalloc(trialtracking.num_samples[i] * sizeof(uint16_t *));
 
         // Rigid-body cell array
         pca_rb[i] = mxCreateCellMatrix(trialtracking.num_samples[i], 1);
@@ -1697,12 +1697,12 @@ void OnTrialTracking(
             if (bWordData)
             {
                 mxa = mxCreateNumericMatrix(trialtracking.max_point_counts[i], dim_count, mxUINT32_CLASS, mxREAL);
-                trialtracking.coords[i][j] = (UINT32 *)mxGetData(mxa);
+                trialtracking.coords[i][j] = (uint32_t *)mxGetData(mxa);
             }
             else
             {
                 mxa = mxCreateNumericMatrix(trialtracking.max_point_counts[i], dim_count, mxUINT16_CLASS, mxREAL);
-                trialtracking.coords[i][j] = (UINT16 *)mxGetData(mxa);
+                trialtracking.coords[i][j] = (uint16_t *)mxGetData(mxa);
             }
             mxSetCell(pca_rb[i], j, mxa);
         } //end for (int j
@@ -1746,7 +1746,7 @@ void OnFileConfig(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
     bool bInstanceFound = false;
     int nFirstParam = 4;
     bool bGetFileInfo = false;
@@ -1787,7 +1787,7 @@ void OnFileConfig(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_COMMENT, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 bInstanceFound = true;
                 break;
             default:
@@ -1843,8 +1843,8 @@ void OnFileConfig(
     if (!mxIsNumeric(prhs[3]) || mxGetNumberOfElements(prhs[3]) != 1)
         PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Invalid action parameter");
 
-    UINT32 bStart = (UINT32) mxGetScalar(prhs[3]);
-    UINT32 options = cbFILECFG_OPT_NONE;
+    uint32_t bStart = (uint32_t) mxGetScalar(prhs[3]);
+    uint32_t options = cbFILECFG_OPT_NONE;
 
     // Process remaining input arguments if available
     for (int i = nFirstParam; i < nrhs; ++i)
@@ -1880,7 +1880,7 @@ void OnFileConfig(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             case PARAM_OPTION:
                 {
@@ -1943,10 +1943,10 @@ void OnDigitalOut(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
     int nFirstParam = 3;
-    UINT16 nChannel = 0;
-    UINT16 nValue = 99;
+    uint16_t nChannel = 0;
+    uint16_t nValue = 99;
     bool bHasNewParams = false;
     cbSdkResult res = CBSDKRESULT_SUCCESS;
     cbPKT_CHANINFO chaninfo;
@@ -1958,14 +1958,14 @@ void OnDigitalOut(
 
     if (!mxIsNumeric(prhs[1]) || mxGetNumberOfElements(prhs[1]) != 1)
         PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid channel parameter");
-    nChannel = (UINT16) mxGetScalar(prhs[1]);
+    nChannel = (uint16_t) mxGetScalar(prhs[1]);
 
     if (2 < nrhs)
     {
         if (mxGetNumberOfElements(prhs[2]) != 1)
             nFirstParam = 2;
         else
-            nValue = (UINT16) mxGetScalar(prhs[2]);
+            nValue = (uint16_t) mxGetScalar(prhs[2]);
 
         enum
         {
@@ -1984,9 +1984,9 @@ void OnDigitalOut(
         int nIdxTimed = 0;
         int nIdxMonitor = 0;
         int nIdxTrigger = 0;
-        UINT16  nTrigChan = 0;
-        UINT16  nTrigValue = 0;
-        UINT32  nOffset = 0;
+        uint16_t  nTrigChan = 0;
+        uint16_t  nTrigValue = 0;
+        uint32_t  nOffset = 0;
 
         // Do a quick look at the options just to find the instance if specified
         for (int i = nFirstParam; i < nrhs; ++i)
@@ -2024,7 +2024,7 @@ void OnDigitalOut(
                 case PARAM_INSTANCE:
                     if (!mxIsNumeric(prhs[i]))
                         PrintHelp(CBMEX_FUNCTION_COMMENT, true, "Invalid instance number");
-                    nInstance = (UINT32)mxGetScalar(prhs[i]);
+                    nInstance = (uint32_t)mxGetScalar(prhs[i]);
                     break;
                 default:
                     break;
@@ -2147,25 +2147,25 @@ void OnDigitalOut(
                 case PARAM_OFFSET:
                     if (!mxIsNumeric(prhs[i]))
                         PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid offset number");
-                    nOffset = (UINT16)(*mxGetPr(prhs[i]));
+                    nOffset = (uint16_t)(*mxGetPr(prhs[i]));
                     bHasNewParams = true;
                     break;
                 case PARAM_VALUE:
                     if (!mxIsNumeric(prhs[i]))
                         PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid value number");
-                    nTrigValue = (UINT16)(*mxGetPr(prhs[i]));
+                    nTrigValue = (uint16_t)(*mxGetPr(prhs[i]));
                     bHasNewParams = true;
                     break;
                 case PARAM_INPUT:
                     if (!mxIsNumeric(prhs[i]))
                         PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid input number");
-                    nTrigChan = (UINT16)(*mxGetPr(prhs[i]));
+                    nTrigChan = (uint16_t)(*mxGetPr(prhs[i]));
                     bHasNewParams = true;
                     break;
                 case PARAM_INSTANCE:
                     if (!mxIsNumeric(prhs[i]))
                         PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid instance number");
-                    nInstance = (UINT32)mxGetScalar(prhs[i]);
+                    nInstance = (uint32_t)mxGetScalar(prhs[i]);
                     break;
                 default:
                     break;
@@ -2478,7 +2478,7 @@ void OnAnalogOut(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
     int nFirstParam = 2;
 
     if (nrhs < 3)
@@ -2508,8 +2508,8 @@ void OnAnalogOut(
     bool bPulses = false;
     bool bDisable = false;
     double dOffset = 0;
-    UINT16 duration[cbMAX_WAVEFORM_PHASES];
-    INT16  amplitude[cbMAX_WAVEFORM_PHASES];
+    uint16_t duration[cbMAX_WAVEFORM_PHASES];
+    int16_t  amplitude[cbMAX_WAVEFORM_PHASES];
 
     cbSdkAoutMon mon;
     memset(&mon, 0, sizeof(mon));
@@ -2529,7 +2529,7 @@ void OnAnalogOut(
     int nIdxMonitor = 0;
 
     // Channel number
-    UINT16 channel = (UINT16)mxGetScalar(prhs[1]);
+    uint16_t channel = (uint16_t)mxGetScalar(prhs[1]);
 
     // Process remaining input arguments if available
     for (int i = nFirstParam; i < nrhs; ++i)
@@ -2663,22 +2663,22 @@ void OnAnalogOut(
             case PARAM_REPEATS:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Invalid repeats number");
-                wf.repeats = (UINT32)(*mxGetPr(prhs[i]));
+                wf.repeats = (uint32_t)(*mxGetPr(prhs[i]));
                 break;
             case PARAM_VALUE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Invalid value number");
-                wf.trigValue = (UINT16)(*mxGetPr(prhs[i]));
+                wf.trigValue = (uint16_t)(*mxGetPr(prhs[i]));
                 break;
             case PARAM_INDEX:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Invalid index number");
-                wf.trigNum = (UINT8)(*mxGetPr(prhs[i]));
+                wf.trigNum = (uint8_t)(*mxGetPr(prhs[i]));
                 break;
             case PARAM_INPUT:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Invalid input number");
-                wf.trigChan = (UINT16)(*mxGetPr(prhs[i]));
+                wf.trigChan = (uint16_t)(*mxGetPr(prhs[i]));
                 mon.chan = wf.trigChan;
                 break;
             case PARAM_TRIGGER:
@@ -2691,7 +2691,7 @@ void OnAnalogOut(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:
                 break;
@@ -2743,7 +2743,7 @@ void OnAnalogOut(
             }
             else
             {
-                UINT32 count = (UINT32)mxGetNumberOfElements(prhs[nIdxWave]);
+                uint32_t count = (uint32_t)mxGetNumberOfElements(prhs[nIdxWave]);
                 // check for proper data structure
                 if (mxGetClassID(prhs[nIdxWave]) != mxDOUBLE_CLASS || count < 2 || (count & 0x01))
                 {
@@ -2752,13 +2752,13 @@ void OnAnalogOut(
                 if (count > (2 * cbMAX_WAVEFORM_PHASES))
                 {
                     char cmdstr[256];
-                    sprintf(cmdstr, "Maximum of %u phases can be specified for each sequence", (UINT32)cbMAX_WAVEFORM_PHASES);
+                    sprintf(cmdstr, "Maximum of %u phases can be specified for each sequence", (uint32_t)cbMAX_WAVEFORM_PHASES);
                     PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, cmdstr);
                 }
                 /// \todo use sequence to pump larger number of phases in NSP1.5
                 wf.phases = count / 2;
                 double *pcfgvals = mxGetPr(prhs[nIdxWave]);
-                for (UINT16 i = 0; i < wf.phases; ++i)
+                for (uint16_t i = 0; i < wf.phases; ++i)
                 {
                     dDuration[i] = *(pcfgvals + i * 2 + 0);
                     dAmplitude[i] = *(pcfgvals + i * 2 + 1);
@@ -2773,7 +2773,7 @@ void OnAnalogOut(
 
                 int nAnaAmplitude = isScaleOut.anamax;
                 int nDigiAmplitude = isScaleOut.digmax;
-                for (UINT16 i = 0; i < wf.phases; ++i)
+                for (uint16_t i = 0; i < wf.phases; ++i)
                 {
                     dAmplitude[i] = (dAmplitude[i] * nDigiAmplitude) / nAnaAmplitude;
                     if (dAmplitude[i] > MAX_int16_T)
@@ -2783,26 +2783,26 @@ void OnAnalogOut(
                 }
                 dOffset = (dOffset * nDigiAmplitude) / nAnaAmplitude;
             }
-            for (UINT16 i = 0; i < wf.phases; ++i)
-                wf.amplitude[i] = (INT16)dAmplitude[i];
+            for (uint16_t i = 0; i < wf.phases; ++i)
+                wf.amplitude[i] = (int16_t)dAmplitude[i];
 
             if (bUnitMs)
             {
-                for (UINT16 i = 0; i < wf.phases; ++i)
+                for (uint16_t i = 0; i < wf.phases; ++i)
                 {
                     dDuration[i] *= 30;
                     if (dDuration[i] > MAX_uint16_T)
                         dDuration[i] = MAX_uint16_T;
                 }
             }
-            for (UINT16 i = 0; i < wf.phases; ++i)
+            for (uint16_t i = 0; i < wf.phases; ++i)
             {
                 // Zero is, but let's not allow it with high level library, because it wastes NSP CPU cycles
                 if (dDuration[i] <= 0)
                     PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Negative or zero duration is not valid");
-                wf.duration[i] = (UINT16)dDuration[i];
+                wf.duration[i] = (uint16_t)dDuration[i];
             }
-            wf.offset = (INT16)dOffset;
+            wf.offset = (int16_t)dOffset;
         }
         else if (wf.type == cbSdkWaveform_SINE)
         {
@@ -2810,7 +2810,7 @@ void OnAnalogOut(
                 PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Invalid sinusoid waveform");
 
             double *pcfgvals = mxGetPr(prhs[nIdxWave]);
-            wf.sineFrequency  = (INT32)(*(pcfgvals + 0));
+            wf.sineFrequency  = (int32_t)(*(pcfgvals + 0));
             double dAmplitude = *(pcfgvals + 1);
             if (bUnitMv)
             {
@@ -2824,8 +2824,8 @@ void OnAnalogOut(
                 dAmplitude = (dAmplitude * nDigiAmplitude) / nAnaAmplitude;
                 dOffset = (dOffset * nDigiAmplitude) / nAnaAmplitude;
             }
-            wf.sineAmplitude = (INT16)dAmplitude;
-            wf.offset = (INT16)dOffset;
+            wf.sineAmplitude = (int16_t)dAmplitude;
+            wf.offset = (int16_t)dOffset;
         }
 
         // If any trigger is specified, parse it
@@ -2927,9 +2927,9 @@ void OnMask(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
     int nFirstParam = 2;
-    UINT32 bActive = 1;
+    uint32_t bActive = 1;
 
     if (nrhs < 2)
         PrintHelp(CBMEX_FUNCTION_MASK, true, "Too few inputs provided");
@@ -2939,7 +2939,7 @@ void OnMask(
     if (!mxIsNumeric(prhs[1]) || mxGetNumberOfElements(prhs[1]) != 1)
         PrintHelp(CBMEX_FUNCTION_MASK, true, "Invalid channel parameter");
 
-    UINT16 nChannel = (UINT16) mxGetScalar(prhs[1]);
+    uint16_t nChannel = (uint16_t) mxGetScalar(prhs[1]);
 
     if (nFirstParam < nrhs)
     {
@@ -2949,7 +2949,7 @@ void OnMask(
             if (mxGetNumberOfElements(prhs[nFirstParam]) != 1)
                 PrintHelp(CBMEX_FUNCTION_MASK, true, "Invalid active parameter");
 
-            bActive = (UINT32)mxGetScalar(prhs[nFirstParam]);
+            bActive = (uint32_t)mxGetScalar(prhs[nFirstParam]);
 
             nFirstParam++; // skip the optional
         }
@@ -2991,7 +2991,7 @@ void OnMask(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_MASK, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:
                 break;
@@ -3027,7 +3027,7 @@ void OnComment(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
     int nFirstParam = 4;
 
     if (nrhs < 4)
@@ -3041,8 +3041,8 @@ void OnComment(
     if (!mxIsNumeric(prhs[2]) || mxGetNumberOfElements(prhs[2]) != 1)
         PrintHelp(CBMEX_FUNCTION_COMMENT, true, "Invalid charset parameter");
 
-    UINT32 rgba = (UINT32) mxGetScalar(prhs[1]);
-    UINT8 charset = (UINT8) mxGetScalar(prhs[2]);
+    uint32_t rgba = (uint32_t) mxGetScalar(prhs[1]);
+    uint8_t charset = (uint8_t) mxGetScalar(prhs[2]);
 
     char  cmt[cbMAX_COMMENT] = {0};
     // fill in the comment string
@@ -3085,7 +3085,7 @@ void OnComment(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_COMMENT, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:
                 break;
@@ -3121,7 +3121,7 @@ void OnConfig(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
     int nFirstParam = 2;
     cbSdkResult res;
     bool bHasNewParams = false;
@@ -3134,7 +3134,7 @@ void OnConfig(
     if (!mxIsNumeric(prhs[1]) || mxGetNumberOfElements(prhs[1]) != 1)
         PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid channel parameter");
 
-    UINT16 channel = (UINT16)mxGetScalar(prhs[1]);
+    uint16_t channel = (uint16_t)mxGetScalar(prhs[1]);
 
     enum
     {
@@ -3179,7 +3179,7 @@ void OnConfig(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_COMMENT, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:
                 break;
@@ -3265,13 +3265,13 @@ void OnConfig(
             case PARAM_USERFLAGS:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid userflags number");
-                chaninfo.userflags = (UINT32)mxGetScalar(prhs[i]);
+                chaninfo.userflags = (uint32_t)mxGetScalar(prhs[i]);
                 bHasNewParams = true;
                 break;
             case PARAM_SMPFILTER:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid smpfilter number");
-                chaninfo.smpfilter = (UINT32)mxGetScalar(prhs[i]);
+                chaninfo.smpfilter = (uint32_t)mxGetScalar(prhs[i]);
                 if (chaninfo.smpfilter >= (cbFIRST_DIGITAL_FILTER + cbNUM_DIGITAL_FILTERS))
                     mexErrMsgTxt("Invalid continuous filter number");
                 bHasNewParams = true;
@@ -3279,7 +3279,7 @@ void OnConfig(
             case PARAM_SMPGROUP:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid smpgroup number");
-                chaninfo.smpgroup = (UINT32)mxGetScalar(prhs[i]);
+                chaninfo.smpgroup = (uint32_t)mxGetScalar(prhs[i]);
                 if (chaninfo.smpgroup >= cbMAXGROUPS)
                     mexErrMsgTxt("Invalid sampling group number");
                 bHasNewParams = true;
@@ -3287,7 +3287,7 @@ void OnConfig(
             case PARAM_SPKFILTER:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid spkfilter number");
-                chaninfo.spkfilter = (UINT32)mxGetScalar(prhs[i]);
+                chaninfo.spkfilter = (uint32_t)mxGetScalar(prhs[i]);
                 if (chaninfo.spkfilter >= (cbFIRST_DIGITAL_FILTER + cbNUM_DIGITAL_FILTERS))
                     mexErrMsgTxt("Invalid spike filter number");
                 bHasNewParams = true;
@@ -3295,14 +3295,14 @@ void OnConfig(
             case PARAM_SPKTHRLEVEL:
                 if (!mxGetString(prhs[i], cmdstr, 16))
                 {
-                    INT32 nValue = 0;
+                    int32_t nValue = 0;
                     res = cbSdkAnalogToDigital(nInstance, channel, cmdstr, &nValue);
                     PrintErrorSDK(res, "cbSdkAnalogToDigital()");
                     chaninfo.spkthrlevel = nValue;
                 }
                 else if (mxIsNumeric(prhs[i]))
                 {
-                    chaninfo.spkthrlevel = (UINT32)mxGetScalar(prhs[i]);
+                    chaninfo.spkthrlevel = (uint32_t)mxGetScalar(prhs[i]);
                 }
                 else
                 {
@@ -3313,20 +3313,20 @@ void OnConfig(
             case PARAM_SPKGROUP:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid spkgroup number");
-                chaninfo.spkgroup = (UINT32)mxGetScalar(prhs[i]);
+                chaninfo.spkgroup = (uint32_t)mxGetScalar(prhs[i]);
                 bHasNewParams = true;
                 break;
             case PARAM_AMPLREJPOS:
                 if (!mxGetString(prhs[i], cmdstr, 16))
                 {
-                    INT32 nValue = 0;
+                    int32_t nValue = 0;
                     res = cbSdkAnalogToDigital(nInstance, channel, cmdstr, &nValue);
                     PrintErrorSDK(res, "cbSdkAnalogToDigital()");
                     chaninfo.amplrejpos = nValue;
                 }
                 else if (mxIsNumeric(prhs[i]))
                 {
-                    chaninfo.amplrejpos = (UINT32)mxGetScalar(prhs[i]);
+                    chaninfo.amplrejpos = (uint32_t)mxGetScalar(prhs[i]);
                 }
                 else
                 {
@@ -3337,14 +3337,14 @@ void OnConfig(
             case PARAM_AMPLREJNEG:
                 if (!mxGetString(prhs[i], cmdstr, 16))
                 {
-                    INT32 nValue = 0;
+                    int32_t nValue = 0;
                     res = cbSdkAnalogToDigital(nInstance, channel, cmdstr, &nValue);
                     PrintErrorSDK(res, "cbSdkAnalogToDigital()");
                     chaninfo.amplrejneg = nValue;
                 }
                 else if (mxIsNumeric(prhs[i]))
                 {
-                    chaninfo.amplrejneg = (UINT32)mxGetScalar(prhs[i]);
+                    chaninfo.amplrejneg = (uint32_t)mxGetScalar(prhs[i]);
                 }
                 else
                 {
@@ -3355,7 +3355,7 @@ void OnConfig(
             case PARAM_REFELECCHAN:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid refelecchan number");
-                chaninfo.refelecchan = (UINT32)mxGetScalar(prhs[i]);
+                chaninfo.refelecchan = (uint32_t)mxGetScalar(prhs[i]);
                 bHasNewParams = true;
                 break;
             case PARAM_INSTANCE:
@@ -3453,7 +3453,7 @@ void OnCCF(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
     int nFirstParam = 1;
     cbSdkResult res = CBSDKRESULT_SUCCESS;
 
@@ -3554,7 +3554,7 @@ void OnCCF(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_CCF, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:
                 break;
@@ -3612,7 +3612,7 @@ void OnSystem(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
     int nFirstParam = 2;
 
     if (nrhs < 2)
@@ -3662,7 +3662,7 @@ void OnSystem(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_SYSTEM, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:
                 break;
@@ -3705,10 +3705,10 @@ void OnSynchOut(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
-    UINT32 nFreq = 0;
-    UINT32 nRepeats = 0;
-    UINT32 nChannel = 1;
+    uint32_t nInstance = 0;
+    uint32_t nFreq = 0;
+    uint32_t nRepeats = 0;
+    uint32_t nChannel = 1;
 
     if (nrhs < 2)
         PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, "Too few inputs provided");
@@ -3762,17 +3762,17 @@ void OnSynchOut(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             case PARAM_FREQ:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, "Invalid frequency value");
-                nFreq = (UINT32)(mxGetScalar(prhs[i]) * 1000);
+                nFreq = (uint32_t)(mxGetScalar(prhs[i]) * 1000);
                 break;
             case PARAM_REPEATS:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, "Invalid repeats value");
-                nRepeats = (UINT32)mxGetScalar(prhs[i]);
+                nRepeats = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:
                 break;
@@ -3807,7 +3807,7 @@ void OnExtCmd(
     int nrhs,
     const mxArray *prhs[] )
 {
-    UINT32 nInstance = 0;
+    uint32_t nInstance = 0;
     cbSdkResult res = CBSDKRESULT_SUCCESS;
     cbSdkExtCmd extCmd;
 
@@ -3878,7 +3878,7 @@ void OnExtCmd(
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
                     PrintHelp(CBMEX_FUNCTION_SYNCHOUT, true, "Invalid instance number");
-                nInstance = (UINT32)mxGetScalar(prhs[i]);
+                nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             case PARAM_UPLOAD:
                 if (mxGetString(prhs[i], cmdstr, cbMAX_LOG - 1))

@@ -19,19 +19,19 @@
  */
 
 typedef struct _cbSdkConfigParam {
-    UINT32 bActive;
-    UINT16 Begchan;
-    UINT32 Begmask;
-    UINT32 Begval;
-    UINT16 Endchan;
-    UINT32 Endmask;
-    UINT32 Endval;
+    uint32_t bActive;
+    uint16_t Begchan;
+    uint32_t Begmask;
+    uint32_t Begval;
+    uint16_t Endchan;
+    uint32_t Endmask;
+    uint32_t Endval;
     bool bDouble;
-    UINT32 uWaveforms;
-    UINT32 uConts;
-    UINT32 uEvents;
-    UINT32 uComments;
-    UINT32 uTrackings;
+    uint32_t uWaveforms;
+    uint32_t uConts;
+    uint32_t uEvents;
+    uint32_t uComments;
+    uint32_t uTrackings;
     bool bAbsolute;
 } cbSdkConfigParam;
 

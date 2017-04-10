@@ -34,7 +34,7 @@ using namespace ccf;
 //   pCallbackFn - the progress reporting function
 // Outputs:
 //   pCCF        - where to take an extra copy of the CCF upon successful reading
-void ReadCCFHelper(QString strFileName, bool bSend, cbCCF * pCCF, cbCCFCallback pCallbackFn, UINT32 nInstance)
+void ReadCCFHelper(QString strFileName, bool bSend, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance)
 {
     // make sure byte array is constructed, thus we can use the internal pointer to character data
     const QByteArray tmp = strFileName.toLatin1();
@@ -49,7 +49,7 @@ void ReadCCFHelper(QString strFileName, bool bSend, cbCCF * pCCF, cbCCFCallback 
 
 // Author & Date: Ehsan Azar       10 June 2012
 // Purpose: Wrapper to run ReadCCFHelper in a thread
-void ccf::ConReadCCF(LPCSTR szFileName, bool bSend, cbCCF * pCCF, cbCCFCallback pCallbackFn, UINT32 nInstance)
+void ccf::ConReadCCF(LPCSTR szFileName, bool bSend, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance)
 {
     QString strFileName = szFileName == NULL ? "" : szFileName;
     // Parameters are copied before thread starts, originals will go out of scope
@@ -63,7 +63,7 @@ void ccf::ConReadCCF(LPCSTR szFileName, bool bSend, cbCCF * pCCF, cbCCFCallback 
 //   szFileName  - the name of the file to write to (if NULL sends to NSP)
 //   ccf         - initial CCF content
 //   pCallbackFn - the progress reporting function
-void WriteCCFHelper(QString strFileName, cbCCF ccf, cbCCFCallback pCallbackFn, UINT32 nInstance)
+void WriteCCFHelper(QString strFileName, cbCCF ccf, cbCCFCallback pCallbackFn, uint32_t nInstance)
 {
     // make sure byte array is constructed, thus we can use the internal pointer to character data
     const QByteArray tmp = strFileName.toLatin1();
@@ -80,7 +80,7 @@ void WriteCCFHelper(QString strFileName, cbCCF ccf, cbCCFCallback pCallbackFn, U
 
 // Author & Date: Ehsan Azar       10 June 2012
 // Purpose: Wrapper to run WriteCCFHelper in a thread
-void ccf::ConWriteCCF(LPCSTR szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, UINT32 nInstance)
+void ccf::ConWriteCCF(LPCSTR szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance)
 {
     QString strFileName = szFileName == NULL ? "" : szFileName;
     cbCCF ccf;

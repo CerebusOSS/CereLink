@@ -44,12 +44,12 @@ typedef enum _ccfResult
 };      // namespace ccf
 
 // CCF callback
-typedef void (* cbCCFCallback)(UINT32 nInstance, const ccf::ccfResult res, LPCSTR szFileName, const cbStateCCF state, const UINT32 nProgress);
+typedef void (* cbCCFCallback)(uint32_t nInstance, const ccf::ccfResult res, LPCSTR szFileName, const cbStateCCF state, const uint32_t nProgress);
 
 class CCFUtils
 {
 public:
-    CCFUtils(bool bSend = false, bool bThreaded = false, cbCCF * pCCF = NULL, cbCCFCallback pCallbackFn = NULL, UINT32 nInstance = 0);
+    CCFUtils(bool bSend = false, bool bThreaded = false, cbCCF * pCCF = NULL, cbCCFCallback pCallbackFn = NULL, uint32_t nInstance = 0);
     virtual ~CCFUtils();
 
 public:

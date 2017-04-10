@@ -165,17 +165,30 @@ ENDIF( WIN32 )
 
 SET( LIB_SOURCE
     ${PROJECT_SOURCE_DIR}/cbmex/cbsdk.cpp
+    ${PROJECT_SOURCE_DIR}/cbmex/cbsdk.h
+    ${PROJECT_SOURCE_DIR}/cbmex/SdkApp.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/cbHwlibHi.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/cbHwlibHi.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtils.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtils.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsBinary.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsBinary.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsConcurrent.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsConcurrent.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXml.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXml.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXmlItems.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXmlItems.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/XmlFile.cpp
+    ${PROJECT_SOURCE_DIR}/cbhwlib/XmlFile.h
     ${PROJECT_SOURCE_DIR}/Central/Instrument.cpp
+    ${PROJECT_SOURCE_DIR}/Central/Instrument.h
     ${PROJECT_SOURCE_DIR}/Central/UDPsocket.cpp
+    ${PROJECT_SOURCE_DIR}/Central/UDPsocket.h
 )
 IF( WIN32 )
     LIST ( APPEND LIB_SOURCE ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc )  # ??
@@ -348,6 +361,8 @@ IF(${BUILD_HDF5} AND HDF5_FOUND )
     SET( N2H5_SOURCE
         ${PROJECT_SOURCE_DIR}/n2h5/main.cpp
         ${PROJECT_SOURCE_DIR}/n2h5/n2h5.cpp
+        ${PROJECT_SOURCE_DIR}/n2h5/n2h5.h
+        ${PROJECT_SOURCE_DIR}/n2h5/NevNsx.h
     )
     MESSAGE ( STATUS "Add n2h5 utility build target")
     IF( WIN32 )

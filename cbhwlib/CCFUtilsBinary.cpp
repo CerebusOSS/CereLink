@@ -564,9 +564,9 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_31(FILE * hFile)
                 if (radius != 0)
                 {
                     isChan.unitmapping[unit].bValid = 1;
-                    isChan.unitmapping[unit].afShape[0][0] = INT16(1 / (radius * radius));
-                    isChan.unitmapping[unit].afShape[1][1] = INT16(1 / (radius * radius));
-                    isChan.unitmapping[unit].afShape[2][2] = INT16(1 / (radius * radius));
+                    isChan.unitmapping[unit].afShape[0][0] = int16_t(1 / (radius * radius));
+                    isChan.unitmapping[unit].afShape[1][1] = int16_t(1 / (radius * radius));
+                    isChan.unitmapping[unit].afShape[2][2] = int16_t(1 / (radius * radius));
                 }
             }
         }
@@ -652,17 +652,17 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_34(FILE * hFile)
             for (int unit = 0; unit < cbLEGACY_MAXUNITS; ++unit)
             {
                 isChan.unitmapping[unit].nOverride   = isChanFile.unitmapping[unit].nOverride;
-                isChan.unitmapping[unit].afOrigin[0] = INT16(isChanFile.unitmapping[unit].afOrigin[0]);
-                isChan.unitmapping[unit].afOrigin[1] = INT16(isChanFile.unitmapping[unit].afOrigin[1]);
+                isChan.unitmapping[unit].afOrigin[0] = int16_t(isChanFile.unitmapping[unit].afOrigin[0]);
+                isChan.unitmapping[unit].afOrigin[1] = int16_t(isChanFile.unitmapping[unit].afOrigin[1]);
                 isChan.unitmapping[unit].afOrigin[2] = 0;
-                isChan.unitmapping[unit].afShape[0][0] = INT16(isChanFile.unitmapping[unit].afShape[0][0]);
-                isChan.unitmapping[unit].afShape[0][1] = INT16(isChanFile.unitmapping[unit].afShape[0][1]);
-                isChan.unitmapping[unit].afShape[1][0] = INT16(isChanFile.unitmapping[unit].afShape[1][0]);
-                isChan.unitmapping[unit].afShape[1][1] = INT16(isChanFile.unitmapping[unit].afShape[1][1]);
-                isChan.unitmapping[unit].afShape[2][0] = INT16(isChanFile.unitmapping[unit].afShape[1][0]);
-                isChan.unitmapping[unit].afShape[2][1] = INT16(isChanFile.unitmapping[unit].afShape[1][1]);
-                isChan.unitmapping[unit].aPhi        = INT16(isChanFile.unitmapping[unit].aPhi);
-                isChan.unitmapping[unit].bValid      = INT16(isChanFile.unitmapping[unit].bValid);
+                isChan.unitmapping[unit].afShape[0][0] = int16_t(isChanFile.unitmapping[unit].afShape[0][0]);
+                isChan.unitmapping[unit].afShape[0][1] = int16_t(isChanFile.unitmapping[unit].afShape[0][1]);
+                isChan.unitmapping[unit].afShape[1][0] = int16_t(isChanFile.unitmapping[unit].afShape[1][0]);
+                isChan.unitmapping[unit].afShape[1][1] = int16_t(isChanFile.unitmapping[unit].afShape[1][1]);
+                isChan.unitmapping[unit].afShape[2][0] = int16_t(isChanFile.unitmapping[unit].afShape[1][0]);
+                isChan.unitmapping[unit].afShape[2][1] = int16_t(isChanFile.unitmapping[unit].afShape[1][1]);
+                isChan.unitmapping[unit].aPhi        = int16_t(isChanFile.unitmapping[unit].aPhi);
+                isChan.unitmapping[unit].bValid      = int16_t(isChanFile.unitmapping[unit].bValid);
             }
         }
     }
@@ -747,17 +747,17 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_35(FILE * hFile)
             for (int unit = 0; unit < cbLEGACY_MAXUNITS; ++unit)
             {
                 isChan.unitmapping[unit].nOverride   = isChanFile.unitmapping[unit].nOverride;
-                isChan.unitmapping[unit].afOrigin[0] = INT16(isChanFile.unitmapping[unit].afOrigin[0]);
-                isChan.unitmapping[unit].afOrigin[1] = INT16(isChanFile.unitmapping[unit].afOrigin[1]);
+                isChan.unitmapping[unit].afOrigin[0] = int16_t(isChanFile.unitmapping[unit].afOrigin[0]);
+                isChan.unitmapping[unit].afOrigin[1] = int16_t(isChanFile.unitmapping[unit].afOrigin[1]);
                 isChan.unitmapping[unit].afOrigin[2] = 0;
-                isChan.unitmapping[unit].afShape[0][0] = INT16(isChanFile.unitmapping[unit].afShape[0][0]);
-                isChan.unitmapping[unit].afShape[0][1] = INT16(isChanFile.unitmapping[unit].afShape[0][1]);
-                isChan.unitmapping[unit].afShape[1][0] = INT16(isChanFile.unitmapping[unit].afShape[1][0]);
-                isChan.unitmapping[unit].afShape[1][1] = INT16(isChanFile.unitmapping[unit].afShape[1][1]);
-                isChan.unitmapping[unit].afShape[2][0] = INT16(isChanFile.unitmapping[unit].afShape[1][0]);
-                isChan.unitmapping[unit].afShape[2][1] = INT16(isChanFile.unitmapping[unit].afShape[1][1]);
-                isChan.unitmapping[unit].aPhi        = INT16(isChanFile.unitmapping[unit].aPhi);
-                isChan.unitmapping[unit].bValid      = INT16(isChanFile.unitmapping[unit].bValid);
+                isChan.unitmapping[unit].afShape[0][0] = int16_t(isChanFile.unitmapping[unit].afShape[0][0]);
+                isChan.unitmapping[unit].afShape[0][1] = int16_t(isChanFile.unitmapping[unit].afShape[0][1]);
+                isChan.unitmapping[unit].afShape[1][0] = int16_t(isChanFile.unitmapping[unit].afShape[1][0]);
+                isChan.unitmapping[unit].afShape[1][1] = int16_t(isChanFile.unitmapping[unit].afShape[1][1]);
+                isChan.unitmapping[unit].afShape[2][0] = int16_t(isChanFile.unitmapping[unit].afShape[1][0]);
+                isChan.unitmapping[unit].afShape[2][1] = int16_t(isChanFile.unitmapping[unit].afShape[1][1]);
+                isChan.unitmapping[unit].aPhi        = int16_t(isChanFile.unitmapping[unit].aPhi);
+                isChan.unitmapping[unit].bValid      = int16_t(isChanFile.unitmapping[unit].bValid);
             }
         }
     }
@@ -842,20 +842,20 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_36(FILE * hFile)
             for (int unit = 0; unit < cbLEGACY_MAXUNITS; ++unit)
             {
                 isChan.unitmapping[unit].nOverride   = isChanFile.unitmapping[unit].nOverride;
-                isChan.unitmapping[unit].afOrigin[0] = INT16(isChanFile.unitmapping[unit].afOrigin[0]);
-                isChan.unitmapping[unit].afOrigin[1] = INT16(isChanFile.unitmapping[unit].afOrigin[1]);
-                isChan.unitmapping[unit].afOrigin[2] = INT16(isChanFile.unitmapping[unit].afOrigin[2]);
-                isChan.unitmapping[unit].afShape[0][0] = INT16(isChanFile.unitmapping[unit].afShape[0][0]);
-                isChan.unitmapping[unit].afShape[0][1] = INT16(isChanFile.unitmapping[unit].afShape[0][1]);
-                isChan.unitmapping[unit].afShape[0][2] = INT16(isChanFile.unitmapping[unit].afShape[0][2]);
-                isChan.unitmapping[unit].afShape[1][0] = INT16(isChanFile.unitmapping[unit].afShape[1][0]);
-                isChan.unitmapping[unit].afShape[1][1] = INT16(isChanFile.unitmapping[unit].afShape[1][1]);
-                isChan.unitmapping[unit].afShape[1][2] = INT16(isChanFile.unitmapping[unit].afShape[1][2]);
-                isChan.unitmapping[unit].afShape[2][0] = INT16(isChanFile.unitmapping[unit].afShape[2][0]);
-                isChan.unitmapping[unit].afShape[2][1] = INT16(isChanFile.unitmapping[unit].afShape[2][1]);
-                isChan.unitmapping[unit].afShape[2][2] = INT16(isChanFile.unitmapping[unit].afShape[2][2]);
-                isChan.unitmapping[unit].aPhi        = INT16(isChanFile.unitmapping[unit].aPhi);
-                isChan.unitmapping[unit].bValid      = INT16(isChanFile.unitmapping[unit].bValid);
+                isChan.unitmapping[unit].afOrigin[0] = int16_t(isChanFile.unitmapping[unit].afOrigin[0]);
+                isChan.unitmapping[unit].afOrigin[1] = int16_t(isChanFile.unitmapping[unit].afOrigin[1]);
+                isChan.unitmapping[unit].afOrigin[2] = int16_t(isChanFile.unitmapping[unit].afOrigin[2]);
+                isChan.unitmapping[unit].afShape[0][0] = int16_t(isChanFile.unitmapping[unit].afShape[0][0]);
+                isChan.unitmapping[unit].afShape[0][1] = int16_t(isChanFile.unitmapping[unit].afShape[0][1]);
+                isChan.unitmapping[unit].afShape[0][2] = int16_t(isChanFile.unitmapping[unit].afShape[0][2]);
+                isChan.unitmapping[unit].afShape[1][0] = int16_t(isChanFile.unitmapping[unit].afShape[1][0]);
+                isChan.unitmapping[unit].afShape[1][1] = int16_t(isChanFile.unitmapping[unit].afShape[1][1]);
+                isChan.unitmapping[unit].afShape[1][2] = int16_t(isChanFile.unitmapping[unit].afShape[1][2]);
+                isChan.unitmapping[unit].afShape[2][0] = int16_t(isChanFile.unitmapping[unit].afShape[2][0]);
+                isChan.unitmapping[unit].afShape[2][1] = int16_t(isChanFile.unitmapping[unit].afShape[2][1]);
+                isChan.unitmapping[unit].afShape[2][2] = int16_t(isChanFile.unitmapping[unit].afShape[2][2]);
+                isChan.unitmapping[unit].aPhi        = int16_t(isChanFile.unitmapping[unit].aPhi);
+                isChan.unitmapping[unit].bValid      = int16_t(isChanFile.unitmapping[unit].bValid);
             }
         }
     }
@@ -928,20 +928,20 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_37(FILE * hFile)
             for (int unit = 0; unit < cbLEGACY_MAXUNITS; ++unit)
             {
                 isChan.unitmapping[unit].nOverride   = isChanFile.unitmapping[unit].nOverride;
-                isChan.unitmapping[unit].afOrigin[0] = INT16(isChanFile.unitmapping[unit].afOrigin[0]);
-                isChan.unitmapping[unit].afOrigin[1] = INT16(isChanFile.unitmapping[unit].afOrigin[1]);
-                isChan.unitmapping[unit].afOrigin[2] = INT16(isChanFile.unitmapping[unit].afOrigin[2]);
-                isChan.unitmapping[unit].afShape[0][0] = INT16(isChanFile.unitmapping[unit].afShape[0][0]);
-                isChan.unitmapping[unit].afShape[0][1] = INT16(isChanFile.unitmapping[unit].afShape[0][1]);
-                isChan.unitmapping[unit].afShape[0][2] = INT16(isChanFile.unitmapping[unit].afShape[0][2]);
-                isChan.unitmapping[unit].afShape[1][0] = INT16(isChanFile.unitmapping[unit].afShape[1][0]);
-                isChan.unitmapping[unit].afShape[1][1] = INT16(isChanFile.unitmapping[unit].afShape[1][1]);
-                isChan.unitmapping[unit].afShape[1][2] = INT16(isChanFile.unitmapping[unit].afShape[1][2]);
-                isChan.unitmapping[unit].afShape[2][0] = INT16(isChanFile.unitmapping[unit].afShape[2][0]);
-                isChan.unitmapping[unit].afShape[2][1] = INT16(isChanFile.unitmapping[unit].afShape[2][1]);
-                isChan.unitmapping[unit].afShape[2][2] = INT16(isChanFile.unitmapping[unit].afShape[2][2]);
-                isChan.unitmapping[unit].aPhi        = INT16(isChanFile.unitmapping[unit].aPhi);
-                isChan.unitmapping[unit].bValid      = INT16(isChanFile.unitmapping[unit].bValid);
+                isChan.unitmapping[unit].afOrigin[0] = int16_t(isChanFile.unitmapping[unit].afOrigin[0]);
+                isChan.unitmapping[unit].afOrigin[1] = int16_t(isChanFile.unitmapping[unit].afOrigin[1]);
+                isChan.unitmapping[unit].afOrigin[2] = int16_t(isChanFile.unitmapping[unit].afOrigin[2]);
+                isChan.unitmapping[unit].afShape[0][0] = int16_t(isChanFile.unitmapping[unit].afShape[0][0]);
+                isChan.unitmapping[unit].afShape[0][1] = int16_t(isChanFile.unitmapping[unit].afShape[0][1]);
+                isChan.unitmapping[unit].afShape[0][2] = int16_t(isChanFile.unitmapping[unit].afShape[0][2]);
+                isChan.unitmapping[unit].afShape[1][0] = int16_t(isChanFile.unitmapping[unit].afShape[1][0]);
+                isChan.unitmapping[unit].afShape[1][1] = int16_t(isChanFile.unitmapping[unit].afShape[1][1]);
+                isChan.unitmapping[unit].afShape[1][2] = int16_t(isChanFile.unitmapping[unit].afShape[1][2]);
+                isChan.unitmapping[unit].afShape[2][0] = int16_t(isChanFile.unitmapping[unit].afShape[2][0]);
+                isChan.unitmapping[unit].afShape[2][1] = int16_t(isChanFile.unitmapping[unit].afShape[2][1]);
+                isChan.unitmapping[unit].afShape[2][2] = int16_t(isChanFile.unitmapping[unit].afShape[2][2]);
+                isChan.unitmapping[unit].aPhi        = int16_t(isChanFile.unitmapping[unit].aPhi);
+                isChan.unitmapping[unit].bValid      = int16_t(isChanFile.unitmapping[unit].bValid);
             }
         }
     }
@@ -986,9 +986,9 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_310(FILE * hFile)
 // Inputs:
 //   nFilter - filter number saved in the configuration file as autosort filter
 // Outputs: returns the new filter number
-UINT32 CCFUtilsBinary::TranslateAutoFilter(UINT32 nFilter)
+uint32_t CCFUtilsBinary::TranslateAutoFilter(uint32_t nFilter)
 {
-    UINT32 nReturn = 0;
+    uint32_t nReturn = 0;
     if (1 == nFilter) nReturn = 6;      // LFP Wide
     if (2 == nFilter) nReturn = 7;      // LFP XWide
     if (3 == nFilter) nReturn = 2;      // Spike Medium
@@ -1009,7 +1009,7 @@ void CCFUtilsBinary::ReadAsPackets(FILE * hFile)
 {
     BYTE abyData[4096]= {0};
     cbPKT_GENERIC_CB2003_10 * pPkt = reinterpret_cast<cbPKT_GENERIC_CB2003_10 *>(&abyData[0]);
-    const UINT32 cbHdrSize = (UINT32)offsetof(cbPKT_GENERIC_CB2003_10, data[0]);
+    const uint32_t cbHdrSize = (uint32_t)offsetof(cbPKT_GENERIC_CB2003_10, data[0]);
     BYTE * pbyPayload = abyData + cbHdrSize;        // point to first byte of payload
     m_bAutoSort = false;
 
@@ -1017,7 +1017,7 @@ void CCFUtilsBinary::ReadAsPackets(FILE * hFile)
     while (1 == fread(pPkt, cbHdrSize, 1, hFile))
     {
         memset(pbyPayload, 0, sizeof(abyData) - cbHdrSize);
-        UINT32 cbPayload = pPkt->dlen * 4;
+        uint32_t cbPayload = pPkt->dlen * 4;
         if (cbPayload != fread(pbyPayload, 1, cbPayload, hFile))
             return; // actually an error
 
@@ -1119,7 +1119,7 @@ void CCFUtilsBinary::ReadSpikeSortingPackets(cbPKT_GENERIC_CB2003_10 *pPkt)
         }
         break;
     case cbPKTTYPE_SS_NOISE_BOUNDARYSET:            // handle noise boundary changes
-        UINT32 nChan;
+        uint32_t nChan;
 
         switch (m_nInternalOriginalVersion)
         {

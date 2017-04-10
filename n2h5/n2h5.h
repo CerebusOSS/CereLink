@@ -27,7 +27,7 @@
 // Basic channel attributes
 //
 typedef struct {
-    UINT16 id;          // channel id
+    uint16_t id;          // channel id
     char szLabel[64];     // Channel label
 } BmiChanAttr_t;
 
@@ -39,7 +39,7 @@ hid_t CreateChanAttrType(hid_t loc);
 typedef struct {
     float  fClock;       // global clock used for this data set
     float  fSampleRate;  // sampling done for this channel
-    UINT8  nSampleBits;  // Number of bits in each sample
+    uint8_t  nSampleBits;  // Number of bits in each sample
 } BmiSamplingAttr_t;
 
 hid_t CreateSamplingAttrType(hid_t loc);
@@ -49,13 +49,13 @@ hid_t CreateSamplingAttrType(hid_t loc);
 //
 typedef struct {
     // High pass filter info
-    UINT32 hpfreq;         // Filter frequency in mHz
-    UINT32 hporder;        // Filter order
-    UINT16 hptype;         // Filter type
+    uint32_t hpfreq;         // Filter frequency in mHz
+    uint32_t hporder;        // Filter order
+    uint16_t hptype;         // Filter type
     // Low pass filter info
-    UINT32 lpfreq;         // Filter frequency in mHz
-    UINT32 lporder;        // Filter order
-    UINT16 lptype;         // Filter type
+    uint32_t lpfreq;         // Filter frequency in mHz
+    uint32_t lporder;        // Filter order
+    uint16_t lptype;         // Filter type
 } BmiFiltAttr_t;
 
 hid_t CreateFiltAttrType(hid_t loc);
@@ -65,10 +65,10 @@ hid_t CreateFiltAttrType(hid_t loc);
 //
 typedef struct {
     // These may only appear in NEV extra headers
-    UINT8 sortCount;       // Number of sorted units
-    UINT32 energy_thresh;
-    INT32 high_thresh;
-    INT32 low_thresh;
+    uint8_t sortCount;       // Number of sorted units
+    uint32_t energy_thresh;
+    int32_t high_thresh;
+    int32_t low_thresh;
 } BmiChanExt1Attr_t;
 
 hid_t CreateChanExt1AttrType(hid_t loc);
@@ -78,10 +78,10 @@ hid_t CreateChanExt1AttrType(hid_t loc);
 //
 typedef struct {
     // These may only appear in NSx extra headers
-    INT32 digmin;          // Minimum digital value
-    INT32 digmax;          // Maximum digital value
-    INT32 anamin;          // Minimum analog Value
-    INT32 anamax;          // Maximum analog Value
+    int32_t digmin;          // Minimum digital value
+    int32_t digmax;          // Maximum digital value
+    int32_t anamin;          // Minimum analog Value
+    int32_t anamax;          // Maximum analog Value
     char anaunit[16];      // Units for the Analog Value (e.g. "mV)
 } BmiChanExt2Attr_t;
 
@@ -92,8 +92,8 @@ hid_t CreateChanExt2AttrType(hid_t loc);
 //
 typedef struct {
     double dFactor;        // nano volts per LSB (used in conversion between digital and analog values)
-    UINT8  phys_connector;
-    UINT8  connector_pin;
+    uint8_t  phys_connector;
+    uint8_t  connector_pin;
 } BmiChanExtAttr_t;
 
 hid_t CreateChanExtAttrType(hid_t loc);
@@ -103,10 +103,10 @@ hid_t CreateChanExtAttrType(hid_t loc);
 //  and thus root-group attribute
 //
 typedef struct {
-    UINT32 nMajorVersion;
-    UINT32 nMinorVersion;
-    UINT32 nFlags;
-    UINT32 nGroupCount; // Number of data groups withing this file
+    uint32_t nMajorVersion;
+    uint32_t nMinorVersion;
+    uint32_t nFlags;
+    uint32_t nGroupCount; // Number of data groups withing this file
     char szDate[64];         // File creation date-time in SQL format
     char szApplication[64];  // Which application created this file
     char szComment[1024];    // File Comment
@@ -118,7 +118,7 @@ hid_t CreateRootAttrType(hid_t loc);
 // Synch general information
 //
 typedef struct {
-    UINT16 id; // video source ID
+    uint16_t id; // video source ID
     float fFps;
     char szLabel[64];        // Name of the video source
 } BmiSynchAttr_t;
@@ -129,60 +129,60 @@ hid_t CreateSynchAttrType(hid_t loc);
 // Video source general information
 //
 typedef struct {
-    UINT16 type;     // trackable type
-    UINT16 trackID;  // trackable ID
-    UINT16 maxPoints;
+    uint16_t type;     // trackable type
+    uint16_t trackID;  // trackable ID
+    uint16_t maxPoints;
     char szLabel[128];  // Name of the trackable
 } BmiTrackingAttr_t;
 
 hid_t CreateTrackingAttrType(hid_t loc);
 
-// Spike data (of INT16 samples)
+// Spike data (of int16_t samples)
 typedef struct {
-    UINT32 dwTimestamp;
-    UINT8  unit;
-    UINT8  res;
+    uint32_t dwTimestamp;
+    uint8_t  unit;
+    uint8_t  res;
     // This must be the last
-    INT16  wave[cbMAX_PNTS]; // Currently up to cbMAX_PNTS
+    int16_t  wave[cbMAX_PNTS]; // Currently up to cbMAX_PNTS
 } BmiSpike16_t;
 
-hid_t CreateSpike16Type(hid_t loc, UINT16 spikeLength);
+hid_t CreateSpike16Type(hid_t loc, uint16_t spikeLength);
 
-// Digital/serial data (of INT16 samples)
+// Digital/serial data (of int16_t samples)
 typedef struct {
-    UINT32 dwTimestamp;
-    UINT16  value;
+    uint32_t dwTimestamp;
+    uint16_t  value;
 } BmiDig16_t;
 
 hid_t CreateDig16Type(hid_t loc);
 
 // Video synchronization
 typedef struct {
-    UINT32 dwTimestamp;
-    UINT16  split;
-    UINT32  frame;
-    UINT32  etime; // Elapsed time in milli-seconds
+    uint32_t dwTimestamp;
+    uint16_t  split;
+    uint32_t  frame;
+    uint32_t  etime; // Elapsed time in milli-seconds
 } BmiSynch_t;
 
 hid_t CreateSynchType(hid_t loc);
 
 // Video tracking
 typedef struct {
-    UINT32 dwTimestamp;
-    UINT16 parentID;
-    UINT16 nodeCount;
+    uint32_t dwTimestamp;
+    uint16_t parentID;
+    uint16_t nodeCount;
     // This must be the last
     hvl_t coords;
 } BmiTracking_t;
 
 // Video tracking
 typedef struct {
-    UINT32 dwTimestamp;
-    UINT16 parentID;
-    UINT16 nodeCount;
-    UINT32 etime;
+    uint32_t dwTimestamp;
+    uint16_t parentID;
+    uint16_t nodeCount;
+    uint32_t etime;
     // This must be the last
-    UINT16 coords[cbMAX_TRACKCOORDS];
+    uint16_t coords[cbMAX_TRACKCOORDS];
 } BmiTracking_fl_t;
 
 hid_t CreateTrackingType(hid_t loc, int dim, int width);
@@ -190,9 +190,9 @@ hid_t CreateTrackingType(hid_t loc, int dim, int width);
 #define BMI_COMMENT_LEN 256
 // Comment or user event
 typedef struct {
-    UINT32 dwTimestamp;
-    UINT8  flags;
-    UINT32 data;
+    uint32_t dwTimestamp;
+    uint8_t  flags;
+    uint32_t data;
     char szComment[BMI_COMMENT_LEN];
 } BmiComment_t;
 

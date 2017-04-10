@@ -51,14 +51,14 @@ public:
     CCFXmlItem(cbMANUALUNITMAPPING & pkt, QString strName = "");
     CCFXmlItem(cbHOOP & pkt, QString strName = "");
     CCFXmlItem(cbAdaptControl & pkt, QString strName = "");
-    CCFXmlItem(cbWaveformData & pkt, UINT16  mode, QString strName = "");
+    CCFXmlItem(cbWaveformData & pkt, uint16_t  mode, QString strName = "");
 
-    CCFXmlItem(UINT32 & number, QString strName = "");
-    CCFXmlItem(INT32 & number, QString strName = "");
-    CCFXmlItem(UINT16 & number, QString strName = "");
-    CCFXmlItem(INT16 & number, QString strName = "");
-    CCFXmlItem(UINT8 & number, QString strName = "");
-    CCFXmlItem(INT8 & number, QString strName = "");
+    CCFXmlItem(uint32_t & number, QString strName = "");
+    CCFXmlItem(int32_t & number, QString strName = "");
+    CCFXmlItem(uint16_t & number, QString strName = "");
+    CCFXmlItem(int16_t & number, QString strName = "");
+    CCFXmlItem(uint8_t & number, QString strName = "");
+    CCFXmlItem(int8_t & number, QString strName = "");
     CCFXmlItem(float & number, QString strName = "");
     CCFXmlItem(double & number, QString strName = "");
 

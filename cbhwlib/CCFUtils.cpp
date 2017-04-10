@@ -30,7 +30,7 @@ using namespace ccf;
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF base constructor
-CCFUtils::CCFUtils(bool bSend, bool bThreaded, cbCCF * pCCF, cbCCFCallback pCallbackFn, UINT32 nInstance) :
+CCFUtils::CCFUtils(bool bSend, bool bThreaded, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance) :
     m_pImpl(NULL),
     m_bSend(bSend),
     m_pCallbackFn(pCallbackFn),
@@ -282,7 +282,7 @@ ccfResult CCFUtils::ReadCCF(LPCSTR szFileName, bool bConvert)
 
     if (szFileName == NULL)
     {
-        UINT32 nIdx = cb_library_index[m_nInstance];
+        uint32_t nIdx = cb_library_index[m_nInstance];
         if (!cb_library_initialized[nIdx] || cb_cfg_buffer_ptr[nIdx] == NULL || cb_cfg_buffer_ptr[nIdx]->sysinfo.chid == 0)
             res = CCFRESULT_ERR_OFFLINE;
         else
@@ -362,7 +362,7 @@ ccfResult CCFUtils::ReadCCF(LPCSTR szFileName, bool bConvert)
 // Purpose: Read latest CCF from NSP
 void CCFUtils::ReadCCFOfNSP()
 {
-    UINT32 nIdx = cb_library_index[m_nInstance];
+    uint32_t nIdx = cb_library_index[m_nInstance];
 
     cbCCF & data = dynamic_cast<ccfXml *>(m_pImpl)->m_data;
     for (int i = 0; i < cbNUM_DIGITAL_FILTERS; ++i)
