@@ -516,6 +516,15 @@ def get_sample_group(group_ix, instance=0):
     return res, channels_info
 
 
+def set_comment(comment_string, rgba_tuple=(0, 0, 0, 255), instance=0):
+    cdef cbSdkResult res
+    cdef uint32_t rgba = (rgba_tuple[0] << 24) + (rgba_tuple[1] << 16) + (rgba_tuple[2] << 8) + rgba_tuple[3]
+    cdef uint8_t charset = 0  # Character set (0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI)
+    cdef bytes py_bytes = comment_string.encode()
+    cdef const char* comment = py_bytes
+    res = cbSdkSetComment(<uint32_t> instance, rgba, charset, comment)
+
+
 cdef cbSdkResult handle_result(cbSdkResult res):
     if (res == CBSDKRESULT_WARNCLOSED):
         print("Library is already closed.")
