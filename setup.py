@@ -4,7 +4,7 @@ import sys
 import numpy
 from setuptools import find_packages
 from setuptools import setup, Extension
-from Cython.Distutils import build_ext
+from Cython.Build import build_ext
 
 
 def get_extras():
@@ -39,11 +39,11 @@ def get_extras():
     elif "win32" in sys.platform:
         import platform
 
-        # Must include stdinit (V2008 does not have it!)
+        # Must include stdint (V2008 does not have it!)
         x_includes += [os.path.join(cur, 'compat')]
         # Must be explicit about cbsdk link path
         arch = '64' if '64bit' in platform.architecture() else ''
-        x_link_args += ['/LIBPATH:{path}'.format(path=os.path.join(cur, 'dist\\lib{arch}'.format(arch=arch)))]
+        x_link_args += ['/LIBPATH:{path}'.format(path=os.path.join(cur, 'dist', 'lib{arch}'.format(arch=arch)))]
         # add winsock, timer, and system libraries
         x_libs += ["ws2_32", "winmm"]
         x_libs += ["kernel32", "user32", "gdi32", "winspool", "shell32",
@@ -122,7 +122,7 @@ extension_kwargs = {
 cbpy_module = Extension('cerebus.cbpy', **extension_kwargs)
 
 setup(
-    name='cerelink',
+    name='cerebus',
     version='0.0.3',
     description='Cerebus Link',
     long_description='Cerebus Link Python Package',
