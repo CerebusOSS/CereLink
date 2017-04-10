@@ -14,6 +14,7 @@ import numpy as np
 cimport numpy as np
 cimport cython
 
+
 def version(instance=0):
     '''Get library version
     Inputs:
@@ -47,6 +48,7 @@ def version(instance=0):
                 }
     return res, ver_dict
 
+
 def defaultConParams():
     #Note: Defaulting to 255.255.255.255 assumes the client is connected to the NSP via a switch.
     #A direct connection might require the client-addr to be "192.168.137.1"
@@ -58,6 +60,7 @@ def defaultConParams():
         'receive-buffer-size': (8 * 1024 * 1024) if sys.platform == 'win32' else (6 * 1024 * 1024)
     }
     return con_parms
+
 
 def open(instance=0, connection='default', parameter={}):
     '''Open library.
@@ -105,13 +108,15 @@ cbpy.open(parameter=cbpy.defaultConParams())
     
     return res, get_connection_type(instance=instance)
 
+
 def close(instance=0):
     '''Close library.
     Inputs:
        instance - (optional) library instance number
     '''
     return handle_result(cbSdkClose(<uint32_t>instance))
-    
+
+
 def get_connection_type(instance=0):
     ''' Get connection type
     Inputs:
@@ -144,6 +149,7 @@ def get_connection_type(instance=0):
         inst_idx = len(instruments) - 1
         
     return {'connection':connections[con_idx], 'instrument':instruments[inst_idx]}
+
 
 def trial_config(instance=0, reset=True, 
                  buffer_parameter={}, 
@@ -205,7 +211,8 @@ def trial_config(instance=0, reset=True,
     handle_result(<cbSdkResult>res)
     
     return res, reset
-    
+
+
 def trial_event(instance=0, reset=False):
     ''' Trial spike and event data.
     Inputs:
@@ -285,6 +292,7 @@ def trial_event(instance=0, reset=False):
 
     return res, trial
 
+
 def trial_continuous(instance=0, reset=False):
     ''' Trial continuous data.
     Inputs:
@@ -308,7 +316,7 @@ def trial_continuous(instance=0, reset=False):
     res = cbsdk_get_trial_config(<int>instance, &cfg_param)
     handle_result(<cbSdkResult>res)
     
-    # get how many samples are avaialble
+    # get how many samples are available
     res = cbsdk_init_trial_cont(<int>instance, <int>reset, &trialcont)
     handle_result(<cbSdkResult>res)
     
@@ -345,7 +353,8 @@ def trial_continuous(instance=0, reset=False):
     handle_result(<cbSdkResult>res)
 
     return res, trial
-    
+
+
 def file_config(instance=0, command='info', comment='', filename=''):
     ''' Configure remote file recording or get status of recording.
     Inputs:
@@ -458,6 +467,7 @@ def digital_out(channel, instance=0, value='low'):
     
     return res
 
+
 def get_channel_config(channel, instance=0):
     '''
     '''
@@ -469,11 +479,48 @@ def get_channel_config(channel, instance=0):
         chan_info.chan, chan_info.proc, chan_info.bank, chan_info.term,
         chan_info.chancaps, chan_info.doutcaps)
 
+
+def get_sample_group(group_ix, instance=0):
+    """
+    """
+    cdef int res
+    cdef uint32_t proc = 1
+    cdef uint32_t nChansInGroup
+    res = cbSdkGetSampleGroupList(<uint32_t>instance, proc, group_ix, &nChansInGroup, NULL)
+    handle_result(<cbSdkResult>res)
+    if (nChansInGroup <= 0):
+        return res, []
+
+    cdef uint32_t pGroupList[144]
+    res = cbSdkGetSampleGroupList(<uint32_t>instance, proc, group_ix, &nChansInGroup, pGroupList)
+    handle_result(<cbSdkResult>res)
+
+    cdef cbPKT_CHANINFO chanInfo
+    channels_info = []
+    for chan_ix in range(nChansInGroup):
+        chan_info = {}
+        res = cbSdkGetChannelConfig(<uint32_t>instance, pGroupList[chan_ix], &chanInfo)
+        handle_result(<cbSdkResult>res)
+        anaRange = chanInfo.physcalin.anamax - chanInfo.physcalin.anamin
+        digRange = chanInfo.physcalin.digmax - chanInfo.physcalin.digmin
+        chan_info['chid'] = chanInfo.chid
+        chan_info['chan'] = chanInfo.chan
+        chan_info['proc'] = chanInfo.proc
+        chan_info['bank'] = chanInfo.bank
+        chan_info['term'] = chanInfo.term
+        chan_info['gain'] = anaRange / digRange
+        chan_info['label'] = chanInfo.label
+        chan_info['unit'] = chanInfo.physcalin.anaunit
+        channels_info.append(chan_info)
+
+    return res, channels_info
+
+
 cdef cbSdkResult handle_result(cbSdkResult res):
     if (res == CBSDKRESULT_WARNCLOSED):
         print("Library is already closed.")
     if (res < 0):
-        errtext = ""
+        errtext = "No associated error string. See cbsdk.h"
         if (res == CBSDKRESULT_ERROFFLINE):
             errtext = "Instrument is offline."
         elif (res == CBSDKRESULT_CLOSED):
