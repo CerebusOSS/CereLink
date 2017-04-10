@@ -12,6 +12,7 @@
 #    First ../Matlab  is looked.
 #    If mex.h is not found then FindMatlab.cmake looks at usual places.
 #    Use -DMatlab_ROOT_DIR if installed in unknown location (or copy to ../Matlab).
+#    e.g., Matlab R2016a on Mac OS: -DMatlab_ROOT_DIR=/Applications/MATLAB_R2016a.app/
 #    -DCBMEX_INSTALL_PREFIX can be used to install cbmex to given directory
 #
 # QT:
@@ -19,7 +20,7 @@
 #     On Mac OS, assuming qt installed with homebrew,
 #     run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt5)
 #     On Windows, set CMAKE_PREFIX_PATH with the Qt path matching your compiler.
-#     For example, cmake .. -G "Visual Studio 14 2015 Win64" -DCMAKE_PREFIX_PATH="C:\Qt\Qt5.6.0\5.6\msvc2015_64\"
+#     For example, cmake .. -G "Visual Studio 14 2015 Win64" -DCMAKE_PREFIX_PATH="C:\Qt\5.8\msvc2015_64\"
 
 
 CMAKE_MINIMUM_REQUIRED( VERSION 3.1.0 )
@@ -102,7 +103,7 @@ cmake_policy(SET CMP0042 NEW) # ENABLE CMP0042: MACOSX_RPATH is enabled by defau
 
 # -Qt
 #We could use a variable to make this editable by GUI, but then we have to clear Qt4 variables for reconfigure.
-#SET(CMAKE_PREFIX_PATH "." CACHE PATH "Qt path. e.g., C:\\Qt\\Qt5.6.0\\5.6\\msvc2015\\")
+#SET(CMAKE_PREFIX_PATH "." CACHE PATH "Qt path. e.g., C:\\Qt\\5.8\\msvc2015_64\\")
 SET(USING_QT5 OFF)
 FIND_PACKAGE( Qt5Core QUIET )
 IF(Qt5Core_FOUND)
@@ -135,14 +136,13 @@ IF(${BUILD_CBMEX})
     IF ( Matlab_INCLUDE_DIRS )
         SET( MATLAB_ROOT "${PROJECT_SOURCE_DIR}/Matlab" )
         MESSAGE ( STATUS "Search mex libraries at " ${Matlab_INCLUDE_DIRS}/../lib/${PLATFORM_NAME} )
-        FILE( GLOB_RECURSE MATLAB_LIBRARIES ${Matlab_INCLUDE_DIRS}/../lib/${PLATFORM_NAME}/libm*.* )
-        IF( MATLAB_LIBRARIES )
+        FILE( GLOB_RECURSE Matlab_LIBRARIES ${Matlab_INCLUDE_DIRS}/../lib/${PLATFORM_NAME}/libm*.* )
+        IF( Matlab_LIBRARIES )
             SET( MATLAB_FOUND 1 )
-        ENDIF( MATLAB_LIBRARIES )
+        ENDIF( Matlab_LIBRARIES )
     ELSE ( Matlab_INCLUDE_DIRS )
         #SET( MATLAB_FIND_DEBUG 1 )
         FIND_PACKAGE( Matlab COMPONENTS MX_LIBRARY)
-        #On my Mac OS it didn’t search correctly without -DMatlab_ROOT_DIR=/Applications/MATLAB_R2016a.app/
     ENDIF ( Matlab_INCLUDE_DIRS )
 ENDIF()
 
