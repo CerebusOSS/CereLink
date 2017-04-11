@@ -35,15 +35,18 @@ typedef struct _cbSdkConfigParam {
     bool bAbsolute;
 } cbSdkConfigParam;
 
-int cbsdk_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param);
-int cbsdk_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param);
+cbSdkResult cbsdk_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param);
+cbSdkResult cbsdk_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param);
 
-int cbsdk_init_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent);
-int cbsdk_get_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent);
+cbSdkResult cbsdk_init_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent);
+cbSdkResult cbsdk_get_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent);
 
-int cbsdk_init_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont);
-int cbsdk_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont);
+cbSdkResult cbsdk_init_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont);
+cbSdkResult cbsdk_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont);
 
-int cbsdk_file_config(int instance,  const char * filename, const char * comment, int start, unsigned int options);
+cbSdkResult cbsdk_init_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm);
+cbSdkResult cbsdk_get_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm);
+
+cbSdkResult cbsdk_file_config(int instance,  const char * filename, const char * comment, int start, unsigned int options);
 
 #endif // include guard
