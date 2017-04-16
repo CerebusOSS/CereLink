@@ -12,6 +12,7 @@ from libcpp cimport bool
 from libc.stdlib cimport malloc, free
 import sys
 import numpy as np
+import locale
 cimport numpy as np
 cimport cython
 
@@ -94,7 +95,7 @@ cbpy.open(parameter=cbpy.defaultConParams())
     cdef cbSdkConnectionType conType = wconType[connection]
     cdef cbSdkConnection con
 
-    cdef bytes szOutIP = parameter.get('inst-addr', cbNET_UDP_ADDR_CNT).encode()
+    cdef bytes szOutIP = parameter.get('inst-addr', cbNET_UDP_ADDR_CNT.decode("utf-8")).encode()
     cdef bytes szInIP  = parameter.get('client-addr', '').encode()
     
     con.szOutIP = szOutIP
@@ -410,10 +411,9 @@ def trial_comment(instance=0, reset=False):
     my_rgbas = np.asarray(mxa_u32)
 
     # For comments
-    cdef char **string_buf = <char **>malloc(trialcomm.num_samples * sizeof(char*))
+    trialcomm.comments = <uint8_t **>malloc(trialcomm.num_samples * sizeof(uint8_t*))
     for comm_ix in range(trialcomm.num_samples):
-        string_buf[comm_ix] = NULL
-    trialcomm.comments = <uint8_t **>string_buf
+        trialcomm.comments[comm_ix] = <uint8_t *>malloc(256 * sizeof(uint8_t))
 
     # For timestamps
     if cfg_param.bDouble:
@@ -431,12 +431,13 @@ def trial_comment(instance=0, reset=False):
 
         trial = []
         for comm_ix in range(trialcomm.num_samples):
-            row = [my_timestamps[comm_ix], my_rgbas[comm_ix]] #, string_buf[comm_ix]]
+            this_enc = 'utf-16' if my_charsets[comm_ix]==1 else locale.getpreferredencoding()
+            row = [my_timestamps[comm_ix], trialcomm.comments[comm_ix].decode(this_enc), my_rgbas[comm_ix]]
             trial.append(row)
 
         return <int>res, trial
     finally:
-        free(string_buf)
+        free(trialcomm.comments)
 
 
 def file_config(instance=0, command='info', comment='', filename=''):
