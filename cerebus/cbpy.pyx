@@ -10,6 +10,7 @@ Purpose: Python module for cbsdk_cython
 from cbsdk_cython cimport *
 from libcpp cimport bool
 from libc.stdlib cimport malloc, free
+from libc.string cimport strncpy
 import sys
 import numpy as np
 import locale
@@ -387,12 +388,6 @@ def trial_comment(instance=0, reset=False):
     if trialcomm.num_samples == 0:
         return <int>res, []
 
-    # uint16_t num_samples    # Number of comments
-    # uint8_t * charsets      # Buffer to hold character sets; (0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI)
-    # uint32_t * rgbas        # Buffer to hold rgba values
-    # uint8_t * * comments    # Pointer to comments
-    # void * timestamps       # Buffer to hold time stamps
-
     # allocate memory
 
     # types
@@ -526,6 +521,7 @@ def time(instance=0, unit='samples'):
 
     cdef uint32_t cbtime
     res = cbSdkGetTime(<uint32_t>instance, &cbtime)
+    handle_result(res)
 
     time = float(cbtime) / factor
     
@@ -551,7 +547,7 @@ def analog_out(channel_out, channel_mon, track_last=True, spike_only=False, inst
         mon.bTrack = track_last
         mon.bSpike = spike_only
         res = cbSdkSetAnalogOutput(<uint32_t>instance, <uint16_t>channel_out, NULL, &mon)
-
+    handle_result(res)
     return res
 
 
@@ -572,20 +568,133 @@ def digital_out(channel, instance=0, value='low'):
     cdef cbSdkResult res
     cdef int int_val = values.index(value)
     res = cbSdkSetDigitalOutput(<uint32_t>instance, <uint16_t>channel, int_val)
-    
+    handle_result(res)
     return res
 
 
 def get_channel_config(channel, instance=0):
     '''
+    Outputs:
+        -chaninfo = A Python dictionary with the following fields:
+        'time': system clock timestamp,
+        'chid': 0x8000,
+        'type': cbPKTTYPE_AINP*,
+        'dlen': cbPKT_DLENCHANINFO,
+        'chan': actual channel id of the channel being configured,
+        'proc': the address of the processor on which the channel resides,
+        'bank': the address of the bank on which the channel resides,
+        'term': the terminal number of the channel within it's bank,
+        'chancaps': general channel capablities (given by cbCHAN_* flags),
+        'doutcaps': digital output capablities (composed of cbDOUT_* flags),
+        'dinpcaps': digital input capablities (composed of cbDINP_* flags),
+        'aoutcaps': analog output capablities (composed of cbAOUT_* flags),
+        'ainpcaps': analog input capablities (composed of cbAINP_* flags),
+        'spkcaps': spike processing capabilities,
+        'label': Label of the channel (null terminated if <16 characters),
+        'userflags': User flags for the channel state,
+        'doutopts': digital output options (composed of cbDOUT_* flags),
+        'dinpopts': digital input options (composed of cbDINP_* flags),
+        'aoutopts': analog output options,
+        'eopchar': digital input capablities (given by cbDINP_* flags),
+        'ainpopts': analog input options (composed of cbAINP* flags),
+        'smpfilter': continuous-time pathway filter id,
+        'smpgroup': continuous-time pathway sample group,
+        'smpdispmin': continuous-time pathway display factor,
+        'smpdispmax': continuous-time pathway display factor
     '''
     cdef cbSdkResult res
-    cdef cbPKT_CHANINFO chan_info
-    res = cbSdkGetChannelConfig(<uint32_t>instance, <uint16_t>channel, &chan_info)
-    print(chan_info)
-    print(chan_info.time, chan_info.chid, chan_info.dlen,
-        chan_info.chan, chan_info.proc, chan_info.bank, chan_info.term,
-        chan_info.chancaps, chan_info.doutcaps)
+    cdef cbPKT_CHANINFO cb_chaninfo
+    res = cbSdkGetChannelConfig(<uint32_t>instance, <uint16_t>channel, &cb_chaninfo)
+    handle_result(res)
+    if res != 0:
+        return res, {}
+
+    chaninfo = {
+        'time': cb_chaninfo.time,
+        'chid': cb_chaninfo.chid,
+        'type': cb_chaninfo.type,  # cbPKTTYPE_AINP*
+        'dlen': cb_chaninfo.dlen,  # cbPKT_DLENCHANINFO
+        'chan': cb_chaninfo.chan,
+        'proc': cb_chaninfo.proc,
+        'bank': cb_chaninfo.bank,
+        'term': cb_chaninfo.term,
+        'chancaps': cb_chaninfo.chancaps,
+        'doutcaps': cb_chaninfo.doutcaps,
+        'dinpcaps': cb_chaninfo.dinpcaps,
+        'aoutcaps': cb_chaninfo.aoutcaps,
+        'ainpcaps': cb_chaninfo.ainpcaps,
+        'spkcaps': cb_chaninfo.spkcaps,
+        'label': cb_chaninfo.label.decode('utf-8'),
+        'userflags': cb_chaninfo.userflags,
+        'doutopts': cb_chaninfo.doutopts,
+        'dinpopts': cb_chaninfo.dinpopts,
+        'aoutopts': cb_chaninfo.aoutopts,
+        'eopchar': cb_chaninfo.eopchar,
+        'monsource': cb_chaninfo.monsource,
+        'outvalue': cb_chaninfo.outvalue,
+        'aoutopts': cb_chaninfo.aoutopts,
+        'eopchar': cb_chaninfo.eopchar,
+        'ainpopts': cb_chaninfo.ainpopts,
+        'smpfilter': cb_chaninfo.smpfilter,
+        'smpgroup': cb_chaninfo.smpgroup,
+        'smpdispmin': cb_chaninfo.smpdispmin,
+        'smpdispmax': cb_chaninfo.smpdispmax
+    }
+
+        # TODO:
+        #cbSCALING           physcalin               # physical channel scaling information
+        #cbFILTDESC          phyfiltin               # physical channel filter definition
+        #cbSCALING           physcalout              # physical channel scaling information
+        #cbFILTDESC          phyfiltout              # physical channel filter definition
+        #int32_t             position[4]             # reserved for future position information
+        #cbSCALING           scalin                  # user-defined scaling information for AINP
+        #cbSCALING           scalout                 # user-defined scaling information for AOUT
+        #uint32_t              monsource
+        #int32_t               outvalue       # output value
+        #uint16_t              lowsamples     # address of channel to monitor
+        #uint16_t              highsamples    # address of channel to monitor
+        #int32_t               offset
+        #uint8_t             trigtype        # trigger type (see cbDOUT_TRIGGER_*)
+        #uint16_t            trigchan        # trigger channel
+        #uint16_t            trigval         # trigger value
+        #uint32_t            lncrate         # line noise cancellation filter adaptation rate
+        #uint32_t            spkfilter       # spike pathway filter id
+        #int32_t             spkdispmax      # spike pathway display factor
+        #int32_t             lncdispmax      # Line Noise pathway display factor
+        #uint32_t            spkopts         # spike processing options
+        #int32_t             spkthrlevel     # spike threshold level
+        #int32_t             spkthrlimit
+        #uint32_t            spkgroup        # NTrodeGroup this electrode belongs to - 0 is single unit, non-0 indicates a multi-trode grouping
+        #int16_t             amplrejpos      # Amplitude rejection positive value
+        #int16_t             amplrejneg      # Amplitude rejection negative value
+        #uint32_t            refelecchan     # Software reference electrode channel
+        #cbMANUALUNITMAPPING unitmapping[cbMAXUNITS+0]             # manual unit mapping
+        #cbHOOP              spkhoops[cbMAXUNITS+0][cbMAXHOOPS+0]    # spike hoop sorting set
+
+    return res, chaninfo
+
+
+def set_channel_config(channel, chaninfo={}, instance=0):
+    """
+    Inputs:
+        chaninfo: A Python dict. See fields descriptions in get_channel_config. All fields are optional.
+    """
+    cdef cbSdkResult res
+    cdef cbPKT_CHANINFO cb_chaninfo
+    res = cbSdkGetChannelConfig(<uint32_t>instance, <uint16_t>channel, &cb_chaninfo)
+    handle_result(res)
+
+    if 'label' in chaninfo:
+        new_label = chaninfo['label']
+        if not isinstance(new_label, bytes):
+            new_label = new_label.encode()
+        strncpy(cb_chaninfo.label, new_label, sizeof(new_label))
+
+    if 'smpgroup' in chaninfo:
+        cb_chaninfo.smpgroup = chaninfo['smpgroup']
+
+    res = cbSdkSetChannelConfig(<uint32_t>instance, <uint16_t>channel, &cb_chaninfo)
+    handle_result(res)
 
 
 def get_sample_group(group_ix, instance=0):
