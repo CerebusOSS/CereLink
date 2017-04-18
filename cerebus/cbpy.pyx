@@ -600,7 +600,21 @@ def get_channel_config(channel, instance=0):
         'smpfilter': continuous-time pathway filter id,
         'smpgroup': continuous-time pathway sample group,
         'smpdispmin': continuous-time pathway display factor,
-        'smpdispmax': continuous-time pathway display factor
+        'smpdispmax': continuous-time pathway display factor,
+        'trigtype': trigger type (see cbDOUT_TRIGGER_*),
+        'trigchan': trigger channel,
+        'trigval': trigger value,
+        'lncrate': line noise cancellation filter adaptation rate,
+        'spkfilter': spike pathway filter id,
+        'spkdispmax': spike pathway display factor,
+        'lncdispmax': Line Noise pathway display factor,
+        'spkopts': spike processing options,
+        'spkthrlevel': spike threshold level,
+        'spkthrlimit': ,
+        'spkgroup': NTrodeGroup this electrode belongs to - 0 is single unit, non-0 indicates a multi-trode grouping,
+        'amplrejpos': Amplitude rejection positive value,
+        'amplrejneg': Amplitude rejection negative value,
+        'refelecchan': Software reference electrode channel,
     '''
     cdef cbSdkResult res
     cdef cbPKT_CHANINFO cb_chaninfo
@@ -638,7 +652,20 @@ def get_channel_config(channel, instance=0):
         'smpfilter': cb_chaninfo.smpfilter,
         'smpgroup': cb_chaninfo.smpgroup,
         'smpdispmin': cb_chaninfo.smpdispmin,
-        'smpdispmax': cb_chaninfo.smpdispmax
+        'smpdispmax': cb_chaninfo.smpdispmax,
+        'trigtype': cb_chaninfo.trigtype,
+        'trigchan': cb_chaninfo.trigchan,
+        'lncrate': cb_chaninfo.lncrate,
+        'spkfilter': cb_chaninfo.spkfilter,
+        'spkdispmax': cb_chaninfo.spkdispmax,
+        'lncdispmax': cb_chaninfo.lncdispmax,
+        'spkopts': cb_chaninfo.spkopts,
+        'spkthrlevel': cb_chaninfo.spkthrlevel,
+        'spkthrlimit': cb_chaninfo.spkthrlimit,
+        'spkgroup': cb_chaninfo.spkgroup,
+        'amplrejpos': cb_chaninfo.amplrejpos,
+        'amplrejneg': cb_chaninfo.amplrejneg,
+        'refelecchan': cb_chaninfo.refelecchan
     }
 
         # TODO:
@@ -654,20 +681,6 @@ def get_channel_config(channel, instance=0):
         #uint16_t              lowsamples     # address of channel to monitor
         #uint16_t              highsamples    # address of channel to monitor
         #int32_t               offset
-        #uint8_t             trigtype        # trigger type (see cbDOUT_TRIGGER_*)
-        #uint16_t            trigchan        # trigger channel
-        #uint16_t            trigval         # trigger value
-        #uint32_t            lncrate         # line noise cancellation filter adaptation rate
-        #uint32_t            spkfilter       # spike pathway filter id
-        #int32_t             spkdispmax      # spike pathway display factor
-        #int32_t             lncdispmax      # Line Noise pathway display factor
-        #uint32_t            spkopts         # spike processing options
-        #int32_t             spkthrlevel     # spike threshold level
-        #int32_t             spkthrlimit
-        #uint32_t            spkgroup        # NTrodeGroup this electrode belongs to - 0 is single unit, non-0 indicates a multi-trode grouping
-        #int16_t             amplrejpos      # Amplitude rejection positive value
-        #int16_t             amplrejneg      # Amplitude rejection negative value
-        #uint32_t            refelecchan     # Software reference electrode channel
         #cbMANUALUNITMAPPING unitmapping[cbMAXUNITS+0]             # manual unit mapping
         #cbHOOP              spkhoops[cbMAXUNITS+0][cbMAXHOOPS+0]    # spike hoop sorting set
 
@@ -692,6 +705,9 @@ def set_channel_config(channel, chaninfo={}, instance=0):
 
     if 'smpgroup' in chaninfo:
         cb_chaninfo.smpgroup = chaninfo['smpgroup']
+
+    if 'spkthrlevel' in chaninfo:
+        cb_chaninfo.spkthrlevel = chaninfo['spkthrlevel']
 
     res = cbSdkSetChannelConfig(<uint32_t>instance, <uint16_t>channel, &cb_chaninfo)
     handle_result(res)
