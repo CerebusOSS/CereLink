@@ -29,6 +29,8 @@ cdef extern from "cbhwlib.h":
         MAX_CHANS_SERIAL = (MAX_CHANS_DIGITAL_IN+1)
         cbMAXTRACKOBJ = 20 # maximum number of trackable objects
         cbMAXHOOPS = 4
+        cbPKT_SPKCACHEPKTCNT = 400
+        cbMAX_PNTS = 128  # make large enough to track longest possible spike width in samples
 
     cdef enum cbwlib_strconsts:
         cbLEN_STR_UNIT          = 8
@@ -149,6 +151,25 @@ cdef extern from "cbhwlib.h":
         uint32_t    lpfreq      # low-pass frequency in milliHertz
         uint32_t    lporder     # low-pass filter order
         uint32_t    lptype      # low-pass filter type
+
+    ctypedef struct cbPKT_SPK:
+        uint32_t    time                # system clock timestamp
+        uint16_t    chid                # channel identifier
+        uint8_t     unit                # unit identification (0=unclassified, 1-5=classified, 255=artifact, 254=background)
+        uint8_t     dlen                # length of what follows ... always  cbPKTDLEN_SPK
+        float       fPattern[3]         # values of the pattern space (Normal uses only 2, PCA uses third)
+        int16_t     nPeak
+        int16_t     nValley
+        int16_t     wave[cbMAX_PNTS+0]  # Room for all possible points collected
+        # wave must be the last item in the structure because it can be variable length to a max of cbMAX_PNTS
+
+    ctypedef struct cbSPKCACHE:
+        uint32_t    chid                            # ID of the Channel
+        uint32_t    pktcnt                          # # of packets which can be saved
+        uint32_t    pktsize                         # Size of an individual packet
+        uint32_t    head                            # Where (0 based index) in the circular buffer to place the NEXT packet.
+        uint32_t    valid                           # How many packets have come in since the last configuration
+        cbPKT_SPK   spkpkt[cbPKT_SPKCACHEPKTCNT+0]  # Circular buffer of the cached spikes
 
 cdef extern from "cbsdk.h":
 
@@ -326,7 +347,7 @@ cdef extern from "cbsdk.h":
     cbSdkResult cbSdkGetType(uint32_t nInstance, cbSdkConnectionType * conType, cbSdkInstrumentType * instType)  # Get connection and instrument type
     cbSdkResult cbSdkClose(uint32_t nInstance)  # Close the library
     cbSdkResult cbSdkGetTime(uint32_t nInstance, uint32_t * cbtime)  # Get the instrument sample clock time
-    #cbSdkGetSpkCache
+    cbSdkResult cbSdkGetSpkCache(uint32_t nInstance, uint16_t channel, cbSPKCACHE **cache)
     #cbSdkGetTrialConfig and cbSdkSetTrialConfig are better handled by cbsdk_helper due to optional arguments.
     cbSdkResult cbSdkUnsetTrialConfig(uint32_t nInstance, cbSdkTrialType type)
     cbSdkResult cbSdkGetChannelLabel(int nInstance, uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position)

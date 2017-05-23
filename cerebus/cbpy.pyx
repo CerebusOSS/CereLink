@@ -758,6 +758,29 @@ def set_comment(comment_string, rgba_tuple=(0, 0, 0, 255), instance=0):
     res = cbSdkSetComment(<uint32_t> instance, rgba, charset, comment)
 
 
+def get_spike_cache(int channel, int valid_since=0, int spike_samples=48, int instance=0):
+    cdef cbSdkResult res
+    cdef cbSPKCACHE *cache
+    cdef cbPKT_SPK spkpkt
+    res = cbSdkGetSpkCache(<uint32_t> instance, <uint16_t> channel, &cache)
+    handle_result(res)
+    cdef int cbPKT_SPKCACHEPKTCNT_int = cbPKT_SPKCACHEPKTCNT
+    spike_samples = min(spike_samples, <int>cbMAX_PNTS)
+    # TODO: Calculate spike_samples from (dwBytesPerPacket - 8) / 2
+    cdef np.ndarray[np.int16_t, ndim=2, mode="c"] np_waveforms = np.zeros((cbPKT_SPKCACHEPKTCNT_int, spike_samples), dtype=np.int16)
+    cdef int n_spikes, start_ix, spike_ix, buff_ix, samp_ix
+    if cache.valid > valid_since:
+        n_spikes = min((cache.valid - valid_since), cbPKT_SPKCACHEPKTCNT_int)
+        start_ix = (cache.head - 1 - n_spikes) % cbPKT_SPKCACHEPKTCNT_int
+        for spike_ix in range(n_spikes):
+            buff_ix = (start_ix + spike_ix) % cbPKT_SPKCACHEPKTCNT_int
+            for samp_ix in range(spike_samples):
+                np_waveforms[spike_ix, samp_ix] = cache.spkpkt[buff_ix].wave[samp_ix]
+    else:
+        n_spikes = 0
+    return np_waveforms[:n_spikes], <int>cache.valid
+
+
 cdef cbSdkResult handle_result(cbSdkResult res):
     if (res == CBSDKRESULT_WARNCLOSED):
         print("Library is already closed.")
