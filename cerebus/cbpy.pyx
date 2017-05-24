@@ -716,17 +716,17 @@ def set_channel_config(channel, chaninfo={}, instance=0):
 def get_sample_group(group_ix, instance=0):
     """
     """
-    cdef int res
+    cdef cbSdkResult res
     cdef uint32_t proc = 1
     cdef uint32_t nChansInGroup
     res = cbSdkGetSampleGroupList(<uint32_t>instance, proc, group_ix, &nChansInGroup, NULL)
-    handle_result(<cbSdkResult>res)
+    handle_result(res)
     if (nChansInGroup <= 0):
-        return res, []
+        return <int> res, []
 
     cdef uint32_t pGroupList[144]
     res = cbSdkGetSampleGroupList(<uint32_t>instance, proc, group_ix, &nChansInGroup, pGroupList)
-    handle_result(<cbSdkResult>res)
+    handle_result(res)
 
     cdef cbPKT_CHANINFO chanInfo
     channels_info = []
@@ -746,7 +746,7 @@ def get_sample_group(group_ix, instance=0):
         chan_info['unit'] = chanInfo.physcalin.anaunit
         channels_info.append(chan_info)
 
-    return res, channels_info
+    return <int> res, channels_info
 
 
 def set_comment(comment_string, rgba_tuple=(0, 0, 0, 255), instance=0):
@@ -758,27 +758,38 @@ def set_comment(comment_string, rgba_tuple=(0, 0, 0, 255), instance=0):
     res = cbSdkSetComment(<uint32_t> instance, rgba, charset, comment)
 
 
+cdef extern from "numpy/arrayobject.h":
+    void PyArray_ENABLEFLAGS(np.ndarray arr, int flags)
+
+
 def get_spike_cache(int channel, int valid_since=0, int spike_samples=48, int instance=0):
-    cdef cbSdkResult res
-    cdef cbSPKCACHE *cache
-    cdef cbPKT_SPK spkpkt
-    res = cbSdkGetSpkCache(<uint32_t> instance, <uint16_t> channel, &cache)
-    handle_result(res)
+    cdef int n_spikes
     cdef int cbPKT_SPKCACHEPKTCNT_int = cbPKT_SPKCACHEPKTCNT
-    spike_samples = min(spike_samples, <int>cbMAX_PNTS)
-    # TODO: Calculate spike_samples from (dwBytesPerPacket - 8) / 2
     cdef np.ndarray[np.int16_t, ndim=2, mode="c"] np_waveforms = np.zeros((cbPKT_SPKCACHEPKTCNT_int, spike_samples), dtype=np.int16)
-    cdef int n_spikes, start_ix, spike_ix, buff_ix, samp_ix
-    if cache.valid > valid_since:
-        n_spikes = min((cache.valid - valid_since), cbPKT_SPKCACHEPKTCNT_int)
-        start_ix = (cache.head - 1 - n_spikes) % cbPKT_SPKCACHEPKTCNT_int
-        for spike_ix in range(n_spikes):
-            buff_ix = (start_ix + spike_ix) % cbPKT_SPKCACHEPKTCNT_int
-            for samp_ix in range(spike_samples):
-                np_waveforms[spike_ix, samp_ix] = cache.spkpkt[buff_ix].wave[samp_ix]
-    else:
-        n_spikes = 0
-    return np_waveforms[:n_spikes], <int>cache.valid
+    cdef uint8_t[<int>cbPKT_SPKCACHEPKTCNT] unit_ids
+    cdef int valid_out
+    n_spikes = cbsdk_get_spikes(instance, channel, valid_since, spike_samples, &np_waveforms[0,0], unit_ids, &valid_out)
+    unit_ids_out = [<int>unit_ids[spike_ix] for spike_ix in range(n_spikes)]
+    # TODO: unit_ids don't seem to be lining up properly with the waveforms when waveforms are coming in quickly.
+    PyArray_ENABLEFLAGS(np_waveforms, np.NPY_OWNDATA)
+    # TODO: It might be better to have Python create the numpy array and pass it in to this function.
+    return np_waveforms[:n_spikes], unit_ids_out, valid_out
+
+
+def get_sys_config(int instance=0):
+    cdef cbSdkResult res
+    cdef uint32_t spklength
+    cdef uint32_t spkpretrig
+    cdef uint32_t sysfreq
+    res = cbSdkGetSysConfig(<uint32_t> instance, &spklength, &spkpretrig, &sysfreq)
+    handle_result(res)
+    return {'spklength': spklength, 'spkpretrig': spkpretrig, 'sysfreq': sysfreq}
+
+
+def set_spike_config(int spklength=48, int spkpretrig=10, int instance=0):
+    cdef cbSdkResult res
+    res = cbSdkSetSpikeConfig(<uint32_t> instance, <uint32_t> spklength, <uint32_t> spkpretrig)
+    handle_result(res)
 
 
 cdef cbSdkResult handle_result(cbSdkResult res):
@@ -792,6 +803,8 @@ cdef cbSdkResult handle_result(cbSdkResult res):
             errtext = "Interface is closed; cannot do this operation."
         elif (res == CBSDKRESULT_ERRCONFIG):
             errtext = "Trying to run an unconfigured method."
+        elif (res == CBSDKRESULT_NULLPTR):
+            errtext = "Null pointer."
 
         raise RuntimeError(("%d, " + errtext) % res)
     return res

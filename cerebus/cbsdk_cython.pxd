@@ -378,6 +378,8 @@ cdef extern from "cbsdk.h":
     cbSdkResult cbSdkGetFilterDesc(uint32_t nInstance, uint32_t proc, uint32_t filt, cbFILTDESC * filtdesc)
     cbSdkResult cbSdkGetSampleGroupList(uint32_t nInstance, uint32_t proc, uint32_t group, uint32_t *length, uint32_t *list)
     cbSdkResult cbSdkGetSampleGroupInfo(uint32_t nInstance, uint32_t proc, uint32_t group, char *label, uint32_t *period, uint32_t *length)
+    cbSdkResult cbSdkSetSpikeConfig(uint32_t nInstance, uint32_t spklength, uint32_t spkpretrig)
+    cbSdkResult cbSdkGetSysConfig(uint32_t nInstance, uint32_t * spklength, uint32_t * spkpretrig, uint32_t * sysfreq)
 
 
 cdef extern from "cbsdk_helper.h":
@@ -411,3 +413,5 @@ cdef extern from "cbsdk_helper.h":
     cbSdkResult cbsdk_get_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm)
 
     cbSdkResult cbsdk_file_config(int instance, const char * filename, const char * comment, int start, unsigned int options)
+
+    int cbsdk_get_spikes(int nInstance, int channel, int valid_since, int spike_samples, int16_t * waveforms, uint8_t * unit_ids, int * valid_out)
