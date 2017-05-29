@@ -758,24 +758,6 @@ def set_comment(comment_string, rgba_tuple=(0, 0, 0, 255), instance=0):
     res = cbSdkSetComment(<uint32_t> instance, rgba, charset, comment)
 
 
-cdef extern from "numpy/arrayobject.h":
-    void PyArray_ENABLEFLAGS(np.ndarray arr, int flags)
-
-
-def get_spike_cache(int channel, int valid_since=0, int spike_samples=48, int instance=0):
-    cdef int n_spikes
-    cdef int cbPKT_SPKCACHEPKTCNT_int = cbPKT_SPKCACHEPKTCNT
-    cdef np.ndarray[np.int16_t, ndim=2, mode="c"] np_waveforms = np.zeros((cbPKT_SPKCACHEPKTCNT_int, spike_samples), dtype=np.int16)
-    cdef uint8_t[<int>cbPKT_SPKCACHEPKTCNT] unit_ids
-    cdef int valid_out
-    n_spikes = cbsdk_get_spikes(instance, channel, valid_since, spike_samples, &np_waveforms[0,0], unit_ids, &valid_out)
-    unit_ids_out = [<int>unit_ids[spike_ix] for spike_ix in range(n_spikes)]
-    # TODO: unit_ids don't seem to be lining up properly with the waveforms when waveforms are coming in quickly.
-    PyArray_ENABLEFLAGS(np_waveforms, np.NPY_OWNDATA)
-    # TODO: It might be better to have Python create the numpy array and pass it in to this function.
-    return np_waveforms[:n_spikes], unit_ids_out, valid_out
-
-
 def get_sys_config(int instance=0):
     cdef cbSdkResult res
     cdef uint32_t spklength
@@ -790,6 +772,45 @@ def set_spike_config(int spklength=48, int spkpretrig=10, int instance=0):
     cdef cbSdkResult res
     res = cbSdkSetSpikeConfig(<uint32_t> instance, <uint32_t> spklength, <uint32_t> spkpretrig)
     handle_result(res)
+
+
+cdef extern from "numpy/arrayobject.h":
+    void PyArray_ENABLEFLAGS(np.ndarray arr, int flags)
+
+
+cdef class SpikeCache:
+    cdef readonly int inst, chan, n_samples, n_pretrig
+    cdef cbSPKCACHE *cache
+    cdef int last_valid
+
+    def __cinit__(self, int channel=1, int instance=0):
+        self.inst = instance
+        self.chan = channel
+        cdef cbSPKCACHE ignoreme  # Just so self.cache is not NULL... but this won't be used by anything
+        self.cache = &ignoreme    # because cbSdkGetSpkCache changes what self.cache is pointing to.
+        cdef cbSdkResult res = cbSdkGetSpkCache(self.inst, self.chan, &self.cache)
+        handle_result(res)
+        self.last_valid = self.cache.valid
+        sys_config_dict = get_sys_config(instance)
+        self.n_samples = sys_config_dict['spklength']
+        self.n_pretrig = sys_config_dict['spkpretrig']
+
+    def get_new_waveforms(self):
+        cdef int new_valid = self.cache.valid
+        cdef int new_head = self.cache.head
+        cdef int n_new = min(new_valid - self.last_valid, 400)
+        cdef np.ndarray[np.int16_t, ndim=2, mode="c"] np_waveforms = np.empty((n_new, self.n_samples), dtype=np.int16)
+        cdef np.ndarray[np.uint8_t, ndim=1] np_unit_ids = np.empty(n_new, dtype=np.uint8)
+        cdef int wf_ix, pkt_ix, samp_ix
+        for wf_ix in range(n_new):
+            pkt_ix = (new_head - 2 - n_new + wf_ix) % 400
+            np_unit_ids[wf_ix] = self.cache.spkpkt[pkt_ix].unit
+            for samp_ix in range(self.n_samples):
+                np_waveforms[wf_ix, samp_ix] = self.cache.spkpkt[pkt_ix].wave[samp_ix]
+        #unit_ids_out = [<int>unit_ids[wf_ix] for wf_ix in range(n_new)]
+        PyArray_ENABLEFLAGS(np_waveforms, np.NPY_OWNDATA)
+        self.last_valid = new_valid
+        return np_waveforms, np_unit_ids
 
 
 cdef cbSdkResult handle_result(cbSdkResult res):

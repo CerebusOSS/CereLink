@@ -86,23 +86,3 @@ cbSdkResult cbsdk_file_config(int instance, const char * filename, const char * 
     cbSdkResult sdkres = cbSdkSetFileConfig(instance, filename == NULL ? "" : filename, comment == NULL ? "" : comment, start, options);
     return sdkres;
 }
-
-int cbsdk_get_spikes(int nInstance, int channel, int valid_since, int spike_samples, int16_t * waveforms, uint8_t * unit_ids, int * valid_out)
-{
-    cbSPKCACHE *cache;
-    cbSdkResult sdkres = cbSdkGetSpkCache(nInstance, channel, &cache);
-    int n_spikes = 0;
-    if (cache->valid > valid_since)
-    {
-        n_spikes = (cache->valid - valid_since) < (int)cbPKT_SPKCACHEPKTCNT ? (cache->valid - valid_since) : cbPKT_SPKCACHEPKTCNT;
-        int start_ix = (cache->head - 1 - n_spikes) % (int)cbPKT_SPKCACHEPKTCNT;
-        for (int spike_ix = 0; spike_ix < n_spikes; spike_ix++)
-        {
-            int buff_ix = (start_ix + spike_ix) % (int)cbPKT_SPKCACHEPKTCNT;
-            memcpy(&waveforms[spike_ix * spike_samples * sizeof(int16_t)], cache->spkpkt[buff_ix].wave, spike_samples * sizeof(int16_t));
-            unit_ids[spike_ix] = cache->spkpkt[buff_ix].unit;
-        }
-    }
-    *valid_out = cache->valid;
-    return n_spikes;
-}

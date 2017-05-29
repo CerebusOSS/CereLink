@@ -413,5 +413,3 @@ cdef extern from "cbsdk_helper.h":
     cbSdkResult cbsdk_get_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm)
 
     cbSdkResult cbsdk_file_config(int instance, const char * filename, const char * comment, int start, unsigned int options)
-
-    int cbsdk_get_spikes(int nInstance, int channel, int valid_since, int spike_samples, int16_t * waveforms, uint8_t * unit_ids, int * valid_out)
