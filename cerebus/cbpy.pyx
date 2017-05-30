@@ -18,7 +18,7 @@ cimport numpy as np
 cimport cython
 
 
-def version(instance=0):
+def version(int instance=0):
     '''Get library version
     Inputs:
         instance - (optional) library instance number
@@ -65,7 +65,7 @@ def defaultConParams():
     return con_parms
 
 
-def open(instance=0, connection='default', parameter={}):
+def open(int instance=0, connection='default', parameter={}):
     '''Open library.
     Inputs:
        connection - connection type, string can be one the following
@@ -112,7 +112,7 @@ cbpy.open(parameter=cbpy.defaultConParams())
     return <int>res, get_connection_type(instance=instance)
 
 
-def close(instance=0):
+def close(int instance=0):
     '''Close library.
     Inputs:
        instance - (optional) library instance number
@@ -120,7 +120,7 @@ def close(instance=0):
     return handle_result(cbSdkClose(<uint32_t>instance))
 
 
-def get_connection_type(instance=0):
+def get_connection_type(int instance=0):
     ''' Get connection type
     Inputs:
        instance - (optional) library instance number
@@ -154,7 +154,7 @@ def get_connection_type(instance=0):
     return {'connection':connections[con_idx], 'instrument':instruments[inst_idx]}
 
 
-def trial_config(instance=0, reset=True, 
+def trial_config(int instance=0, reset=True,
                  buffer_parameter={}, 
                  range_parameter={},
                  noevent=0, nocontinuous=0, nocomment=0):
@@ -188,10 +188,10 @@ def trial_config(instance=0, reset=True,
     cdef cbSdkConfigParam cfg_param
     
     # retrieve old values
-    res = cbsdk_get_trial_config(<int>instance, &cfg_param)
+    res = cbsdk_get_trial_config(<uint32_t>instance, &cfg_param)
     handle_result(res)
     
-    cfg_param.bActive = reset
+    cfg_param.bActive = <uint32_t>reset
     
     # Fill cfg_param with provided buffer_parameter values or default.
     cfg_param.bDouble = buffer_parameter.get('double', cfg_param.bDouble)
@@ -217,7 +217,7 @@ def trial_config(instance=0, reset=True,
     return <int>res, reset
 
 
-def trial_event(instance=0, reset=False):
+def trial_event(int instance=0, bool reset=False):
     ''' Trial spike and event data.
     Inputs:
        reset - (optional) boolean 
@@ -238,11 +238,11 @@ def trial_event(instance=0, reset=False):
     trial = []
     
     # retrieve old values
-    res = cbsdk_get_trial_config(<int>instance, &cfg_param)
+    res = cbsdk_get_trial_config(<uint32_t>instance, &cfg_param)
     handle_result(res)
     
     # get how many samples are available
-    res = cbsdk_init_trial_event(<int>instance, <int>reset, &trialevent)
+    res = cbsdk_init_trial_event(<uint32_t>instance, <int>reset, &trialevent)
     handle_result(res)
     
     if trialevent.count == 0:
@@ -291,13 +291,13 @@ def trial_event(instance=0, reset=False):
         trial.append([ch, {'timestamps':timestamps, 'events':dig_events}])
     
     # get the trial
-    res = cbsdk_get_trial_event(<int>instance, <int>reset, &trialevent)
+    res = cbsdk_get_trial_event(<uint32_t>instance, <int>reset, &trialevent)
     handle_result(res)
 
     return <int>res, trial
 
 
-def trial_continuous(instance=0, reset=False):
+def trial_continuous(int instance=0, bool reset=False):
     ''' Trial continuous data.
     Inputs:
        reset - (optional) boolean 
@@ -317,11 +317,11 @@ def trial_continuous(instance=0, reset=False):
     trial = []
     
     # retrieve old values
-    res = cbsdk_get_trial_config(<int>instance, &cfg_param)
+    res = cbsdk_get_trial_config(<uint32_t>instance, &cfg_param)
     handle_result(res)
     
     # get how many samples are available
-    res = cbsdk_init_trial_cont(<int>instance, <int>reset, &trialcont)
+    res = cbsdk_init_trial_cont(<uint32_t>instance, <int>reset, &trialcont)
     handle_result(res)
     
     if trialcont.count == 0:
@@ -353,13 +353,13 @@ def trial_continuous(instance=0, reset=False):
         trial.append(row)
         
     # get the trial
-    res = cbsdk_get_trial_cont(<int>instance, <int>reset, &trialcont)
+    res = cbsdk_get_trial_cont(<uint32_t>instance, <int>reset, &trialcont)
     handle_result(res)
 
     return <int>res, trial
 
 
-def trial_comment(instance=0, reset=False):
+def trial_comment(int instance=0, bool reset=False):
     ''' Trial comment data.
     Inputs:
        reset - (optional) boolean
@@ -378,11 +378,11 @@ def trial_comment(instance=0, reset=False):
     cdef cbSdkTrialComment trialcomm
 
     # retrieve old values
-    res = cbsdk_get_trial_config(<int>instance, &cfg_param)
+    res = cbsdk_get_trial_config(<uint32_t>instance, &cfg_param)
     handle_result(<cbSdkResult>res)
 
     # get how many comments are available
-    res = cbsdk_init_trial_comment(<int>instance, <int>reset, &trialcomm)
+    res = cbsdk_init_trial_comment(<uint32_t>instance, <int>reset, &trialcomm)
     handle_result(res)
 
     if trialcomm.num_samples == 0:
@@ -435,7 +435,7 @@ def trial_comment(instance=0, reset=False):
         free(trialcomm.comments)
 
 
-def file_config(instance=0, command='info', comment='', filename=''):
+def file_config(int instance=0, command='info', comment='', filename=''):
     ''' Configure remote file recording or get status of recording.
     Inputs:
        command - string, File configuration command, can be of of the following
@@ -490,12 +490,12 @@ def file_config(instance=0, command='info', comment='', filename=''):
     cdef int set_res
     filename_string = filename.encode('UTF-8')
     comment_string = comment.encode('UTF-8')
-    set_res = cbsdk_file_config(<int>instance, <const char *>filename_string, <char *>comment_string, start, options)
+    set_res = cbsdk_file_config(<uint32_t>instance, <const char *>filename_string, <char *>comment_string, start, options)
     
     return set_res
 
 
-def time(instance=0, unit='samples'):
+def time(int instance=0, unit='samples'):
     '''Instrument time.
     Inputs:
        unit - time unit, string can be one the following
@@ -525,10 +525,10 @@ def time(instance=0, unit='samples'):
 
     time = float(cbtime) / factor
     
-    return res, time
+    return <int>res, time
 
 
-def analog_out(channel_out, channel_mon, track_last=True, spike_only=False, instance=0):
+def analog_out(channel_out, channel_mon, track_last=True, spike_only=False, int instance=0):
     '''
     Monitor a channel.
     Inputs:
@@ -548,10 +548,10 @@ def analog_out(channel_out, channel_mon, track_last=True, spike_only=False, inst
         mon.bSpike = spike_only
         res = cbSdkSetAnalogOutput(<uint32_t>instance, <uint16_t>channel_out, NULL, &mon)
     handle_result(res)
-    return res
+    return <int>res
 
 
-def digital_out(channel, instance=0, value='low'):
+def digital_out(int channel, int instance=0, value='low'):
     '''Digital output command.
     Inputs:
     channel - integer, digital output channel number (1-based)
@@ -566,13 +566,13 @@ def digital_out(channel, instance=0, value='low'):
         raise RuntimeError("Invalid value %s" % value)
 
     cdef cbSdkResult res
-    cdef int int_val = values.index(value)
+    cdef uint16_t int_val = values.index(value)
     res = cbSdkSetDigitalOutput(<uint32_t>instance, <uint16_t>channel, int_val)
     handle_result(res)
-    return res
+    return <int>res
 
 
-def get_channel_config(channel, instance=0):
+def get_channel_config(int channel, int instance=0):
     '''
     Outputs:
         -chaninfo = A Python dictionary with the following fields:
@@ -621,7 +621,7 @@ def get_channel_config(channel, instance=0):
     res = cbSdkGetChannelConfig(<uint32_t>instance, <uint16_t>channel, &cb_chaninfo)
     handle_result(res)
     if res != 0:
-        return res, {}
+        return <int>res, {}
 
     chaninfo = {
         'time': cb_chaninfo.time,
@@ -684,10 +684,10 @@ def get_channel_config(channel, instance=0):
         #cbMANUALUNITMAPPING unitmapping[cbMAXUNITS+0]             # manual unit mapping
         #cbHOOP              spkhoops[cbMAXUNITS+0][cbMAXHOOPS+0]    # spike hoop sorting set
 
-    return res, chaninfo
+    return <int>res, chaninfo
 
 
-def set_channel_config(channel, chaninfo={}, instance=0):
+def set_channel_config(int channel, chaninfo={}, int instance=0):
     """
     Inputs:
         chaninfo: A Python dict. See fields descriptions in get_channel_config. All fields are optional.
@@ -711,9 +711,10 @@ def set_channel_config(channel, chaninfo={}, instance=0):
 
     res = cbSdkSetChannelConfig(<uint32_t>instance, <uint16_t>channel, &cb_chaninfo)
     handle_result(res)
+    return <int>res
 
 
-def get_sample_group(group_ix, instance=0):
+def get_sample_group(int group_ix, int instance=0):
     """
     """
     cdef cbSdkResult res
@@ -725,7 +726,7 @@ def get_sample_group(group_ix, instance=0):
         return <int> res, []
 
     cdef uint32_t pGroupList[144]
-    res = cbSdkGetSampleGroupList(<uint32_t>instance, proc, group_ix, &nChansInGroup, pGroupList)
+    res = cbSdkGetSampleGroupList(<uint32_t>instance, proc, <uint32_t>group_ix, &nChansInGroup, pGroupList)
     handle_result(res)
 
     cdef cbPKT_CHANINFO chanInfo
@@ -746,10 +747,10 @@ def get_sample_group(group_ix, instance=0):
         chan_info['unit'] = chanInfo.physcalin.anaunit
         channels_info.append(chan_info)
 
-    return <int> res, channels_info
+    return <int>res, channels_info
 
 
-def set_comment(comment_string, rgba_tuple=(0, 0, 0, 255), instance=0):
+def set_comment(comment_string, rgba_tuple=(0, 0, 0, 255), int instance=0):
     cdef cbSdkResult res
     cdef uint32_t rgba = (rgba_tuple[0] << 24) + (rgba_tuple[1] << 16) + (rgba_tuple[2] << 8) + rgba_tuple[3]
     cdef uint8_t charset = 0  # Character set (0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI)
@@ -795,6 +796,7 @@ cdef class SpikeCache:
         self.n_samples = sys_config_dict['spklength']
         self.n_pretrig = sys_config_dict['spkpretrig']
 
+    @cython.boundscheck(False) # turn off bounds-checking for entire function
     def get_new_waveforms(self):
         cdef int new_valid = self.cache.valid
         cdef int new_head = self.cache.head
@@ -805,6 +807,8 @@ cdef class SpikeCache:
         for wf_ix in range(n_new):
             pkt_ix = (new_head - 2 - n_new + wf_ix) % 400
             np_unit_ids[wf_ix] = self.cache.spkpkt[pkt_ix].unit
+            # Instead of per-sample copy, we could copy the pointer for the whole wave to the buffer of a 1-d np array,
+            # then use memory view copying from 1-d array into our 2d matrix. But below is pure-C so should be fast too.
             for samp_ix in range(self.n_samples):
                 np_waveforms[wf_ix, samp_ix] = self.cache.spkpkt[pkt_ix].wave[samp_ix]
         #unit_ids_out = [<int>unit_ids[wf_ix] for wf_ix in range(n_new)]
