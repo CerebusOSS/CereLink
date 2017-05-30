@@ -1,6 +1,7 @@
 from __future__ import print_function
 import os
 import sys
+import platform
 import numpy
 from setuptools import find_packages
 from setuptools import setup, Extension
@@ -9,6 +10,7 @@ from Cython.Build import build_ext
 
 def get_extras():
     cur = os.path.dirname(os.path.abspath(__file__))
+    arch = '64' if '64bit' in platform.architecture() else ''
     # Find all the extra include files, libraries, and link arguments we need to install.
     x_includes = [os.path.join(cur, 'dist', 'include')]  # Must include cbsdk headers
     x_libs = []
@@ -37,12 +39,9 @@ def get_extras():
             x_link_args += ['-framework', 'QtConcurrent']
 
     elif "win32" in sys.platform:
-        import platform
-
         # Must include stdint (V2008 does not have it!)
         x_includes += [os.path.join(cur, 'compat')]
         # Must be explicit about cbsdk link path
-        arch = '64' if '64bit' in platform.architecture() else ''
         x_link_args += ['/LIBPATH:{path}'.format(path=os.path.join(cur, 'dist', 'lib{arch}'.format(arch=arch)))]
         # add winsock, timer, and system libraries
         x_libs += ["ws2_32", "winmm"]
@@ -105,7 +104,22 @@ def get_extras():
         else:
             x_libs += ["QtCore4", "QtXml4"]
     else:  # Linux
-        x_libs += ["QtCore", "QtXml"]  # TODO Qt5: + "QtConcurrent"
+        x_link_args += ['-L{path}'.format(path=os.path.join(cur, 'dist', 'lib{arch}'.format(arch=arch)))]
+        # For Qt linking at run time, check `qtchooser -print-env`
+        # If it is not pointing to correct QtDir, then edit /usr/lib/x86_64-linux-gnu/qt-default/qtchooser/default.conf
+        # /opt/Qt/5.9/gcc_64/bin
+        # /opt/Qt/5.9/gcc_64/lib
+        # This should also take care of finding the link dir at compile time, (i.e. -L/path/to/qt not necessary)
+        # but we need to specify lib names, and these are version dependent.
+        import subprocess
+        import re
+        p = subprocess.Popen('qmake -v', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        qt_ver = re.findall('Qt version .', p.stdout.read().decode())[0][-1]
+        # TODO: qmake -v might give different version string text for Qt4 so we will need a smarter parser.
+        if qt_ver == '5':
+            x_libs += ["Qt5Core", "Qt5Xml", "Qt5Concurrent"]
+        elif qt_ver == '4':
+            x_libs += ["QtCore", "QtXml"]
 
     return x_includes, x_libs, x_link_args
 

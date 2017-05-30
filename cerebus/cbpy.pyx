@@ -56,7 +56,8 @@ def defaultConParams():
     #Note: Defaulting to 255.255.255.255 assumes the client is connected to the NSP via a switch.
     #A direct connection might require the client-addr to be "192.168.137.1"
     con_parms = {
-        'client-addr': str(cbNET_UDP_ADDR_BCAST.decode("utf-8")) if sys.platform == 'linux2' else '255.255.255.255',
+        'client-addr': str(cbNET_UDP_ADDR_BCAST.decode("utf-8"))\
+            if ('linux' in sys.platform or 'linux2' in sys.platform) else '255.255.255.255',
         'client-port': cbNET_UDP_PORT_BCAST,
         'inst-addr': cbNET_UDP_ADDR_CNT.decode("utf-8"),
         'inst-port': cbNET_UDP_PORT_CNT,
