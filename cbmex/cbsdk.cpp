@@ -102,7 +102,7 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
     // Get information about this group...
     uint32_t  period;
     uint32_t  length;
-    uint32_t  list[cbNUM_ANALOG_CHANS];
+    uint16_t  list[cbNUM_ANALOG_CHANS];
     if (cbGetSampleGroupInfo(1, group, NULL, &period, &length, m_nInstance) != cbRESULT_OK)
         return;
     if (cbGetSampleGroupList(1, group, &length, list, m_nInstance) != cbRESULT_OK)
@@ -3374,7 +3374,7 @@ CBSDKAPI    cbSdkResult cbSdkGetChannelConfig(uint32_t nInstance, uint16_t chann
 
 * \n This function returns the error code
 */
-cbSdkResult SdkApp::SdkGetSampleGroupList(uint32_t proc, uint32_t group, uint32_t *length, uint32_t *list)
+cbSdkResult SdkApp::SdkGetSampleGroupList(uint32_t proc, uint32_t group, uint32_t *length, uint16_t *list)
 {
     if (m_instInfo == 0)
         return CBSDKRESULT_CLOSED;
@@ -3389,7 +3389,7 @@ cbSdkResult SdkApp::SdkGetSampleGroupList(uint32_t proc, uint32_t group, uint32_
 
 /// sdk stub for SdkApp::SdkGetSampleGroupList
 CBSDKAPI    cbSdkResult cbSdkGetSampleGroupList(uint32_t nInstance,
-                                                uint32_t proc, uint32_t group, uint32_t *length, uint32_t *list)
+                                                uint32_t proc, uint32_t group, uint32_t *length, uint16_t *list)
 {
     if (nInstance >= cbMAXOPEN)
         return CBSDKRESULT_INVALIDPARAM;

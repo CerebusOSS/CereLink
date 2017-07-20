@@ -357,9 +357,9 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 {
                     const cbPKT_AOUT_WAVEFORM * pPktAoutWave = reinterpret_cast<const cbPKT_AOUT_WAVEFORM *>(pPkt);
                     uint16_t nChan = pPktAoutWave->chan;
-                    if (nChan > cbFIRST_ANAOUT_CHAN)
+                    if (nChan > cbNUM_ANALOG_CHANS)
                     {
-                        nChan -= (cbFIRST_ANAOUT_CHAN + 1);
+                        nChan -= (cbNUM_ANALOG_CHANS + 1);
                         if (nChan < AOUT_NUM_GAIN_CHANS)
                         {
                             uint8_t trigNum = pPktAoutWave->trigNum;

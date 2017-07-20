@@ -1262,8 +1262,8 @@ cbRESULT cbGetAoutWaveform(uint32_t channel, uint8_t  trigNum, uint16_t  * mode,
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[channel - 1].chancaps & cbCHAN_AOUT)) return cbRESULT_INVALIDFUNCTION;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[channel - 1].aoutcaps & cbAOUT_WAVEFORM)) return cbRESULT_INVALIDFUNCTION;
     if (trigNum >= cbMAX_AOUT_TRIGGER) return cbRESULT_INVALIDFUNCTION;
-    if (channel <= cbFIRST_ANAOUT_CHAN) return cbRESULT_INVALIDCHANNEL;
-    channel -= (cbFIRST_ANAOUT_CHAN + 1); // make it 0-based
+    if (channel <= cbNUM_ANALOG_CHANS) return cbRESULT_INVALIDCHANNEL;
+    channel -= (cbNUM_ANALOG_CHANS + 1); // make it 0-based
     if (channel >= AOUT_NUM_GAIN_CHANS) return cbRESULT_INVALIDCHANNEL;
     if (cb_cfg_buffer_ptr[nIdx]->isWaveform[channel][trigNum].type == 0) return cbRESULT_INVALIDCHANNEL;
 
@@ -1326,7 +1326,7 @@ cbRESULT cbGetSampleGroupInfo( uint32_t proc, uint32_t group, char *label, uint3
 }
 
 
-cbRESULT cbGetSampleGroupList( uint32_t proc, uint32_t group, uint32_t *length, uint32_t *list, uint32_t nInstance)
+cbRESULT cbGetSampleGroupList( uint32_t proc, uint32_t group, uint32_t *length, uint16_t *list, uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
 
@@ -1345,8 +1345,8 @@ cbRESULT cbGetSampleGroupList( uint32_t proc, uint32_t group, uint32_t *length, 
         *length = cb_cfg_buffer_ptr[nIdx]->groupinfo[proc - 1][group - 1].length;
 
     if (list)
-        memcpy(list,&(cb_cfg_buffer_ptr[nIdx]->groupinfo[proc-1][group-1].list[0]),
-                    cb_cfg_buffer_ptr[nIdx]->groupinfo[proc-1][group-1].length * 4);
+        memcpy(list, &(cb_cfg_buffer_ptr[nIdx]->groupinfo[proc-1][group-1].list[0]),
+                    cb_cfg_buffer_ptr[nIdx]->groupinfo[proc-1][group-1].length * sizeof(cb_cfg_buffer_ptr[nIdx]->groupinfo[proc-1][group-1].list[0]));
 
     return cbRESULT_OK;
 }

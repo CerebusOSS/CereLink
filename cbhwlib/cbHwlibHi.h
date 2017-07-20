@@ -26,6 +26,20 @@
 #define MIN_CHANS              1
 #define MAX_CHANS_ARRAY        96       // In neuroport there are only 96 channels
 
+#define MAX_CHANS_FRONT_END    cbNUM_FE_CHANS
+#define MIN_CHANS_ANALOG_IN    (MAX_CHANS_FRONT_END + 1)
+#define MAX_CHANS_ANALOG_IN    (MAX_CHANS_FRONT_END + cbNUM_ANAIN_CHANS)
+#define MIN_CHANS_ANALOG_OUT   (MAX_CHANS_ANALOG_IN + 1)
+#define MAX_CHANS_ANALOG_OUT   (MAX_CHANS_ANALOG_IN + cbNUM_ANAOUT_CHANS)
+#define MIN_CHANS_AUDIO        (MAX_CHANS_ANALOG_OUT + 1)
+#define MAX_CHANS_AUDIO        (MAX_CHANS_ANALOG_OUT + cbNUM_AUDOUT_CHANS)
+#define MIN_CHANS_DIGITAL_IN   (MAX_CHANS_AUDIO + 1)
+#define MAX_CHANS_DIGITAL_IN   (MAX_CHANS_AUDIO + cbNUM_DIGIN_CHANS)
+#define MIN_CHANS_SERIAL       (MAX_CHANS_DIGITAL_IN + 1)
+#define MAX_CHANS_SERIAL       (MAX_CHANS_DIGITAL_IN + cbNUM_SERIAL_CHANS)
+#define MIN_CHANS_DIGITAL_OUT  (MAX_CHANS_SERIAL + 1)
+#define MAX_CHANS_DIGITAL_OUT  (MAX_CHANS_SERIAL + cbNUM_DIGOUT_CHANS)
+
 // Currently we have 8 acquisition groups:
 //                                  Sampling        Filter
 enum { ACQGRP_NONE,             //  not sampled
