@@ -24,21 +24,16 @@
 #define STR(s) #s
 #define STRINGIFY(s) STR(s)
 
-#define BMI_VERSION_DATE_BUILT      03 October 2016
+#define BMI_VERSION_DATE_BUILT      24 May 2017
 
-#define BMI_VERSION_BUILD_NUMBER    19
-#define BMI_VERSION_BUILD_DATE      9/6/2016 4:54:11 PM
-#define BMI_COPYRIGHT_FROM          2008
-#define BMI_COPYRIGHT_TO            2016
-
-#define BMI_VERSION_MAJOR       6
-#define BMI_VERSION_MINOR       5
-#define BMI_VERSION_REVISION    4
+#define BMI_VERSION_MAJOR       7
+#define BMI_VERSION_MINOR       0
+#define BMI_VERSION_REVISION    2
 #define BMI_VERSION_BUILD       0
 
 #define BMI_VERSION           BMI_VERSION_MAJOR,BMI_VERSION_MINOR,BMI_VERSION_BUILD_NUMBER
 
-#define BMI_COPYRIGHT_S       "Copyright (C) 2008-2016 Blackrock Microsystems"
+#define BMI_COPYRIGHT_S       "Copyright (C) " STRINGIFY(BMI_COPYRIGHT_FROM) " - " STRINGIFY(BMI_COPYRIGHT_TO) " Blackrock Microsystems"
 #define BMI_COPYRIGHT_STR       BMI_COPYRIGHT_S
 
 #if BMI_VERSION_BUILD == 0
