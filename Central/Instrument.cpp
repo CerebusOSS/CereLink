@@ -70,7 +70,7 @@ void Instrument::SetNetwork(int nInPort, int nOutPort, LPCSTR szInIP, LPCSTR szO
 //  nNSPnum              - index of nsp
 // Outputs:
 //  Returns the error code (0 means success)
-cbRESULT Instrument::OpenNSP(STARTUP_OPTIONS nStartupOptionsFlags, UINT16 nNSPnum)
+cbRESULT Instrument::OpenNSP(STARTUP_OPTIONS nStartupOptionsFlags, uint16_t nNSPnum)
 {
     m_szInIP = g_NSP_IP[nNSPnum < 4 ? nNSPnum : 0];
     return Open(nStartupOptionsFlags);
@@ -121,8 +121,8 @@ cbRESULT Instrument::Open(STARTUP_OPTIONS nStartupOptionsFlags, bool bBroadcast,
 
 int Instrument::Send(void *ppkt)
 {
-    UINT32 quadlettotal = (((cbPKT_GENERIC*)ppkt)->dlen) + cbPKT_HEADER_32SIZE;
-    UINT32 cbSize = quadlettotal << 2;      // number of bytes
+    uint32_t quadlettotal = (((cbPKT_GENERIC*)ppkt)->dlen) + cbPKT_HEADER_32SIZE;
+    uint32_t cbSize = quadlettotal << 2;      // number of bytes
 
 
     CachedPacket * pEnd = ARRAY_END(m_aicCache);
@@ -208,14 +208,14 @@ void Instrument::Shutdown()
 //  pPacketData - the packet put put in this location
 // Outputs:
 //  the number of bytes read, or 0 if no data was found
-int Instrument::LoopbackRecvLow(void * pBuffer, void * pPacketData, UINT32 nInstance)
+int Instrument::LoopbackRecvLow(void * pBuffer, void * pPacketData, uint32_t nInstance)
 {
-    UINT32 nIdx = cb_library_index[nInstance];
+    uint32_t nIdx = cb_library_index[nInstance];
 
     cbPKT_GENERIC * pPacket = static_cast<cbPKT_GENERIC *>(pPacketData);
 
     // find the length of the packet
-    const UINT32 quadlettotal = (pPacket->dlen) + cbPKT_HEADER_32SIZE;
+    const uint32_t quadlettotal = (pPacket->dlen) + cbPKT_HEADER_32SIZE;
     const int cbSize = quadlettotal << 2;           // How many bytes are there
 
     // copy the packet

@@ -29,6 +29,8 @@ cdef extern from "cbhwlib.h":
         MAX_CHANS_SERIAL = (MAX_CHANS_DIGITAL_IN+1)
         cbMAXTRACKOBJ = 20 # maximum number of trackable objects
         cbMAXHOOPS = 4
+        cbPKT_SPKCACHEPKTCNT = 400
+        cbMAX_PNTS = 128  # make large enough to track longest possible spike width in samples
 
     cdef enum cbwlib_strconsts:
         cbLEN_STR_UNIT          = 8
@@ -149,6 +151,25 @@ cdef extern from "cbhwlib.h":
         uint32_t    lpfreq      # low-pass frequency in milliHertz
         uint32_t    lporder     # low-pass filter order
         uint32_t    lptype      # low-pass filter type
+
+    ctypedef struct cbPKT_SPK:
+        uint32_t    time                # system clock timestamp
+        uint16_t    chid                # channel identifier
+        uint8_t     unit                # unit identification (0=unclassified, 1-5=classified, 255=artifact, 254=background)
+        uint8_t     dlen                # length of what follows ... always  cbPKTDLEN_SPK
+        float       fPattern[3]         # values of the pattern space (Normal uses only 2, PCA uses third)
+        int16_t     nPeak
+        int16_t     nValley
+        int16_t     wave[cbMAX_PNTS+0]  # Room for all possible points collected
+        # wave must be the last item in the structure because it can be variable length to a max of cbMAX_PNTS
+
+    ctypedef struct cbSPKCACHE:
+        uint32_t    chid                            # ID of the Channel
+        uint32_t    pktcnt                          # # of packets which can be saved
+        uint32_t    pktsize                         # Size of an individual packet
+        uint32_t    head                            # Where (0 based index) in the circular buffer to place the NEXT packet.
+        uint32_t    valid                           # How many packets have come in since the last configuration
+        cbPKT_SPK   spkpkt[cbPKT_SPKCACHEPKTCNT+0]  # Circular buffer of the cached spikes
 
 cdef extern from "cbsdk.h":
 
@@ -326,7 +347,7 @@ cdef extern from "cbsdk.h":
     cbSdkResult cbSdkGetType(uint32_t nInstance, cbSdkConnectionType * conType, cbSdkInstrumentType * instType)  # Get connection and instrument type
     cbSdkResult cbSdkClose(uint32_t nInstance)  # Close the library
     cbSdkResult cbSdkGetTime(uint32_t nInstance, uint32_t * cbtime)  # Get the instrument sample clock time
-    #cbSdkGetSpkCache
+    cbSdkResult cbSdkGetSpkCache(uint32_t nInstance, uint16_t channel, cbSPKCACHE **cache)
     #cbSdkGetTrialConfig and cbSdkSetTrialConfig are better handled by cbsdk_helper due to optional arguments.
     cbSdkResult cbSdkUnsetTrialConfig(uint32_t nInstance, cbSdkTrialType type)
     cbSdkResult cbSdkGetChannelLabel(int nInstance, uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position)
@@ -355,6 +376,10 @@ cdef extern from "cbsdk.h":
     cbSdkResult cbSdkSetChannelConfig(uint32_t nInstance, uint16_t channel, cbPKT_CHANINFO * chaninfo)
     cbSdkResult cbSdkGetChannelConfig(uint32_t nInstance, uint16_t channel, cbPKT_CHANINFO * chaninfo)
     cbSdkResult cbSdkGetFilterDesc(uint32_t nInstance, uint32_t proc, uint32_t filt, cbFILTDESC * filtdesc)
+    cbSdkResult cbSdkGetSampleGroupList(uint32_t nInstance, uint32_t proc, uint32_t group, uint32_t *length, uint32_t *list)
+    cbSdkResult cbSdkGetSampleGroupInfo(uint32_t nInstance, uint32_t proc, uint32_t group, char *label, uint32_t *period, uint32_t *length)
+    cbSdkResult cbSdkSetSpikeConfig(uint32_t nInstance, uint32_t spklength, uint32_t spkpretrig)
+    cbSdkResult cbSdkGetSysConfig(uint32_t nInstance, uint32_t * spklength, uint32_t * spkpretrig, uint32_t * sysfreq)
 
 
 cdef extern from "cbsdk_helper.h":
@@ -375,13 +400,16 @@ cdef extern from "cbsdk_helper.h":
         uint32_t uTrackings
         int bAbsolute
 
-    int cbsdk_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param)
-    int cbsdk_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
+    cbSdkResult cbsdk_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param)
+    cbSdkResult cbsdk_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
 
-    int cbsdk_init_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
-    int cbsdk_get_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
+    cbSdkResult cbsdk_init_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
+    cbSdkResult cbsdk_get_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
 
-    int cbsdk_init_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
-    int cbsdk_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
+    cbSdkResult cbsdk_init_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
+    cbSdkResult cbsdk_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
 
-    int cbsdk_file_config(int instance, const char * filename, const char * comment, int start, unsigned int options)
+    cbSdkResult cbsdk_init_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm)
+    cbSdkResult cbsdk_get_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm)
+
+    cbSdkResult cbsdk_file_config(int instance, const char * filename, const char * comment, int start, unsigned int options)

@@ -84,15 +84,15 @@ public:
     void ShutDown(); // Instrument shutdown
     void StandBy();  // Instrument standby
     bool IsStandAlone() {return m_bStandAlone;} // If running in stand-alone
-    UINT32 getPacketCounter() {return m_nRecentPacketCount;}
-    UINT32 getDataCounter() {return m_dataCounter;}
+    uint32_t getPacketCounter() {return m_nRecentPacketCount;}
+    uint32_t getDataCounter() {return m_dataCounter;}
 protected:
     enum { INST_TICK_COUNT = 10 };
     void run();
     void ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt); // Process incoming packets in stand-alone mode
     void timerEvent(QTimerEvent *event); // the QT timer event for stand-alone networking
     void OnWaitEvent(); // Non-stand-alone networking
-    inline void CheckForLinkFailure(UINT32 nTicks, UINT32 nCurrentPacketCount); // Check link failure
+    inline void CheckForLinkFailure(uint32_t nTicks, uint32_t nCurrentPacketCount); // Check link failure
 private:
     void UpdateSortModel(const cbPKT_SS_MODELSET & rUnitModel);
     void UpdateBasisModel(const cbPKT_FS_BASIS & rBasisModel);
@@ -100,20 +100,20 @@ private:
     cbLevelOfConcern m_enLOC; // level of concern
     STARTUP_OPTIONS m_nStartupOptionsFlags;
     QVector<Listener *> m_listener;   // instrument network listeners
-    UINT32 m_timerTicks;    // network timer ticks
+    uint32_t m_timerTicks;    // network timer ticks
     int m_timerId; // Stand-alone timer ID
     bool m_bDone;// flag to finish networking thread
-    UINT32 m_nRecentPacketCount; // number of real packets
-    UINT32 m_dataCounter;        // data counter
-    UINT32 m_nLastNumberOfPacketsReceived;
-    UINT32 m_runlevel; // Last runlevel
+    uint32_t m_nRecentPacketCount; // number of real packets
+    uint32_t m_dataCounter;        // data counter
+    uint32_t m_nLastNumberOfPacketsReceived;
+    uint32_t m_runlevel; // Last runlevel
 protected:
-    static const UINT32 MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS;
+    static const uint32_t MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS;
     bool m_bStandAlone;  // If it is stand-alone
     Instrument m_icInstrument;   // The instrument
-    UINT32 m_instInfo; // Last instrument state
-    UINT32 m_nInstance;  // library instance
-    UINT32 m_nIdx;  // library instance index
+    uint32_t m_instInfo; // Last instrument state
+    uint32_t m_nInstance;  // library instance
+    uint32_t m_nIdx;  // library instance index
     int m_nInPort;  // Client port number
     int m_nOutPort; // Instrument port number
     bool m_bBroadcast;

@@ -37,7 +37,7 @@ public:
     virtual ~Instrument();
 
     // Open the NSP instrument
-    cbRESULT OpenNSP(STARTUP_OPTIONS nStartupOptionsFlags, UINT16 nNSPnum);
+    cbRESULT OpenNSP(STARTUP_OPTIONS nStartupOptionsFlags, uint16_t nNSPnum);
     cbRESULT Open(STARTUP_OPTIONS nStartupOptionsFlags, bool bBroadcast = false, bool bDontRoute = true,
         bool bNonBlocking = true, int nRecBufSize = NSP_REC_BUF_SIZE);
     void SetNetwork(int nInPort, int nOutPort, LPCSTR szInIP, LPCSTR szOutIP);
@@ -81,9 +81,9 @@ public:
     //  pBuffer - Where to stuff the packet
     // Outputs:
     //  the number of bytes read, or 0 if no data was found
-    int LoopbackRecv(void * pBuffer, UINT32 nInstance = 0)
+    int LoopbackRecv(void * pBuffer, uint32_t nInstance = 0)
     {
-        UINT32 nIdx = cb_library_index[nInstance];
+        uint32_t nIdx = cb_library_index[nInstance];
 
         // The logic here is quite complicated. Data is filled in from other processes
         // in a 2 pass mode. First they fill all except they skip the first 4 bytes.
@@ -110,7 +110,7 @@ protected:
     //  pPacketData - the packet put put in this location
     // Outputs:
     //  the number of bytes read, or 0 if no data was found
-    int LoopbackRecvLow(void * pBuffer, void * pPacketData, UINT32 nInstance = 0);
+    int LoopbackRecvLow(void * pBuffer, void * pPacketData, uint32_t nInstance = 0);
 
 
     class CachedPacket

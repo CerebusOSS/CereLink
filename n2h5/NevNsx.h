@@ -22,14 +22,14 @@
 #ifndef WIN32
 typedef struct _SYSTEMTIME
 {
-    UINT16 wYear;
-    UINT16 wMonth;
-    UINT16 wDayOfWeek;
-    UINT16 wDay;
-    UINT16 wHour;
-    UINT16 wMinute;
-    UINT16 wSecond;
-    UINT16 wMilliseconds;
+    uint16_t wYear;
+    uint16_t wMonth;
+    uint16_t wDayOfWeek;
+    uint16_t wDay;
+    uint16_t wHour;
+    uint16_t wMinute;
+    uint16_t wSecond;
+    uint16_t wMilliseconds;
 } SYSTEMTIME;
 #endif
 
@@ -56,13 +56,13 @@ typedef struct
 {
     char achFileID[8];      // Always set to NEURALSG
     char szGroup[16];       // Label of the group
-    UINT32 nPeriod;       // How many ticks per sample (30,000 = rate)
-    UINT32 cnChannels;    // How many channels
+    uint32_t nPeriod;       // How many ticks per sample (30,000 = rate)
+    uint32_t cnChannels;    // How many channels
 
     // Next comes
-    //   UINT32           // Which channels?
+    //   uint32_t           // Which channels?
     // then
-    //   INT16 wData;   // Data from each channel
+    //   int16_t wData;   // Data from each channel
 } Nsx21Hdr;
 
 typedef struct
@@ -70,60 +70,60 @@ typedef struct
     char achFileID[8];      // Always set to NEURALCD
     unsigned char nMajor;   // Major version number
     unsigned char nMinor;   // Minor version number
-    UINT32 nBytesInHdrs;  // Bytes in all headers also pointer to first data pkt
+    uint32_t nBytesInHdrs;  // Bytes in all headers also pointer to first data pkt
     char szGroup[16];       // Label of the group
     char szComment[256];    // File comment
-    UINT32 nPeriod;       // How many ticks per sample (30,000 = rate)
-    UINT32 nResolution;   // Time resolution of time stamps
+    uint32_t nPeriod;       // How many ticks per sample (30,000 = rate)
+    uint32_t nResolution;   // Time resolution of time stamps
     SYSTEMTIME isAcqTime;  // Windows time structure
-    UINT32 cnChannels;    // How many channels
+    uint32_t cnChannels;    // How many channels
 } Nsx22Hdr;
 
 typedef struct 
 {
     char achExtHdrID[2];   // Always set to CC
-    UINT16 id;             // Which channel
+    uint16_t id;             // Which channel
     char label[16];        // What is the "name" of this electrode?
-    UINT8 phys_connector;  // Which connector (e.g. bank 1)
-    UINT8 connector_pin;   // Which pin on that collector
-    INT16 digmin;          // Minimum digital value
-    INT16 digmax;          // Maximum digital value
-    INT16 anamin;          // Minimum Analog Value
-    INT16 anamax;          // Maximum Analog Value
+    uint8_t phys_connector;  // Which connector (e.g. bank 1)
+    uint8_t connector_pin;   // Which pin on that collector
+    int16_t digmin;          // Minimum digital value
+    int16_t digmax;          // Maximum digital value
+    int16_t anamin;          // Minimum Analog Value
+    int16_t anamax;          // Maximum Analog Value
     char anaunit[16];      // Units for the Analog Value (e.g. "mV)
-    UINT32 hpfreq;
-    UINT32 hporder;
-    INT16  hptype;
-    UINT32 lpfreq;
-    UINT32 lporder;
-    INT16  lptype;
+    uint32_t hpfreq;
+    uint32_t hporder;
+    int16_t  hptype;
+    uint32_t lpfreq;
+    uint32_t lporder;
+    int16_t  lptype;
 } Nsx22ExtHdr;
 
 typedef struct
 {
     char nHdr;                // Always set to 0x01
-    UINT32 nTimestamp;        // Which channel
-    UINT32 nNumDatapoints;    // Number of datapoints
+    uint32_t nTimestamp;        // Which channel
+    uint32_t nNumDatapoints;    // Number of datapoints
 
     // Next comes
-    //   INT16 DataPoint    // Data points
+    //   int16_t DataPoint    // Data points
 } Nsx22DataHdr;
 
 // This is the basic header data structure as recorded in the NEV file
 typedef struct 
 {
     char achFileType[8];            // should always be "NEURALEV"
-    UINT8 byFileRevMajor;           // Major version of the file
-    UINT8 byFileRevMinor;           // Minor version of the file
-    UINT16 wFileFlags;              // currently set to "0x01" to mean all data is 16 bit
-    UINT32 dwStartOfData;           // how many bytes are are ALL of the headers
-    UINT32 dwBytesPerPacket;        // All "data" is fixed length...what is that length
-    UINT32 dwTimeStampResolutionHz; // How many counts per second for the global clock (now 30,000)
-    UINT32 dwSampleResolutionHz;    // How many counts per second for the samples (now 30,000 as well)
+    uint8_t byFileRevMajor;           // Major version of the file
+    uint8_t byFileRevMinor;           // Minor version of the file
+    uint16_t wFileFlags;              // currently set to "0x01" to mean all data is 16 bit
+    uint32_t dwStartOfData;           // how many bytes are are ALL of the headers
+    uint32_t dwBytesPerPacket;        // All "data" is fixed length...what is that length
+    uint32_t dwTimeStampResolutionHz; // How many counts per second for the global clock (now 30,000)
+    uint32_t dwSampleResolutionHz;    // How many counts per second for the samples (now 30,000 as well)
     SYSTEMTIME isAcqTime;           // Greenwich Mean Time when data was collected
     char szApplication[32];         // Which application created this? NULL terminated
     char szComment[256];            // Comments (NULL terminated)
-    UINT32 dwNumOfExtendedHeaders;  // How many extended headers are there?
+    uint32_t dwNumOfExtendedHeaders;  // How many extended headers are there?
 } NevHdr;
 
 // This is the extra header data structure as recorded in the NEV file
@@ -132,18 +132,18 @@ typedef struct
     char achPacketID[8];            // "NEUWAV", "NEULABL", "NEUFLT", ...
      union {
          struct {
-            UINT16 id;
+            uint16_t id;
              union {
                 struct {
-                    UINT8  phys_connector;
-                    UINT8  connector_pin;
-                    UINT16 digital_factor;
-                    UINT16 energy_thresh;
-                    INT16  high_thresh;
-                    INT16  low_thresh;
-                    UINT8  sorted_count;
-                    UINT8  wave_bytes;
-                    UINT16 wave_samples;
+                    uint8_t  phys_connector;
+                    uint8_t  connector_pin;
+                    uint16_t digital_factor;
+                    uint16_t energy_thresh;
+                    int16_t  high_thresh;
+                    int16_t  low_thresh;
+                    uint8_t  sorted_count;
+                    uint8_t  wave_bytes;
+                    uint16_t wave_samples;
                     char   achReserved[8];
                 } neuwav;
                 struct {
@@ -151,12 +151,12 @@ typedef struct
                     char   achReserved[6];
                 } neulabel;
                 struct {
-                    UINT32 hpfreq;
-                    UINT32 hporder;
-                    INT16  hptype;
-                    UINT32 lpfreq;
-                    UINT32 lporder;
-                    INT16  lptype;
+                    uint32_t hpfreq;
+                    uint32_t hporder;
+                    int16_t  hptype;
+                    uint32_t lpfreq;
+                    uint32_t lporder;
+                    int16_t  lptype;
                     char   achReserved[2];
                 } neuflt;
                 struct {
@@ -165,8 +165,8 @@ typedef struct
                     char   achReserved[2];
                 } videosyn;
                 struct {
-                    UINT16 trackID;
-                    UINT16 maxPoints;
+                    uint16_t trackID;
+                    uint16_t maxPoints;
                     char   label[16];
                     char   achReserved[2];
                 } trackobj;
@@ -174,7 +174,7 @@ typedef struct
         };
          struct {
             char   label[16];
-            UINT8  mode;
+            uint8_t  mode;
             char   achReserved[7];
         } diglabel;
          struct {
@@ -187,39 +187,39 @@ typedef struct
 //  The size is larger than any packet to safely read them from file
 typedef struct
 {
-    UINT32 dwTimestamp;
-    UINT16 wPacketID;
+    uint32_t dwTimestamp;
+    uint16_t wPacketID;
      union {
         struct {
-            UINT8  byInsertionReason;
-            UINT8  byReserved;
-            UINT16 wDigitalValue;
+            uint8_t  byInsertionReason;
+            uint8_t  byReserved;
+            uint16_t wDigitalValue;
             char   achReserved[260];
         } digital; // digital or serial data
         struct {
-            UINT8  charset;
-            UINT8  flags;
-            UINT32 data;
+            uint8_t  charset;
+            uint8_t  flags;
+            uint32_t data;
             char   comment[258];
         } comment; // comment data
         struct {
-            UINT16  split;
-            UINT32  frame;
-            UINT32  etime;
-            UINT32  id;
+            uint16_t  split;
+            uint32_t  frame;
+            uint32_t  etime;
+            uint32_t  id;
             char   achReserved[250];
         } synch; // synchronization data
         struct {
-            UINT16 parentID;
-            UINT16 nodeID;
-            UINT16 nodeCount;
-            UINT16 coordsLength;
-            UINT16 coords[cbMAX_TRACKCOORDS];
+            uint16_t parentID;
+            uint16_t nodeID;
+            uint16_t nodeCount;
+            uint16_t coordsLength;
+            uint16_t coords[cbMAX_TRACKCOORDS];
         } track; // tracking data
         struct {
-            UINT8  unit;
-            UINT8  res;
-            INT16  wave[cbMAX_PNTS];
+            uint8_t  unit;
+            uint8_t  res;
+            int16_t  wave[cbMAX_PNTS];
             char   achReserved[6];
         } spike; // spike data
     };

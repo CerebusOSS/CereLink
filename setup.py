@@ -1,17 +1,20 @@
 from __future__ import print_function
 import os
 import sys
+import platform
 import numpy
 from setuptools import find_packages
 from setuptools import setup, Extension
-from Cython.Distutils import build_ext
+from Cython.Build import build_ext
 
 
 def get_extras():
+    cur = os.path.dirname(os.path.abspath(__file__))
+    arch = '64' if '64bit' in platform.architecture() else ''
     # Find all the extra include files, libraries, and link arguments we need to install.
-    extra_includes = []
-    extra_libs = []
-    extra_link_args = []
+    x_includes = [os.path.join(cur, 'dist', 'include')]  # Must include cbsdk headers
+    x_libs = []
+    x_link_args = []
 
     if sys.platform == "darwin":
         # Find Qt framework
@@ -28,27 +31,22 @@ def get_extras():
             if hasqt4:
                 p = subprocess.Popen('brew --prefix qt', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                 qtfwdir = str(p.stdout.read().decode("utf-8")[:-1]) + "/Frameworks"
-        extra_link_args += ['-F', qtfwdir,
-                           '-framework', 'QtCore',
-                           '-framework', 'QtXml']
+
+        x_link_args += ['-F', qtfwdir,
+                        '-framework', 'QtCore',
+                        '-framework', 'QtXml']
         if hasqt5:
-            extra_link_args += ['-framework', 'QtConcurrent']
+            x_link_args += ['-framework', 'QtConcurrent']
 
     elif "win32" in sys.platform:
-        import platform
-
-        cur = os.path.dirname(os.path.abspath(__file__))
-        # Must include cbsdk headers
-        extra_includes += [os.path.join(cur, 'dist\\include')]
-        # Must include stdinit (V2008 does not have it!)
-        extra_includes += [os.path.join(cur, 'compat')]
+        # Must include stdint (V2008 does not have it!)
+        x_includes += [os.path.join(cur, 'compat')]
         # Must be explicit about cbsdk link path
-        arch = '64' if '64bit' in platform.architecture() else ''
-        extra_link_args += ['/LIBPATH:{path}'.format(path=os.path.join(cur, 'dist\\lib{arch}'.format(arch=arch)))]
+        x_link_args += ['/LIBPATH:{path}'.format(path=os.path.join(cur, 'dist', 'lib{arch}'.format(arch=arch)))]
         # add winsock, timer, and system libraries
-        extra_libs += ["ws2_32", "winmm"]
-        extra_libs += ["kernel32", "user32", "gdi32", "winspool", "shell32",
-                       "ole32", "oleaut32", "uuid", "comdlg32", "advapi32"]
+        x_libs += ["ws2_32", "winmm"]
+        x_libs += ["kernel32", "user32", "gdi32", "winspool", "shell32",
+                   "ole32", "oleaut32", "uuid", "comdlg32", "advapi32"]
 
         # Find Qt library
         def _get_qt_path():
@@ -87,28 +85,43 @@ def get_extras():
                     raise RuntimeError("Cannot find Qt in registry nor QTDIR is set")
 
             # Parse qt_path to see if it is qt5
-            is_qt5 = False
+            _is_qt5 = False
             tmp = (path, '')
             while tmp[0] is not '':
                 tmp = os.path.split(tmp[0])
                 mysplit = tmp[1].split('.')
                 if len(mysplit) > 1:
                     if mysplit[0][-1] == '5':
-                        is_qt5 = True
+                        _is_qt5 = True
                         tmp = ('', '')
-            return path, is_qt5
+            return path, _is_qt5
 
         qt_path, is_qt5 = _get_qt_path()
-        extra_link_args += ['/LIBPATH:{path}'.format(path=os.path.join(qt_path, 'lib'))]
-        extra_includes += [os.path.join(qt_path, 'include')]
+        x_link_args += ['/LIBPATH:{path}'.format(path=os.path.join(qt_path, 'lib'))]
+        x_includes += [os.path.join(qt_path, 'include')]
         if is_qt5:
-            extra_libs += ["Qt5Core", "Qt5Xml", "Qt5Concurrent"]
+            x_libs += ["Qt5Core", "Qt5Xml", "Qt5Concurrent"]
         else:
-            extra_libs += ["QtCore4", "QtXml4"]
-    else: #Linux
-        extra_libs += ["QtCore", "QtXml"]  # TODO Qt5: + "QtConcurrent"
+            x_libs += ["QtCore4", "QtXml4"]
+    else:  # Linux
+        x_link_args += ['-L{path}'.format(path=os.path.join(cur, 'dist', 'lib{arch}'.format(arch=arch)))]
+        # For Qt linking at run time, check `qtchooser -print-env`
+        # If it is not pointing to correct QtDir, then edit /usr/lib/x86_64-linux-gnu/qt-default/qtchooser/default.conf
+        # /opt/Qt/5.9/gcc_64/bin
+        # /opt/Qt/5.9/gcc_64/lib
+        # This should also take care of finding the link dir at compile time, (i.e. -L/path/to/qt not necessary)
+        # but we need to specify lib names, and these are version dependent.
+        import subprocess
+        import re
+        p = subprocess.Popen('qmake -v', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        qt_ver = re.findall('Qt version .', p.stdout.read().decode())[0][-1]
+        # TODO: qmake -v might give different version string text for Qt4 so we will need a smarter parser.
+        if qt_ver == '5':
+            x_libs += ["Qt5Core", "Qt5Xml", "Qt5Concurrent"]
+        elif qt_ver == '4':
+            x_libs += ["QtCore", "QtXml"]
 
-    return extra_includes, extra_libs, extra_link_args
+    return x_includes, x_libs, x_link_args
 
 extra_includes, extra_libs, extra_link_args = get_extras()
 
@@ -123,7 +136,7 @@ extension_kwargs = {
 cbpy_module = Extension('cerebus.cbpy', **extension_kwargs)
 
 setup(
-    name='cerelink',
+    name='cerebus',
     version='0.0.3',
     description='Cerebus Link',
     long_description='Cerebus Link Python Package',

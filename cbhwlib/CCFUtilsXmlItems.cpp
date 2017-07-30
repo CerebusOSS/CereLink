@@ -495,7 +495,7 @@ CCFXmlItem::CCFXmlItem(cbAdaptControl & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 Sept 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbWaveformData & pkt, UINT16 mode, QString strName)
+CCFXmlItem::CCFXmlItem(cbWaveformData & pkt, uint16_t mode, QString strName)
 {
     m_xmlTag = strName;
     m_xmlAttribs.insert("Type", "cbWaveformData");
@@ -515,7 +515,7 @@ CCFXmlItem::CCFXmlItem(cbWaveformData & pkt, UINT16 mode, QString strName)
         lst += ccf::GetCCFXmlItem(pkt.seq, "parameters/seq");
         lst += ccf::GetCCFXmlItem(pkt.phases, "parameters/phases");
         // Partially save these parameters
-        UINT16 phases = pkt.phases;
+        uint16_t phases = pkt.phases;
         if (phases > cbMAX_WAVEFORM_PHASES)
             phases = cbMAX_WAVEFORM_PHASES;
         lst += ccf::GetCCFXmlItem(pkt.duration, phases, "parameters/duration");
@@ -529,60 +529,60 @@ CCFXmlItem::CCFXmlItem(cbWaveformData & pkt, UINT16 mode, QString strName)
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(UINT32 & number, QString strName)
+CCFXmlItem::CCFXmlItem(uint32_t & number, QString strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", QString("UINT32"));
+    m_xmlAttribs.insert("Type", QString("uint32_t"));
+
+    m_xmlValue = (uint) number;
+}
+
+// Author & Date: Ehsan Azar       11 April 2012
+// Purpose: CCF XML basic number constructor
+CCFXmlItem::CCFXmlItem(int32_t & number, QString strName)
+{
+    m_xmlTag = strName;
+    m_xmlAttribs.insert("Type", "int32_t");
 
     m_xmlValue = number;
 }
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(INT32 & number, QString strName)
+CCFXmlItem::CCFXmlItem(uint16_t & number, QString strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "INT32");
+    m_xmlAttribs.insert("Type", "uint16_t");
 
     m_xmlValue = number;
 }
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(UINT16 & number, QString strName)
+CCFXmlItem::CCFXmlItem(int16_t & number, QString strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "UINT16");
-
-    m_xmlValue = number;
-}
-
-// Author & Date: Ehsan Azar       11 April 2012
-// Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(INT16 & number, QString strName)
-{
-    m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "INT16");
+    m_xmlAttribs.insert("Type", "int16_t");
 
     m_xmlValue = number;
 }
 
     // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(UINT8 & number, QString strName)
+CCFXmlItem::CCFXmlItem(uint8_t & number, QString strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "UINT8");
+    m_xmlAttribs.insert("Type", "uint8_t");
 
     m_xmlValue = number;
 }
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(INT8 & number, QString strName)
+CCFXmlItem::CCFXmlItem(int8_t & number, QString strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "INT8");
+    m_xmlAttribs.insert("Type", "int8_t");
 
     m_xmlValue = number;
 }
@@ -1121,7 +1121,7 @@ void ccf::ReadItem(XmlFile * const xml, cbAdaptControl & item)
 template<>
 void ccf::ReadItem(XmlFile * const xml, cbWaveformData & item)
 {
-    UINT16 mode = 0;
+    uint16_t mode = 0;
     ccf::ReadItem(xml, item.offset, "offset");
     ccf::ReadItem(xml, mode, "mode");
     if (mode == cbWAVEFORM_MODE_SINE)

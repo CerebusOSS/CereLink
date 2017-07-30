@@ -313,7 +313,7 @@ hid_t CreateTrackingAttrType(hid_t loc)
 //  spikeLength - the spike length to use
 // Outputs:
 //   Returns the type id
-hid_t CreateSpike16Type(hid_t loc, UINT16 spikeLength)
+hid_t CreateSpike16Type(hid_t loc, uint16_t spikeLength)
 {
     herr_t ret;
     hid_t tid = -1;
@@ -334,7 +334,7 @@ hid_t CreateSpike16Type(hid_t loc, UINT16 spikeLength)
     hsize_t     dims[1] = {spikeLength};
     hid_t tid_arr_wave = H5Tarray_create(H5T_NATIVE_INT16, 1, dims);
 
-    tid = H5Tcreate(H5T_COMPOUND, offsetof(BmiSpike16_t, wave) + sizeof(INT16) * spikeLength);
+    tid = H5Tcreate(H5T_COMPOUND, offsetof(BmiSpike16_t, wave) + sizeof(int16_t) * spikeLength);
     ret = H5Tinsert(tid, "TimeStamp", offsetof(BmiSpike16_t, dwTimestamp), H5T_NATIVE_UINT32);
     ret = H5Tinsert(tid, "Unit", offsetof(BmiSpike16_t, unit), H5T_NATIVE_UINT8);
     ret = H5Tinsert(tid, "Wave", offsetof(BmiSpike16_t, wave), tid_arr_wave);

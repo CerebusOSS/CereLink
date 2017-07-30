@@ -61,21 +61,21 @@
 typedef struct _cbSdkVersion
 {
     // Library version
-    UINT32 major;
-    UINT32 minor;
-    UINT32 release;
-    UINT32 beta;
+    uint32_t major;
+    uint32_t minor;
+    uint32_t release;
+    uint32_t beta;
     // Protocol version
-    UINT32 majorp;
-    UINT32 minorp;
+    uint32_t majorp;
+    uint32_t minorp;
     // NSP version
-    UINT32 nspmajor;
-    UINT32 nspminor;
-    UINT32 nsprelease;
-    UINT32 nspbeta;
+    uint32_t nspmajor;
+    uint32_t nspminor;
+    uint32_t nsprelease;
+    uint32_t nspbeta;
     // NSP protocol version
-    UINT32 nspmajorp;
-    UINT32 nspminorp;
+    uint32_t nspmajorp;
+    uint32_t nspminorp;
 } cbSdkVersion;
 
 /// cbSdk return values
@@ -145,7 +145,7 @@ typedef struct _cbSdkCCFEvent
     cbStateCCF state;           ///< CCF state
     cbSdkResult result;         ///< Last result
     LPCSTR szFileName;          ///< CCF filename under operation
-    UINT8 progress; ///< Progress (in percent)
+    uint8_t progress; ///< Progress (in percent)
 } cbSdkCCFEvent;
 
 /// Reason for packet loss
@@ -166,7 +166,7 @@ typedef struct _cbSdkPktLostEvent
 /// Instrument information
 typedef struct _cbSdkInstInfo
 {
-    UINT32 instInfo;     ///< bitfield of cbINSTINFO_* (0 means closed)
+    uint32_t instInfo;     ///< bitfield of cbINSTINFO_* (0 means closed)
 } cbSdkInstInfo;
 
 /// Packet type information
@@ -238,7 +238,7 @@ typedef enum _DefaultSampleGroup {
     SDK_SMPGRP_RAW = 6
 } DefaultSampleGroup;
 
-typedef void (* cbSdkCallback)(UINT32 nInstance, const cbSdkPktType type, const void* pEventData, void* pCallbackData);
+typedef void (* cbSdkCallback)(uint32_t nInstance, const cbSdkPktType type, const void* pEventData, void* pCallbackData);
 
 
 /// The default number of continuous samples that will be stored per channel in the trial buffer
@@ -257,9 +257,9 @@ typedef void (* cbSdkCallback)(UINT32 nInstance, const cbSdkPktType type, const 
 /// Trial spike events
 typedef struct _cbSdkTrialEvent
 {
-    UINT16 count; ///< Number of valid channels in this trial (up to cbNUM_ANALOG_CHANS+2)
-    UINT16 chan[cbNUM_ANALOG_CHANS + 2]; ///< channel numbers (1-based)
-    UINT32 num_samples[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1]; ///< number of samples
+    uint16_t count; ///< Number of valid channels in this trial (up to cbNUM_ANALOG_CHANS+2)
+    uint16_t chan[cbNUM_ANALOG_CHANS + 2]; ///< channel numbers (1-based)
+    uint32_t num_samples[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1]; ///< number of samples
     void * timestamps[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1];   ///< Buffer to hold time stamps
     void * waveforms[cbNUM_ANALOG_CHANS + 2]; ///< Buffer to hold waveforms or digital values
 } cbSdkTrialEvent;
@@ -289,37 +289,37 @@ typedef struct _cbSdkConnection
 /// Trial continuous data
 typedef struct _cbSdkTrialCont
 {
-    UINT16 count; ///< Number of valid channels in this trial (up to cbNUM_ANALOG_CHANS)
-    UINT16 chan[cbNUM_ANALOG_CHANS]; ///< Channel numbers (1-based)
-    UINT16 sample_rates[cbNUM_ANALOG_CHANS]; ///< Current sample rate (samples per second)
-    UINT32 num_samples[cbNUM_ANALOG_CHANS]; ///< Number of samples
-    UINT32 time;  ///< Start time for trial continuous data
+    uint16_t count; ///< Number of valid channels in this trial (up to cbNUM_ANALOG_CHANS)
+    uint16_t chan[cbNUM_ANALOG_CHANS]; ///< Channel numbers (1-based)
+    uint16_t sample_rates[cbNUM_ANALOG_CHANS]; ///< Current sample rate (samples per second)
+    uint32_t num_samples[cbNUM_ANALOG_CHANS]; ///< Number of samples
+    uint32_t time;  ///< Start time for trial continuous data
     void * samples[cbNUM_ANALOG_CHANS]; ///< Buffer to hold sample vectors
 } cbSdkTrialCont;
 
 /// Trial comment data
 typedef struct _cbSdkTrialComment
 {
-    UINT16 num_samples; ///< Number of comments
-    UINT8 * charsets;   ///< Buffer to hold character sets
-    UINT32 * rgbas;     ///< Buffer to hold rgba values
-    UINT8 * * comments; ///< Pointer to comments
+    uint16_t num_samples; ///< Number of comments
+    uint8_t * charsets;   ///< Buffer to hold character sets
+    uint32_t * rgbas;     ///< Buffer to hold rgba values
+    uint8_t * * comments; ///< Pointer to comments
     void * timestamps;  ///< Buffer to hold time stamps
 } cbSdkTrialComment;
 
 /// Trial video tracking data
 typedef struct _cbSdkTrialTracking
 {
-    UINT16 count;								///< Number of valid trackable objects (up to cbMAXTRACKOBJ)
-    UINT16 ids[cbMAXTRACKOBJ];					///< Node IDs (holds count elements)
-    UINT16 max_point_counts[cbMAXTRACKOBJ];		///< Maximum point counts (holds count elements)
-    UINT16 types[cbMAXTRACKOBJ];				///< Node types (can be cbTRACKOBJ_TYPE_* and determines coordinate counts) (holds count elements)
-    UINT8  names[cbMAXTRACKOBJ][cbLEN_STR_LABEL + 1];   ///< Node names (holds count elements)
-    UINT16 num_samples[cbMAXTRACKOBJ];			///< Number of samples
-    UINT16 * point_counts[cbMAXTRACKOBJ];		///< Buffer to hold number of valid points (up to max_point_counts) (holds count*num_samples elements)
+    uint16_t count;								///< Number of valid trackable objects (up to cbMAXTRACKOBJ)
+    uint16_t ids[cbMAXTRACKOBJ];					///< Node IDs (holds count elements)
+    uint16_t max_point_counts[cbMAXTRACKOBJ];		///< Maximum point counts (holds count elements)
+    uint16_t types[cbMAXTRACKOBJ];				///< Node types (can be cbTRACKOBJ_TYPE_* and determines coordinate counts) (holds count elements)
+    uint8_t  names[cbMAXTRACKOBJ][cbLEN_STR_LABEL + 1];   ///< Node names (holds count elements)
+    uint16_t num_samples[cbMAXTRACKOBJ];			///< Number of samples
+    uint16_t * point_counts[cbMAXTRACKOBJ];		///< Buffer to hold number of valid points (up to max_point_counts) (holds count*num_samples elements)
     void * * coords[cbMAXTRACKOBJ] ;			///< Buffer to hold tracking points (holds count*num_samples tarackables, each of max_point_counts points
-    UINT32 * synch_frame_numbers[cbMAXTRACKOBJ];///< Buffer to hold synch frame numbers (holds count*num_samples elements)
-    UINT32 * synch_timestamps[cbMAXTRACKOBJ];   ///< Buffer to hold synchronized tracking time stamps (in milliseconds) (holds count*num_samples elements)
+    uint32_t * synch_frame_numbers[cbMAXTRACKOBJ];///< Buffer to hold synch frame numbers (holds count*num_samples elements)
+    uint32_t * synch_timestamps[cbMAXTRACKOBJ];   ///< Buffer to hold synchronized tracking time stamps (in milliseconds) (holds count*num_samples elements)
     void  * timestamps[cbMAXTRACKOBJ];          ///< Buffer to hold tracking time stamps (holds count*num_samples elements)
 } cbSdkTrialTracking;
 
@@ -349,21 +349,21 @@ typedef enum _cbSdkWaveformTriggerType
 typedef struct _cbSdkWaveformData
 {
     cbSdkWaveformType type;
-    UINT32  repeats;
+    uint32_t  repeats;
     cbSdkWaveformTriggerType  trig;
-    UINT16  trigChan;
-    UINT16  trigValue;
-    UINT8   trigNum;
-    INT16   offset;
+    uint16_t  trigChan;
+    uint16_t  trigValue;
+    uint8_t   trigNum;
+    int16_t   offset;
     union {
         struct {
-            UINT16 sineFrequency;
-            INT16  sineAmplitude;
+            uint16_t sineFrequency;
+            int16_t  sineAmplitude;
         };
         struct {
-            UINT16 phases;
-            UINT16  * duration;
-            INT16   * amplitude;
+            uint16_t phases;
+            uint16_t  * duration;
+            int16_t   * amplitude;
         };
     };
 } cbSdkWaveformData;
@@ -371,7 +371,7 @@ typedef struct _cbSdkWaveformData
 /// Analog output monitor
 typedef struct _cbSdkAoutMon
 {
-    UINT16  chan; ///< (1-based) channel to monitor
+    uint16_t  chan; ///< (1-based) channel to monitor
     BOOL bTrack; ///< If should monitor last tracked channel
     BOOL bSpike; ///< If spike or continuous should be monitored
 } cbSdkAoutMon;
@@ -410,142 +410,142 @@ typedef struct _cbSdkExtCmd
 
 // Can call this even with closed library to get library information
 /*! Get the library version (and nsp version if library is open) */
-CBSDKAPI    cbSdkResult cbSdkGetVersion(UINT32 nInstance, cbSdkVersion * version);
+CBSDKAPI    cbSdkResult cbSdkGetVersion(uint32_t nInstance, cbSdkVersion * version);
 
 /*! Read configuration file. */
-CBSDKAPI    cbSdkResult cbSdkReadCCF(UINT32 nInstance, cbSdkCCF * pData, const char * szFileName, bool bConvert, bool bSend = false, bool bThreaded = false); // Read batch config from CCF (or nsp if filename is null)
+CBSDKAPI    cbSdkResult cbSdkReadCCF(uint32_t nInstance, cbSdkCCF * pData, const char * szFileName, bool bConvert, bool bSend = false, bool bThreaded = false); // Read batch config from CCF (or nsp if filename is null)
 /*! Write configuration file. */
-CBSDKAPI    cbSdkResult cbSdkWriteCCF(UINT32 nInstance, cbSdkCCF * pData, const char * szFileName, bool bThreaded = false); // Write batch config to CCF (or nsp if filename is null)
+CBSDKAPI    cbSdkResult cbSdkWriteCCF(uint32_t nInstance, cbSdkCCF * pData, const char * szFileName, bool bThreaded = false); // Write batch config to CCF (or nsp if filename is null)
 
 /*! Open the library */
-CBSDKAPI    cbSdkResult cbSdkOpen(UINT32 nInstance,
+CBSDKAPI    cbSdkResult cbSdkOpen(uint32_t nInstance,
                                   cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT,
                                   cbSdkConnection con = cbSdkConnection());
 
-CBSDKAPI    cbSdkResult cbSdkGetType(UINT32 nInstance, cbSdkConnectionType * conType, cbSdkInstrumentType * instType); // Get connection and instrument type
+CBSDKAPI    cbSdkResult cbSdkGetType(uint32_t nInstance, cbSdkConnectionType * conType, cbSdkInstrumentType * instType); // Get connection and instrument type
 
 /*! Close the library */
-CBSDKAPI    cbSdkResult cbSdkClose(UINT32 nInstance);
+CBSDKAPI    cbSdkResult cbSdkClose(uint32_t nInstance);
 
 /*! Get the instrument sample clock time */
-CBSDKAPI    cbSdkResult cbSdkGetTime(UINT32 nInstance, UINT32 * cbtime);
+CBSDKAPI    cbSdkResult cbSdkGetTime(uint32_t nInstance, uint32_t * cbtime);
 
 /*! Get direct access to internal spike cache shared memory */
-CBSDKAPI    cbSdkResult cbSdkGetSpkCache(UINT32 nInstance, UINT16 channel, cbSPKCACHE **cache);
+CBSDKAPI    cbSdkResult cbSdkGetSpkCache(uint32_t nInstance, uint16_t channel, cbSPKCACHE **cache);
 // Note that spike cache is volatile, thus should not be used for critical operations such as recording
 
 /*! Get trial setup configuration */
-CBSDKAPI    cbSdkResult cbSdkGetTrialConfig(UINT32 nInstance,
-                                         UINT32 * pbActive, UINT16 * pBegchan = NULL, UINT32 * pBegmask = NULL, UINT32 * pBegval = NULL,
-                                         UINT16 * pEndchan = NULL, UINT32 * pEndmask = NULL, UINT32 * pEndval = NULL, bool * pbDouble = NULL,
-                                         UINT32 * puWaveforms = NULL, UINT32 * puConts = NULL, UINT32 * puEvents = NULL,
-                                         UINT32 * puComments = NULL, UINT32 * puTrackings = NULL, bool * pbAbsolute = NULL);
+CBSDKAPI    cbSdkResult cbSdkGetTrialConfig(uint32_t nInstance,
+                                         uint32_t * pbActive, uint16_t * pBegchan = NULL, uint32_t * pBegmask = NULL, uint32_t * pBegval = NULL,
+                                         uint16_t * pEndchan = NULL, uint32_t * pEndmask = NULL, uint32_t * pEndval = NULL, bool * pbDouble = NULL,
+                                         uint32_t * puWaveforms = NULL, uint32_t * puConts = NULL, uint32_t * puEvents = NULL,
+                                         uint32_t * puComments = NULL, uint32_t * puTrackings = NULL, bool * pbAbsolute = NULL);
 /*! Setup a trial */
-CBSDKAPI    cbSdkResult cbSdkSetTrialConfig(UINT32 nInstance,
-                                         UINT32 bActive, UINT16 begchan = 0, UINT32 begmask = 0, UINT32 begval = 0,
-                                         UINT16 endchan = 0, UINT32 endmask = 0, UINT32 endval = 0, bool bDouble = false,
-                                         UINT32 uWaveforms = 0, UINT32 uConts = cbSdk_CONTINUOUS_DATA_SAMPLES, UINT32 uEvents = cbSdk_EVENT_DATA_SAMPLES,
-                                         UINT32 uComments = 0, UINT32 uTrackings = 0, bool bAbsolute = false); // Configure a data collection trial
+CBSDKAPI    cbSdkResult cbSdkSetTrialConfig(uint32_t nInstance,
+                                         uint32_t bActive, uint16_t begchan = 0, uint32_t begmask = 0, uint32_t begval = 0,
+                                         uint16_t endchan = 0, uint32_t endmask = 0, uint32_t endval = 0, bool bDouble = false,
+                                         uint32_t uWaveforms = 0, uint32_t uConts = cbSdk_CONTINUOUS_DATA_SAMPLES, uint32_t uEvents = cbSdk_EVENT_DATA_SAMPLES,
+                                         uint32_t uComments = 0, uint32_t uTrackings = 0, bool bAbsolute = false); // Configure a data collection trial
 // begchan - first channel number (1-based), zero means all
 // endchan - last channel number (1-based), zero means all
 
 /*! Close given trial if configured */
-CBSDKAPI    cbSdkResult cbSdkUnsetTrialConfig(UINT32 nInstance, cbSdkTrialType type);
+CBSDKAPI    cbSdkResult cbSdkUnsetTrialConfig(uint32_t nInstance, cbSdkTrialType type);
 
 /*! Get channel label */
 // Pass NULL or allocate bValid[6] label[cbLEN_STR_LABEL] position[4]
-CBSDKAPI    cbSdkResult cbSdkGetChannelLabel(UINT32 nInstance, UINT16 channel, UINT32 * bValid, char * label = NULL, UINT32 * userflags = NULL, INT32 * position = NULL); // Get channel label
+CBSDKAPI    cbSdkResult cbSdkGetChannelLabel(uint32_t nInstance, uint16_t channel, uint32_t * bValid, char * label = NULL, uint32_t * userflags = NULL, int32_t * position = NULL); // Get channel label
 /*! Set channel label */
-CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(UINT32 nInstance, UINT16 channel, const char * label, UINT32 userflags, INT32 * position); // Set channel label
+CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(uint32_t nInstance, uint16_t channel, const char * label, uint32_t userflags, int32_t * position); // Set channel label
 
 /*! Retrieve data of a trial (NULL means ignore), user should allocate enough buffers beforehand, and trial should not be closed during this call */
-CBSDKAPI    cbSdkResult cbSdkGetTrialData(UINT32 nInstance,
-                                          UINT32 bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
+CBSDKAPI    cbSdkResult cbSdkGetTrialData(uint32_t nInstance,
+                                          uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                           cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
 
 /*! Initialize the structures (and fill with information about active channels, comment pointers and samples in the buffer) */
-CBSDKAPI    cbSdkResult cbSdkInitTrialData(UINT32 nInstance, UINT32 bActive,
+CBSDKAPI    cbSdkResult cbSdkInitTrialData(uint32_t nInstance, uint32_t bActive,
                                            cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                            cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
 
 /*! Start/stop/open/close file recording */
-CBSDKAPI    cbSdkResult cbSdkSetFileConfig(UINT32 nInstance, const char * filename, const char * comment, UINT32 bStart, UINT32 options = cbFILECFG_OPT_NONE);
+CBSDKAPI    cbSdkResult cbSdkSetFileConfig(uint32_t nInstance, const char * filename, const char * comment, uint32_t bStart, uint32_t options = cbFILECFG_OPT_NONE);
 
 /*! Get the state of file recording */
-CBSDKAPI    cbSdkResult cbSdkGetFileConfig(UINT32 nInstance, char * filename, char * username, bool * pbRecording);
+CBSDKAPI    cbSdkResult cbSdkGetFileConfig(uint32_t nInstance, char * filename, char * username, bool * pbRecording);
 
-CBSDKAPI    cbSdkResult cbSdkSetPatientInfo(UINT32 nInstance, const char * ID, const char * firstname, const char * lastname, UINT32 DOBMonth, UINT32 DOBDay, UINT32 DOBYear);
+CBSDKAPI    cbSdkResult cbSdkSetPatientInfo(uint32_t nInstance, const char * ID, const char * firstname, const char * lastname, uint32_t DOBMonth, uint32_t DOBDay, uint32_t DOBYear);
 
-CBSDKAPI    cbSdkResult cbSdkInitiateImpedance(UINT32 nInstance);
+CBSDKAPI    cbSdkResult cbSdkInitiateImpedance(uint32_t nInstance);
 
-CBSDKAPI    cbSdkResult cbSdkSendPoll(UINT32 nInstance, const char* appname, UINT32 mode, UINT32 flags, UINT32 extra);
+CBSDKAPI    cbSdkResult cbSdkSendPoll(uint32_t nInstance, const char* appname, uint32_t mode, uint32_t flags, uint32_t extra);
 
 /*! This sends an arbitrary packet without any validation. Please use with care or it might break the system */
-CBSDKAPI    cbSdkResult cbSdkSendPacket(UINT32 nInstance, void * ppckt);
+CBSDKAPI    cbSdkResult cbSdkSendPacket(uint32_t nInstance, void * ppckt);
 
 /*! Get/Set the runlevel of the instrument */
-CBSDKAPI    cbSdkResult cbSdkSetSystemRunLevel(UINT32 nInstance, UINT32 runlevel, UINT32 locked, UINT32 resetque);
+CBSDKAPI    cbSdkResult cbSdkSetSystemRunLevel(uint32_t nInstance, uint32_t runlevel, uint32_t locked, uint32_t resetque);
 
-CBSDKAPI    cbSdkResult cbSdkGetSystemRunLevel(UINT32 nInstance, UINT32 * runlevel, UINT32 * runflags = NULL, UINT32 * resetque = NULL);
+CBSDKAPI    cbSdkResult cbSdkGetSystemRunLevel(uint32_t nInstance, uint32_t * runlevel, uint32_t * runflags = NULL, uint32_t * resetque = NULL);
 
 /*! Send a digital output command */
-CBSDKAPI    cbSdkResult cbSdkSetDigitalOutput(UINT32 nInstance, UINT16 channel, UINT16 value);
+CBSDKAPI    cbSdkResult cbSdkSetDigitalOutput(uint32_t nInstance, uint16_t channel, uint16_t value);
 
 /*! Send a synch output waveform */
-CBSDKAPI    cbSdkResult cbSdkSetSynchOutput(UINT32 nInstance, UINT16 channel, UINT32 nFreq, UINT32 nRepeats);
+CBSDKAPI    cbSdkResult cbSdkSetSynchOutput(uint32_t nInstance, uint16_t channel, uint32_t nFreq, uint32_t nRepeats);
 
 /*! Send an extension command */
-CBSDKAPI    cbSdkResult cbSdkExtDoCommand(UINT32 nInstance, cbSdkExtCmd * extCmd);
+CBSDKAPI    cbSdkResult cbSdkExtDoCommand(uint32_t nInstance, cbSdkExtCmd * extCmd);
 
 /*! Send a analog output waveform or monitor a given channel, disable channel if both are null */
-CBSDKAPI    cbSdkResult cbSdkSetAnalogOutput(UINT32 nInstance, UINT16 channel, cbSdkWaveformData * wf, cbSdkAoutMon * mon);
+CBSDKAPI    cbSdkResult cbSdkSetAnalogOutput(uint32_t nInstance, uint16_t channel, cbSdkWaveformData * wf, cbSdkAoutMon * mon);
 
 /*! * Mask channels (for both trial and callback)
 * @param[in] channel channel number (1-based), zero means all channels
 */
-CBSDKAPI    cbSdkResult cbSdkSetChannelMask(UINT32 nInstance, UINT16 channel, UINT32 bActive);
+CBSDKAPI    cbSdkResult cbSdkSetChannelMask(uint32_t nInstance, uint16_t channel, uint32_t bActive);
 
 /*! Send a comment or custom event */
-CBSDKAPI    cbSdkResult cbSdkSetComment(UINT32 nInstance, UINT32 rgba, UINT8 charset, const char * comment = NULL);
+CBSDKAPI    cbSdkResult cbSdkSetComment(uint32_t nInstance, uint32_t rgba, uint8_t charset, const char * comment = NULL);
 
 /*! Send a full channel configuration packet */
-CBSDKAPI    cbSdkResult cbSdkSetChannelConfig(UINT32 nInstance, UINT16 channel, cbPKT_CHANINFO * chaninfo);
+CBSDKAPI    cbSdkResult cbSdkSetChannelConfig(uint32_t nInstance, uint16_t channel, cbPKT_CHANINFO * chaninfo);
 /*! Get a full channel configuration packet */
-CBSDKAPI    cbSdkResult cbSdkGetChannelConfig(UINT32 nInstance, UINT16 channel, cbPKT_CHANINFO * chaninfo);
+CBSDKAPI    cbSdkResult cbSdkGetChannelConfig(uint32_t nInstance, uint16_t channel, cbPKT_CHANINFO * chaninfo);
 
 /*! Get filter description (proc = 1 for now) */
-CBSDKAPI    cbSdkResult cbSdkGetFilterDesc(UINT32 nInstance, UINT32 proc, UINT32 filt, cbFILTDESC * filtdesc);
+CBSDKAPI    cbSdkResult cbSdkGetFilterDesc(uint32_t nInstance, uint32_t proc, uint32_t filt, cbFILTDESC * filtdesc);
 
 /*! Get sample group list (proc = 1 for now) */
-CBSDKAPI    cbSdkResult cbSdkGetSampleGroupList(UINT32 nInstance, UINT32 proc, UINT32 group, UINT32 *length, UINT32 *list);
+CBSDKAPI    cbSdkResult cbSdkGetSampleGroupList(uint32_t nInstance, uint32_t proc, uint32_t group, uint32_t *length, uint32_t *list);
 
-CBSDKAPI    cbSdkResult cbSdkGetSampleGroupInfo(UINT32 nInstance, UINT32 proc, UINT32 group, char *label, UINT32 *period, UINT32 *length);
+CBSDKAPI    cbSdkResult cbSdkGetSampleGroupInfo(uint32_t nInstance, uint32_t proc, uint32_t group, char *label, uint32_t *period, uint32_t *length);
 
 /*!
 * Get information about given trackable object
 * @param[in] id		trackable ID (1 to cbMAXTRACKOBJ)
 * @param[in] name	string of length cbLEN_STR_LABEL
 */
-CBSDKAPI    cbSdkResult cbSdkGetTrackObj(UINT32 nInstance, char *name, UINT16 *type, UINT16 *pointCount, UINT32 id);
+CBSDKAPI    cbSdkResult cbSdkGetTrackObj(uint32_t nInstance, char *name, uint16_t *type, uint16_t *pointCount, uint32_t id);
 
 /*! Get video source information */
 // id     video source ID (1 to cbMAXVIDEOSOURCE)
 // name   string of length cbLEN_STR_LABEL
-CBSDKAPI    cbSdkResult cbSdkGetVideoSource(UINT32 nInstance, char *name, float *fps, UINT32 id);
+CBSDKAPI    cbSdkResult cbSdkGetVideoSource(uint32_t nInstance, char *name, float *fps, uint32_t id);
 
 /// Send global spike configuration
-CBSDKAPI    cbSdkResult cbSdkSetSpikeConfig(UINT32 nInstance, UINT32 spklength, UINT32 spkpretrig);
+CBSDKAPI    cbSdkResult cbSdkSetSpikeConfig(uint32_t nInstance, uint32_t spklength, uint32_t spkpretrig);
 /// Get global system configuration
-CBSDKAPI    cbSdkResult cbSdkGetSysConfig(UINT32 nInstance, UINT32 * spklength, UINT32 * spkpretrig = NULL, UINT32 * sysfreq = NULL);
+CBSDKAPI    cbSdkResult cbSdkGetSysConfig(uint32_t nInstance, uint32_t * spklength, uint32_t * spkpretrig = NULL, uint32_t * sysfreq = NULL);
 /// Perform given system command
-CBSDKAPI    cbSdkResult cbSdkSystem(UINT32 nInstance, cbSdkSystemType cmd);
+CBSDKAPI    cbSdkResult cbSdkSystem(uint32_t nInstance, cbSdkSystemType cmd);
 
-CBSDKAPI    cbSdkResult cbSdkRegisterCallback(UINT32 nInstance, cbSdkCallbackType callbacktype, cbSdkCallback pCallbackFn, void* pCallbackData);
-CBSDKAPI    cbSdkResult cbSdkUnRegisterCallback(UINT32 nInstance, cbSdkCallbackType callbacktype);
-CBSDKAPI    cbSdkResult cbSdkCallbackStatus(UINT32 nInstance, cbSdkCallbackType callbacktype);
+CBSDKAPI    cbSdkResult cbSdkRegisterCallback(uint32_t nInstance, cbSdkCallbackType callbacktype, cbSdkCallback pCallbackFn, void* pCallbackData);
+CBSDKAPI    cbSdkResult cbSdkUnRegisterCallback(uint32_t nInstance, cbSdkCallbackType callbacktype);
+CBSDKAPI    cbSdkResult cbSdkCallbackStatus(uint32_t nInstance, cbSdkCallbackType callbacktype);
 // At most one callback per each callback type per each connection
 
 /// Convert volts string (e.g. '5V', '-65mV', ...) to its raw digital value equivalent for given channel
-CBSDKAPI    cbSdkResult cbSdkAnalogToDigital(UINT32 nInstance, UINT16 channel, const char * szVoltsUnitString, INT32 * digital);
+CBSDKAPI    cbSdkResult cbSdkAnalogToDigital(uint32_t nInstance, uint16_t channel, const char * szVoltsUnitString, int32_t * digital);
 
 #endif /* CBSDK_H_INCLUDED */

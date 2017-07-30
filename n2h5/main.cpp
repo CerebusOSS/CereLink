@@ -50,7 +50,7 @@
 #define CHUNK_SIZE_CONTINUOUS   (1024)
 #define CHUNK_SIZE_EVENT        (1024)
 
-UINT16 g_nCombine = 0; // subchannel combine level
+uint16_t g_nCombine = 0; // subchannel combine level
 bool g_bAppend = false;
 bool g_bNoSpikes = false;
 bool g_bSkipEmpty = false;
@@ -222,7 +222,7 @@ int ConvertNev(FILE * pFile, hid_t file)
     if (AddRoot(pFile, file, isHdr))
         return 1;
 
-    UINT16 nSpikeLength = 48;
+    uint16_t nSpikeLength = 48;
     hid_t tid_spike = -1;
     hid_t tid_dig = -1;
     hid_t tid_comment = -1;
@@ -233,7 +233,7 @@ int ConvertNev(FILE * pFile, hid_t file)
     hid_t tid_filt_attr = -1;
 
     // 21, 22, 23 flat file verion number
-    UINT32 nVer = isHdr.byFileRevMajor * 10 + isHdr.byFileRevMinor;
+    uint32_t nVer = isHdr.byFileRevMajor * 10 + isHdr.byFileRevMinor;
 
     nSpikeLength = (isHdr.dwBytesPerPacket - 8) / 2;
 
@@ -254,7 +254,7 @@ int ConvertNev(FILE * pFile, hid_t file)
     BmiChanExt1Attr_t chanExt1Attr[cbNUM_ANALOG_CHANS];
     memset(chanExt1Attr, 0, sizeof(chanExt1Attr));
     // Read the header to fill channel attributes
-    for (UINT32 i = 0; i < isHdr.dwNumOfExtendedHeaders; ++i)
+    for (uint32_t i = 0; i < isHdr.dwNumOfExtendedHeaders; ++i)
     {
         NevExtHdr isExtHdr;
         if (fread(&isExtHdr, sizeof(isExtHdr), 1, pFile) != 1)
@@ -360,11 +360,11 @@ int ConvertNev(FILE * pFile, hid_t file)
         } else {
             printf("Unknown header (%7s) in the source file\n", isExtHdr.achPacketID);
         }
-    } // end for (UINT32 i = 0
+    } // end for (uint32_t i = 0
 
-    UINT32 nChannelOffset = 0;
-    UINT32 nDigChannelOffset = 0;
-    UINT32 nSerChannelOffset = 0;
+    uint32_t nChannelOffset = 0;
+    uint32_t nDigChannelOffset = 0;
+    uint32_t nSerChannelOffset = 0;
 
     hsize_t     dims[1] = {1};
     hid_t space_attr = H5Screate_simple(1, dims, NULL);
@@ -470,7 +470,7 @@ int ConvertNev(FILE * pFile, hid_t file)
 
         // Add digital and serial channel and their attributes
         {
-            UINT16 id = 1 + 0;
+            uint16_t id = 1 + 0;
             char szNum[7];
             std::string strLabel = "digital";
             sprintf(szNum, "%05u", id + nDigChannelOffset);
@@ -495,7 +495,7 @@ int ConvertNev(FILE * pFile, hid_t file)
 
         // Add digital and serial channel and their attributes
         {
-            UINT16 id = 1 + 0;
+            uint16_t id = 1 + 0;
             char szNum[7];
             std::string strLabel = "serial";
             sprintf(szNum, "%05u", id + nSerChannelOffset);
@@ -617,7 +617,7 @@ int ConvertNev(FILE * pFile, hid_t file)
         {
             // NeuroMotive charset is fixed
             hid_t aid = H5Acreate(gid_comment, "NeuroMotiveCharset", H5T_NATIVE_UINT8, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            UINT8 charset = 255;
+            uint8_t charset = 255;
             ret = H5Awrite(aid, H5T_NATIVE_UINT8, &charset);
             ret = H5Aclose(aid);
 
@@ -724,7 +724,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                     {
                         if (ptid_serial < 0)
                         {
-                            UINT16 id = 1 + 0;
+                            uint16_t id = 1 + 0;
                             char szNum[7];
                             std::string strLabel = "/channel/serial";
                             sprintf(szNum, "%05u", id + nSerChannelOffset);
@@ -740,7 +740,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                     } else {
                         if (ptid_digital < 0)
                         {
-                            UINT16 id = 1 + 0;
+                            uint16_t id = 1 + 0;
                             char szNum[7];
                             std::string strLabel = "/channel/digital";
                             sprintf(szNum, "%05u", id + nDigChannelOffset);
@@ -774,7 +774,7 @@ int ConvertNev(FILE * pFile, hid_t file)
                                     hsize_t     dims[1] = {1};
                                     hid_t space_attr = H5Screate_simple(1, dims, NULL);
                                     hid_t aid = H5Acreate(gid, "Charset", H5T_NATIVE_UINT8, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-                                    UINT8 charset = nevData.comment.charset;
+                                    uint8_t charset = nevData.comment.charset;
                                     ret = H5Awrite(aid, H5T_NATIVE_UINT8, &charset);
                                     ret = H5Aclose(aid);
                                     ret = H5Sclose(space_attr);
@@ -946,11 +946,11 @@ int ConvertNSx21(const char * szSrcFile, FILE * pFile, hid_t file)
             gid_channel = H5Gcreate(file, "channel", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         hid_t tid_chan_attr = CreateChanAttrType(gid_channel);
         hid_t tid_sampling_attr = CreateSamplingAttrType(gid_channel);
-        for (UINT32 i = 0; i < isHdr.cnChannels; ++i)
+        for (uint32_t i = 0; i < isHdr.cnChannels; ++i)
         {
             char szNum[7];
-            UINT32 id; // 1-based
-            if (fread(&id, sizeof(UINT32), 1, pFile) != 1)
+            uint32_t id; // 1-based
+            if (fread(&id, sizeof(uint32_t), 1, pFile) != 1)
             {
                 printf("Invalid header in source file\n");
                 return 1;
@@ -966,7 +966,7 @@ int ConvertNSx21(const char * szSrcFile, FILE * pFile, hid_t file)
             samplingAttr[i].nSampleBits = 16;
             samplingAttr[i].fSampleRate = float(30000.0) / isHdr.nPeriod;
 
-            UINT32 nChannelOffset = 0;
+            uint32_t nChannelOffset = 0;
             if (g_bAppend)
             {
                 bool bExists = false;
@@ -1015,7 +1015,7 @@ int ConvertNSx21(const char * szSrcFile, FILE * pFile, hid_t file)
             ret = H5Gclose(gid);
             // Add data start clock attribute
             aid = H5Acreate(dsid, "StartClock", H5T_NATIVE_UINT32, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            UINT32 nStartTime = 0; // 2.1 does not have paused headers
+            uint32_t nStartTime = 0; // 2.1 does not have paused headers
             ret = H5Awrite(aid, H5T_NATIVE_UINT32, &nStartTime);
             ret = H5Aclose(aid);
             // Add data sampling attribute
@@ -1024,7 +1024,7 @@ int ConvertNSx21(const char * szSrcFile, FILE * pFile, hid_t file)
             ret = H5Aclose(aid);
 
             ret = H5Dclose(dsid);
-        } // end for (UINT32 i = 0
+        } // end for (uint32_t i = 0
         ret = H5Tclose(tid_sampling_attr);
         ret = H5Tclose(tid_chan_attr);
         ret = H5Gclose(gid_channel);
@@ -1032,35 +1032,35 @@ int ConvertNSx21(const char * szSrcFile, FILE * pFile, hid_t file)
     }
 
     int count = 0;
-    INT16 anDataBufferCache[cbNUM_ANALOG_CHANS][CHUNK_SIZE_CONTINUOUS];
-    INT16 anDataBuffer[cbNUM_ANALOG_CHANS];
-    size_t nGot = fread(anDataBuffer, sizeof(INT16), isHdr.cnChannels, pFile);
+    int16_t anDataBufferCache[cbNUM_ANALOG_CHANS][CHUNK_SIZE_CONTINUOUS];
+    int16_t anDataBuffer[cbNUM_ANALOG_CHANS];
+    size_t nGot = fread(anDataBuffer, sizeof(int16_t), isHdr.cnChannels, pFile);
     if (nGot != isHdr.cnChannels)
     {
         perror("Source file is empty or invalid\n");
         return 1;
     }
     do {
-        for (UINT32 i = 0; i < isHdr.cnChannels; ++i)
+        for (uint32_t i = 0; i < isHdr.cnChannels; ++i)
         {
             anDataBufferCache[i][count] = anDataBuffer[i];
         }
         count++;
         if (count == CHUNK_SIZE_CONTINUOUS)
         {
-            for (UINT32 i = 0; i < isHdr.cnChannels; ++i)
+            for (uint32_t i = 0; i < isHdr.cnChannels; ++i)
             {
                 ret = H5PTappend(ptid_chan[i], count, &anDataBufferCache[i][0]);
             }
             count = 0;
         }
-        nGot = fread(anDataBuffer, sizeof(INT16), isHdr.cnChannels, pFile);
+        nGot = fread(anDataBuffer, sizeof(int16_t), isHdr.cnChannels, pFile);
     } while (nGot == isHdr.cnChannels);
 
     // Write out the remaining chunk
     if (count > 0)
     {
-        for (UINT32 i = 0; i < isHdr.cnChannels; ++i)
+        for (uint32_t i = 0; i < isHdr.cnChannels; ++i)
         {
             ret = H5PTappend(ptid_chan[i], count, &anDataBufferCache[i][0]);
         }
@@ -1110,7 +1110,7 @@ int ConvertNSx22(FILE * pFile, hid_t file)
         return 1;
 
     // Read extra headers
-    for (UINT32 i = 0; i < isHdr.cnChannels; ++i)
+    for (uint32_t i = 0; i < isHdr.cnChannels; ++i)
     {
         Nsx22ExtHdr isExtHdr;
         if (fread(&isExtHdr, sizeof(isExtHdr), 1, pFile) != 1)
@@ -1136,22 +1136,22 @@ int ConvertNSx22(FILE * pFile, hid_t file)
 
         chanExtAttr[i].phys_connector = isExtHdr.phys_connector;
         chanExtAttr[i].connector_pin = isExtHdr.connector_pin;
-        UINT64 anarange = INT64(isExtHdr.anamax) - INT64(isExtHdr.anamin);
-        UINT64 digrange = INT64(isExtHdr.digmax) - INT64(isExtHdr.digmin);
+        uint64_t anarange = int64_t(isExtHdr.anamax) - int64_t(isExtHdr.anamin);
+        uint64_t digrange = int64_t(isExtHdr.digmax) - int64_t(isExtHdr.digmin);
         if (strncmp(isExtHdr.anaunit, "uV", 2) == 0)
         {
-            chanExtAttr[i].dFactor = UINT32((anarange * INT64(1E3)) / digrange);
+            chanExtAttr[i].dFactor = uint32_t((anarange * int64_t(1E3)) / digrange);
         }
         else if (strncmp(isExtHdr.anaunit, "mV", 2) == 0)
         {
-            chanExtAttr[i].dFactor = UINT32((anarange * INT64(1E6)) / digrange);
+            chanExtAttr[i].dFactor = uint32_t((anarange * int64_t(1E6)) / digrange);
         }
         else if (strncmp(isExtHdr.anaunit, "V", 2) == 0)
         {
-            chanExtAttr[i].dFactor = UINT32((anarange * INT64(1E9)) / digrange);
+            chanExtAttr[i].dFactor = uint32_t((anarange * int64_t(1E9)) / digrange);
         } else {
             printf("Unknown analog unit for channel %u, uV used\n", isExtHdr.id);
-            chanExtAttr[i].dFactor = UINT32((anarange * INT64(1E3)) / digrange);
+            chanExtAttr[i].dFactor = uint32_t((anarange * int64_t(1E3)) / digrange);
         }
         filtAttr[i].hpfreq = isExtHdr.hpfreq;
         filtAttr[i].hporder = isExtHdr.hporder;
@@ -1173,7 +1173,7 @@ int ConvertNSx22(FILE * pFile, hid_t file)
     hid_t tid_sampling_attr = -1;
     hid_t tid_filt_attr = -1;
 
-    UINT32 nChannelOffset = 0;
+    uint32_t nChannelOffset = 0;
 
     hid_t ptid_chan[cbNUM_ANALOG_CHANS];
     {
@@ -1203,11 +1203,11 @@ int ConvertNSx22(FILE * pFile, hid_t file)
         hid_t tid_chan_attr = CreateChanAttrType(gid_channel);
         hid_t tid_chanext_attr = CreateChanExtAttrType(gid_channel);
         hid_t tid_chanext2_attr = CreateChanExt2AttrType(gid_channel);
-        for (UINT32 i = 0; i < isHdr.cnChannels; ++i)
+        for (uint32_t i = 0; i < isHdr.cnChannels; ++i)
         {
             std::string strLabel = "channel";
             {
-                UINT32 id = chanAttr[i].id + nChannelOffset;
+                uint32_t id = chanAttr[i].id + nChannelOffset;
                 char szNum[7];
                 sprintf(szNum, "%05u", id);
                 strLabel += szNum;
@@ -1243,7 +1243,7 @@ int ConvertNSx22(FILE * pFile, hid_t file)
             }
 
             ret = H5Gclose(gid);
-        } // end for (UINT32 i = 0
+        } // end for (uint32_t i = 0
         ret = H5Tclose(tid_chanext2_attr);
         ret = H5Tclose(tid_chanext_attr);
         ret = H5Tclose(tid_chan_attr);
@@ -1282,7 +1282,7 @@ int ConvertNSx22(FILE * pFile, hid_t file)
                         " Use --skipempty if instead you want to skip empty headers\n");
             }
         }
-        for (UINT32 i = 0; i < isHdr.cnChannels; ++i)
+        for (uint32_t i = 0; i < isHdr.cnChannels; ++i)
         {
             size_t chunk_size = CHUNK_SIZE_CONTINUOUS;
             int compression = -1; // TODO: use options to add compression
@@ -1323,7 +1323,7 @@ int ConvertNSx22(FILE * pFile, hid_t file)
             ret = H5Gclose(gid);
             // Add data start clock attribute
             hid_t aid = H5Acreate(dsid, "StartClock", H5T_NATIVE_UINT32, space_attr, H5P_DEFAULT, H5P_DEFAULT);
-            UINT32 nStartTime = isDataHdr.nTimestamp;
+            uint32_t nStartTime = isDataHdr.nTimestamp;
             ret = H5Awrite(aid, H5T_NATIVE_UINT32, &nStartTime);
             ret = H5Aclose(aid);
             // Add data sampling attribute
@@ -1338,11 +1338,11 @@ int ConvertNSx22(FILE * pFile, hid_t file)
             ret = H5Dclose(dsid);
         }
         int count = 0;
-        INT16 anDataBufferCache[cbNUM_ANALOG_CHANS][CHUNK_SIZE_CONTINUOUS];
-        for (UINT32 i = 0; i < isDataHdr.nNumDatapoints || isDataHdr.nNumDatapoints == 0; ++i)
+        int16_t anDataBufferCache[cbNUM_ANALOG_CHANS][CHUNK_SIZE_CONTINUOUS];
+        for (uint32_t i = 0; i < isDataHdr.nNumDatapoints || isDataHdr.nNumDatapoints == 0; ++i)
         {
-            INT16 anDataBuffer[cbNUM_ANALOG_CHANS];
-            size_t nGot = fread(anDataBuffer, sizeof(INT16), isHdr.cnChannels, pFile);
+            int16_t anDataBuffer[cbNUM_ANALOG_CHANS];
+            size_t nGot = fread(anDataBuffer, sizeof(int16_t), isHdr.cnChannels, pFile);
             if (nGot != isHdr.cnChannels)
             {
                 if (isDataHdr.nNumDatapoints == 0)
@@ -1351,31 +1351,31 @@ int ConvertNSx22(FILE * pFile, hid_t file)
                     printf("Fewer data points (%u) than specified in data header (%u) at the source file!\n", i + 1, isDataHdr.nNumDatapoints);
                 break;
             }
-            for (UINT32 j = 0; j < isHdr.cnChannels; ++j)
+            for (uint32_t j = 0; j < isHdr.cnChannels; ++j)
             {
                 anDataBufferCache[j][count] = anDataBuffer[j];
             }
             count++;
             if (count == CHUNK_SIZE_CONTINUOUS)
             {
-                for (UINT32 j = 0; j < isHdr.cnChannels; ++j)
+                for (uint32_t j = 0; j < isHdr.cnChannels; ++j)
                 {
                     ret = H5PTappend(ptid_chan[j], count, &anDataBufferCache[j][0]);
                 }
                 count = 0;
             }
-        } // end for (UINT32 i = 0
+        } // end for (uint32_t i = 0
 
         // Write out the remaining chunk
         if (count > 0)
         {
-            for (UINT32 i = 0; i < isHdr.cnChannels; ++i)
+            for (uint32_t i = 0; i < isHdr.cnChannels; ++i)
             {
                 ret = H5PTappend(ptid_chan[i], count, &anDataBufferCache[i][0]);
             }
         }
         // Close packet tables as we may open them again for paused files
-        for (UINT32 i = 0; i < isHdr.cnChannels; ++i)
+        for (uint32_t i = 0; i < isHdr.cnChannels; ++i)
         {
             ret = H5PTclose(ptid_chan[i]);
         }        
