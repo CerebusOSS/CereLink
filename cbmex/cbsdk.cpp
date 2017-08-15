@@ -529,7 +529,7 @@ cbSdkResult SdkApp::SdkGetVersion(cbSdkVersion *version)
     memset(version, 0, sizeof(cbSdkVersion));
     version->major = BMI_VERSION_MAJOR;
     version->minor = BMI_VERSION_MINOR;
-    version->release = BMI_VERSION_BUILD_NUMBER;   //RELEASE;
+    version->release = BMI_VERSION_BUILD;   //RELEASE;
     version->beta = 0;  //BMI_VERSION_BETA;
     version->majorp = cbVERSION_MAJOR;
     version->minorp = cbVERSION_MINOR;
@@ -559,7 +559,7 @@ CBSDKAPI    cbSdkResult cbSdkGetVersion(uint32_t nInstance, cbSdkVersion *versio
     memset(version, 0, sizeof(cbSdkVersion));
     version->major = BMI_VERSION_MAJOR;
     version->minor = BMI_VERSION_MINOR;
-    version->release = BMI_VERSION_BUILD_NUMBER;   //RELEASE;
+    version->release = BMI_VERSION_BUILD;   //RELEASE;
     version->beta = 0;  //BMI_VERSION_BETA;
     version->majorp = cbVERSION_MAJOR;
     version->minorp = cbVERSION_MINOR;
