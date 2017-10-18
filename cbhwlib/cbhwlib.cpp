@@ -1345,8 +1345,8 @@ cbRESULT cbGetSampleGroupList( uint32_t proc, uint32_t group, uint32_t *length, 
         *length = cb_cfg_buffer_ptr[nIdx]->groupinfo[proc - 1][group - 1].length;
 
     if (list)
-        memcpy(list,&(cb_cfg_buffer_ptr[nIdx]->groupinfo[proc-1][group-1].list[0]),
-                    cb_cfg_buffer_ptr[nIdx]->groupinfo[proc-1][group-1].length * 4);
+        memcpy(list, &(cb_cfg_buffer_ptr[nIdx]->groupinfo[proc-1][group-1].list[0]),
+                    cb_cfg_buffer_ptr[nIdx]->groupinfo[proc-1][group-1].length * sizeof(cb_cfg_buffer_ptr[nIdx]->groupinfo[proc-1][group-1].list[0]));
 
     return cbRESULT_OK;
 }
