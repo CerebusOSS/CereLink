@@ -64,7 +64,7 @@
 #ifdef __cplusplus
 #include <string.h>
 #endif
-#include <stdint.h>
+#include "pstdint.h"
 
 #pragma pack(push, 1)
 
