@@ -21,12 +21,19 @@ cdef extern from "cbhwlib.h":
     # Have to put constants that are used as array sizes in an enum,
     # otherwise they are considered non-const and can't be used.
     cdef enum cbhwlib_consts:
-        cbNUM_FE_CHANS = 128
+        cbNUM_FE_CHANS = 256
         cbNUM_ANAIN_CHANS = 16
         cbNUM_ANALOG_CHANS = (cbNUM_FE_CHANS + cbNUM_ANAIN_CHANS)
+        cbNUM_ANAOUT_CHANS = 4
+        cbNUM_AUDOUT_CHANS = 2
+        cbNUM_ANALOGOUT_CHANS = (cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS)
+        cbNUM_DIGIN_CHANS = 1
+        cbNUM_SERIAL_CHANS = 1
+        cbNUM_DIGOUT_CHANS = 4
+        cbMAXCHANS = (cbNUM_ANALOG_CHANS +  cbNUM_ANALOGOUT_CHANS + cbNUM_DIGIN_CHANS + cbNUM_SERIAL_CHANS + cbNUM_DIGOUT_CHANS)
         cbMAXUNITS = 5
-        MAX_CHANS_DIGITAL_IN = (cbNUM_FE_CHANS+cbNUM_ANAIN_CHANS+4+2+1)
-        MAX_CHANS_SERIAL = (MAX_CHANS_DIGITAL_IN+1)
+        # MAX_CHANS_DIGITAL_IN = (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS + cbNUM_DIGIN_CHANS)
+        # MAX_CHANS_SERIAL = (MAX_CHANS_DIGITAL_IN + 1cbNUM_SERIAL_CHANS
         cbMAXTRACKOBJ = 20 # maximum number of trackable objects
         cbMAXHOOPS = 4
         cbPKT_SPKCACHEPKTCNT = 400
@@ -376,7 +383,7 @@ cdef extern from "cbsdk.h":
     cbSdkResult cbSdkSetChannelConfig(uint32_t nInstance, uint16_t channel, cbPKT_CHANINFO * chaninfo)
     cbSdkResult cbSdkGetChannelConfig(uint32_t nInstance, uint16_t channel, cbPKT_CHANINFO * chaninfo)
     cbSdkResult cbSdkGetFilterDesc(uint32_t nInstance, uint32_t proc, uint32_t filt, cbFILTDESC * filtdesc)
-    cbSdkResult cbSdkGetSampleGroupList(uint32_t nInstance, uint32_t proc, uint32_t group, uint32_t *length, uint32_t *list)
+    cbSdkResult cbSdkGetSampleGroupList(uint32_t nInstance, uint32_t proc, uint32_t group, uint32_t *length, uint16_t *list)
     cbSdkResult cbSdkGetSampleGroupInfo(uint32_t nInstance, uint32_t proc, uint32_t group, char *label, uint32_t *period, uint32_t *length)
     cbSdkResult cbSdkSetSpikeConfig(uint32_t nInstance, uint32_t spklength, uint32_t spkpretrig)
     cbSdkResult cbSdkGetSysConfig(uint32_t nInstance, uint32_t * spklength, uint32_t * spkpretrig, uint32_t * sysfreq)
