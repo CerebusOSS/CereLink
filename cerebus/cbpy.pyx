@@ -277,7 +277,8 @@ def trial_event(int instance=0, bool reset=False):
         trialevent.waveforms[channel] = NULL
         dig_events = []
         # Fill values for non-empty digital or serial channels
-        if ch == MAX_CHANS_DIGITAL_IN or ch == MAX_CHANS_SERIAL:
+        if (ch == (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS + cbNUM_DIGIN_CHANS))\
+            or (ch == (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS + cbNUM_DIGIN_CHANS + cbNUM_SERIAL_CHANS)):
             num_samples = trialevent.num_samples[channel][0]
             if num_samples:
                 if cfg_param.bDouble:
@@ -726,7 +727,7 @@ def get_sample_group(int group_ix, int instance=0):
     if (nChansInGroup <= 0):
         return <int> res, []
 
-    cdef uint32_t pGroupList[144]
+    cdef uint16_t pGroupList[cbNUM_ANALOG_CHANS+0]
     res = cbSdkGetSampleGroupList(<uint32_t>instance, proc, <uint32_t>group_ix, &nChansInGroup, pGroupList)
     handle_result(res)
 
@@ -831,6 +832,8 @@ cdef cbSdkResult handle_result(cbSdkResult res):
             errtext = "Trying to run an unconfigured method."
         elif (res == CBSDKRESULT_NULLPTR):
             errtext = "Null pointer."
+        elif (res == CBSDKRESULT_INVALIDCHANNEL):
+            errtext = "Invalid channel number."
 
         raise RuntimeError(("%d, " + errtext) % res)
     return res

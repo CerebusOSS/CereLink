@@ -19,8 +19,8 @@
 #     QT5 ships with its own cmake config files. We need to tell CMake where to find this.
 #     On Mac OS, assuming qt installed with homebrew,
 #     run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt5)
-#     On Windows, set CMAKE_PREFIX_PATH with the Qt path matching your compiler.
-#     For example, cmake .. -G "Visual Studio 14 2015 Win64" -DCMAKE_PREFIX_PATH="C:\Qt\5.8\msvc2015_64\"
+#     On Windows, run CMake with -DQt5_DIR=path\to\qt\version\platform\lib\cmake\Qt5
+#     For example: cmake .. -G "Visual Studio 14 2015 Win64" -DQt5_DIR=C:\Qt\5.9.1\msvc2015_64\lib\cmake\Qt5
 
 
 CMAKE_MINIMUM_REQUIRED( VERSION 3.1.0 )
@@ -105,15 +105,14 @@ cmake_policy(SET CMP0042 NEW) # ENABLE CMP0042: MACOSX_RPATH is enabled by defau
 #We could use a variable to make this editable by GUI, but then we have to clear Qt4 variables for reconfigure.
 #SET(CMAKE_PREFIX_PATH "." CACHE PATH "Qt path. e.g., C:\\Qt\\5.8\\msvc2015_64\\")
 SET(USING_QT5 OFF)
-FIND_PACKAGE( Qt5Core QUIET )
-IF(Qt5Core_FOUND)
+find_package(Qt5 COMPONENTS Core)
+IF(Qt5_FOUND)
     MESSAGE(STATUS "Found Qt ${Qt5Core_VERSION_STRING}")
     SET(USING_QT5 ON)
-    FIND_PACKAGE( Qt5Xml REQUIRED )
-    FIND_PACKAGE( Qt5Concurrent REQUIRED )
-ELSE(Qt5Core_FOUND)
+    FIND_PACKAGE(Qt5 REQUIRED COMPONENTS Xml Concurrent)
+ELSE(Qt5_FOUND)
     FIND_PACKAGE( Qt4 REQUIRED QtCore QtXml)
-ENDIF(Qt5Core_FOUND)
+ENDIF(Qt5_FOUND)
 IF(${USING_QT5})
     SET(QT_LIBRARIES Qt5::Core Qt5::Xml Qt5::Concurrent)
 ELSE(${USING_QT5})

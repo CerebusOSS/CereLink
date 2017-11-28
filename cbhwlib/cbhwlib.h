@@ -1,8 +1,8 @@
 /* =STS=> cbhwlib.h[1687].aa78   submit   SMID:82 */
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// (c) Copyright 2002-2008 Cyberkinetics, Inc.
-// (c) Copyright 2008-2011 Blackrock Microsystems
+// (c) Copyright 2002 - 2008 Cyberkinetics, Inc.
+// (c) Copyright 2008 - 2017 Blackrock Microsystems
 //
 // $Workfile: cbhwlib.h $
 // $Archive: /Cerebus/Human/LinuxApps/player/cbhwlib.h $
@@ -64,14 +64,15 @@
 #ifdef __cplusplus
 #include <string.h>
 #endif
-#include <stdint.h>
+#include "pstdint.h"
 
 #pragma pack(push, 1)
 
 #define cbVERSION_MAJOR  3
-#define cbVERSION_MINOR  10
+#define cbVERSION_MINOR  11
 
 // Version history:
+// 3.11 - 17 Jan 2017 hls - Changed list in cbPKT_GROUPINFO from UINT32 to UINT16 to allow for 256-channels
 // 3.10 - 23 Oct 2014 hls - Added reboot capability for extension loader
 //        26 Jul 2014 js  - Added analog output to extension
 //        18 Mar 2014 sa  - Add triggered digital output
@@ -162,6 +163,7 @@ typedef LONG * PLONG;
 typedef uint8_t BYTE;
 typedef uint32_t DWORD;
 typedef unsigned int UINT;
+typedef uint8_t DLEN;
 #define RGB(r,g,b) ((uint8_t)r + ((uint8_t)g << 8) + ((uint8_t)b << 16))
 #define MAKELONG(a, b)      ((a & 0xffff) | ((b & 0xffff) << 16))
 #ifndef FALSE
@@ -224,7 +226,7 @@ typedef unsigned int UINT;
 #define cbMAXSITEPLOTS ((cbMAXSITES - 1) * cbMAXSITES / 2)  // combination of 2 out of n is n!/((n-2)!2!) -- the only issue is the display
 
 // Channel Definitions
-#define cbNUM_FE_CHANS        128                                       // #Front end channels
+#define cbNUM_FE_CHANS        256                                       // #Front end channels
 #define cbNUM_ANAIN_CHANS     16                                        // #Analog Input channels
 #define cbNUM_ANALOG_CHANS    (cbNUM_FE_CHANS + cbNUM_ANAIN_CHANS)      // Total Analog Inputs
 #define cbNUM_ANAOUT_CHANS    4                                         // #Analog Output channels
@@ -237,13 +239,13 @@ typedef unsigned int UINT;
 // Total of all channels = 156
 #define cbMAXCHANS            (cbNUM_ANALOG_CHANS +  cbNUM_ANALOGOUT_CHANS + cbNUM_DIGIN_CHANS + cbNUM_SERIAL_CHANS + cbNUM_DIGOUT_CHANS)
 
-#define cbFIRST_FE_CHAN       0                                          // 0   First Front end channel
-#define cbFIRST_ANAIN_CHAN    cbNUM_FE_CHANS                             // 256 First Analog Input channel
-#define cbFIRST_ANAOUT_CHAN   (cbFIRST_ANAIN_CHAN + cbNUM_ANAIN_CHANS)   // 288 First Analog Output channel
-#define cbFIRST_AUDOUT_CHAN   (cbFIRST_ANAOUT_CHAN + cbNUM_ANAOUT_CHANS) // 296 First Audio Output channel
-#define cbFIRST_DIGIN_CHAN    (cbFIRST_AUDOUT_CHAN + cbNUM_AUDOUT_CHANS) // 300 First Digital Input channel
-#define cbFIRST_SERIAL_CHAN   (cbFIRST_DIGIN_CHAN + cbNUM_DIGIN_CHANS)   // 302 First Serial Input channel
-#define cbFIRST_DIGOUT_CHAN   (cbFIRST_SERIAL_CHAN + cbNUM_SERIAL_CHANS) // 304 First Digital Output channel
+// #define cbFIRST_FE_CHAN       0                                          // 0   First Front end channel
+// #define cbFIRST_ANAIN_CHAN    cbNUM_FE_CHANS                             // 256 First Analog Input channel
+// #define cbFIRST_ANAOUT_CHAN   (cbFIRST_ANAIN_CHAN + cbNUM_ANAIN_CHANS)   // 288 First Analog Output channel
+// #define cbFIRST_AUDOUT_CHAN   (cbFIRST_ANAOUT_CHAN + cbNUM_ANAOUT_CHANS) // 296 First Audio Output channel
+// #define cbFIRST_DIGIN_CHAN    (cbFIRST_AUDOUT_CHAN + cbNUM_AUDOUT_CHANS) // 300 First Digital Input channel
+// #define cbFIRST_SERIAL_CHAN   (cbFIRST_DIGIN_CHAN + cbNUM_DIGIN_CHANS)   // 302 First Serial Input channel
+// #define cbFIRST_DIGOUT_CHAN   (cbFIRST_SERIAL_CHAN + cbNUM_SERIAL_CHANS) // 304 First Digital Output channel
 
 // Bank definitions - NOTE: If any of the channel types have more than cbCHAN_PER_BANK channels, the banks must be increased accordingly
 #define cbCHAN_PER_BANK       32                                         // number of 32 channel banks == 1024
@@ -271,19 +273,19 @@ typedef unsigned int UINT;
 #define cbMAXNTRODES          (cbNUM_ANALOG_CHANS / 2)                  // minimum is stereotrode so max n-trodes is max chans / 2
 
 // These defines moved from cbHwlibHi to have a central place
-#define MAX_CHANS_FRONT_END    cbNUM_FE_CHANS
-#define MIN_CHANS_ANALOG_IN    (MAX_CHANS_FRONT_END + 1)
-#define MAX_CHANS_ANALOG_IN    (MAX_CHANS_FRONT_END + cbNUM_ANAIN_CHANS)
-#define MIN_CHANS_ANALOG_OUT   (MAX_CHANS_ANALOG_IN + 1)
-#define MAX_CHANS_ANALOG_OUT   (MAX_CHANS_ANALOG_IN + cbNUM_ANAOUT_CHANS)
-#define MIN_CHANS_AUDIO        (MAX_CHANS_ANALOG_OUT + 1)
-#define MAX_CHANS_AUDIO        (MAX_CHANS_ANALOG_OUT + cbNUM_AUDOUT_CHANS)
-#define MIN_CHANS_DIGITAL_IN   (MAX_CHANS_AUDIO + 1)
-#define MAX_CHANS_DIGITAL_IN   (MAX_CHANS_AUDIO + cbNUM_DIGIN_CHANS)
-#define MIN_CHANS_SERIAL       (MAX_CHANS_DIGITAL_IN + 1)
-#define MAX_CHANS_SERIAL       (MAX_CHANS_DIGITAL_IN + cbNUM_SERIAL_CHANS)
-#define MIN_CHANS_DIGITAL_OUT  (MAX_CHANS_SERIAL + 1)
-#define MAX_CHANS_DIGITAL_OUT  (MAX_CHANS_SERIAL + cbNUM_DIGOUT_CHANS)
+// #define MAX_CHANS_FRONT_END    cbNUM_FE_CHANS
+// #define MIN_CHANS_ANALOG_IN    (MAX_CHANS_FRONT_END + 1)
+// #define MAX_CHANS_ANALOG_IN    (MAX_CHANS_FRONT_END + cbNUM_ANAIN_CHANS)
+// #define MIN_CHANS_ANALOG_OUT   (MAX_CHANS_ANALOG_IN + 1)
+// #define MAX_CHANS_ANALOG_OUT   (MAX_CHANS_ANALOG_IN + cbNUM_ANAOUT_CHANS)
+// #define MIN_CHANS_AUDIO        (MAX_CHANS_ANALOG_OUT + 1)
+// #define MAX_CHANS_AUDIO        (MAX_CHANS_ANALOG_OUT + cbNUM_AUDOUT_CHANS)
+// #define MIN_CHANS_DIGITAL_IN   (MAX_CHANS_AUDIO + 1)
+// #define MAX_CHANS_DIGITAL_IN   (MAX_CHANS_AUDIO + cbNUM_DIGIN_CHANS)
+// #define MIN_CHANS_SERIAL       (MAX_CHANS_DIGITAL_IN + 1)
+// #define MAX_CHANS_SERIAL       (MAX_CHANS_DIGITAL_IN + cbNUM_SERIAL_CHANS)
+// #define MIN_CHANS_DIGITAL_OUT  (MAX_CHANS_SERIAL + 1)
+// #define MAX_CHANS_DIGITAL_OUT  (MAX_CHANS_SERIAL + cbNUM_DIGOUT_CHANS)
 #define SCALE_LNC_COUNT        17
 #define SCALE_CONTINUOUS_COUNT 17
 #define SCALE_SPIKE_COUNT      23
@@ -1253,7 +1255,7 @@ typedef struct {
 typedef struct {
     uint32_t time;        // system clock timestamp
     uint16_t chid;        // channel identifier
-    uint8_t unit;      // unit identification (0=unclassified, 1-5=classified, 255=artifact, 254=background)
+    uint8_t unit;      // unit identification (0=unclassified, 1-5=classified, 30=background, 31=artifact)
     uint8_t dlen;      // length of what follows ... always  cbPKTDLEN_SPK
 
     float  fPattern[3]; // values of the pattern space (Normal uses only 2, PCA uses third)
@@ -1882,13 +1884,13 @@ typedef struct {
     char   label[cbLEN_STR_LABEL];  // sampling group label
     uint32_t period;     // sampling period for the group
     uint32_t length;     //
-    uint32_t list[cbNUM_ANALOG_CHANS];   // variable length list. The max size is
+    uint16_t list[cbNUM_ANALOG_CHANS];   // variable length list. The max size is
                                        // the total number of analog channels
 } cbPKT_GROUPINFO;
 
 #ifdef __cplusplus
 cbRESULT cbGetSampleGroupInfo(uint32_t proc, uint32_t group, char *label, uint32_t *period, uint32_t *length, uint32_t nInstance = 0);
-cbRESULT cbGetSampleGroupList(uint32_t proc, uint32_t group, uint32_t *length, uint32_t *list, uint32_t nInstance = 0);
+cbRESULT cbGetSampleGroupList(uint32_t proc, uint32_t group, uint32_t *length, uint16_t *list, uint32_t nInstance = 0);
 cbRESULT cbSetSampleGroupOptions(uint32_t proc, uint32_t group, uint32_t period, char *label, uint32_t nInstance = 0);
 // Retreives the Sample Group information in a processor and their definitions
 // Labels are 16-characters maximum.
@@ -2986,7 +2988,7 @@ enum WM_USER_GLOBAL
 #endif
 
 
-#define cbRECBUFFLEN 4194304
+#define cbRECBUFFLEN cbNUM_FE_CHANS * 32768 * 4
 typedef struct {
     uint32_t received;
     uint32_t lasttime;
@@ -3050,6 +3052,16 @@ public:
 private:
     int32_t m_iBlockRecording;
     uint32_t m_nPCStatusFlags;
+    uint32_t m_nNumFEChans;     // number of each type of channels received from the instrument
+    uint32_t m_nNumAnainChans;
+    uint32_t m_nNumAnalogChans;
+    uint32_t m_nNumAoutChans;
+    uint32_t m_nNumAudioChans;
+    uint32_t m_nNumAnalogoutChans;
+    uint32_t m_nNumDiginChans;
+    uint32_t m_nNumSerialChans;
+    uint32_t m_nNumDigoutChans;
+    uint32_t m_nNumTotalChans;
 
 public:
     cbPcStatus() :
@@ -3058,10 +3070,30 @@ public:
         m_nPCStatusFlags(0)
         {
         }
-    bool IsRecordingBlocked() { return m_iBlockRecording != 0; }
-    void SetBlockRecording(bool bBlockRecording) { m_iBlockRecording += bBlockRecording ? 1 : -1; }
-    uint32_t cbGetPCStatusFlags() { return m_nPCStatusFlags; }
-    void cbSetPCStatusFlags(uint32_t nPCStatusFlags) { m_nPCStatusFlags = nPCStatusFlags; }
+    bool IsRecordingBlocked()           { return m_iBlockRecording != 0; }
+    uint32_t cbGetPCStatusFlags()       { return m_nPCStatusFlags; }
+    uint32_t cbGetNumFEChans()          { return m_nNumFEChans; }
+    uint32_t cbGetNumAnainChans()       { return m_nNumAnainChans; }
+    uint32_t cbGetNumAnalogChans()      { return m_nNumAnalogChans; }
+    uint32_t cbGetNumAoutChans()        { return m_nNumAoutChans; }
+    uint32_t cbGetNumAudioChans()       { return m_nNumAudioChans; }
+    uint32_t cbGetNumAnalogoutChans()   { return m_nNumAnalogoutChans; }
+    uint32_t cbGetNumDiginChans()       { return m_nNumDiginChans; }
+    uint32_t cbGetNumSerialChans()      { return m_nNumSerialChans; }
+    uint32_t cbGetNumDigoutChans()      { return m_nNumDigoutChans; }
+    uint32_t cbGetNumTotalChans()       { return m_nNumTotalChans; }
+    void SetBlockRecording(bool bBlockRecording)                { m_iBlockRecording += bBlockRecording ? 1 : -1; }
+    void cbSetPCStatusFlags(uint32_t nPCStatusFlags)            { m_nPCStatusFlags = nPCStatusFlags; }
+    void cbSetNumFEChans(uint32_t nNumFEChans)                  { m_nNumFEChans = nNumFEChans; }
+    void cbSetNumAnainChans(uint32_t nNumAnainChans)            { m_nNumAnainChans = nNumAnainChans; }
+    void cbSetNumAnalogChans(uint32_t nNumAnalogChans)          { m_nNumAnalogChans = nNumAnalogChans; }
+    void cbSetNumAoutChans(uint32_t nNumAoutChans)              { m_nNumAoutChans = nNumAoutChans; }
+    void cbSetNumAudioChans(uint32_t nNumAudioChans)            { m_nNumAudioChans = nNumAudioChans; }
+    void cbSetNumAnalogoutChans(uint32_t nNumAnalogoutChans)    { m_nNumAnalogoutChans = nNumAnalogoutChans; }
+    void cbSetNumDiginChans(uint32_t nNumDiginChans)            { m_nNumDiginChans = nNumDiginChans; }
+    void cbSetNumSerialChans(uint32_t nNumSerialChans)          { m_nNumSerialChans = nNumSerialChans; }
+    void cbSetNumDigoutChans(uint32_t nNumDigoutChans)          { m_nNumDigoutChans = nNumDigoutChans; }
+    void cbSetNumTotalChans(uint32_t nNumTotalChans)            { m_nNumTotalChans = nNumTotalChans; }
 };
 
 typedef struct {

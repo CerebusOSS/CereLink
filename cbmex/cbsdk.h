@@ -1,4 +1,4 @@
-/* =STS=> cbsdk.h[4901].aa05   open     SMID:5 */
+/* =STS=> cbsdk.h[4901].aa20   submit     SMID:22 */
 //////////////////////////////////////////////////////////////////////////////
 //
 // (c) Copyright 2010 - 2011 Blackrock Microsystems
@@ -238,6 +238,10 @@ typedef enum _DefaultSampleGroup {
     SDK_SMPGRP_RAW = 6
 } DefaultSampleGroup;
 
+/** Callback details.
+ * \n pEventData points to a cbPkt_* structure depending on the type
+ * \n pCallbackData is what is used to register the callback
+ */
 typedef void (* cbSdkCallback)(uint32_t nInstance, const cbSdkPktType type, const void* pEventData, void* pCallbackData);
 
 
@@ -517,7 +521,7 @@ CBSDKAPI    cbSdkResult cbSdkGetChannelConfig(uint32_t nInstance, uint16_t chann
 CBSDKAPI    cbSdkResult cbSdkGetFilterDesc(uint32_t nInstance, uint32_t proc, uint32_t filt, cbFILTDESC * filtdesc);
 
 /*! Get sample group list (proc = 1 for now) */
-CBSDKAPI    cbSdkResult cbSdkGetSampleGroupList(uint32_t nInstance, uint32_t proc, uint32_t group, uint32_t *length, uint32_t *list);
+CBSDKAPI    cbSdkResult cbSdkGetSampleGroupList(uint32_t nInstance, uint32_t proc, uint32_t group, uint32_t *length, uint16_t *list);
 
 CBSDKAPI    cbSdkResult cbSdkGetSampleGroupInfo(uint32_t nInstance, uint32_t proc, uint32_t group, char *label, uint32_t *period, uint32_t *length);
 

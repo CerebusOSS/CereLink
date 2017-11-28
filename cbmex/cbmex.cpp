@@ -31,6 +31,7 @@
 
 #include "cbmex.h"
 #include "cbsdk.h"
+#include "cbHwlibHi.h"
 
 #ifdef _DEBUG
 // Comment this line not to have a debug console when debugging cbsdk

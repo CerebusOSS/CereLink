@@ -19,7 +19,7 @@
 #ifndef CBMEX_H_INCLUDED
 #define CBMEX_H_INCLUDED
 
-#include "stdint.h"
+#include "pstdint.h"
 #include "mex.h"
 #include "mex_compat.h"
 
