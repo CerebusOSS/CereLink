@@ -157,10 +157,8 @@ SET( LIB_INCL_DIRS
     ${PROJECT_SOURCE_DIR}/cbhwlib
     ${PROJECT_SOURCE_DIR}/Central
     ${PROJECT_SOURCE_DIR}/CentralCommon
+    ${PROJECT_SOURCE_DIR}/compat/
 )
-IF( WIN32 )
-    LIST(APPEND LIB_INCL_DIRS "${PROJECT_SOURCE_DIR}/compat/")
-ENDIF( WIN32 )
 
 SET( LIB_SOURCE
     ${PROJECT_SOURCE_DIR}/cbmex/cbsdk.cpp
@@ -380,7 +378,7 @@ INSTALL( TARGETS ${INSTALL_TARGET_LIST}
     LIBRARY DESTINATION lib${LIB_SUFFIX}
     ARCHIVE DESTINATION lib${LIB_SUFFIX}
 )
-INSTALL( FILES ${PROJECT_SOURCE_DIR}/cbmex/cbsdk.h ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h DESTINATION include )
+INSTALL( FILES ${PROJECT_SOURCE_DIR}/cbmex/cbsdk.h ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h ${PROJECT_SOURCE_DIR}/compat/pstdint.h DESTINATION include )
 
 #########################################################################################
 # Shared & Static post-build copy the header files into the dist directory.
@@ -389,4 +387,5 @@ ADD_CUSTOM_COMMAND(
     POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/cbmex/cbsdk.h" "${CMAKE_CURRENT_SOURCE_DIR}/dist/include/cbsdk.h"
     COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/cbhwlib/cbhwlib.h" "${CMAKE_CURRENT_SOURCE_DIR}/dist/include/cbhwlib.h"
+    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/compat/pstdint.h" "${CMAKE_CURRENT_SOURCE_DIR}/dist/include/pstdint.h"
 )
