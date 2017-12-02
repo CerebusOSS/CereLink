@@ -64,7 +64,11 @@
 #ifdef __cplusplus
 #include <string.h>
 #endif
+#if defined(WIN32)
 #include "pstdint.h"
+#else
+#include "stdint.h"
+#endif
 
 #pragma pack(push, 1)
 

@@ -19,7 +19,11 @@
 #ifndef CBMEX_H_INCLUDED
 #define CBMEX_H_INCLUDED
 
+#if defined(WIN32)
 #include "pstdint.h"
+#else
+#include "stdint.h"
+#endif
 #include "mex.h"
 #include "mex_compat.h"
 
