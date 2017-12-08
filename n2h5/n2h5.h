@@ -23,6 +23,9 @@
 #include "hdf5.h"
 #include "hdf5_hl.h"
 
+#define cbFIRST_DIGIN_CHAN    (cbNUM_FE_CHANS + cbNUM_ANAIN_CHANS + cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS)
+#define cbFIRST_SERIAL_CHAN   (cbFIRST_DIGIN_CHAN + cbNUM_DIGIN_CHANS)
+
 //
 // Basic channel attributes
 //
