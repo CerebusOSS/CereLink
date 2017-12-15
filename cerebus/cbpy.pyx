@@ -361,6 +361,114 @@ def trial_continuous(int instance=0, bool reset=False):
     return <int>res, trial
 
 
+def trial_data(int instance=0, bool reset=False):
+    '''
+    :param instance: (optional) library instance number
+    :param reset: (optional) boolean
+               set False (default) to leave buffer intact.
+               set True to clear all the data and reset the trial time to the current time.
+    :return:
+             res: (int) returned by cbsdk
+             continuous data: list of the form [channel, continuous_array]
+                                    channel: integer, channel number (1-based)
+                                    continuous_array: array, continuous values for channel)
+             event data: list of arrays [channel, {'timestamps':[unit0_ts, ..., unitN_ts], 'events':digital_events}]
+                                channel: integer, channel number (1-based)
+                                digital_events: array, digital event values for channel (if a digital or serial channel)
+                                unitN_ts: array, spike timestamps of unit N for channel (if an electrode channel));
+    '''
+    cdef cbSdkResult res
+    cdef cbSdkConfigParam cfg_param
+    cdef cbSdkTrialCont trialcont
+    cdef cbSdkTrialEvent trialevent
+
+    trial_event = []
+    trial_cont = []
+
+    # retrieve old values
+    res = cbsdk_get_trial_config(<uint32_t>instance, &cfg_param)
+    handle_result(res)
+
+    # get how many samples are available
+    res = cbsdk_init_trial_data(<uint32_t>instance, <int>reset, &trialevent, &trialcont)
+    handle_result(res)
+
+    if trialevent.count == 0 or trialcont.count == 0:
+        return res, trial_event, trial_cont
+
+    cdef np.double_t[:] mxa_d_event, mxa_d_cont
+    cdef np.int16_t[:] mxa_i16
+    cdef np.uint32_t[:] mxa_u32
+    cdef np.uint16_t[:] mxa_u16
+
+    # allocate memory for trial event
+    for channel in range(trialevent.count):
+        ch = trialevent.chan[channel] # Actual channel number
+
+        timestamps = []
+        # Fill timestamps for non-empty channels
+        for u in range(cbMAXUNITS+1):
+            trialevent.timestamps[channel][u] = NULL
+            num_samples = trialevent.num_samples[channel][u]
+            ts = []
+            if num_samples:
+                if cfg_param.bDouble:
+                    mxa_d_event = np.zeros(num_samples, dtype=np.double)
+                    trialevent.timestamps[channel][u] = <void *>&mxa_d_event[0]
+                    ts = np.asarray(mxa_d_event)
+                else:
+                    mxa_u32 = np.zeros(num_samples, dtype=np.uint32)
+                    trialevent.timestamps[channel][u] = <void *>&mxa_u32[0]
+                    ts = np.asarray(mxa_u32)
+            timestamps.append(ts)
+
+        trialevent.waveforms[channel] = NULL
+        dig_events = []
+        # Fill values for non-empty digital or serial channels
+        if (ch == (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS + cbNUM_DIGIN_CHANS))\
+            or (ch == (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS + cbNUM_DIGIN_CHANS + cbNUM_SERIAL_CHANS)):
+            num_samples = trialevent.num_samples[channel][0]
+            if num_samples:
+                if cfg_param.bDouble:
+                    mxa_d_event = np.zeros(num_samples, dtype=np.double)
+                    trialevent.waveforms[channel] = <void *>&mxa_d_event[0]
+                    dig_events = np.asarray(mxa_d_event)
+                else:
+                    mxa_u16 = np.zeros(num_samples, dtype=np.uint16)
+                    trialevent.waveforms[channel] = <void *>&mxa_u16[0]
+                    dig_events = np.asarray(mxa_u16)
+
+        trial_event.append([ch, {'timestamps':timestamps, 'events':dig_events}])
+
+    # allocate memory for trial continuous
+    for channel in range(trialcont.count):
+        ch = trialcont.chan[channel] # Actual channel number
+
+        row = [ch]
+
+        trialcont.samples[channel] = NULL
+        num_samples = trialcont.num_samples[channel]
+        if cfg_param.bDouble:
+            mxa_d_cont = np.zeros(num_samples, dtype=np.double)
+            if num_samples:
+                trialcont.samples[channel] = <void *>&mxa_d_cont[0]
+            cont = np.asarray(mxa_d_cont)
+        else:
+            mxa_i16 = np.zeros(num_samples, dtype=np.int16)
+            if num_samples:
+                trialcont.samples[channel] = <void *>&mxa_i16[0]
+            cont = np.asarray(mxa_i16)
+
+        row.append(cont)
+        trial_cont.append(row)
+
+    # cbsdk get trial data
+    res = cbsdk_get_trial_data(<uint32_t>instance, <int>reset, &trialevent, &trialcont)
+    handle_result(res)
+
+    return <int>res, trial_event, trial_cont
+
+
 def trial_comment(int instance=0, bool reset=False):
     ''' Trial comment data.
     Inputs:

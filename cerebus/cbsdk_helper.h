@@ -41,6 +41,9 @@ cbSdkResult cbsdk_set_trial_config(uint32_t nInstance, const cbSdkConfigParam * 
 cbSdkResult cbsdk_init_trial_event(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent);
 cbSdkResult cbsdk_get_trial_event(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent);
 
+cbSdkResult cbsdk_init_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont);
+cbSdkResult cbsdk_get_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont);
+
 cbSdkResult cbsdk_init_trial_cont(uint32_t nInstance, int reset, cbSdkTrialCont * trialcont);
 cbSdkResult cbsdk_get_trial_cont(uint32_t nInstance, int reset, cbSdkTrialCont * trialcont);
 
