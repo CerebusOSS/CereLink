@@ -1,4 +1,0 @@
-CereLink is Copyright Blackrock Microsystems (LLC)
-
-The source code is licensed under dual-license (GPLv2 or proprietary license).
-For proprietary license please contact support@blackrockmicro.com
