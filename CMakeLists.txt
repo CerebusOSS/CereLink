@@ -20,7 +20,7 @@
 #     On Mac OS, assuming qt installed with homebrew,
 #     run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt5)
 #     On Windows, run CMake with -DQt5_DIR=path\to\qt\version\platform\lib\cmake\Qt5
-#     For example: cmake .. -G "Visual Studio 14 2015 Win64" -DQt5_DIR=C:\Qt\5.9.1\msvc2015_64\lib\cmake\Qt5
+#     For example: cmake .. -G "Visual Studio 14 2015 Win64" -DQt5_DIR=C:\Qt\5.10.0\msvc2015_64\lib\cmake\Qt5
 
 
 CMAKE_MINIMUM_REQUIRED( VERSION 3.1.0 )
