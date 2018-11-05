@@ -17,3 +17,8 @@ File conversion utility (n2h5): Converts nsx and nev files to hdf5 format
 # Project wiki
 
 https://github.com/dashesy/CereLink/wiki
+
+# Build
+
+Some build information can be found in the comments at the top of the CMakeLists.txt.
+Additional information can be found in the wiki.

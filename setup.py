@@ -57,7 +57,7 @@ def get_extras():
             except ImportError:
                 import winreg as _winreg
             try:
-                path = os.environ['QTDIR']  # e.g. `set QTDIR=C:\Qt\Qt5.6.0\5.6\msvc2015_64`
+                path = os.environ['QTDIR']  # e.g. `set QTDIR=C:\Qt\Qt5.10.0\msvc2015_64`
             except:
                 pass
             if not path:
