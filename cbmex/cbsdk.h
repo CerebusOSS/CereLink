@@ -412,6 +412,9 @@ typedef struct _cbSdkExtCmd
     char szCmd[cbMAX_LOG];
 } cbSdkExtCmd;
 
+
+extern "C"
+{
 // Can call this even with closed library to get library information
 /*! Get the library version (and nsp version if library is open) */
 CBSDKAPI    cbSdkResult cbSdkGetVersion(uint32_t nInstance, cbSdkVersion * version);
@@ -482,8 +485,6 @@ CBSDKAPI    cbSdkResult cbSdkSetPatientInfo(uint32_t nInstance, const char * ID,
 
 CBSDKAPI    cbSdkResult cbSdkInitiateImpedance(uint32_t nInstance);
 
-CBSDKAPI    cbSdkResult cbSdkSendPoll(uint32_t nInstance, const char* appname, uint32_t mode, uint32_t flags, uint32_t extra);
-
 /*! This sends an arbitrary packet without any validation. Please use with care or it might break the system */
 CBSDKAPI    cbSdkResult cbSdkSendPacket(uint32_t nInstance, void * ppckt);
 
@@ -551,5 +552,9 @@ CBSDKAPI    cbSdkResult cbSdkCallbackStatus(uint32_t nInstance, cbSdkCallbackTyp
 
 /// Convert volts string (e.g. '5V', '-65mV', ...) to its raw digital value equivalent for given channel
 CBSDKAPI    cbSdkResult cbSdkAnalogToDigital(uint32_t nInstance, uint16_t channel, const char * szVoltsUnitString, int32_t * digital);
+
+}
+
+CBSDKAPI    cbSdkResult cbSdkSendPoll(uint32_t nInstance, const char* appname, uint32_t mode, uint32_t flags, uint32_t extra);
 
 #endif /* CBSDK_H_INCLUDED */
