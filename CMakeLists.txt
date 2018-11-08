@@ -373,6 +373,10 @@ IF(${BUILD_HDF5} AND HDF5_FOUND )
     LIST(APPEND INSTALL_TARGET_LIST ${N2H5_NAME})
 ENDIF(${BUILD_HDF5} AND HDF5_FOUND )
 
+##
+# C++ / CLI
+add_subdirectory(cli)
+
 #########################################################################################
 # Install libraries, test executable, and headers
 INSTALL( TARGETS ${INSTALL_TARGET_LIST}
