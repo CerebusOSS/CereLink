@@ -26,23 +26,23 @@ namespace SimpleClient
             {
                 for (int i = 0; i < 5; i++)
                 {
-                    Console.WriteLine("C# - managed.Fetch() {0}", i);
                     UInt16 nChans = managed.Fetch();
                     Console.WriteLine("C# - managed.Fetch() {0} - fetched {1} channels.", i, nChans);
+                    System.Threading.Thread.Sleep(11);
                     if (managed.GetIsDouble())
                     {
-                        Double[][] arr = managed.contSamplesDbl;
-                        for (int chan_idx = 0; chan_idx < nChans; chan_idx++)
+                        for (UInt16 chan_idx = 0; chan_idx < nChans; chan_idx++)
                         {
-                            Console.WriteLine("C# - Retrieved {0} dbl samples for channel {1}", arr[chan_idx].Length, chan_idx);
+                            Double[] arr = managed.GetDataDbl(chan_idx);
+                            Console.WriteLine("C# - Channel {0} ({1} samples): [{2} ... {3}]", chan_idx, arr.Length, arr[0], arr[arr.Length - 1]);
                         }
                     }
                     else
                     {
-                        Int16[][] arr = managed.contSamplesInt;
-                        for (int chan_idx = 0; chan_idx < nChans; chan_idx++)
+                        for (UInt16 chan_idx = 0; chan_idx < nChans; chan_idx++)
                         {
-                            Console.WriteLine("C# - Retrieved {0} int samples for channel {1}", arr[chan_idx].Length, chan_idx);
+                            Int16[] arr = managed.GetDataInt(chan_idx);
+                            Console.WriteLine("C# - Channel {0} ({1} samples): [{2} ... {3}]", chan_idx, arr.Length, arr[0], arr[arr.Length - 1]);
                         }
                     }
                 }

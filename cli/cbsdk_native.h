@@ -35,20 +35,22 @@ public:
 	~CbSdkNative();
 	bool GetIsDouble();
 	void PrefetchData(uint16_t &chan_count, uint32_t* samps_per_chan, uint16_t* chan_numbers);
-	void TransferData(void* buff, int chan_idx, uint32_t* timestamp = NULL);
+	void TransferData(uint32_t* timestamp = NULL);
+	void GetData(int16_t* buffer, int chan_idx);  // copy
+	void GetData(double* buffer, int chan_idx);  // copy
 	
 private:
 	int32_t m_instance;
 	CbSdkConfigParam cfg;
+	
 	// forward declarations of structures from cbsdk.h
 	std::unique_ptr<my_cbSdkTrialEvent> p_trialEvent;
 	std::unique_ptr<my_cbSdkTrialCont> p_trialCont;
-	// Convenient references to data vectors, shared with p_trialCont->samples.
+	
+	// Data vectors to store the result of TransferData.
 	std::array<std::vector<double>, 256 + 16> dblData;
 	std::array<std::vector<int16_t>, 256 + 16> intData;
 
 	CbSdkConfigParam FetchTrialConfig();
 	void PushTrialConfig(CbSdkConfigParam config);
-	void AllocateBuffers();
-	void DeallocateBuffers();
 };
