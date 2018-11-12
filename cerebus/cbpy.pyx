@@ -300,17 +300,20 @@ def trial_event(int instance=0, bool reset=False):
 
 
 def trial_continuous(int instance=0, bool reset=False):
-    ''' Trial continuous data.
+    """
+    Trial continuous data.
     Inputs:
        reset - (optional) boolean 
                set False (default) to leave buffer intact.
                set True to clear all the data and reset the trial time to the current time.
        instance - (optional) library instance number
     Outputs:
+       result code of the data fetch operation.
        list of the form [channel, continuous_array]
            channel: integer, channel number (1-based)
            continuous_array: array, continuous values for channel)
-    '''
+       timestamp of sample 0
+    """
     
     cdef cbSdkResult res
     cdef cbSdkConfigParam cfg_param
@@ -327,7 +330,7 @@ def trial_continuous(int instance=0, bool reset=False):
     handle_result(res)
     
     if trialcont.count == 0:
-        return res, trial
+        return res, trial, None
 
     cdef np.double_t[:] mxa_d
     cdef np.int16_t[:] mxa_i16
@@ -358,25 +361,26 @@ def trial_continuous(int instance=0, bool reset=False):
     res = cbsdk_get_trial_cont(<uint32_t>instance, <int>reset, &trialcont)
     handle_result(res)
 
-    return <int>res, trial
+    return <int>res, trial, trialcont.time
 
 
 def trial_data(int instance=0, bool reset=False):
-    '''
+    """
     :param instance: (optional) library instance number
     :param reset: (optional) boolean
                set False (default) to leave buffer intact.
                set True to clear all the data and reset the trial time to the current time.
     :return:
              res: (int) returned by cbsdk
-             continuous data: list of the form [channel, continuous_array]
-                                    channel: integer, channel number (1-based)
-                                    continuous_array: array, continuous values for channel)
              event data: list of arrays [channel, {'timestamps':[unit0_ts, ..., unitN_ts], 'events':digital_events}]
-                                channel: integer, channel number (1-based)
-                                digital_events: array, digital event values for channel (if a digital or serial channel)
-                                unitN_ts: array, spike timestamps of unit N for channel (if an electrode channel));
-    '''
+                channel: integer, channel number (1-based)
+                digital_events: array, digital event values for channel (if a digital or serial channel)
+                unitN_ts: array, spike timestamps of unit N for channel (if an electrode channel));
+             continuous data: list of the form [channel, continuous_array]
+                channel: integer, channel number (1-based)
+                continuous_array: array, continuous values for channel)
+             timestamp of sample 0
+    """
     cdef cbSdkResult res
     cdef cbSdkConfigParam cfg_param
     cdef cbSdkTrialCont trialcont
@@ -394,7 +398,7 @@ def trial_data(int instance=0, bool reset=False):
     handle_result(res)
 
     if trialevent.count == 0 or trialcont.count == 0:
-        return res, trial_event, trial_cont
+        return res, trial_event, trial_cont, None
 
     cdef np.double_t[:] mxa_d_event, mxa_d_cont
     cdef np.int16_t[:] mxa_i16
@@ -466,7 +470,7 @@ def trial_data(int instance=0, bool reset=False):
     res = cbsdk_get_trial_data(<uint32_t>instance, <int>reset, &trialevent, &trialcont)
     handle_result(res)
 
-    return <int>res, trial_event, trial_cont
+    return <int>res, trial_event, trial_cont, trialcont.time
 
 
 def trial_comment(int instance=0, bool reset=False):
