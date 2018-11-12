@@ -54,3 +54,16 @@ private:
 	CbSdkConfigParam FetchTrialConfig();
 	void PushTrialConfig(CbSdkConfigParam config);
 };
+
+
+extern "C"
+{
+	__declspec(dllexport) CbSdkNative* CbSdkNative_Create(uint32_t nInstance, int inPort, int outPort, int bufsize, const char* inIP, const char* outIP, bool use_double);
+	__declspec(dllexport) bool CbSdkNative_GetIsDouble(CbSdkNative* pCbSdk);
+	__declspec(dllexport) bool CbSdkNative_GetIsOnline(CbSdkNative* pCbSdk);
+	__declspec(dllexport) void CbSdkNative_PrefetchData(CbSdkNative* pCbSdk, uint16_t &chan_count, uint32_t* samps_per_chan, uint16_t* chan_numbers);
+	__declspec(dllexport) void CbSdkNative_TransferData(CbSdkNative* pCbSdk, uint32_t* timestamp = NULL);
+	__declspec(dllexport) void CbSdkNative_GetDataInt(CbSdkNative* pCbSdk, int16_t* buffer, int chan_idx);
+	__declspec(dllexport) void CbSdkNative_GetDataDouble(CbSdkNative* pCbSdk, double* buffer, int chan_idx);
+	__declspec(dllexport) void CbSdkNative_Delete(CbSdkNative* pCbSdk);
+}

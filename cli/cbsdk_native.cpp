@@ -119,7 +119,7 @@ void CbSdkNative::TransferData(uint32_t* timestamp)
 
 void CbSdkNative::GetData(int16_t* buffer, int chan_idx)
 {
-	for (int samp_ix = 0; samp_ix < p_trialCont->num_samples[chan_idx]; samp_ix++)
+	for (uint32_t samp_ix = 0; samp_ix < p_trialCont->num_samples[chan_idx]; samp_ix++)
 	{
 		buffer[samp_ix] = intData[chan_idx][samp_ix];
 	}
@@ -131,5 +131,61 @@ void CbSdkNative::GetData(double* buffer, int chan_idx)
 	for (int samp_ix = 0; samp_ix < native_data.size(); samp_ix++)
 	{
 		buffer[samp_ix] = native_data[samp_ix];
+	}
+}
+
+CbSdkNative* CbSdkNative_Create(uint32_t nInstance, int inPort, int outPort, int bufsize, const char* inIP, const char* outIP, bool use_double)
+{
+	return new CbSdkNative(nInstance, inPort, outPort, bufsize, inIP, outIP, use_double);
+}
+
+bool CbSdkNative_GetIsDouble(CbSdkNative* pCbSdk) {
+	if (pCbSdk != NULL)
+		return pCbSdk->GetIsDouble();
+	else
+		return false;
+}
+
+bool CbSdkNative_GetIsOnline(CbSdkNative* pCbSdk)
+{
+	if (pCbSdk != NULL)
+		return pCbSdk->isOnline;
+	else
+		return false;
+}
+
+void CbSdkNative_PrefetchData(CbSdkNative* pCbSdk, uint16_t &chan_count, uint32_t* samps_per_chan, uint16_t* chan_numbers)
+{
+	if (pCbSdk != NULL)
+	{
+		pCbSdk->PrefetchData(chan_count, samps_per_chan, chan_numbers);
+		std::cout << "pCbSdk->PrefetchData(chan_count, samps_per_chan, chan_numbers) returned." << std::endl;
+	}
+		
+}
+
+void CbSdkNative_TransferData(CbSdkNative* pCbSdk, uint32_t* timestamp)
+{
+	if (pCbSdk != NULL)
+		pCbSdk->TransferData(timestamp);
+}
+
+void CbSdkNative_GetDataInt(CbSdkNative* pCbSdk, int16_t* buffer, int chan_idx)
+{
+	if (pCbSdk != NULL)
+		pCbSdk->GetData(buffer, chan_idx);
+}
+
+void CbSdkNative_GetDataDouble(CbSdkNative* pCbSdk, double* buffer, int chan_idx)
+{
+	if (pCbSdk != NULL)
+		pCbSdk->GetData(buffer, chan_idx);
+}
+
+void CbSdkNative_Delete(CbSdkNative* pCbSdk) {
+	if (pCbSdk != NULL)
+	{
+		delete pCbSdk;
+		pCbSdk = NULL;
 	}
 }

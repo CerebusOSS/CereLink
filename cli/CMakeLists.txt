@@ -7,7 +7,7 @@ IF(${BUILD_CLI})
         ${CMAKE_CURRENT_LIST_DIR}/cbsdk_native.h ${CMAKE_CURRENT_LIST_DIR}/cbsdk_native.cpp
 		${CMAKE_CURRENT_LIST_DIR}/AssemblyInfo.cpp)
     set_source_files_properties(${cbsdk_cli_SOURCE} PROPERTIES LANGUAGE "CXX")
-	ADD_LIBRARY(${LIB_NAME_CLI} SHARED ${cbsdk_cli_SOURCE})
+	ADD_LIBRARY(${LIB_NAME_CLI} MODULE ${cbsdk_cli_SOURCE})
 	TARGET_INCLUDE_DIRECTORIES(${LIB_NAME_CLI} PRIVATE
         ${LIB_INCL_DIRS}
         ${PROJECT_SOURCE_DIR}/cbmex)
@@ -25,11 +25,26 @@ IF(${BUILD_CLI})
 	)  
     # target_compile_options(${LIB_NAME_CLI} PRIVATE /clr)
     # target_compile_options(${LIB_NAME_CLI} PRIVATE /EHa)
-    STRING(REPLACE "/EHsc" "/EHa" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
-    STRING (REGEX REPLACE "[/|-]RTC(su|[1su])" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-    STRING (REGEX REPLACE "[/|-]RTC(su|[1su])" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+    # STRING(REPLACE "/EHsc" "/EHa" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+    # STRING (REGEX REPLACE "[/|-]RTC(su|[1su])" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    # STRING (REGEX REPLACE "[/|-]RTC(su|[1su])" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 	LIST(APPEND INSTALL_TARGET_LIST ${LIB_NAME_CLI})
 	
-	# Test CSharp program
+	# CSharp program to TestCLI
+	add_subdirectory(TestCLI)
+	
+	# Create an extended version of the library with a simple C++ wrapper class.
+	SET(LIB_NAME_EXT cbsdk_ext)
+	ADD_LIBRARY(${LIB_NAME_EXT} SHARED
+		${CMAKE_CURRENT_LIST_DIR}/cbsdk_native.h
+		${CMAKE_CURRENT_LIST_DIR}/cbsdk_native.cpp
+		)
+	TARGET_INCLUDE_DIRECTORIES(${LIB_NAME_EXT} PRIVATE ${LIB_INCL_DIRS} ${CMAKE_SOURCE_DIR}/cbmex)
+	TARGET_LINK_LIBRARIES(${LIB_NAME_EXT} ${LIB_NAME})
+	ADD_DEPENDENCIES(${LIB_NAME_EXT} ${LIB_NAME})
+	LIST(APPEND INSTALL_TARGET_LIST ${LIB_NAME_EXT})
+	
+	# CSharp program to test cbsdk_ext
 	add_subdirectory(TestCSharp)
+
 ENDIF(${BUILD_CLI})

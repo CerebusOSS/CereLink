@@ -18,35 +18,26 @@ namespace SimpleClient
             int bufsize = 8 * 1024 * 1024;
             string inIP = "127.0.0.1";
             string outIP = "";
-            bool use_double = false;
+            // bool use_double = false;
 
-            CbSdkCLI managed = new CbSdkCLI(nInstance, inPort, outPort, bufsize, inIP, outIP, use_double);
-            Console.WriteLine("C# - managed.GetIsOnline(): {0}", managed.GetIsOnline());
-            if (managed.GetIsOnline())
+            CereLinkConnection conn = new CereLinkConnection(nInstance, inPort, outPort, bufsize, inIP, outIP);
+            if (conn.IsOnline())
             {
-                for (int i = 0; i < 5; i++)
+                for (int fetch_ix = 0; fetch_ix < 5; fetch_ix++)
                 {
-                    UInt16 nChans = managed.Fetch();
-                    Console.WriteLine("C# - managed.Fetch() {0} - fetched {1} channels.", i, nChans);
+                    short[][] result = conn.FetchData();
+                    Console.WriteLine("Returned {0} chans.", result.Length);
+                    for (int chan_ix = 0; chan_ix < result.Length; chan_ix++)
+                    {
+                        Console.WriteLine("Chan {0} has {1} samples: [{2} ... {3}]",
+                            chan_ix, result[chan_ix].Length, result[chan_ix][0], result[chan_ix][result[chan_ix].Length - 1]);
+                    }
                     System.Threading.Thread.Sleep(11);
-                    if (managed.GetIsDouble())
-                    {
-                        for (UInt16 chan_idx = 0; chan_idx < nChans; chan_idx++)
-                        {
-                            Double[] arr = managed.GetDataDbl(chan_idx);
-                            Console.WriteLine("C# - Channel {0} ({1} samples): [{2} ... {3}]", chan_idx, arr.Length, arr[0], arr[arr.Length - 1]);
-                        }
-                    }
-                    else
-                    {
-                        for (UInt16 chan_idx = 0; chan_idx < nChans; chan_idx++)
-                        {
-                            Int16[] arr = managed.GetDataInt(chan_idx);
-                            Console.WriteLine("C# - Channel {0} ({1} samples): [{2} ... {3}]", chan_idx, arr.Length, arr[0], arr[arr.Length - 1]);
-                        }
-                    }
                 }
-                
+            }
+            else
+            {
+                Console.WriteLine("Not online.");
             }
         }
     }
