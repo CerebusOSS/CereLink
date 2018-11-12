@@ -41,28 +41,28 @@ namespace CereLink
 
     public class CereLinkConnection
     {
-        [DllImport("cbsdk_extd.dll")]
+        [DllImport("cbsdk_ext.dll")]
         private static extern IntPtr CbSdkNative_Create(UInt32 nInstance, int inPort, int outPort, int bufsize, String inIP, String outIP, bool use_double);
 
-        [DllImport("cbsdk_extd.dll")]
+        [DllImport("cbsdk_ext.dll")]
         private static extern bool CbSdkNative_GetIsDouble(IntPtr pCbSdk);
 
-        [DllImport("cbsdk_extd.dll")]
+        [DllImport("cbsdk_ext.dll")]
         private static extern bool CbSdkNative_GetIsOnline(IntPtr pCbSdk);
 
-        [DllImport("cbsdk_extd.dll")]
+        [DllImport("cbsdk_ext.dll")]
         private static extern void CbSdkNative_PrefetchData(IntPtr pCbSdk, ref UInt16 chan_count, UInt32[] samps_per_chan, UInt16[] chan_numbers);
 
-        [DllImport("cbsdk_extd.dll")]
+        [DllImport("cbsdk_ext.dll")]
         private static extern void CbSdkNative_TransferData(IntPtr pCbSdk, ref UInt32 timestamp);
 
-        [DllImport("cbsdk_extd.dll")]
+        [DllImport("cbsdk_ext.dll")]
         private static extern void CbSdkNative_GetDataInt(IntPtr pCbSdk, Int16[] buffer, int chan_idx);
 
-        [DllImport("cbsdk_extd.dll")]
+        [DllImport("cbsdk_ext.dll")]
         private static extern void CbSdkNative_GetDataDouble(IntPtr pCbSdk, double[] buffer, int chan_idx);
 
-        [DllImport("cbsdk_extd.dll")]
+        [DllImport("cbsdk_ext.dll")]
         private static extern void CbSdkNative_Delete(IntPtr value);
 
         private IntPtr pNative;
