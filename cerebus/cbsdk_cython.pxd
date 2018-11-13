@@ -416,8 +416,8 @@ cdef extern from "cbsdk_helper.h":
     cbSdkResult cbsdk_init_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
     cbSdkResult cbsdk_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
 
-    cbSdkResult cbsdk_init_trial_data(int nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont)
-    cbSdkResult cbsdk_get_trial_data(int nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont)
+    cbSdkResult cbsdk_init_trial_data(int nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm)
+    cbSdkResult cbsdk_get_trial_data(int nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm)
 
     cbSdkResult cbsdk_init_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm)
     cbSdkResult cbsdk_get_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm)

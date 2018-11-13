@@ -66,18 +66,28 @@ cbSdkResult cbsdk_get_trial_cont(uint32_t nInstance, int reset, cbSdkTrialCont *
     return sdkres;
 }
 
-cbSdkResult cbsdk_init_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont)
+cbSdkResult cbsdk_init_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm)
 {
-	memset(trialevent, 0, sizeof(*trialevent));
-	memset(trialcont, 0, sizeof(*trialcont));
-	cbSdkResult sdkres = cbSdkInitTrialData(nInstance, reset, trialevent, trialcont, 0, 0);
+    if(trialevent)
+    {
+        memset(trialevent, 0, sizeof(*trialevent));
+    }
+	if (trialcont)
+	{
+	    memset(trialcont, 0, sizeof(*trialcont));
+	}
+	if (trialcomm)
+	{
+	    memset(trialcomm, 0, sizeof(*trialcomm));
+	}
+	cbSdkResult sdkres = cbSdkInitTrialData(nInstance, reset, trialevent, trialcont, trialcomm, 0);
 
 	return sdkres;
 }
 
-cbSdkResult cbsdk_get_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont)
+cbSdkResult cbsdk_get_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm)
 {
-	cbSdkResult sdkres = cbSdkGetTrialData(nInstance, reset, trialevent, trialcont, 0, 0);
+	cbSdkResult sdkres = cbSdkGetTrialData(nInstance, reset, trialevent, trialcont, trialcomm, 0);
 
 	return sdkres;
 }
