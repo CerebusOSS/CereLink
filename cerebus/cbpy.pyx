@@ -365,7 +365,7 @@ def trial_continuous(int instance=0, bool reset=False):
 
 
 def trial_data(int instance=0, bool reset=False, bool is_double=False,
-               bool do_event=True, bool do_cont=True, bool do_comment=False):
+               bool do_event=True, bool do_cont=True, bool do_comment=False, unsigned long wait_for_comment_msec=250):
     """
 
     :param instance: (optional) library instance number
@@ -378,6 +378,8 @@ def trial_data(int instance=0, bool reset=False, bool is_double=False,
     :param do_event: (optional) boolean. Set to False to skip fetching events.
     :param do_cont: (optional) boolean. Set to False to skip fetching continuous data.
     :param do_comment: (optional) boolean. Set to True to fetch comments.
+    :param wait_for_comment_msec: (optional) unsigned long. How long we should wait for new comments.
+               Default (0) will not wait and will only return comments that existed prior to calling this.
     :return: (result, event_data, continuous_data, t_zero, comment_data)
              res: (int) returned by cbsdk
              event data: list of arrays [channel, {'timestamps':[unit0_ts, ..., unitN_ts], 'events':digital_events}]
@@ -419,7 +421,8 @@ def trial_data(int instance=0, bool reset=False, bool is_double=False,
 
     # get how many samples are available
     res = cbsdk_init_trial_data(<uint32_t>instance, <int>reset, &trialevent if do_event else NULL,
-                                &trialcont if do_cont else NULL, &trialcomm if do_comment else NULL)
+                                &trialcont if do_cont else NULL, &trialcomm if do_comment else NULL,
+                                wait_for_comment_msec)
     handle_result(res)
 
     if (not do_event or (trialevent.count == 0)) and (not do_cont or (trialcont.count == 0))\
@@ -533,7 +536,7 @@ def trial_data(int instance=0, bool reset=False, bool is_double=False,
     return <int>res, trial_event, trial_cont, tzero, trial_comment
 
 
-def trial_comment(int instance=0, bool reset=False):
+def trial_comment(int instance=0, bool reset=False, unsigned long wait_for_comment_msec=250):
     ''' Trial comment data.
     Inputs:
        reset - (optional) boolean
@@ -556,7 +559,7 @@ def trial_comment(int instance=0, bool reset=False):
     handle_result(<cbSdkResult>res)
 
     # get how many comments are available
-    res = cbsdk_init_trial_comment(<uint32_t>instance, <int>reset, &trialcomm)
+    res = cbsdk_init_trial_comment(<uint32_t>instance, <int>reset, &trialcomm, wait_for_comment_msec)
     handle_result(res)
 
     if trialcomm.num_samples == 0:

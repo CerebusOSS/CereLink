@@ -473,7 +473,7 @@ CBSDKAPI    cbSdkResult cbSdkGetTrialData(uint32_t nInstance,
 /*! Initialize the structures (and fill with information about active channels, comment pointers and samples in the buffer) */
 CBSDKAPI    cbSdkResult cbSdkInitTrialData(uint32_t nInstance, uint32_t bActive,
                                            cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
-                                           cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
+                                           cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking, unsigned long wait_for_comment_msec = 250);
 
 /*! Start/stop/open/close file recording */
 CBSDKAPI    cbSdkResult cbSdkSetFileConfig(uint32_t nInstance, const char * filename, const char * comment, uint32_t bStart, uint32_t options = cbFILECFG_OPT_NONE);

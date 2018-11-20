@@ -366,7 +366,7 @@ cdef extern from "cbsdk.h":
     # Initialize the structures (and fill with information about active channels, comment pointers and samples in the buffer)
     cbSdkResult cbSdkInitTrialData( uint32_t nInstance,
                                     cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
-                                    cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking)
+                                    cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking, unsigned long wait_for_comment_msec)
     #cbSdkSetFileConfig
     cbSdkResult cbSdkGetFileConfig(uint32_t nInstance, char * filename, char * username, bool * pbRecording)
     cbSdkResult cbSdkSetPatientInfo(uint32_t nInstance, const char * ID, const char * firstname, const char * lastname, uint32_t DOBMonth, uint32_t DOBDay, uint32_t DOBYear)
@@ -416,10 +416,10 @@ cdef extern from "cbsdk_helper.h":
     cbSdkResult cbsdk_init_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
     cbSdkResult cbsdk_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
 
-    cbSdkResult cbsdk_init_trial_data(int nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm)
+    cbSdkResult cbsdk_init_trial_data(int nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
     cbSdkResult cbsdk_get_trial_data(int nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm)
 
-    cbSdkResult cbsdk_init_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm)
+    cbSdkResult cbsdk_init_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
     cbSdkResult cbsdk_get_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm)
 
     cbSdkResult cbsdk_file_config(int instance, const char * filename, const char * comment, int start, unsigned int options)

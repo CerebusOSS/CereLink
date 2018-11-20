@@ -77,7 +77,7 @@ public:
     cbSdkResult SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                 cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
     cbSdkResult SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent* trialevent, cbSdkTrialCont * trialcont,
-                                 cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
+                                 cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking, unsigned long wait_for_comment_msec = 250);
     cbSdkResult SdkSetFileConfig(const char * filename, const char * comment, uint32_t bStart, uint32_t options);
     cbSdkResult SdkGetFileConfig(char * filename, char * username, bool * pbRecording);
     cbSdkResult SdkSetPatientInfo(const char * ID, const char * firstname, const char * lastname,

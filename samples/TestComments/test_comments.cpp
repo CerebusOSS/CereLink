@@ -212,7 +212,7 @@ void testGetComment(void)
 	cbSdkTrialComment trialcomment = { 0, nullptr, nullptr, nullptr, nullptr };
 	//printf("cbSdkInitTrialData\n");
 	//testGetTime();
-	cbSdkResult res = cbSdkInitTrialData(INST, bActive, nullptr, nullptr, &trialcomment, nullptr);
+	cbSdkResult res = cbSdkInitTrialData(INST, bActive, nullptr, nullptr, &trialcomment, nullptr, 0);
 	//testGetTime();
 
 	if (trialcomment.num_samples > 0)

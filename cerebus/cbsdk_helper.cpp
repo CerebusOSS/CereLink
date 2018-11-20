@@ -66,7 +66,7 @@ cbSdkResult cbsdk_get_trial_cont(uint32_t nInstance, int reset, cbSdkTrialCont *
     return sdkres;
 }
 
-cbSdkResult cbsdk_init_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm)
+cbSdkResult cbsdk_init_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
 {
     if(trialevent)
     {
@@ -80,7 +80,7 @@ cbSdkResult cbsdk_init_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent
 	{
 	    memset(trialcomm, 0, sizeof(*trialcomm));
 	}
-	cbSdkResult sdkres = cbSdkInitTrialData(nInstance, reset, trialevent, trialcont, trialcomm, 0);
+	cbSdkResult sdkres = cbSdkInitTrialData(nInstance, reset, trialevent, trialcont, trialcomm, 0, wait_for_comment_msec);
 
 	return sdkres;
 }
@@ -92,10 +92,10 @@ cbSdkResult cbsdk_get_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent 
 	return sdkres;
 }
 
-cbSdkResult cbsdk_init_trial_comment(uint32_t nInstance, int reset, cbSdkTrialComment * trialcomm)
+cbSdkResult cbsdk_init_trial_comment(uint32_t nInstance, int reset, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
 {
     memset(trialcomm, 0, sizeof(*trialcomm));
-    cbSdkResult sdkres = cbSdkInitTrialData(nInstance, reset, 0, 0, trialcomm, 0);
+    cbSdkResult sdkres = cbSdkInitTrialData(nInstance, reset, 0, 0, trialcomm, 0, wait_for_comment_msec);
 
     return sdkres;
 }

@@ -2167,11 +2167,12 @@ CBSDKAPI    cbSdkResult cbSdkGetTrialData(uint32_t nInstance,
 * @param[out]	trialcomment  - initialize number of buffered comments
 * @param[out]	trialtracking - initialize trackable count, trackable name, id, type,
 * maximum point count and number of buffered samples for each trackable
+* @param        wait_for_comment_msec - number of milliseconds to wait for a comment.
 
 * \n This function returns the error code
 */
 cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
-                                     cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking)
+                                     cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking, unsigned long wait_for_comment_msec)
 {
     // This time is used for relative timings,
     //  continuous as well as event relative timings reset any time bActive is set
@@ -2283,7 +2284,7 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
             // Wait for packets to come in
             m_lockGetPacketsCmt.lock();
             m_bPacketsCmt = TRUE;
-            m_waitPacketsCmt.wait(&m_lockGetPacketsCmt, 250);		
+            m_waitPacketsCmt.wait(&m_lockGetPacketsCmt, wait_for_comment_msec);
             m_lockGetPacketsCmt.unlock();
 
             // Take a snapshot of the current write pointer
@@ -2354,14 +2355,14 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
 /// sdk stub for SdkApp::SdkInitTrialData
 CBSDKAPI    cbSdkResult cbSdkInitTrialData(uint32_t nInstance, uint32_t bActive,
                                            cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
-                                           cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking)
+                                           cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking, unsigned long wait_for_comment_msec)
 {
     if (nInstance >= cbMAXOPEN)
         return CBSDKRESULT_INVALIDPARAM;
     if (g_app[nInstance] == NULL)
         return CBSDKRESULT_CLOSED;
 
-    return g_app[nInstance]->SdkInitTrialData(bActive, trialevent, trialcont, trialcomment, trialtracking);
+    return g_app[nInstance]->SdkInitTrialData(bActive, trialevent, trialcont, trialcomment, trialtracking, wait_for_comment_msec);
 }
 
 // Author & Date:   Ehsan Azar     25 Feb 2011
