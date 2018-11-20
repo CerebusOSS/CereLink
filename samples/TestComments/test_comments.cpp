@@ -210,35 +210,37 @@ void testGetComment(void)
 {
 	uint32_t bActive = true;
 	cbSdkTrialComment trialcomment = { 0, nullptr, nullptr, nullptr, nullptr };
-	printf("cbSdkInitTrialData\n");
-	testGetTime();
+	//printf("cbSdkInitTrialData\n");
+	//testGetTime();
 	cbSdkResult res = cbSdkInitTrialData(INST, bActive, nullptr, nullptr, &trialcomment, nullptr);
-	testGetTime();
+	//testGetTime();
 
 	if (trialcomment.num_samples > 0)
 	{
 		// Allocate memory for trialcomment
-	/*
-	uint16_t num_samples; ///< Number of comments
-	uint8_t * charsets;   ///< Buffer to hold character sets
-	uint32_t * rgbas;     ///< Buffer to hold rgba values
-	uint8_t * * comments; ///< Pointer to comments
-	void * timestamps;  ///< Buffer to hold time stamps
-	*/
+		/*
+		uint16_t num_samples; ///< Number of comments
+		uint8_t * charsets;   ///< Buffer to hold character sets
+		uint32_t * rgbas;     ///< Buffer to hold rgba values
+		uint8_t * * comments; ///< Pointer to comments
+		void * timestamps;  ///< Buffer to hold time stamps
+		*/
 		std::vector<uint8_t> charsets = std::vector<uint8_t>(trialcomment.num_samples);
 		std::vector<uint32_t> rgbas = std::vector<uint32_t>(trialcomment.num_samples);
-		std::vector<uint16_t> timestamps = std::vector<uint16_t>(trialcomment.num_samples);
+		std::vector<uint32_t> timestamps = std::vector<uint32_t>(trialcomment.num_samples);
+		trialcomment.charsets = charsets.data();
+		trialcomment.rgbas = rgbas.data();
+		trialcomment.timestamps = (void*)timestamps.data();
+
 		std::vector<uint8_t *> comments = std::vector<uint8_t *>(trialcomment.num_samples);
 		trialcomment.comments = comments.data();
 		for (size_t comm_ix = 0; comm_ix < trialcomment.num_samples; comm_ix++)
 		{
-			trialcomment.comments[comm_ix] = new uint8_t[cbMAX_COMMENT + 1];
+			trialcomment.comments[comm_ix] = new uint8_t[cbMAX_COMMENT];
 		}
-		trialcomment.charsets = charsets.data();
-		trialcomment.rgbas = rgbas.data();
-		trialcomment.timestamps = (void*)timestamps.data();
 		
-		printf("cbSdkGetTrialData\n");
+		
+		printf("cbSdkGetTrialData - For %d comments\n", trialcomment.num_samples);
 		testGetTime();
 		res = cbSdkGetTrialData(INST, bActive, nullptr, nullptr, &trialcomment, nullptr);
 		testGetTime();
