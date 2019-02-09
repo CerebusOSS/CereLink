@@ -1763,6 +1763,15 @@ void OnFileConfig(
     // Do a quick look at the options just to find the instance if specified
     for (int i = 1; i < nrhs; ++i)
     {
+        
+        /* Cheat-fix. We know that prhs[ 3 ] is the 'action', by definition
+           of 'fileconfig'. However, a numeric argument will trigger an
+           error inside this for loop. To avoid this, skip input 3. There
+           is code further down that does basic type and scalar checking.
+        */
+        if  ( i == 3 )
+          continue ;
+        
         if (param == PARAM_NONE)
         {
             char cmdstr[255];
