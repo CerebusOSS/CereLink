@@ -1765,8 +1765,8 @@ void OnFileConfig(
     {
         if (param == PARAM_NONE)
         {
-            char cmdstr[128];
-            if (mxGetString(prhs[i], cmdstr, 16))
+            char cmdstr[255];
+            if (mxGetString(prhs[i], cmdstr, 255))
             {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d is invalid", i);
@@ -1778,7 +1778,7 @@ void OnFileConfig(
             }
             else
             {
-                param = PARAM_OPTION; // Just something valid but instance
+                param = PARAM_NONE; // Just something valid but instance
             }
         }
         else
