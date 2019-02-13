@@ -1761,19 +1761,12 @@ void OnFileConfig(
     } param = PARAM_NONE;
 
     // Do a quick look at the options just to find the instance if specified
-    for (int i = 1; i < nrhs; ++i)
+    for (int i = nFirstParam; i < nrhs; ++i)
     {
-        
-        /* Cheat-fix. We know that prhs[ 3 ] is the 'action', by definition
-           of 'fileconfig'. However, a numeric argument will trigger an
-           error inside this for loop. To avoid this, skip input 3. There
-           is code further down that does basic type and scalar checking.
-        */
-        if  ( i == 3 )
-          continue ;
         
         if (param == PARAM_NONE)
         {
+
             char cmdstr[255];
             if (mxGetString(prhs[i], cmdstr, 255))
             {
@@ -1784,6 +1777,10 @@ void OnFileConfig(
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
+            }
+            else if (_strcmpi(cmdstr, "option") == 0)
+            {
+                param = PARAM_OPTION;
             }
             else
             {
