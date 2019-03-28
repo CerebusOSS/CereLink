@@ -1892,7 +1892,7 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
             if (ch == MAX_CHANS_DIGITAL_IN)
                 ch = cbNUM_ANALOG_CHANS + 1; //index + 1 in cache
             else if (ch == MAX_CHANS_SERIAL)
-                ch = cbNUM_ANALOG_CHANS + 2; //index + 1 in cache
+                ch = cbNUM_ANALOG_CHANS + 2; //index + 2 in cache
             if (ch == 0 || (ch > cbNUM_ANALOG_CHANS + 2))
                 return CBSDKRESULT_INVALIDCHANNEL;
             // Ignore masked channels
@@ -2213,7 +2213,7 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
                     continue;
                 uint16_t ch = channel + 1; // Actual channel number
                 if (ch > cbNUM_ANALOG_CHANS)
-                    ch = (ch - cbNUM_ANALOG_CHANS + 150);
+                    ch += cbNUM_ANALOGOUT_CHANS;
                 if (!m_bChannelMask[ch - 1])
                     continue;
                 trialevent->chan[count] = ch;
@@ -4095,7 +4095,7 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 m_pLateCallback[CBSDKCALLBACK_CONTINUOUS](m_nInstance, cbSdkPkt_CONTINUOUS, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_CONTINUOUS]);
         }
     }
-    // check for channel event packets cerebus channels 1-144
+    // check for channel event packets cerebus channels 1-272
     else if (pPkt->chid < cbNUM_ANALOG_CHANS + 1)   // channels are 1 based
     {
         if (pPkt->chid > 0 && m_bChannelMask[pPkt->chid - 1])
