@@ -241,7 +241,7 @@ cdef extern from "cbsdk.h":
     ctypedef enum cbSdkTrialType:
         CBSDKTRIAL_CONTINUOUS = 0
         CBSDKTRIAL_EVENTS = 1
-        CBSDKTRIAL_COMMETNS = 2
+        CBSDKTRIAL_COMMENTS = 2
         CBSDKTRIAL_TRACKING = 3
 
     ctypedef enum cbSdkWaveformType:

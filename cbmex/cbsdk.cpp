@@ -946,7 +946,7 @@ cbSdkResult SdkApp::SdkClose()
         SdkUnsetTrialConfig(CBSDKTRIAL_EVENTS);
 
     if (m_CMT != NULL)
-        SdkUnsetTrialConfig(CBSDKTRIAL_COMMETNS);
+        SdkUnsetTrialConfig(CBSDKTRIAL_COMMENTS);
 
     if (m_TR != NULL)
         SdkUnsetTrialConfig(CBSDKTRIAL_TRACKING);
@@ -1115,7 +1115,7 @@ cbSdkResult SdkApp::unsetTrialConfig(cbSdkTrialType type)
         delete m_ED;
         m_ED = NULL;
         break;
-    case CBSDKTRIAL_COMMETNS:
+    case CBSDKTRIAL_COMMENTS:
         if (m_CMT == NULL)
             return CBSDKRESULT_ERRCONFIG;
         if (m_CMT->timestamps)
@@ -1220,7 +1220,7 @@ cbSdkResult SdkApp::SdkUnsetTrialConfig(cbSdkTrialType type)
         res = unsetTrialConfig(type);
         m_lockTrialEvent.unlock();
         break;
-    case CBSDKTRIAL_COMMETNS:
+    case CBSDKTRIAL_COMMENTS:
         m_lockTrialComment.lock();
         res = unsetTrialConfig(type);
         m_lockTrialComment.unlock();
@@ -1531,7 +1531,7 @@ cbSdkResult SdkApp::SdkSetTrialConfig(uint32_t bActive, uint16_t begchan, uint32
                 bErr = true;
             }
             if (bErr)
-                unsetTrialConfig(CBSDKTRIAL_COMMETNS);
+                unsetTrialConfig(CBSDKTRIAL_COMMENTS);
         }
         if (m_CMT) m_CMT->reset();
         m_lockTrialComment.unlock();
