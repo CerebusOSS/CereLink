@@ -1,5 +1,7 @@
 dist/
 build*/
+cerebus.egg-info
+*.pyd
 
 .*
 *.*~

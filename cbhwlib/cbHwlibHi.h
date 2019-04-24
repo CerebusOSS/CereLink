@@ -86,12 +86,13 @@ bool IsSerialEnabled(uint32_t nChannel, uint32_t nInstance = 0);
 bool IsDigitalOutEnabled(uint32_t nChannel, uint32_t nInstance = 0);
 
 // Is it "this" kind of channel? (very fast)
-bool IsChanAnalogIn(uint32_t dwChan);             // TRUE means yes; FALSE, no
-bool IsChanFEAnalogIn(uint32_t dwChan);           // TRUE means yes; FALSE, no
-bool IsChanAIAnalogIn(uint32_t dwChan);           // TRUE means yes; FALSE, no
-bool IsChanSerial(uint32_t dwChan);               // TRUE means yes; FALSE, no
-bool IsChanDigin(uint32_t dwChan);                // TRUE means yes; FALSE, no
-bool IsChanDigout(uint32_t dwChan);               // TRUE means yes; FALSE, no
+bool IsChanAnalogIn(uint32_t dwChan, uint32_t nInstance = 0);             // TRUE means yes; FALSE, no
+bool IsChanFEAnalogIn(uint32_t dwChan, uint32_t nInstance = 0);           // TRUE means yes; FALSE, no
+bool IsChanAIAnalogIn(uint32_t dwChan, uint32_t nInstance = 0);           // TRUE means yes; FALSE, no
+bool IsChanAnyDigIn(uint32_t dwChan, uint32_t nInstance = 0);  // TRUE means yes; FALSE, no
+bool IsChanSerial(uint32_t dwChan, uint32_t nInstance = 0); // TRUE means yes; FALSE, no
+bool IsChanDigin(uint32_t dwChan, uint32_t nInstance = 0);  // TRUE means yes; FALSE, no
+bool IsChanDigout(uint32_t dwChan, uint32_t nInstance = 0);               // TRUE means yes; FALSE, no
 bool IsChanCont(uint32_t dwChan, uint32_t nInstance = 0);                 // TRUE means yes; FALSE, no
 
 bool AreHoopsDefined(uint32_t nChannel, uint32_t nInstance = 0);

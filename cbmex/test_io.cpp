@@ -6,6 +6,10 @@
 //  This extends testcbsdk with explicit testing of data io.
 //  This is incomplete and only includes tests that were relevant to debugging specific problems.
 //
+//  Call with -c to enable continuous data (not tested), -e to enable events (works ok),
+//  and -r <int> to specify a fixed runtime (?not working).
+//  while running, press Esc key to stop.
+//
 //  Note:
 //   Make sure only the SDK is used here, and not cbhwlib directly
 //    this will ensure SDK is capable of whatever test suite can do
@@ -17,6 +21,7 @@
 #include <vector>
 #include <stdio.h>
 #include <conio.h>
+#include <inttypes.h>
 #include "debugmacs.h"
 
 #include "cbsdk.h"
@@ -269,14 +274,14 @@ int main(int argc, char *argv[])
 			delete ptrialcomment;
 			ptrialcomment = nullptr;
 		}
-		res = cbSdkInitTrialData(INST, cfg.bActive, ptrialevent, ptrialcont, ptrialcomment, 0);
+		res = cbSdkInitTrialData(INST, 0, ptrialevent, ptrialcont, ptrialcomment, 0);
 
 		// allocate memory
-		if (ptrialevent && ptrialevent->count > 0)
+		if (ptrialevent && (ptrialevent->count > 0))
 		{
 			for (size_t ev_ix = 0; ev_ix < ptrialevent->count; ev_ix++)
 			{
-				uint16_t chan_id = ptrialevent->chan[ev_ix];  // 1-based, skips over output channels.
+				uint16_t chan_id = ptrialevent->chan[ev_ix];  // 1-based
 
 				// Every event channel, regardless of type (spike, digital, serial), gets an array of timestamps.
 				for (size_t un_ix = 0; un_ix < cbMAXUNITS + 1; un_ix++)
@@ -292,18 +297,66 @@ int main(int argc, char *argv[])
 					}
 				}
 
-				if (chan_id > cbNUM_ANALOG_CHANS)
+				uint8_t chanType;
+				cbSdkGetChannelType(INST, chan_id, &chanType);
+				if ((chanType == cbCHANTYPE_DIGIN) || (chanType == cbCHANTYPE_SERIAL))
 				{
-					printf("Digital Channel\n");
-
+					// alloc waveform data
+					uint32_t n_samples = ptrialevent->num_samples[ev_ix][0];
+					ptrialevent->waveforms[ev_ix] = malloc(n_samples * sizeof(uint16_t));
+					// TODO: If double then allocate sizeof(double)
 				}
 			}
 		}
 
+		if (ptrialcont && (ptrialcont->count > 0))
+		{
+			// TODO: Allocate continuous data
+		}
+		
 		// cbSdkGetTrialData to fetch the data
 		res = cbSdkGetTrialData(INST, cfg.bActive, ptrialevent, ptrialcont, ptrialcomment, 0);
 
-		// TODO: Print something to do with the data.
+		// Print something to do with the data.
+		if (ptrialevent && (ptrialevent->count > 0))
+		{
+			for (size_t ev_ix = 0; ev_ix < ptrialevent->count; ev_ix++)
+			{
+				for (size_t un_ix = 0; un_ix < cbMAXUNITS + 1; un_ix++)
+				{
+					if (ptrialevent->num_samples[ev_ix][un_ix])
+					{
+						uint32_t* ts = (uint32_t *)ptrialevent->timestamps[ev_ix][un_ix];
+						// printf(" %" PRIu32, *ts);
+					}
+				}
+				// printf("\n");
+				
+				uint16_t chan_id = ptrialevent->chan[ev_ix];
+				uint8_t chanType;
+				cbSdkGetChannelType(INST, chan_id, &chanType);
+				if ((chanType == cbCHANTYPE_DIGIN) || (chanType == cbCHANTYPE_SERIAL))
+				{
+					uint32_t n_samples = ptrialevent->num_samples[ev_ix][0];
+					if (n_samples > 0)
+					{
+						uint32_t* ts = (uint32_t *)ptrialevent->timestamps[ev_ix][0];
+						printf("%" PRIu32 ":", *ts);
+					}
+					uint16_t* wf = (uint16_t*)ptrialevent->waveforms[ev_ix];
+					for (uint32_t sample_ix = 0; sample_ix < n_samples; sample_ix++)
+					{
+						printf(" %" PRIu16, wf[sample_ix]);
+					}
+					if (n_samples > 0) printf("\n");
+				}
+			}
+		}
+
+		if (ptrialcont && (ptrialcont->count > 0))
+		{
+			// TODO: Print continous data
+		}
 
 		// Free allocated memory.
 		if (ptrialevent)
@@ -320,11 +373,31 @@ int main(int argc, char *argv[])
 							ptrialevent->timestamps[ev_ix][un_ix] = NULL;
 						}
 					}
+
+					uint16_t chan_id = ptrialevent->chan[ev_ix];
+					uint8_t chanType;
+					cbSdkGetChannelType(INST, chan_id + 1, &chanType);
+					if ((chanType == cbCHANTYPE_DIGIN) || (chanType == cbCHANTYPE_SERIAL))
+					{
+						free(ptrialevent->waveforms[ev_ix]);
+						ptrialevent->waveforms[ev_ix] = NULL;
+					}
 				}
 			}
 			delete ptrialevent;
 			ptrialevent = nullptr;
 		}
+
+		if (ptrialcont)
+		{
+			if (ptrialcont->count > 0)
+			{
+				// TODO: Free continous data
+			}
+			delete ptrialcont;
+			ptrialcont = nullptr;
+		}
+
 		if (_kbhit())
 		{
 			kb_ch = _getch();

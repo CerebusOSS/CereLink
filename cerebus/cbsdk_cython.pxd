@@ -65,6 +65,23 @@ cdef extern from "cbhwlib.h":
         cbFILECFG_OPT_SYNCH =        0x00000006
         cbFILECFG_OPT_OPEN =         0x00000007
 
+    cdef enum cbhwlib_cbCHANCAPS:
+        cbCHAN_EXISTS       = 0x00000001  # Channel id is allocated
+        cbCHAN_CONNECTED    = 0x00000002  # Channel is connected and mapped and ready to use
+        cbCHAN_ISOLATED     = 0x00000004  # Channel is electrically isolated
+        cbCHAN_AINP         = 0x00000100  # Channel has analog input capabilities
+        cbCHAN_AOUT         = 0x00000200  # Channel has analog output capabilities
+        cbCHAN_DINP         = 0x00000400  # Channel has digital input capabilities
+        cbCHAN_DOUT         = 0x00000800  # Channel has digital output capabilities
+
+    cdef enum cbhwlib_cbCHANTYPES:
+        cbCHANTYPE_ANAIN  = 0x01
+        cbCHANTYPE_ANAOUT = 0x02
+        cbCHANTYPE_AUDOUT = 0x04
+        cbCHANTYPE_DIGIN  = 0x10
+        cbCHANTYPE_SERIAL = 0x20
+        cbCHANTYPE_DIGOUT = 0x40
+
     ctypedef struct cbSCALING:
         int16_t digmin     # digital value that cooresponds with the anamin value
         int16_t digmax     # digital value that cooresponds with the anamax value
@@ -359,6 +376,7 @@ cdef extern from "cbsdk.h":
     cbSdkResult cbSdkUnsetTrialConfig(uint32_t nInstance, cbSdkTrialType type)
     cbSdkResult cbSdkGetChannelLabel(int nInstance, uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position)
     cbSdkResult cbSdkSetChannelLabel(uint32_t nInstance, uint16_t channel, const char * label, uint32_t userflags, int32_t * position)
+    cbSdkResult cbSdkGetChannelType(uint32_t nInstance, uint16_t channel, uint8_t* ch_type)
     # Retrieve data of a trial (NULL means ignore), user should allocate enough buffers beforehand, and trial should not be closed during this call
     cbSdkResult cbSdkGetTrialData(  uint32_t nInstance,
                                     uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,

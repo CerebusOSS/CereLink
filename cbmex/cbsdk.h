@@ -261,11 +261,12 @@ typedef void (* cbSdkCallback)(uint32_t nInstance, const cbSdkPktType type, cons
 /// Trial spike events
 typedef struct _cbSdkTrialEvent
 {
+	// TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
     uint16_t count; ///< Number of valid channels in this trial (up to cbNUM_ANALOG_CHANS+2)
-    uint16_t chan[cbNUM_ANALOG_CHANS + 2]; ///< channel numbers (1-based)
-    uint32_t num_samples[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1]; ///< number of samples
-    void * timestamps[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1];   ///< Buffer to hold time stamps
-    void * waveforms[cbNUM_ANALOG_CHANS + 2]; ///< Buffer to hold waveforms or digital values
+    uint16_t chan[cbMAXCHANS]; ///< channel numbers (1-based)
+    uint32_t num_samples[cbMAXCHANS][cbMAXUNITS + 1]; ///< number of samples
+    void * timestamps[cbMAXCHANS][cbMAXUNITS + 1];   ///< Buffer to hold time stamps
+    void * waveforms[cbMAXCHANS]; ///< Buffer to hold waveforms or digital values
 } cbSdkTrialEvent;
 
 /// Connection information
@@ -464,6 +465,9 @@ CBSDKAPI    cbSdkResult cbSdkUnsetTrialConfig(uint32_t nInstance, cbSdkTrialType
 CBSDKAPI    cbSdkResult cbSdkGetChannelLabel(uint32_t nInstance, uint16_t channel, uint32_t * bValid, char * label = NULL, uint32_t * userflags = NULL, int32_t * position = NULL); // Get channel label
 /*! Set channel label */
 CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(uint32_t nInstance, uint16_t channel, const char * label, uint32_t userflags, int32_t * position); // Set channel label
+
+/*! Get channel type */
+CBSDKAPI	cbSdkResult cbSdkGetChannelType(uint32_t nInstance, uint16_t channel, uint8_t* ch_type);
 
 /*! Retrieve data of a trial (NULL means ignore), user should allocate enough buffers beforehand, and trial should not be closed during this call */
 CBSDKAPI    cbSdkResult cbSdkGetTrialData(uint32_t nInstance,

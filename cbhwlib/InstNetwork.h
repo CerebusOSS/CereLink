@@ -122,6 +122,8 @@ protected:
     int m_nRecBufSize;
     QString m_strInIP;  // Client IPv4 address
     QString m_strOutIP; // Instrument IPv4 address
+	uint8_t m_ChannelType[cbMAXCHANS]; // Holds an integer for each channel indicating its type. See cbCHTYPE_ in cbhwlib.h
+	// TODO: Maybe we need a m_ChanIdxInType array for indexing waveform arrays.
 
 public Q_SLOTS:
     void Close(); // stop timer and close the message loop
