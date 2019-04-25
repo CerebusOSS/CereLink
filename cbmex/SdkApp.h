@@ -74,6 +74,7 @@ public:
                                   bool bAbsolute);
     cbSdkResult SdkGetChannelLabel(uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position);
     cbSdkResult SdkSetChannelLabel(uint16_t channel, const char * label, uint32_t userflags, int32_t * position);
+	cbSdkResult SdkGetChannelType(uint16_t channel, uint8_t * chtype);
     cbSdkResult SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                 cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
     cbSdkResult SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent* trialevent, cbSdkTrialCont * trialcont,
@@ -205,18 +206,25 @@ private:
     // Structure to store all of the variables associated with the event data
     struct EventData
     {
+        // We use cbMAXCHANS to size the arrays,
+        // even though that's more than the analog + digin + serial channels than are required,
+        // simply so we can index into these arrays using the channel number (-1).
+        // The alternative is to map between channel number and array index, but
+        // this is problematic with the recent change to 2-NSP support.
+        // Later I may add a m_ChIdxInType or m_ChIdxInBuff for such a map.
+        // - chadwick.boulay@gmail.com
         uint32_t size; // default is cbSdk_EVENT_DATA_SAMPLES
-        uint32_t * timestamps[cbNUM_ANALOG_CHANS + 2];
-        uint16_t * units[cbNUM_ANALOG_CHANS + 2];
+        uint32_t * timestamps[cbMAXCHANS];
+        uint16_t * units[cbMAXCHANS];
         int16_t  * waveform_data; // buffer with maximum size of array [cbNUM_ANALOG_CHANS][size][cbMAX_PNTS]
-        uint32_t write_index[cbNUM_ANALOG_CHANS + 2];                  // next index location to write data
-        uint32_t write_start_index[cbNUM_ANALOG_CHANS + 2];            // index location that writing began
+        uint32_t write_index[cbMAXCHANS];                  // next index location to write data
+        uint32_t write_start_index[cbMAXCHANS];            // index location that writing began
 
         void reset()
         {
             if (size)
             {
-                for (uint32_t i = 0; i < cbNUM_ANALOG_CHANS + 2; ++i)
+                for (uint32_t i = 0; i < cbMAXCHANS; ++i)
                 {
                     memset(timestamps[i], 0, size * sizeof(uint32_t));
                     memset(units[i], 0, size * sizeof(uint16_t));

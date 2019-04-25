@@ -240,7 +240,7 @@ typedef uint8_t DLEN;
 #define cbNUM_SERIAL_CHANS    1                                         // #Serial Input channels
 #define cbNUM_DIGOUT_CHANS    4                                         // #Digital Output channels
 
-// Total of all channels = 156
+// Total of all channels = 284
 #define cbMAXCHANS            (cbNUM_ANALOG_CHANS +  cbNUM_ANALOGOUT_CHANS + cbNUM_DIGIN_CHANS + cbNUM_SERIAL_CHANS + cbNUM_DIGOUT_CHANS)
 
 // #define cbFIRST_FE_CHAN       0                                          // 0   First Front end channel
@@ -250,6 +250,15 @@ typedef uint8_t DLEN;
 // #define cbFIRST_DIGIN_CHAN    (cbFIRST_AUDOUT_CHAN + cbNUM_AUDOUT_CHANS) // 300 First Digital Input channel
 // #define cbFIRST_SERIAL_CHAN   (cbFIRST_DIGIN_CHAN + cbNUM_DIGIN_CHANS)   // 302 First Serial Input channel
 // #define cbFIRST_DIGOUT_CHAN   (cbFIRST_SERIAL_CHAN + cbNUM_SERIAL_CHANS) // 304 First Digital Output channel
+
+// Channel type definitions. Used by SdkApp to store the channel type for each channel on the instrument.
+// Uses uint8_t
+#define cbCHANTYPE_ANAIN  0x01
+#define cbCHANTYPE_ANAOUT 0x02
+#define cbCHANTYPE_AUDOUT 0x04
+#define cbCHANTYPE_DIGIN  0x10
+#define cbCHANTYPE_SERIAL 0x20
+#define cbCHANTYPE_DIGOUT 0x40
 
 // Bank definitions - NOTE: If any of the channel types have more than cbCHAN_PER_BANK channels, the banks must be increased accordingly
 #define cbCHAN_PER_BANK       32                                         // number of 32 channel banks == 1024
@@ -2774,7 +2783,7 @@ typedef struct {
     uint8_t type;      // cbPKTTYPE_WAVEFORMREP or cbPKTTYPE_WAVEFORMSET depending on direction
     uint8_t dlen;      // packet size
 
-    uint16_t chan;        // which analog output/audio output channel (1-based, will equal chan from GetDoutCaps)
+    uint16_t chan;        // which analog output/audio output channel (1-based, will equal chan from GetAoutCaps)
 
     // Each file may contain multiple sequences.
     // Each sequence consists of phases

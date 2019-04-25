@@ -218,13 +218,16 @@ def trial_config(int instance=0, reset=True,
     return <int>res, reset
 
 
-def trial_event(int instance=0, bool reset=False):
+def trial_event(int instance=0, bool reset=False, bool reset_clock=False):
     ''' Trial spike and event data.
     Inputs:
-       reset - (optional) boolean 
-               set False (default) to leave buffer intact.
-               set True to clear all the data and reset the trial time to the current time.
        instance - (optional) library instance number
+       reset - (optional) boolean
+               set False (default) to leave buffer intact.
+               set True to clear all the data after it has been retrieved.
+       reset_clock - (optional) boolean
+                set False (default) to leave the trial clcok alone.
+                set True to update the trial time to the current time (seems inconsistent?)
     Outputs:
        list of arrays [channel, {'timestamps':[unit0_ts, ..., unitN_ts], 'events':digital_events}]
            channel: integer, channel number (1-based)
@@ -235,6 +238,7 @@ def trial_event(int instance=0, bool reset=False):
     cdef cbSdkResult res
     cdef cbSdkConfigParam cfg_param
     cdef cbSdkTrialEvent trialevent
+    cdef uint8_t ch_type
     
     trial = []
     
@@ -243,7 +247,7 @@ def trial_event(int instance=0, bool reset=False):
     handle_result(res)
     
     # get how many samples are available
-    res = cbsdk_init_trial_event(<uint32_t>instance, <int>reset, &trialevent)
+    res = cbsdk_init_trial_event(<uint32_t>instance, <int>reset_clock, &trialevent)
     handle_result(res)
     
     if trialevent.count == 0:
@@ -254,40 +258,41 @@ def trial_event(int instance=0, bool reset=False):
     cdef np.uint16_t[:] mxa_u16
     
     # allocate memory
-    for channel in range(trialevent.count):
-        ch = trialevent.chan[channel] # Actual channel number
+    for ev_ix in range(trialevent.count):
+        ch = trialevent.chan[ev_ix] # Actual channel number
         
         timestamps = []
-        # Fill timestamps for non-empty channels
+        # Fill timestamps for non-empty events
         for u in range(cbMAXUNITS+1):
-            trialevent.timestamps[channel][u] = NULL
-            num_samples = trialevent.num_samples[channel][u]
+            trialevent.timestamps[ev_ix][u] = NULL
+            num_samples = trialevent.num_samples[ev_ix][u]
             ts = []
             if num_samples:
                 if cfg_param.bDouble:
                     mxa_d = np.zeros(num_samples, dtype=np.double)
-                    trialevent.timestamps[channel][u] = <void *>&mxa_d[0]
+                    trialevent.timestamps[ev_ix][u] = <void *>&mxa_d[0]
                     ts = np.asarray(mxa_d)
                 else:
                     mxa_u32 = np.zeros(num_samples, dtype=np.uint32)
-                    trialevent.timestamps[channel][u] = <void *>&mxa_u32[0]
+                    trialevent.timestamps[ev_ix][u] = <void *>&mxa_u32[0]
                     ts = np.asarray(mxa_u32)
             timestamps.append(ts)
         
-        trialevent.waveforms[channel] = NULL
+        trialevent.waveforms[ev_ix] = NULL
         dig_events = []
+        res = cbSdkGetChannelType(<uint32_t>instance, ch, &ch_type)
+        handle_result(res)
         # Fill values for non-empty digital or serial channels
-        if (ch == (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS + cbNUM_DIGIN_CHANS))\
-            or (ch == (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS + cbNUM_DIGIN_CHANS + cbNUM_SERIAL_CHANS)):
-            num_samples = trialevent.num_samples[channel][0]
+        if (ch_type == cbhwlib_cbCHANTYPES.cbCHANTYPE_DIGIN) or (ch_type == cbhwlib_cbCHANTYPES.cbCHANTYPE_SERIAL):
+            num_samples = trialevent.num_samples[ev_ix][0]
             if num_samples:
                 if cfg_param.bDouble:
                     mxa_d = np.zeros(num_samples, dtype=np.double)
-                    trialevent.waveforms[channel] = <void *>&mxa_d[0]
+                    trialevent.waveforms[ev_ix] = <void *>&mxa_d[0]
                     dig_events = np.asarray(mxa_d)
                 else:
                     mxa_u16 = np.zeros(num_samples, dtype=np.uint16)
-                    trialevent.waveforms[channel] = <void *>&mxa_u16[0]
+                    trialevent.waveforms[ev_ix] = <void *>&mxa_u16[0]
                     dig_events = np.asarray(mxa_u16)
         
         trial.append([ch, {'timestamps':timestamps, 'events':dig_events}])
@@ -361,12 +366,15 @@ def trial_continuous(int instance=0, bool reset=False):
     return <int>res, trial
 
 
-def trial_data(int instance=0, bool reset=False):
+def trial_data(int instance=0, bool reset=False, bool reset_clock=False):
     '''
     :param instance: (optional) library instance number
     :param reset: (optional) boolean
                set False (default) to leave buffer intact.
                set True to clear all the data and reset the trial time to the current time.
+    :param reset_clock - (optional) boolean
+                set False (default) to leave the trial clcok alone.
+                set True to update the trial time to the current time (seems inconsistent?)
     :return:
              res: (int) returned by cbsdk
              continuous data: list of the form [channel, continuous_array]
@@ -381,6 +389,7 @@ def trial_data(int instance=0, bool reset=False):
     cdef cbSdkConfigParam cfg_param
     cdef cbSdkTrialCont trialcont
     cdef cbSdkTrialEvent trialevent
+    cdef uint8_t ch_type
 
     trial_event = []
     trial_cont = []
@@ -390,10 +399,10 @@ def trial_data(int instance=0, bool reset=False):
     handle_result(res)
 
     # get how many samples are available
-    res = cbsdk_init_trial_data(<uint32_t>instance, <int>reset, &trialevent, &trialcont)
+    res = cbsdk_init_trial_data(<uint32_t>instance, <int>reset_clock, &trialevent, &trialcont)
     handle_result(res)
 
-    if trialevent.count == 0 or trialcont.count == 0:
+    if trialevent.count == 0 and trialcont.count == 0:
         return res, trial_event, trial_cont
 
     cdef np.double_t[:] mxa_d_event, mxa_d_cont
@@ -424,9 +433,10 @@ def trial_data(int instance=0, bool reset=False):
 
         trialevent.waveforms[channel] = NULL
         dig_events = []
+        res = cbSdkGetChannelType(<uint32_t>instance, ch, &ch_type)
+        handle_result(res)
         # Fill values for non-empty digital or serial channels
-        if (ch == (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS + cbNUM_DIGIN_CHANS))\
-            or (ch == (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS + cbNUM_DIGIN_CHANS + cbNUM_SERIAL_CHANS)):
+        if (ch_type == cbhwlib_cbCHANTYPES.cbCHANTYPE_DIGIN) or (ch_type == cbhwlib_cbCHANTYPES.cbCHANTYPE_SERIAL):
             num_samples = trialevent.num_samples[channel][0]
             if num_samples:
                 if cfg_param.bDouble:
