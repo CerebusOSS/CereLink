@@ -213,13 +213,13 @@ void SdkApp::OnPktEvent(const cbPKT_GENERIC * const pPkt)
                 m_ED->write_index[ch] = new_write_index;
 
                 if (m_bPacketsEvent)
-                {	
+                {
                     m_lockGetPacketsEvent.lock();
                         if (pPkt->time > m_uTrialStartTime)
                         {
                             m_bPacketsEvent = FALSE;
                             m_waitPacketsEvent.wakeAll();
-                        }						
+                        }
                     m_lockGetPacketsEvent.unlock();
                 }
             }
@@ -281,14 +281,13 @@ void SdkApp::OnPktComment(const cbPKT_COMMENT * const pPkt)
                 m_CMT->write_index = new_write_index;
 
                 if (m_bPacketsCmt)
-                {	
-
+                {
                     m_lockGetPacketsCmt.lock();
                         if (pPkt->time > m_uTrialStartTime)
                         {
                             m_bPacketsCmt = FALSE;
                             m_waitPacketsCmt.wakeAll();
-                        }						
+                        }
                     m_lockGetPacketsCmt.unlock();
                 }
             }
@@ -328,14 +327,13 @@ void SdkApp::OnPktLog(const cbPKT_LOG * const pPkt)
                 m_CMT->write_index = new_write_index;
 
                 if (m_bPacketsCmt)
-                {	
-
+                {
                     m_lockGetPacketsCmt.lock();
                         if (pPkt->time > m_uTrialStartTime)
                         {
                             m_bPacketsCmt = FALSE;
                             m_waitPacketsCmt.wakeAll();
-                        }						
+                        }
                     m_lockGetPacketsCmt.unlock();
                 }
             }
@@ -425,14 +423,13 @@ void SdkApp::OnPktTrack(const cbPKT_VIDEOTRACK * const pPkt)
                 m_TR->write_index[id] = new_write_index;
 
                 if (m_bPacketsTrack)
-                {	
-
+                {
                     m_lockGetPacketsTrack.lock();
                         if (pPkt->time > m_uTrialStartTime)
                         {
                             m_bPacketsTrack = FALSE;
                             m_waitPacketsTrack.wakeAll();
-                        }						
+                        }
                     m_lockGetPacketsTrack.unlock();
                 }
             }
@@ -1086,7 +1083,7 @@ cbSdkResult SdkApp::unsetTrialConfig(cbSdkTrialType type)
     case CBSDKTRIAL_EVENTS:
         if (m_ED == NULL)
             return CBSDKRESULT_ERRCONFIG;
-		// TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
+        // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
         for (uint32_t i = 0; i < cbMAXCHANS; ++i)
         {
             if (m_ED->timestamps[i])
@@ -1468,8 +1465,8 @@ cbSdkResult SdkApp::SdkSetTrialConfig(uint32_t bActive, uint16_t begchan, uint32
             m_ED->size = uEvents;
             bool bErr = false;
             try {
-				// TODO: Go back to using cbNUM_ANALOG_CHANS + 2 once we have a ChIdxInType map
-				// for indexing m_ED while processing packets.
+                // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 once we have a ChIdxInType map
+                // for indexing m_ED while processing packets.
                 for (uint32_t i = 0; i < cbMAXCHANS; ++i)
                 {
                     m_ED->timestamps[i] = new uint32_t[m_ED->size];
@@ -1700,14 +1697,14 @@ cbSdkResult SdkApp::SdkGetChannelLabel(uint16_t channel, uint32_t * bValid, char
         for (int i = 0; i < 6; ++i)
             bValid[i] = 0;
         cbHOOP hoops[cbMAXUNITS][cbMAXHOOPS];
-		if (m_ChannelType[channel-1] == cbCHANTYPE_ANAIN)
+        if (m_ChannelType[channel-1] == cbCHANTYPE_ANAIN)
         {
             cbGetAinpSpikeHoops(channel, &hoops[0][0], m_nInstance);
             bValid[0] = IsSpikeProcessingEnabled(channel);
             for (int i = 0; i < cbMAXUNITS; ++i)
                 bValid[i + 1] = hoops[i][0].valid;
         }
-		else if ((m_ChannelType[channel - 1] == cbCHANTYPE_DIGIN) || (m_ChannelType[channel - 1] == cbCHANTYPE_SERIAL))
+        else if ((m_ChannelType[channel - 1] == cbCHANTYPE_DIGIN) || (m_ChannelType[channel - 1] == cbCHANTYPE_SERIAL))
         {
             uint32_t options;
             cbGetDinpOptions(channel, &options, NULL, m_nInstance);
@@ -1773,24 +1770,24 @@ CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(uint32_t nInstance,
 
 cbSdkResult SdkApp::SdkGetChannelType(uint16_t channel, uint8_t * chType)
 {
-	if (m_instInfo == 0)
-		return CBSDKRESULT_CLOSED;
+    if (m_instInfo == 0)
+        return CBSDKRESULT_CLOSED;
 
-	*chType = m_ChannelType[channel - 1];
-	return CBSDKRESULT_SUCCESS;
+    *chType = m_ChannelType[channel - 1];
+    return CBSDKRESULT_SUCCESS;
 }
 
 CBSDKAPI    cbSdkResult cbSdkGetChannelType(uint32_t nInstance, uint16_t channel, uint8_t *chType)
 {
-	if (channel == 0 || channel > cbMAXCHANS)
-		return CBSDKRESULT_INVALIDCHANNEL;
-	if (chType == NULL)
-		return CBSDKRESULT_NULLPTR;
-	if (nInstance >= cbMAXOPEN)
-		return CBSDKRESULT_INVALIDPARAM;
-	if (g_app[nInstance] == NULL)
-		return CBSDKRESULT_CLOSED;
-	return g_app[nInstance]->SdkGetChannelType(channel, chType);
+    if (channel == 0 || channel > cbMAXCHANS)
+        return CBSDKRESULT_INVALIDCHANNEL;
+    if (chType == NULL)
+        return CBSDKRESULT_NULLPTR;
+    if (nInstance >= cbMAXOPEN)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (g_app[nInstance] == NULL)
+        return CBSDKRESULT_CLOSED;
+    return g_app[nInstance]->SdkGetChannelType(channel, chType);
 }
 
 // Author & Date:   Ehsan Azar     11 March 2011
@@ -1894,15 +1891,15 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
 
     if (trialevent)
     {
-		// TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
+        // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
         uint32_t read_end_index[cbMAXCHANS];
         uint32_t read_start_index[cbMAXCHANS];
         if (m_ED == NULL)
             return CBSDKRESULT_ERRCONFIG;
         
-		// Determine how many samples to copy on this iteration.
-		// We will copy the minimum among (write_index-write_start_index) and
-		// trialevent->num_samples which should correspond to the number of allocated samples.
+        // Determine how many samples to copy on this iteration.
+        // We will copy the minimum among (write_index-write_start_index) and
+        // trialevent->num_samples which should correspond to the number of allocated samples.
         memcpy(read_start_index, m_ED->write_start_index, sizeof(read_start_index));
         m_lockTrialEvent.lock();
         memcpy(read_end_index, m_ED->write_index, sizeof(read_end_index));
@@ -1912,7 +1909,7 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
         for (uint32_t ev_ix = 0; ev_ix < trialevent->count; ev_ix++)
         {
             uint16_t ch = trialevent->chan[ev_ix]; // channel number, 1-based
-			if ((m_ChannelType[ch - 1] != cbCHANTYPE_ANAIN) && (m_ChannelType[ch - 1] != cbCHANTYPE_DIGIN) && (m_ChannelType[ch - 1] != cbCHANTYPE_SERIAL))
+            if ((m_ChannelType[ch - 1] != cbCHANTYPE_ANAIN) && (m_ChannelType[ch - 1] != cbCHANTYPE_DIGIN) && (m_ChannelType[ch - 1] != cbCHANTYPE_SERIAL))
                 return CBSDKRESULT_INVALIDCHANNEL;
             // Ignore masked channels
             if (!m_bChannelMask[ch - 1])
@@ -1922,18 +1919,18 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
             }
 
             uint32_t read_index = m_ED->write_start_index[ch - 1];
-			int num_samples = read_end_index[ch - 1] - read_index;
+            int num_samples = read_end_index[ch - 1] - read_index;
             if (num_samples < 0)
                 num_samples += m_ED->size;
 
-			// We don't know for sure how many samples were allocated,
-			// but this is what the client application was told to allocate.
-			uint32_t num_allocated = 0;
-			for (int unit_ix = 0; unit_ix < cbMAXUNITS; unit_ix++)
-			{
-				num_allocated += trialevent->num_samples[ev_ix][unit_ix];
-			}
-			num_samples = std::min((uint32_t)num_samples, num_allocated);
+            // We don't know for sure how many samples were allocated,
+            // but this is what the client application was told to allocate.
+            uint32_t num_allocated = 0;
+            for (int unit_ix = 0; unit_ix < cbMAXUNITS; unit_ix++)
+            {
+                num_allocated += trialevent->num_samples[ev_ix][unit_ix];
+            }
+            num_samples = std::min((uint32_t)num_samples, num_allocated);
 
             uint32_t num_samples_unit[cbMAXUNITS + 1];  // To keep track of how many samples are copied per unit.
             memset(num_samples_unit, 0, sizeof(num_samples_unit));
@@ -1942,57 +1939,57 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
             {
                 uint16_t unit = m_ED->units[ch - 1][read_index];  // pktType for anain, or the first data value for dig/serial.
 
-				// For digital or serial data, 'unit' holds data, and is not indicating the unit number.
-				// So here we copy the data to trialevent->waveforms, then set unit to 0.
-				if ((m_ChannelType[ch - 1] == cbCHANTYPE_DIGIN) || (m_ChannelType[ch - 1] == cbCHANTYPE_SERIAL))
-				{
-					if (num_samples_unit[0] < trialevent->num_samples[ev_ix][0])
-					{
-						void * dataptr = trialevent->waveforms[ev_ix];
-						// Null means ignore
-						if (dataptr)
-						{
-							if (m_bTrialDouble)
-								*((double *)dataptr + num_samples_unit[0]) = unit;
-							else
-								*((uint16_t *)dataptr + num_samples_unit[0]) = unit;
-						}
-					}
-					unit = 0;
-				}
+                // For digital or serial data, 'unit' holds data, and is not indicating the unit number.
+                // So here we copy the data to trialevent->waveforms, then set unit to 0.
+                if ((m_ChannelType[ch - 1] == cbCHANTYPE_DIGIN) || (m_ChannelType[ch - 1] == cbCHANTYPE_SERIAL))
+                {
+                    if (num_samples_unit[0] < trialevent->num_samples[ev_ix][0])
+                    {
+                        void * dataptr = trialevent->waveforms[ev_ix];
+                        // Null means ignore
+                        if (dataptr)
+                        {
+                            if (m_bTrialDouble)
+                                *((double *)dataptr + num_samples_unit[0]) = unit;
+                            else
+                                *((uint16_t *)dataptr + num_samples_unit[0]) = unit;
+                        }
+                    }
+                    unit = 0;
+                }
 
-				// Timestamps
-				if (unit <= cbMAXUNITS + 1)     // remove noise unit. why?
-				{
-					if (num_samples_unit[unit] < trialevent->num_samples[ev_ix][unit])
-					{
-						void * dataptr = trialevent->timestamps[ev_ix][unit];
-						// Null means ignore
-						if (dataptr)
-						{
-							uint32_t ts = m_ED->timestamps[ch - 1][read_index];
-							// If time wraps or due to reset, time will restart amidst trial
-							if (!m_bTrialAbsolute && ts >= prevStartTime)
-								ts -= prevStartTime;
-							if (m_bTrialDouble)
-								*((double *)dataptr + num_samples_unit[unit]) = cbSdk_SECONDS_PER_TICK * ts;
-							else
-								*((uint32_t *)dataptr + num_samples_unit[unit]) = ts;
-						}
-						num_samples_unit[unit]++;
-						
-						// Increment the read index.
-						read_index++;
-						if (read_index >= m_ED->size)
-							read_index = 0;
-					} 
+                // Timestamps
+                if (unit <= cbMAXUNITS + 1)     // remove noise unit. why?
+                {
+                    if (num_samples_unit[unit] < trialevent->num_samples[ev_ix][unit])
+                    {
+                        void * dataptr = trialevent->timestamps[ev_ix][unit];
+                        // Null means ignore
+                        if (dataptr)
+                        {
+                            uint32_t ts = m_ED->timestamps[ch - 1][read_index];
+                            // If time wraps or due to reset, time will restart amidst trial
+                            if (!m_bTrialAbsolute && ts >= prevStartTime)
+                                ts -= prevStartTime;
+                            if (m_bTrialDouble)
+                                *((double *)dataptr + num_samples_unit[unit]) = cbSdk_SECONDS_PER_TICK * ts;
+                            else
+                                *((uint32_t *)dataptr + num_samples_unit[unit]) = ts;
+                        }
+                        num_samples_unit[unit]++;
+                        
+                        // Increment the read index.
+                        read_index++;
+                        if (read_index >= m_ED->size)
+                            read_index = 0;
+                    } 
                 }
             }
             
-			// retrieved number of samples
+            // retrieved number of samples
             memcpy(trialevent->num_samples[ev_ix], num_samples_unit, sizeof(num_samples_unit));
             
-			// Flush the buffer and start a new 'trial'...
+            // Flush the buffer and start a new 'trial'...
             if (bActive)
                 read_start_index[ch - 1] = read_index;
         }
@@ -2231,7 +2228,7 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
             m_bPacketsEvent = TRUE;
             m_lockGetPacketsEvent.unlock();
 
-			// TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
+            // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
             uint32_t read_end_index[cbMAXCHANS];
             // Take a snapshot of the current write pointer
             m_lockTrialEvent.lock();
@@ -2315,7 +2312,7 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
             // Wait for packets to come in
             m_lockGetPacketsCmt.lock();
             m_bPacketsCmt = TRUE;
-            m_waitPacketsCmt.wait(&m_lockGetPacketsCmt, 250);		
+            m_waitPacketsCmt.wait(&m_lockGetPacketsCmt, 250);
             m_lockGetPacketsCmt.unlock();
 
             // Take a snapshot of the current write pointer
@@ -2353,7 +2350,7 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
             // Wait for packets to come in
             m_lockGetPacketsTrack.lock();
             m_bPacketsTrack = TRUE;
-            m_waitPacketsTrack.wait(&m_lockGetPacketsTrack, 250);		
+            m_waitPacketsTrack.wait(&m_lockGetPacketsTrack, 250);
             m_lockGetPacketsTrack.unlock();
 
             // Take a snapshot of the current write pointer
@@ -3995,7 +3992,7 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
 
     // This callback type needs to be bound only once
     LateBindCallback(CBSDKCALLBACK_ALL);
-	bool b_checkEvent = false;
+    bool b_checkEvent = false;
 
     // check for configuration class packets
     if (pPkt->chid & cbPKTCHAN_CONFIGURATION)
@@ -4128,48 +4125,48 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 m_pLateCallback[CBSDKCALLBACK_CONTINUOUS](m_nInstance, cbSdkPkt_CONTINUOUS, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_CONTINUOUS]);
         }
     }
-	// check for channel event packets cerebus channels 1-272
-	else if (m_ChannelType[pPkt->chid-1] == cbCHANTYPE_ANAIN) // channels are 1-based, m_ChannelType is 0-based.
-	{
-		if (m_bChannelMask[pPkt->chid - 1])
-		{
-			b_checkEvent = true;
-			if (m_pLateCallback[CBSDKCALLBACK_ALL])
-				m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_SPIKE, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
-			// Late bind before usage
-			LateBindCallback(CBSDKCALLBACK_SPIKE);
-			if (m_pLateCallback[CBSDKCALLBACK_SPIKE])
-				m_pLateCallback[CBSDKCALLBACK_SPIKE](m_nInstance, cbSdkPkt_SPIKE, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_SPIKE]);
-		}
-	}
-	// catch digital input port events and save them as NSAS experiment event packets
-	else if (m_ChannelType[pPkt->chid - 1] == cbCHANTYPE_DIGIN)
-	{
-		if (m_bChannelMask[pPkt->chid - 1])
-		{
-			b_checkEvent = true;
-			if (m_pLateCallback[CBSDKCALLBACK_ALL])
-				m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_DIGITAL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
-			// Late bind before usage
-			LateBindCallback(CBSDKCALLBACK_DIGITAL);
-			if (m_pLateCallback[CBSDKCALLBACK_DIGITAL])
-				m_pLateCallback[CBSDKCALLBACK_DIGITAL](m_nInstance, cbSdkPkt_DIGITAL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_DIGITAL]);
-		}
-	}
-	// catch serial input port events and save them as NSAS experiment event packets
-	else if (m_ChannelType[pPkt->chid - 1] == cbCHANTYPE_SERIAL)
-	{
-		if (m_bChannelMask[pPkt->chid - 1])
-		{
-			b_checkEvent = true;
-			if (m_pLateCallback[CBSDKCALLBACK_ALL])
-				m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_SERIAL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
-			// Late bind before usage
-			LateBindCallback(CBSDKCALLBACK_SERIAL);
-			if (m_pLateCallback[CBSDKCALLBACK_SERIAL])
-				m_pLateCallback[CBSDKCALLBACK_SERIAL](m_nInstance, cbSdkPkt_SERIAL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_SERIAL]);
-		}
-	}
+    // check for channel event packets cerebus channels 1-272
+    else if (m_ChannelType[pPkt->chid-1] == cbCHANTYPE_ANAIN) // channels are 1-based, m_ChannelType is 0-based.
+    {
+        if (m_bChannelMask[pPkt->chid - 1])
+        {
+            b_checkEvent = true;
+            if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_SPIKE, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
+            // Late bind before usage
+            LateBindCallback(CBSDKCALLBACK_SPIKE);
+            if (m_pLateCallback[CBSDKCALLBACK_SPIKE])
+                m_pLateCallback[CBSDKCALLBACK_SPIKE](m_nInstance, cbSdkPkt_SPIKE, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_SPIKE]);
+        }
+    }
+    // catch digital input port events and save them as NSAS experiment event packets
+    else if (m_ChannelType[pPkt->chid - 1] == cbCHANTYPE_DIGIN)
+    {
+        if (m_bChannelMask[pPkt->chid - 1])
+        {
+            b_checkEvent = true;
+            if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_DIGITAL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
+            // Late bind before usage
+            LateBindCallback(CBSDKCALLBACK_DIGITAL);
+            if (m_pLateCallback[CBSDKCALLBACK_DIGITAL])
+                m_pLateCallback[CBSDKCALLBACK_DIGITAL](m_nInstance, cbSdkPkt_DIGITAL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_DIGITAL]);
+        }
+    }
+    // catch serial input port events and save them as NSAS experiment event packets
+    else if (m_ChannelType[pPkt->chid - 1] == cbCHANTYPE_SERIAL)
+    {
+        if (m_bChannelMask[pPkt->chid - 1])
+        {
+            b_checkEvent = true;
+            if (m_pLateCallback[CBSDKCALLBACK_ALL])
+                m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_SERIAL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
+            // Late bind before usage
+            LateBindCallback(CBSDKCALLBACK_SERIAL);
+            if (m_pLateCallback[CBSDKCALLBACK_SERIAL])
+                m_pLateCallback[CBSDKCALLBACK_SERIAL](m_nInstance, cbSdkPkt_SERIAL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_SERIAL]);
+        }
+    }
     
     // save the timestamp to overcome the case where the reset button is pressed
     // (or recording started) which resets the timestamp to 0, but Central doesn't

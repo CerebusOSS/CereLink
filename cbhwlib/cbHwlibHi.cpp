@@ -84,46 +84,46 @@ bool IsRawProcessingEnabled(uint32_t nChan, uint32_t nInstance)
 // TRUE means yes; FALSE, no
 bool IsChanAnyDigIn(uint32_t dwChan, uint32_t nInstance)
 {
-	uint32_t dwChanCaps;
-	bool result;
+    uint32_t dwChanCaps;
+    bool result;
 
-	result = dwChan >= MIN_CHANS;
-	result &= cbGetChanCaps(dwChan, &dwChanCaps, nInstance) == cbRESULT_OK;
-	result &= (dwChanCaps & cbCHAN_DINP) == cbCHAN_DINP;
-	return result;
+    result = dwChan >= MIN_CHANS;
+    result &= cbGetChanCaps(dwChan, &dwChanCaps, nInstance) == cbRESULT_OK;
+    result &= (dwChanCaps & cbCHAN_DINP) == cbCHAN_DINP;
+    return result;
 }
 
 
 // TRUE means yes; FALSE, no
 bool IsChanSerial(uint32_t dwChan, uint32_t nInstance)
 {
-	uint32_t dwDiginCaps;
-	bool result = IsChanAnyDigIn(dwChan, nInstance);
-	result &= cbGetDinpCaps(dwChan, &dwDiginCaps, nInstance) == cbRESULT_OK;
-	result &= (dwDiginCaps & cbDINP_SERIALMASK) == cbDINP_SERIALMASK;
-	return result;
+    uint32_t dwDiginCaps;
+    bool result = IsChanAnyDigIn(dwChan, nInstance);
+    result &= cbGetDinpCaps(dwChan, &dwDiginCaps, nInstance) == cbRESULT_OK;
+    result &= (dwDiginCaps & cbDINP_SERIALMASK) == cbDINP_SERIALMASK;
+    return result;
 }
 
 
 // TRUE means yes; FALSE, no
 bool IsChanDigin(uint32_t dwChan, uint32_t nInstance)
 {
-	uint32_t dwDiginCaps;
-	bool result = IsChanAnyDigIn(dwChan, nInstance);
-	result &= cbGetDinpCaps(dwChan, &dwDiginCaps, nInstance) == cbRESULT_OK;
-	result &= (dwDiginCaps & cbDINP_SERIALMASK) != cbDINP_SERIALMASK;
-	return result;
+    uint32_t dwDiginCaps;
+    bool result = IsChanAnyDigIn(dwChan, nInstance);
+    result &= cbGetDinpCaps(dwChan, &dwDiginCaps, nInstance) == cbRESULT_OK;
+    result &= (dwDiginCaps & cbDINP_SERIALMASK) != cbDINP_SERIALMASK;
+    return result;
 }
 
 bool IsChanDigout(uint32_t dwChan, uint32_t nInstance)
 {
-	uint32_t dwChanCaps;
-	bool result;
+    uint32_t dwChanCaps;
+    bool result;
 
-	result = dwChan >= MIN_CHANS;
-	result &= cbGetChanCaps(dwChan, &dwChanCaps, nInstance) == cbRESULT_OK;
-	result &= (dwChanCaps & cbCHAN_DOUT) == cbCHAN_DOUT;
-	return result;
+    result = dwChan >= MIN_CHANS;
+    result &= cbGetChanCaps(dwChan, &dwChanCaps, nInstance) == cbRESULT_OK;
+    result &= (dwChanCaps & cbCHAN_DOUT) == cbCHAN_DOUT;
+    return result;
 }
 
 
@@ -132,13 +132,13 @@ bool IsChanDigout(uint32_t dwChan, uint32_t nInstance)
 // Input:   nChannel - the channel ID that we want to check
 bool IsChanAnalogIn(uint32_t dwChan, uint32_t nInstance)
 {
-	uint32_t dwChanCaps;
-	bool result;
+    uint32_t dwChanCaps;
+    bool result;
 
-	result = dwChan >= MIN_CHANS;
-	result &= cbGetChanCaps(dwChan, &dwChanCaps, nInstance) == cbRESULT_OK;
-	result &= (dwChanCaps & cbCHAN_AINP) == cbCHAN_AINP;
-	return result;
+    result = dwChan >= MIN_CHANS;
+    result &= cbGetChanCaps(dwChan, &dwChanCaps, nInstance) == cbRESULT_OK;
+    result &= (dwChanCaps & cbCHAN_AINP) == cbCHAN_AINP;
+    return result;
 }
 
 
@@ -147,12 +147,12 @@ bool IsChanAnalogIn(uint32_t dwChan, uint32_t nInstance)
 // Input:   nChannel - the channel ID that we want to check
 bool IsChanFEAnalogIn(uint32_t dwChan, uint32_t nInstance)
 {
-	bool result = IsChanAnalogIn(dwChan, nInstance);
-	result &= dwChan <= MAX_CHANS_FRONT_END;  // TODO: This is not consistent on single vs double NSP systems.
-	// uint32_t dwAinpCaps;
-	// result &= cbGetAinpCaps(dwChan, &dwAinpCaps, nullptr, nullptr, nInstance);
-	// result &= (dwAinpCaps & cbAINP_??) == cbAINP_??;
-	return result;
+    bool result = IsChanAnalogIn(dwChan, nInstance);
+    result &= dwChan <= MAX_CHANS_FRONT_END;  // TODO: This is not consistent on single vs double NSP systems.
+    // uint32_t dwAinpCaps;
+    // result &= cbGetAinpCaps(dwChan, &dwAinpCaps, nullptr, nullptr, nInstance);
+    // result &= (dwAinpCaps & cbAINP_??) == cbAINP_??;
+    return result;
 }
 
 

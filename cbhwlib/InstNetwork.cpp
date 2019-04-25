@@ -151,9 +151,9 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                     if (chan > 0 && chan <= cbMAXCHANS)
                     {
                         memcpy(&(cb_cfg_buffer_ptr[m_nIdx]->chaninfo[chan - 1]), pPkt, sizeof(cbPKT_CHANINFO));
-						// Invalidate the cache
+                        // Invalidate the cache
                         if ((pPkt->type == cbPKTTYPE_CHANREP) && (m_ChannelType[chan - 1] == cbCHANTYPE_ANAIN))
-							cb_spk_buffer_ptr[m_nIdx]->cache[chan - 1].valid = 0;
+                            cb_spk_buffer_ptr[m_nIdx]->cache[chan - 1].valid = 0;
                     }
                 }
             }
@@ -354,12 +354,12 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 {
                     const cbPKT_AOUT_WAVEFORM * pPktAoutWave = reinterpret_cast<const cbPKT_AOUT_WAVEFORM *>(pPkt);
                     uint16_t nChan = pPktAoutWave->chan;
-					if ((m_ChannelType[nChan-1] == cbCHANTYPE_ANAOUT) || (m_ChannelType[nChan - 1] == cbCHANTYPE_AUDOUT))
-					{
-						uint8_t trigNum = pPktAoutWave->trigNum;
-						if (trigNum < cbMAX_AOUT_TRIGGER)
-							cb_cfg_buffer_ptr[m_nIdx]->isWaveform[nChan][trigNum] = *pPktAoutWave;
-					}
+                    if ((m_ChannelType[nChan-1] == cbCHANTYPE_ANAOUT) || (m_ChannelType[nChan - 1] == cbCHANTYPE_AUDOUT))
+                    {
+                        uint8_t trigNum = pPktAoutWave->trigNum;
+                        if (trigNum < cbMAX_AOUT_TRIGGER)
+                            cb_cfg_buffer_ptr[m_nIdx]->isWaveform[nChan][trigNum] = *pPktAoutWave;
+                    }
                 }
             }
             else if (pPkt->type == cbPKTTYPE_NPLAYREP)
@@ -745,27 +745,27 @@ void InstNetwork::run()
     m_runlevel = cbRUNLEVEL_SHUTDOWN;
     m_bDone = false;
 
-	// Determine the channel type for each channel.
-	for (uint32_t ch_ix = 0; ch_ix < cbMAXCHANS; ch_ix++)
-	{
-		uint32_t chancaps;
-		cbRESULT res = cbGetChanCaps(ch_ix + 1, &chancaps, m_nInstance);
-		if ((chancaps & cbCHAN_AINP) == cbCHAN_AINP)
-			m_ChannelType[ch_ix] = cbCHANTYPE_ANAIN;
-		else if ((chancaps & cbCHAN_AOUT) == cbCHAN_AOUT)
-			m_ChannelType[ch_ix] = cbCHANTYPE_ANAOUT;
-		else if ((chancaps & cbCHAN_DINP) == cbCHAN_DINP)
-		{
-			uint32_t diginCaps;
-			res = cbGetDinpCaps(ch_ix + 1, &diginCaps, m_nInstance);
-			if (diginCaps & cbDINP_SERIALMASK)
-				m_ChannelType[ch_ix] = cbCHANTYPE_SERIAL;
-			else
-				m_ChannelType[ch_ix] = cbCHANTYPE_DIGIN;
-		}
-		else if ((chancaps & cbCHAN_DOUT) == cbCHAN_DOUT)
-			m_ChannelType[ch_ix] = cbCHANTYPE_DIGOUT;
-	}
+    // Determine the channel type for each channel.
+    for (uint32_t ch_ix = 0; ch_ix < cbMAXCHANS; ch_ix++)
+    {
+        uint32_t chancaps;
+        cbRESULT res = cbGetChanCaps(ch_ix + 1, &chancaps, m_nInstance);
+        if ((chancaps & cbCHAN_AINP) == cbCHAN_AINP)
+            m_ChannelType[ch_ix] = cbCHANTYPE_ANAIN;
+        else if ((chancaps & cbCHAN_AOUT) == cbCHAN_AOUT)
+            m_ChannelType[ch_ix] = cbCHANTYPE_ANAOUT;
+        else if ((chancaps & cbCHAN_DINP) == cbCHAN_DINP)
+        {
+            uint32_t diginCaps;
+            res = cbGetDinpCaps(ch_ix + 1, &diginCaps, m_nInstance);
+            if (diginCaps & cbDINP_SERIALMASK)
+                m_ChannelType[ch_ix] = cbCHANTYPE_SERIAL;
+            else
+                m_ChannelType[ch_ix] = cbCHANTYPE_DIGIN;
+        }
+        else if ((chancaps & cbCHAN_DOUT) == cbCHAN_DOUT)
+            m_ChannelType[ch_ix] = cbCHANTYPE_DIGOUT;
+    }
 
     // If stand-alone setup network packet handling timer
     if (m_bStandAlone)

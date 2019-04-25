@@ -261,7 +261,7 @@ typedef void (* cbSdkCallback)(uint32_t nInstance, const cbSdkPktType type, cons
 /// Trial spike events
 typedef struct _cbSdkTrialEvent
 {
-	// TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
+    // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
     uint16_t count; ///< Number of valid channels in this trial (up to cbNUM_ANALOG_CHANS+2)
     uint16_t chan[cbMAXCHANS]; ///< channel numbers (1-based)
     uint32_t num_samples[cbMAXCHANS][cbMAXUNITS + 1]; ///< number of samples
@@ -277,9 +277,9 @@ typedef struct _cbSdkConnection
         nInPort = cbNET_UDP_PORT_BCAST;
         nOutPort = cbNET_UDP_PORT_CNT;
         #ifdef __APPLE__
-			nRecBufSize = (6 * 1024 * 1024); // Despite setting kern.ipc.maxsockbuf=8388608, 8MB is still too much.
+            nRecBufSize = (6 * 1024 * 1024); // Despite setting kern.ipc.maxsockbuf=8388608, 8MB is still too much.
         #else
-			nRecBufSize = (8 * 1024 * 1024); // 8MB default needed for best performance
+            nRecBufSize = (8 * 1024 * 1024); // 8MB default needed for best performance
         #endif
         szInIP = "";
         szOutIP = "";
@@ -401,7 +401,7 @@ typedef enum _cbSdkExtCmdType
     cbSdkExtCmd_RPC = 0,    // RPC command
     cbSdkExtCmd_UPLOAD,     // Upload the file
     cbSdkExtCmd_TERMINATE,  // Signal last RPC command to terminate
-    cbSdkExtCmd_INPUT,		// Input to RPC command
+    cbSdkExtCmd_INPUT,      // Input to RPC command
     cbSdkExtCmd_END_PLUGIN, // Signal to end plugin
     cbSdkExtCmd_NSP_REBOOT, // Restart the NSP
 } cbSdkExtCmdType;
@@ -467,7 +467,7 @@ CBSDKAPI    cbSdkResult cbSdkGetChannelLabel(uint32_t nInstance, uint16_t channe
 CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(uint32_t nInstance, uint16_t channel, const char * label, uint32_t userflags, int32_t * position); // Set channel label
 
 /*! Get channel type */
-CBSDKAPI	cbSdkResult cbSdkGetChannelType(uint32_t nInstance, uint16_t channel, uint8_t* ch_type);
+CBSDKAPI    cbSdkResult cbSdkGetChannelType(uint32_t nInstance, uint16_t channel, uint8_t* ch_type);
 
 /*! Retrieve data of a trial (NULL means ignore), user should allocate enough buffers beforehand, and trial should not be closed during this call */
 CBSDKAPI    cbSdkResult cbSdkGetTrialData(uint32_t nInstance,
