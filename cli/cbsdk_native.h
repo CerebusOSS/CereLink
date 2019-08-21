@@ -38,7 +38,10 @@ public:
 	void TransferData(uint32_t* timestamp = NULL);
 	void GetData(int16_t* buffer, int chan_idx);  // copy
 	void GetData(double* buffer, int chan_idx);  // copy
-	
+	bool SetFileStorage(char* file_name, char* file_comment, bool* bStart);
+	void SetPatientInfo(char* ID, char* f_name, char* l_name, uint32_t DOB_month, uint32_t DOB_day, uint32_t DOB_year);
+	bool GetIsRecording();
+
 private:
 	int32_t m_instance;
 	CbSdkConfigParam cfg;
@@ -66,4 +69,7 @@ extern "C"
 	__declspec(dllexport) void CbSdkNative_GetDataInt(CbSdkNative* pCbSdk, int16_t* buffer, int chan_idx);
 	__declspec(dllexport) void CbSdkNative_GetDataDouble(CbSdkNative* pCbSdk, double* buffer, int chan_idx);
 	__declspec(dllexport) void CbSdkNative_Delete(CbSdkNative* pCbSdk);
+	__declspec(dllexport) bool CbSdkNative_SetFileStorage(CbSdkNative* pCbSdk, char* file_name, char* file_comment, bool* bStart);
+	__declspec(dllexport) void CbSdkNative_SetPatientInfo(CbSdkNative* pCbSdk, char* ID, char* f_name, char* l_name, uint32_t DOB_month, uint32_t DOB_day, uint32_t DOB_year );
+	__declspec(dllexport) bool CbSdkNative_GetIsRecording(CbSdkNative* pCbSdk);
 }

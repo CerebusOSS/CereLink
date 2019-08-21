@@ -134,6 +134,42 @@ void CbSdkNative::GetData(double* buffer, int chan_idx)
 	}
 }
 
+// Added by GD 2019-08-20. 
+bool CbSdkNative::SetFileStorage(char* file_name, char* file_comment, bool* bStart)
+{
+	// For some reason the script accepts an integer instead of a boolean. 
+	uint32_t iStart = bStart?1:0; 
+
+	cbSdkResult res = cbSdkSetFileConfig(m_instance, file_name, file_comment, iStart);
+	if (res == CBSDKRESULT_SUCCESS)
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+void CbSdkNative::SetPatientInfo(char* ID, char* f_name, char* l_name, uint32_t DOB_month, uint32_t DOB_day, uint32_t DOB_year )
+{
+	cbSdkResult res = cbSdkSetPatientInfo(m_instance, ID, f_name, l_name, DOB_month, DOB_day, DOB_year);
+}
+
+bool CbSdkNative::GetIsRecording()
+{
+	bool* bIsRecording; 
+	char filename[256];
+	char username[256];
+	cbSdkResult res = cbSdkGetFileConfig(m_instance, filename, username, bIsRecording);
+	if (res == CBSDKRESULT_SUCCESS && *(bIsRecording)==true)
+		return true;
+	else
+		return false; 
+}
+
+
+
 CbSdkNative* CbSdkNative_Create(uint32_t nInstance, int inPort, int outPort, int bufsize, const char* inIP, const char* outIP, bool use_double)
 {
 	return new CbSdkNative(nInstance, inPort, outPort, bufsize, inIP, outIP, use_double);
@@ -189,3 +225,35 @@ void CbSdkNative_Delete(CbSdkNative* pCbSdk) {
 		pCbSdk = NULL;
 	}
 }
+
+
+// To set the File Storage settings of the Central suite. 
+// return true if OK; False if error; 
+bool CbSdkNative_SetFileStorage(CbSdkNative* pCbSdk, char* file_name, char* file_comment, bool* bStart)
+{
+	if (pCbSdk != NULL)
+	{
+		return pCbSdk->SetFileStorage(file_name, file_comment, bStart);
+	}
+	else
+	{
+		return false;
+	}
+
+}
+
+void CbSdkNative_SetPatientInfo(CbSdkNative* pCbSdk, char* patient_ID, char* first_name, char* last_name, uint32_t DOB_month, uint32_t DOB_day, uint32_t DOB_year)
+{
+	if (pCbSdk != NULL)
+		pCbSdk->SetPatientInfo(patient_ID, first_name, last_name, DOB_month, DOB_day, DOB_year);
+
+}
+
+bool CbSdkNative_GetIsRecording(CbSdkNative* pCbSdk)
+{
+	if (pCbSdk != NULL)
+		return pCbSdk->GetIsRecording();
+	else
+		return false; 
+}
+
