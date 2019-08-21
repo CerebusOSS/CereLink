@@ -141,14 +141,7 @@ bool CbSdkNative::SetFileStorage(char* file_name, char* file_comment, bool* bSta
 	uint32_t iStart = bStart?1:0; 
 
 	cbSdkResult res = cbSdkSetFileConfig(m_instance, file_name, file_comment, iStart);
-	if (res == CBSDKRESULT_SUCCESS)
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
+	return (res == CBSDKRESULT_SUCCESS);
 }
 
 void CbSdkNative::SetPatientInfo(char* ID, char* f_name, char* l_name, uint32_t DOB_month, uint32_t DOB_day, uint32_t DOB_year )
@@ -159,11 +152,11 @@ void CbSdkNative::SetPatientInfo(char* ID, char* f_name, char* l_name, uint32_t 
 bool CbSdkNative::GetIsRecording()
 {
 	bool* bIsRecording; 
-	char filename[256];
+	char filename[256]; // Could be added to the return. 
 	char username[256];
 	cbSdkResult res = cbSdkGetFileConfig(m_instance, filename, username, bIsRecording);
-	if (res == CBSDKRESULT_SUCCESS && *(bIsRecording)==true)
-		return true;
+	if (res == CBSDKRESULT_SUCCESS)
+		return  *(bIsRecording);
 	else
 		return false; 
 }
@@ -232,13 +225,9 @@ void CbSdkNative_Delete(CbSdkNative* pCbSdk) {
 bool CbSdkNative_SetFileStorage(CbSdkNative* pCbSdk, char* file_name, char* file_comment, bool* bStart)
 {
 	if (pCbSdk != NULL)
-	{
 		return pCbSdk->SetFileStorage(file_name, file_comment, bStart);
-	}
 	else
-	{
 		return false;
-	}
 
 }
 
