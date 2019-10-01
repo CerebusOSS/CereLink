@@ -25,7 +25,7 @@ namespace SimpleClient
             {
                 for (int fetch_ix = 0; fetch_ix < 5; fetch_ix++)
                 {
-                    conn.SetComment("TestCSharp fetch", 255, 1);
+                    conn.SetComment("TestCSharp fetch", 255, 0, 0, 0);
                     short[][] result = conn.FetchData();
                     Console.WriteLine("Returned {0} chans.", result.Length);
                     for (int chan_ix = 0; chan_ix < result.Length; chan_ix++)

@@ -3281,7 +3281,7 @@ cbSdkResult SdkApp::SdkSetComment(uint32_t rgba, uint8_t charset, const char * c
 }
 
 /// sdk stub for SdkApp::SdkSetComment
-CBSDKAPI    cbSdkResult cbSdkSetComment(uint32_t nInstance, uint32_t rgba, uint8_t charset, const char * comment)
+CBSDKAPI    cbSdkResult cbSdkSetComment(uint32_t nInstance, uint32_t t_bgr, uint8_t charset, const char * comment)
 {
     if (comment)
     {
@@ -3293,7 +3293,7 @@ CBSDKAPI    cbSdkResult cbSdkSetComment(uint32_t nInstance, uint32_t rgba, uint8
     if (g_app[nInstance] == NULL)
         return CBSDKRESULT_CLOSED;
 
-    return g_app[nInstance]->SdkSetComment(rgba, charset, comment);
+    return g_app[nInstance]->SdkSetComment(t_bgr, charset, comment);
 }
 
 // Author & Date:   Ehsan Azar     3 March 2011

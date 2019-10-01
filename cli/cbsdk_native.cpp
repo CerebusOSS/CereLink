@@ -74,13 +74,11 @@ bool CbSdkNative::GetIsDouble()
 	return cfg.bDouble;
 }
 
-void CbSdkNative::SetComment(std::string comment, uint32_t rgba, uint8_t charset)
+void CbSdkNative::SetComment(std::string comment, uint32_t t_bgr, uint8_t charset)
 {
-    //uint32_t rgba = (rgba_tuple[0] << 24) + (rgba_tuple[1] << 16) + (rgba_tuple[2] << 8) + rgba_tuple[3];
+    //uint32_t t_bgr = (transparency << 24) + (blue << 16) + (green << 8) + red;
     //uint8_t charset = 0  // Character set(0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI);
-    //bytes py_bytes = comment_string.encode();
-    //const char* comment = py_bytes;
-    cbSdkResult res = cbSdkSetComment(m_instance, rgba, charset, comment.c_str());
+    cbSdkResult res = cbSdkSetComment(m_instance, t_bgr, charset, comment.c_str());
 }
 
 /*
@@ -204,10 +202,11 @@ bool CbSdkNative_GetIsOnline(CbSdkNative* pCbSdk)
 
 //rgba: (red << 24) + (green << 16) + (blue << 8) + alpha
 //charset: 0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI
-void CbSdkNative_SetComment(CbSdkNative* pCbSdk, const char* comment, uint32_t rgba, uint8_t charset)
+void CbSdkNative_SetComment(CbSdkNative* pCbSdk, const char* comment, uint8_t red, uint8_t green, uint8_t blue, uint8_t charset)
 {
+    uint32_t t_bgr = (blue << 16) + (green << 8) + (red);
     if (pCbSdk != NULL)
-        pCbSdk->SetComment(comment, rgba, charset);
+        pCbSdk->SetComment(comment, t_bgr, charset);
 }
 
 /*

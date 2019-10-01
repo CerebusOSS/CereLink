@@ -51,7 +51,7 @@ namespace CereLink
         private static extern bool CbSdkNative_GetIsOnline(IntPtr pCbSdk);
 
         [DllImport("cbsdk_ext")]
-        private static extern void CbSdkNative_SetComment(IntPtr pCbSdk, String comment, UInt32 rgba, int charset);
+        private static extern void CbSdkNative_SetComment(IntPtr pCbSdk, String comment, byte red, byte green, byte blue, int charset);
 
         [DllImport("cbsdk_ext")]
         private static extern void CbSdkNative_PrefetchData(IntPtr pCbSdk, ref UInt16 chan_count, UInt32[] samps_per_chan, UInt16[] chan_numbers);
@@ -90,11 +90,10 @@ namespace CereLink
             return CbSdkNative_GetIsOnline(pNative);
         }
 
-        // rgba: (red << 24) + (green << 16) + (blue << 8) + alpha
         // charset: (0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI)
-        public void SetComment(String comment, UInt32 rgba, int charset)
+        public void SetComment(String comment, byte red, byte green, byte blue, int charset)
         {
-            CbSdkNative_SetComment(pNative, comment, rgba, charset);
+            CbSdkNative_SetComment(pNative, comment, red, green, blue, charset);
         }
 
         public Int16[][] FetchData()

@@ -871,12 +871,13 @@ def get_sample_group(int group_ix, int instance=0):
 
 
 def set_comment(comment_string, rgba_tuple=(0, 0, 0, 255), int instance=0):
+    """rgba_tuple is actually t_bgr: transparency, blue, green, red. Default: no-transparency & red."""
     cdef cbSdkResult res
-    cdef uint32_t rgba = (rgba_tuple[0] << 24) + (rgba_tuple[1] << 16) + (rgba_tuple[2] << 8) + rgba_tuple[3]
+    cdef uint32_t t_bgr = (rgba_tuple[0] << 24) + (rgba_tuple[1] << 16) + (rgba_tuple[2] << 8) + rgba_tuple[3]
     cdef uint8_t charset = 0  # Character set (0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI)
     cdef bytes py_bytes = comment_string.encode()
     cdef const char* comment = py_bytes
-    res = cbSdkSetComment(<uint32_t> instance, rgba, charset, comment)
+    res = cbSdkSetComment(<uint32_t> instance, t_bgr, charset, comment)
 
 
 def get_sys_config(int instance=0):

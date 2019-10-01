@@ -307,7 +307,7 @@ typedef struct _cbSdkTrialComment
 {
     uint16_t num_samples; ///< Number of comments
     uint8_t * charsets;   ///< Buffer to hold character sets
-    uint32_t * rgbas;     ///< Buffer to hold rgba values
+    uint32_t * rgbas;     ///< Buffer to hold rgba values (actually tbgr)
     uint8_t * * comments; ///< Pointer to comments
     void * timestamps;  ///< Buffer to hold time stamps
 } cbSdkTrialComment;
@@ -515,7 +515,8 @@ CBSDKAPI    cbSdkResult cbSdkSetAnalogOutput(uint32_t nInstance, uint16_t channe
 CBSDKAPI    cbSdkResult cbSdkSetChannelMask(uint32_t nInstance, uint16_t channel, uint32_t bActive);
 
 /*! Send a comment or custom event */
-CBSDKAPI    cbSdkResult cbSdkSetComment(uint32_t nInstance, uint32_t rgba, uint8_t charset, const char * comment = NULL);
+// @param[in] t_bgr (transparency << 24) + (blue << 16) + (green << 8) + red
+CBSDKAPI    cbSdkResult cbSdkSetComment(uint32_t nInstance, uint32_t t_bgr, uint8_t charset, const char * comment = NULL);
 
 /*! Send a full channel configuration packet */
 CBSDKAPI    cbSdkResult cbSdkSetChannelConfig(uint32_t nInstance, uint16_t channel, cbPKT_CHANINFO * chaninfo);
