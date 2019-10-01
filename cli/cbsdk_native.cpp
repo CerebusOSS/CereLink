@@ -5,10 +5,11 @@
 
 struct my_cbSdkTrialEvent : public cbSdkTrialEvent {};
 struct my_cbSdkTrialCont : public cbSdkTrialCont {};
+struct my_cbSdkTrialComment : public cbSdkTrialComment {};
 
 
 CbSdkNative::CbSdkNative(uint32_t nInstance, int inPort, int outPort, int bufsize, std::string inIP, std::string outIP, bool use_double)
-	:p_trialEvent(new my_cbSdkTrialEvent()), p_trialCont(new my_cbSdkTrialCont)
+	:p_trialEvent(new my_cbSdkTrialEvent()), p_trialCont(new my_cbSdkTrialCont), p_trialComment(new my_cbSdkTrialComment)
 {
 	m_instance = nInstance;
 	cbSdkConnection con = cbSdkConnection();
@@ -72,6 +73,23 @@ bool CbSdkNative::GetIsDouble()
 {
 	return cfg.bDouble;
 }
+
+void CbSdkNative::SetComment(std::string comment, uint32_t rgba, uint8_t charset)
+{
+    //uint32_t rgba = (rgba_tuple[0] << 24) + (rgba_tuple[1] << 16) + (rgba_tuple[2] << 8) + rgba_tuple[3];
+    //uint8_t charset = 0  // Character set(0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI);
+    //bytes py_bytes = comment_string.encode();
+    //const char* comment = py_bytes;
+    cbSdkResult res = cbSdkSetComment(m_instance, rgba, charset, comment.c_str());
+}
+
+/*
+bool CbSdkNative::GetComment()
+{
+    cbSdkResult sdkres = cbSdkInitTrialData(m_instance, 1, 0, 0, p_trialComment.get(), 0);
+    return (sdkres == CBSDKRESULT_SUCCESS);
+}
+*/
 
 CbSdkNative::CbSdkConfigParam CbSdkNative::FetchTrialConfig()
 {
@@ -151,12 +169,12 @@ void CbSdkNative::SetPatientInfo(char* ID, char* f_name, char* l_name, uint32_t 
 
 bool CbSdkNative::GetIsRecording()
 {
-	bool* bIsRecording; 
+	bool bIsRecording = false;
 	char filename[256]; // Could be added to the return. 
 	char username[256];
-	cbSdkResult res = cbSdkGetFileConfig(m_instance, filename, username, bIsRecording);
+	cbSdkResult res = cbSdkGetFileConfig(m_instance, filename, username, &bIsRecording);
 	if (res == CBSDKRESULT_SUCCESS)
-		return  *(bIsRecording);
+		return  bIsRecording;
 	else
 		return false; 
 }
@@ -165,6 +183,7 @@ bool CbSdkNative::GetIsRecording()
 
 CbSdkNative* CbSdkNative_Create(uint32_t nInstance, int inPort, int outPort, int bufsize, const char* inIP, const char* outIP, bool use_double)
 {
+    //inIP and outIP get auto-cast to std::string
 	return new CbSdkNative(nInstance, inPort, outPort, bufsize, inIP, outIP, use_double);
 }
 
@@ -182,6 +201,24 @@ bool CbSdkNative_GetIsOnline(CbSdkNative* pCbSdk)
 	else
 		return false;
 }
+
+//rgba: (red << 24) + (green << 16) + (blue << 8) + alpha
+//charset: 0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI
+void CbSdkNative_SetComment(CbSdkNative* pCbSdk, const char* comment, uint32_t rgba, uint8_t charset)
+{
+    if (pCbSdk != NULL)
+        pCbSdk->SetComment(comment, rgba, charset);
+}
+
+/*
+bool CbSdkNative_GetComment(CbSdkNative* pCbSdk)
+{
+    if (pCbSdk != NULL)
+        return pCbSdk->GetComment();
+    else
+        return false;
+}
+*/
 
 void CbSdkNative_PrefetchData(CbSdkNative* pCbSdk, uint16_t &chan_count, uint32_t* samps_per_chan, uint16_t* chan_numbers)
 {
