@@ -312,7 +312,8 @@ def trial_continuous(int instance=0, bool reset=False):
                set True to clear all the data and reset the trial time to the current time.
        instance - (optional) library instance number
     Outputs:
-       list of the form [channel, continuous_array]
+       res   - result code
+       trial - list of the form [channel, continuous_array]
            channel: integer, channel number (1-based)
            continuous_array: array, continuous values for channel)
     '''
