@@ -36,6 +36,7 @@ option(BUILD_STATIC "Build static cbsdk library" ON)
 option(BUILD_CBMEX "Build Matlab wrapper" ON)
 option(BUILD_CBOCT "Build Octave wrapper" ON)
 option(BUILD_TEST "Build testcbsdk" ON)
+option(BUILD_TEST_COMMENTS "Build test_comments" ON)
 option(BUILD_HDF5 "Build HDF5" ON)
 
 ##########################################################################################
@@ -46,6 +47,7 @@ SET( LIB_NAME_STATIC cbsdk_static )
 SET( LIB_NAME_CBMEX cbmex )
 SET( LIB_NAME_CBOCT cboct )
 SET( TEST_NAME testcbsdk )
+SET( TEST_COMMENTS_NAME test_comments )
 SET( N2H5_NAME n2h5 )
 
 ##########################################################################################
@@ -361,6 +363,22 @@ IF(${BUILD_TEST})
             COMMAND ${QT5_WINDEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
     ENDIF(WIN32)
 ENDIF(${BUILD_TEST})
+
+IF(${BUILD_TEST_COMMENTS})
+    ADD_EXECUTABLE( ${TEST_COMMENTS_NAME} ${PROJECT_SOURCE_DIR}/samples/TestComments/test_comments.cpp )
+    TARGET_INCLUDE_DIRECTORIES( ${TEST_COMMENTS_NAME} PRIVATE
+        ${LIB_INCL_DIRS}
+        ${PROJECT_SOURCE_DIR}/cbmex)
+    TARGET_LINK_LIBRARIES( ${TEST_COMMENTS_NAME} ${LIB_NAME} )
+    LIST(APPEND INSTALL_TARGET_LIST ${TEST_COMMENTS_NAME})
+    IF(WIN32)
+        get_target_property(QT5_QMAKE_EXECUTABLE Qt5::qmake IMPORTED_LOCATION)
+        get_filename_component(QT5_WINDEPLOYQT_EXECUTABLE ${QT5_QMAKE_EXECUTABLE} PATH)
+        set(QT5_WINDEPLOYQT_EXECUTABLE "${QT5_WINDEPLOYQT_EXECUTABLE}/windeployqt.exe")
+        add_custom_command(TARGET ${TEST_COMMENTS_NAME} POST_BUILD
+            COMMAND ${QT5_WINDEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
+    ENDIF(WIN32)
+ENDIF(${BUILD_TEST_COMMENTS})
 
 ##
 # n2h5

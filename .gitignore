@@ -2,6 +2,7 @@ dist/
 build*/
 *.egg-info
 *.pyd
+cerebus/cbpy.cp*
 
 .*
 *.*~
