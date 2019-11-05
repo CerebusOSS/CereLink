@@ -47,7 +47,7 @@ Here are some cmake one-liners that work if your development environment
 happens to match perfectly. If not, then modify the cmake options following the instructions below.
 
 * Windows:
-    * `cmake .. -G "Visual Studio 15 2017 Win64" -DQt5_DIR="C:\Qt\5.11.1\msvc2017_64\lib\cmake\Qt5" -DBUILD_HDF5=OFF`
+    * `cmake .. -G "Visual Studio 15 2017 Win64" -DQt5_DIR="C:\Qt\5.12.0\msvc2017_64\lib\cmake\Qt5" -DBUILD_HDF5=OFF`
 * MacOS
     * `cmake .. -DQt5_DIR=$(brew --prefix qt5)/lib/cmake/Qt5`
 * Linux
@@ -88,5 +88,5 @@ for a primer.
 * Open a Terminal or Anaconda prompt and activate your Python environment.
 * Your Python environment must already have Cython installed and pip should be installed too.
 * Change to the CereLink directory.
-* Set the QTDIR environment variable: `set QTDIR=C:\Qt\5.11.1\msvc2017_64`
+* Set the QTDIR environment variable: `set QTDIR=C:\Qt\5.12.0\msvc2017_64`
 * `pip install .`

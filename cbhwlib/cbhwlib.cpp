@@ -1262,9 +1262,11 @@ cbRESULT cbGetAoutWaveform(uint32_t channel, uint8_t  trigNum, uint16_t  * mode,
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[channel - 1].chancaps & cbCHAN_AOUT)) return cbRESULT_INVALIDFUNCTION;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[channel - 1].aoutcaps & cbAOUT_WAVEFORM)) return cbRESULT_INVALIDFUNCTION;
     if (trigNum >= cbMAX_AOUT_TRIGGER) return cbRESULT_INVALIDFUNCTION;
-    if (channel <= cbNUM_ANALOG_CHANS) return cbRESULT_INVALIDCHANNEL;
-    channel -= (cbNUM_ANALOG_CHANS + 1); // make it 0-based
-    if (channel >= AOUT_NUM_GAIN_CHANS) return cbRESULT_INVALIDCHANNEL;
+    // TODO: Maybe we need a m_ChanIdxInType array.
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[cbNUM_ANALOG_CHANS - 1].chancaps & cbCHANTYPE_ANAIN)
+        channel -= (cbNUM_ANALOG_CHANS + 1); // make it 0-based
+    else
+        channel -= (128 + cbNUM_ANAIN_CHANS + 1);
     if (cb_cfg_buffer_ptr[nIdx]->isWaveform[channel][trigNum].type == 0) return cbRESULT_INVALIDCHANNEL;
 
     // otherwise, return the data
@@ -1794,7 +1796,7 @@ cbRESULT cbGetDoutCaps(uint32_t chan, uint32_t *doutcaps, uint32_t nInstance)
 // Purpose: Digital Output Inquiry and Configuration Functions
 //
 cbRESULT cbGetDoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, uint32_t *value,
-						  uint8_t *triggertype, uint16_t *trigchan, uint16_t *trigval, uint32_t nInstance)
+                          uint8_t *triggertype, uint16_t *trigchan, uint16_t *trigval, uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
 
@@ -1842,7 +1844,7 @@ cbRESULT cbSetDoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uin
     chaninfo.doutopts  = options;
     chaninfo.monsource = monchan;
     chaninfo.outvalue  = value;
-    chaninfo.trigtype  = triggertype;	
+    chaninfo.trigtype  = triggertype;
     chaninfo.trigchan  = trigchan;
     chaninfo.trigval   = trigval;
 
@@ -2499,7 +2501,7 @@ cbRESULT cbSSGetNoiseBoundary(uint32_t chanIdx, float afCentroid[3], float afMaj
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
-    if ((chanIdx - 1) >= cbNUM_ANALOG_CHANS) return cbRESULT_INVALIDCHANNEL;
+    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chancaps & cbCHAN_AINP)) return cbRESULT_INVALIDCHANNEL;
 
     cbPKT_SS_NOISE_BOUNDARY const & rPkt = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktNoiseBoundary[chanIdx - 1];
     if (afCentroid)
@@ -2548,9 +2550,8 @@ cbRESULT cbSSSetNoiseBoundary(uint32_t chanIdx, float afCentroid[3], float afMaj
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
-    if (!cb_library_initialized[nIdx])
-        return cbRESULT_NOLIBRARY;
-    if ((chanIdx - 1) >= cbNUM_ANALOG_CHANS) return cbRESULT_INVALIDCHANNEL;
+    if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
+    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chancaps & cbCHAN_AINP)) return cbRESULT_INVALIDCHANNEL;
 
     cbPKT_SS_NOISE_BOUNDARY icPkt;
     icPkt.set(chanIdx, afCentroid[0], afCentroid[1], afCentroid[2],
@@ -2576,9 +2577,8 @@ cbRESULT cbSSGetNoiseBoundaryByTheta(uint32_t chanIdx, float afCentroid[3], floa
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
-    if (!cb_library_initialized[nIdx])
-        return cbRESULT_NOLIBRARY;
-    if ((chanIdx - 1) >= cbNUM_ANALOG_CHANS) return cbRESULT_INVALIDCHANNEL;
+    if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
+    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chancaps & cbCHAN_AINP)) return cbRESULT_INVALIDCHANNEL;
 
     // get noise boundary info
     cbPKT_SS_NOISE_BOUNDARY const & rPkt = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktNoiseBoundary[chanIdx - 1];
@@ -2621,9 +2621,8 @@ cbRESULT cbSSSetNoiseBoundaryByTheta(uint32_t chanIdx, const float afCentroid[3]
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
-    if (!cb_library_initialized[nIdx])
-        return cbRESULT_NOLIBRARY;
-    if ((chanIdx - 1) >= cbNUM_ANALOG_CHANS) return cbRESULT_INVALIDCHANNEL;
+    if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
+    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chancaps & cbCHAN_AINP)) return cbRESULT_INVALIDCHANNEL;
 
     // TODO: must be implemented for non MSC
 #ifndef QT_APP

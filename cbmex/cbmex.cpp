@@ -1761,24 +1761,30 @@ void OnFileConfig(
     } param = PARAM_NONE;
 
     // Do a quick look at the options just to find the instance if specified
-    for (int i = 1; i < nrhs; ++i)
+    for (int i = nFirstParam; i < nrhs; ++i)
     {
+        
         if (param == PARAM_NONE)
         {
-            char cmdstr[128];
-            if (mxGetString(prhs[i], cmdstr, 16))
+
+            char cmdstr[255];
+            if (mxGetString(prhs[i], cmdstr, 255))
             {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d is invalid", i);
-                PrintHelp(CBMEX_FUNCTION_COMMENT, true, errstr);
+                PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, errstr);
             }
             if (_strcmpi(cmdstr, "instance") == 0)
             {
                 param = PARAM_INSTANCE;
             }
+            else if (_strcmpi(cmdstr, "option") == 0)
+            {
+                param = PARAM_OPTION;
+            }
             else
             {
-                param = PARAM_OPTION; // Just something valid but instance
+                param = PARAM_NONE; // Just something valid but instance
             }
         }
         else
@@ -1787,7 +1793,7 @@ void OnFileConfig(
             {
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_COMMENT, true, "Invalid instance number");
+                    PrintHelp(CBMEX_FUNCTION_FILECONFIG, true, "Invalid instance number");
                 nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 bInstanceFound = true;
                 break;
@@ -1999,7 +2005,7 @@ void OnDigitalOut(
                 {
                     char errstr[128];
                     sprintf(errstr, "Parameter %d is invalid", i);
-                    PrintHelp(CBMEX_FUNCTION_COMMENT, true, errstr);
+                    PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, errstr);
                 }
                 if (_strcmpi(cmdstr, "instance") == 0)
                 {
@@ -2024,7 +2030,7 @@ void OnDigitalOut(
                 {
                 case PARAM_INSTANCE:
                     if (!mxIsNumeric(prhs[i]))
-                        PrintHelp(CBMEX_FUNCTION_COMMENT, true, "Invalid instance number");
+                        PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid instance number");
                     nInstance = (uint32_t)mxGetScalar(prhs[i]);
                     break;
                 default:
@@ -3162,7 +3168,7 @@ void OnConfig(
             {
                 char errstr[128];
                 sprintf(errstr, "Parameter %d is invalid", i);
-                PrintHelp(CBMEX_FUNCTION_COMMENT, true, errstr);
+                PrintHelp(CBMEX_FUNCTION_CONFIG, true, errstr);
             }
             if (_strcmpi(cmdstr, "instance") == 0)
             {
@@ -3179,7 +3185,7 @@ void OnConfig(
             {
             case PARAM_INSTANCE:
                 if (!mxIsNumeric(prhs[i]))
-                    PrintHelp(CBMEX_FUNCTION_COMMENT, true, "Invalid instance number");
+                    PrintHelp(CBMEX_FUNCTION_CONFIG, true, "Invalid instance number");
                 nInstance = (uint32_t)mxGetScalar(prhs[i]);
                 break;
             default:

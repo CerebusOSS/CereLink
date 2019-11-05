@@ -1,6 +1,7 @@
 dist/
 build*/
-cerebus.egg-info
+*.egg-info
+*.pyd
 cerebus/cbpy.cp*
 
 .*
@@ -34,4 +35,3 @@ Release/
 cerebus/cbpy.so
 cerebus/cbpy.cpp
 cerebus/cbpyw.cpp
-cerelink.egg-info

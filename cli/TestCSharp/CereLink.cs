@@ -40,30 +40,43 @@ namespace CereLink
     }
 
     public class CereLinkConnection
-    {
-        [DllImport("cbsdk_ext.dll")]
+    {  
+        [DllImport("cbsdk_ext")]
         private static extern IntPtr CbSdkNative_Create(UInt32 nInstance, int inPort, int outPort, int bufsize, String inIP, String outIP, bool use_double);
 
-        [DllImport("cbsdk_ext.dll")]
+        [DllImport("cbsdk_ext")]
         private static extern bool CbSdkNative_GetIsDouble(IntPtr pCbSdk);
 
-        [DllImport("cbsdk_ext.dll")]
+        [DllImport("cbsdk_ext")]
         private static extern bool CbSdkNative_GetIsOnline(IntPtr pCbSdk);
 
-        [DllImport("cbsdk_ext.dll")]
+        [DllImport("cbsdk_ext")]
+        private static extern void CbSdkNative_SetComment(IntPtr pCbSdk, String comment, byte red, byte green, byte blue, int charset);
+
+        [DllImport("cbsdk_ext")]
         private static extern void CbSdkNative_PrefetchData(IntPtr pCbSdk, ref UInt16 chan_count, UInt32[] samps_per_chan, UInt16[] chan_numbers);
 
-        [DllImport("cbsdk_ext.dll")]
+        [DllImport("cbsdk_ext")]
         private static extern void CbSdkNative_TransferData(IntPtr pCbSdk, ref UInt32 timestamp);
 
-        [DllImport("cbsdk_ext.dll")]
+        [DllImport("cbsdk_ext")]
         private static extern void CbSdkNative_GetDataInt(IntPtr pCbSdk, Int16[] buffer, int chan_idx);
 
-        [DllImport("cbsdk_ext.dll")]
+        [DllImport("cbsdk_ext")] 
         private static extern void CbSdkNative_GetDataDouble(IntPtr pCbSdk, double[] buffer, int chan_idx);
 
-        [DllImport("cbsdk_ext.dll")]
+        [DllImport("cbsdk_ext")]
         private static extern void CbSdkNative_Delete(IntPtr value);
+
+        [DllImport("cbsdk_ext")]
+        private static extern bool CbSdkNative_SetFileStorage(IntPtr pCbSdk, String file_name, String file_comment, bool bStart);
+
+        [DllImport("cbsdk_ext")]
+        private static extern bool CbSdkNative_SetPatientInfo(IntPtr pCbSdk, String ID, String f_name, String l_name, UInt32 DOB_month, UInt32 DOB_day, UInt32 DOB_year);
+
+        [DllImport("cbsdk_ext")]
+        private static extern bool CbSdkNative_GetIsRecording(IntPtr pCbSdk);
+
 
         private IntPtr pNative;
 
@@ -75,6 +88,12 @@ namespace CereLink
         public bool IsOnline()
         {
             return CbSdkNative_GetIsOnline(pNative);
+        }
+
+        // charset: (0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI)
+        public void SetComment(String comment, byte red, byte green, byte blue, int charset)
+        {
+            CbSdkNative_SetComment(pNative, comment, red, green, blue, charset);
         }
 
         public Int16[][] FetchData()
@@ -94,6 +113,21 @@ namespace CereLink
                 CbSdkNative_GetDataInt(pNative, out_arr[chan_ix], chan_ix);
             }
             return out_arr;
+        }
+
+        public bool SetFileStorage(string file_name, string file_comment, bool bStart)
+        {
+            return CbSdkNative_SetFileStorage(pNative, file_name, file_comment, bStart);
+        }
+
+        public void SetPatientInfo(string ID, string f_name, string l_name, UInt32 DOB_month, UInt32 DOB_day, UInt32 DOB_year)
+        {
+            CbSdkNative_SetPatientInfo(pNative, ID, f_name, l_name, DOB_month, DOB_day, DOB_year);
+        }
+
+        public bool IsRecording()
+        {
+            return CbSdkNative_GetIsRecording(pNative);
         }
 
         ~CereLinkConnection()

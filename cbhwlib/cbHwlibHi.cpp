@@ -82,61 +82,84 @@ bool IsRawProcessingEnabled(uint32_t nChan, uint32_t nInstance)
 
 
 // TRUE means yes; FALSE, no
-bool IsChanSerial(uint32_t dwChan)
+bool IsChanAnyDigIn(uint32_t dwChan, uint32_t nInstance)
 {
-    if ((dwChan >= MIN_CHANS_SERIAL) && (dwChan <= MAX_CHANS_SERIAL))
-        return true;
+    uint32_t dwChanCaps;
+    bool result;
 
-    return false;
+    result = dwChan >= MIN_CHANS;
+    result &= cbGetChanCaps(dwChan, &dwChanCaps, nInstance) == cbRESULT_OK;
+    result &= (dwChanCaps & cbCHAN_DINP) == cbCHAN_DINP;
+    return result;
 }
 
 
 // TRUE means yes; FALSE, no
-bool IsChanDigin(uint32_t dwChan)
+bool IsChanSerial(uint32_t dwChan, uint32_t nInstance)
 {
-    if ((dwChan >= MIN_CHANS_DIGITAL_IN) && (dwChan <= MAX_CHANS_DIGITAL_IN))
-        return true;
-
-    return false;
+    uint32_t dwDiginCaps;
+    bool result = IsChanAnyDigIn(dwChan, nInstance);
+    result &= cbGetDinpCaps(dwChan, &dwDiginCaps, nInstance) == cbRESULT_OK;
+    result &= (dwDiginCaps & cbDINP_SERIALMASK) == cbDINP_SERIALMASK;
+    return result;
 }
 
-bool IsChanDigout(uint32_t dwChan)
-{
-    if ((dwChan >= MIN_CHANS_DIGITAL_OUT) && (dwChan <= MAX_CHANS_DIGITAL_OUT))
-        return true;
 
-    return false;
+// TRUE means yes; FALSE, no
+bool IsChanDigin(uint32_t dwChan, uint32_t nInstance)
+{
+    uint32_t dwDiginCaps;
+    bool result = IsChanAnyDigIn(dwChan, nInstance);
+    result &= cbGetDinpCaps(dwChan, &dwDiginCaps, nInstance) == cbRESULT_OK;
+    result &= (dwDiginCaps & cbDINP_SERIALMASK) != cbDINP_SERIALMASK;
+    return result;
+}
+
+bool IsChanDigout(uint32_t dwChan, uint32_t nInstance)
+{
+    uint32_t dwChanCaps;
+    bool result;
+
+    result = dwChan >= MIN_CHANS;
+    result &= cbGetChanCaps(dwChan, &dwChanCaps, nInstance) == cbRESULT_OK;
+    result &= (dwChanCaps & cbCHAN_DOUT) == cbCHAN_DOUT;
+    return result;
 }
 
 
 // Author & Date:   Almut Branner   15 Jan 2004
 // Purpose: Find out whether an analog in channel
 // Input:   nChannel - the channel ID that we want to check
-bool IsChanAnalogIn(uint32_t dwChan)
+bool IsChanAnalogIn(uint32_t dwChan, uint32_t nInstance)
 {
-    if ((dwChan >= MIN_CHANS) && (dwChan <= MAX_CHANS_ANALOG_IN))
-        return true;
+    uint32_t dwChanCaps;
+    bool result;
 
-    return false;
+    result = dwChan >= MIN_CHANS;
+    result &= cbGetChanCaps(dwChan, &dwChanCaps, nInstance) == cbRESULT_OK;
+    result &= (dwChanCaps & cbCHAN_AINP) == cbCHAN_AINP;
+    return result;
 }
 
 
 // Author & Date:   Almut Branner   15 Jan 2004
 // Purpose: Find out whether a channel is a Front-End analog in channel
 // Input:   nChannel - the channel ID that we want to check
-bool IsChanFEAnalogIn(uint32_t dwChan)
+bool IsChanFEAnalogIn(uint32_t dwChan, uint32_t nInstance)
 {
-    if ((dwChan >= MIN_CHANS) && (dwChan <= MAX_CHANS_FRONT_END))
-        return true;
-
-    return false;
+    bool result = IsChanAnalogIn(dwChan, nInstance);
+    result &= dwChan <= MAX_CHANS_FRONT_END;  // TODO: This is not consistent on single vs double NSP systems.
+    // uint32_t dwAinpCaps;
+    // result &= cbGetAinpCaps(dwChan, &dwAinpCaps, nullptr, nullptr, nInstance);
+    // result &= (dwAinpCaps & cbAINP_??) == cbAINP_??;
+    return result;
 }
 
 
 // Author & Date:   Almut Branner   15 Jan 2004
 // Purpose: Find out whether a channel is a Analog-In analog in channel
 // Input:   nChannel - the channel ID that we want to check
-bool IsChanAIAnalogIn(uint32_t dwChan)
+bool IsChanAIAnalogIn(uint32_t dwChan, uint32_t nInstance)
 {
     if ((dwChan >= MIN_CHANS_ANALOG_IN) && (dwChan <= MAX_CHANS_ANALOG_IN))
         return true;
