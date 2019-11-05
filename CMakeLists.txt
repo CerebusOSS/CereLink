@@ -16,15 +16,17 @@
 #    -DCBMEX_INSTALL_PREFIX can be used to install cbmex to given directory
 #
 # General Windows:
-#    If you are using MSVC and not logged-in as an administrator then you will not be
+#    - If you are using MSVC and not logged-in as an administrator then you will not be
 #    able to build the INSTALL target, as by default it tries to install to C:\Program Files.
 #    Change the install target using CMAKE_INSTALL_PREFIX. See example CMAKE command below.
+#    - If you would like to build the C# libraries and examples then add -DBUILD_CLI=ON
 # QT:
 #     QT5 ships with its own cmake config files. We need to tell CMake where to find this.
 #     On Mac OS, assuming qt installed with homebrew,
 #     run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt5)
 #     On Windows, run CMake with -DQt5_DIR=path\to\qt\version\platform\lib\cmake\Qt5
-#     For example: cmake .. -G "Visual Studio 15 2017 Win64" -DQt5_DIR=C:\Qt\5.13.1\msvc2017_64\lib\cmake\Qt5 -DCMAKE_INSTALL_PREFIX=..\dist
+#     For example: cmake .. -G "Visual Studio 15 2017 Win64" -DQt5_DIR=C:\Qt\5.13.1\msvc2017_64\lib\cmake\Qt5 -DCMAKE_INSTALL_PREFIX=..\dist -DBUILD_CLI=ON
+#
 
 
 CMAKE_MINIMUM_REQUIRED( VERSION 3.1.0 )
