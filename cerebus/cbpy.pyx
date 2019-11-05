@@ -1,11 +1,11 @@
-'''
+"""
 Created on March 9, 2013
 
 @author: dashesy
 
 Purpose: Python module for cbsdk_cython
 
-'''
+"""
 
 from cbsdk_cython cimport *
 from libcpp cimport bool
@@ -19,7 +19,7 @@ cimport cython
 
 
 def version(int instance=0):
-    '''Get library version
+    """Get library version
     Inputs:
         instance - (optional) library instance number
     Outputs:"
@@ -36,7 +36,7 @@ def version(int instance=0):
              nsp_beta - beta NSP firmware version (0 if non-beta))
              nsp_protocol_major - major NSP protocol version
              nsp_protocol_minor - minor NSP protocol version
-    '''
+    """
 
     cdef cbSdkResult res
     cdef cbSdkVersion ver
@@ -67,7 +67,7 @@ def defaultConParams():
 
 
 def open(int instance=0, connection='default', parameter={}):
-    '''Open library.
+    """Open library.
     Inputs:
        connection - connection type, string can be one the following
                'default': tries slave then master connection
@@ -86,7 +86,7 @@ def open(int instance=0, connection='default', parameter={}):
     Test with:
 from cerebus import cbpy
 cbpy.open(parameter=cbpy.defaultConParams())
-    '''
+    """
     
     cdef cbSdkResult res
     
@@ -114,15 +114,15 @@ cbpy.open(parameter=cbpy.defaultConParams())
 
 
 def close(int instance=0):
-    '''Close library.
+    """Close library.
     Inputs:
        instance - (optional) library instance number
-    '''
+    """
     return handle_result(cbSdkClose(<uint32_t>instance))
 
 
 def get_connection_type(int instance=0):
-    ''' Get connection type
+    """ Get connection type
     Inputs:
        instance - (optional) library instance number
     Outputs:
@@ -131,7 +131,7 @@ def get_connection_type(int instance=0):
                           'Default', 'Slave', 'Master', 'Closed', 'Unknown'
            'instrument': Instrument connected to; can be any of:
                           'NSP', 'nPlay', 'Local NSP', 'Remote nPlay', 'Unknown')
-    '''
+    """
     
     cdef cbSdkResult res
     
@@ -159,7 +159,7 @@ def trial_config(int instance=0, reset=True,
                  buffer_parameter={}, 
                  range_parameter={},
                  noevent=0, nocontinuous=0, nocomment=0):
-    '''Configure trial settings.
+    """Configure trial settings.
     Inputs:
        reset - boolean, set True to flush data cache and start collecting data immediately,
                set False to stop collecting data immediately
@@ -183,7 +183,7 @@ def trial_config(int instance=0, reset=True,
        instance - (optional) library instance number
     Outputs:
        reset - (boolean) if it is reset
-    '''    
+    """
     
     cdef cbSdkResult res
     cdef cbSdkConfigParam cfg_param
@@ -219,7 +219,7 @@ def trial_config(int instance=0, reset=True,
 
 
 def trial_event(int instance=0, bool reset=False, bool reset_clock=False):
-    ''' Trial spike and event data.
+    """ Trial spike and event data.
     Inputs:
        instance - (optional) library instance number
        reset - (optional) boolean
@@ -233,7 +233,7 @@ def trial_event(int instance=0, bool reset=False, bool reset_clock=False):
            channel: integer, channel number (1-based)
            digital_events: array, digital event values for channel (if a digital or serial channel)
            unitN_ts: array, spike timestamps of unit N for channel (if an electrode channel));
-    '''
+    """
     
     cdef cbSdkResult res
     cdef cbSdkConfigParam cfg_param
@@ -380,7 +380,7 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
     :param reset_clock - (optional) boolean
                 set False (default) to leave the trial clock alone.
                 set True to update the trial time to the current time (seems inconsistent?)
-	:param is_double: (optional) boolean
+    :param is_double: (optional) boolean
                 set False (default) to use int16
                 set True to use double
     :param do_event: (optional) boolean. Set to False to skip fetching events.
@@ -409,7 +409,7 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
     cdef cbSdkTrialCont trialcont
     cdef cbSdkTrialEvent trialevent
     cdef cbSdkTrialComment trialcomm
-	cdef uint8_t ch_type
+    cdef uint8_t ch_type
 
     cdef uint32_t tzero = 0
     cdef int comm_ix
@@ -434,7 +434,7 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
                                 wait_for_comment_msec)
     handle_result(res)
 
-	# Early return if none of the requested data are available.
+    # Early return if none of the requested data are available.
     if (not do_event or (trialevent.count == 0)) and (not do_cont or (trialcont.count == 0))\
             and (not do_comment or (trialcomm.num_samples == 0)):
         return res, trial_event, trial_cont, tzero, trial_comment
@@ -464,10 +464,10 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
             ch = trialevent.chan[channel] # Actual channel number
             trialevent.waveforms[channel] = NULL
             dig_events = []
-			res = cbSdkGetChannelType(<uint32_t>instance, ch, &ch_type)
-			handle_result(res)
+            res = cbSdkGetChannelType(<uint32_t>instance, ch, &ch_type)
+            handle_result(res)
             # Fill values for non-empty digital or serial channels
-			if (ch_type == cbhwlib_cbCHANTYPES.cbCHANTYPE_DIGIN) or (ch_type == cbhwlib_cbCHANTYPES.cbCHANTYPE_SERIAL):
+            if (ch_type == cbhwlib_cbCHANTYPES.cbCHANTYPE_DIGIN) or (ch_type == cbhwlib_cbCHANTYPES.cbCHANTYPE_SERIAL):
                 num_samples = trialevent.num_samples[channel][0]
                 if num_samples > 0:
                     if is_double:
@@ -548,7 +548,7 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
 
 
 def trial_comment(int instance=0, bool reset=False, unsigned long wait_for_comment_msec=250):
-    ''' Trial comment data.
+    """ Trial comment data.
     Inputs:
        reset - (optional) boolean
                set False (default) to leave buffer intact.
@@ -559,7 +559,7 @@ def trial_comment(int instance=0, bool reset=False, unsigned long wait_for_comme
            timestamp: ?
            comment_str: the comment as a py string
            rgba: integer; the comment colour. 8 bits each for r, g, b, a
-    '''
+    """
 
     cdef cbSdkResult res
     cdef cbSdkConfigParam cfg_param
@@ -625,7 +625,7 @@ def trial_comment(int instance=0, bool reset=False, unsigned long wait_for_comme
 
 
 def file_config(int instance=0, command='info', comment='', filename=''):
-    ''' Configure remote file recording or get status of recording.
+    """ Configure remote file recording or get status of recording.
     Inputs:
        command - string, File configuration command, can be of of the following
                'info': (default) get File recording information
@@ -642,7 +642,7 @@ def file_config(int instance=0, command='info', comment='', filename=''):
            'Recording': boolean, if recording is in progress
            'FileName': string, file name being recorded
            'UserName': Computer that is recording
-    '''
+    """
     
     
     cdef cbSdkResult res
@@ -685,7 +685,7 @@ def file_config(int instance=0, command='info', comment='', filename=''):
 
 
 def time(int instance=0, unit='samples'):
-    '''Instrument time.
+    """Instrument time.
     Inputs:
        unit - time unit, string can be one the following
                 'samples': (default) sample number integer
@@ -694,7 +694,7 @@ def time(int instance=0, unit='samples'):
        instance - (optional) library instance number
     Outputs:
        time - time passed since last reset
-    '''
+    """
 
 
     cdef cbSdkResult res
@@ -718,7 +718,7 @@ def time(int instance=0, unit='samples'):
 
 
 def analog_out(channel_out, channel_mon, track_last=True, spike_only=False, int instance=0):
-    '''
+    """
     Monitor a channel.
     Inputs:
     channel_out - integer, analog output channel number (1-based)
@@ -726,7 +726,7 @@ def analog_out(channel_out, channel_mon, track_last=True, spike_only=False, int 
     channel_mon - integer, channel to monitor (1-based)
     track_last - (optional) If True, track last channel clicked on in raster plot or hardware config window.
     spike_only - (optional) If True, only play spikes. If False, play continuous.
-    '''
+    """
     cdef cbSdkResult res
     cdef cbSdkAoutMon mon
     if channel_mon is None:
@@ -741,14 +741,15 @@ def analog_out(channel_out, channel_mon, track_last=True, spike_only=False, int 
 
 
 def digital_out(int channel, int instance=0, value='low'):
-    '''Digital output command.
+    """Digital output command.
     Inputs:
     channel - integer, digital output channel number (1-based)
                On NSP, 153 (dout1), 154 (dout2), 155 (dout3), 156 (dout4)
     value - (optional), depends on the command
            for command of 'set_value':
                string, can be 'high' or 'low' (default)
-    instance - (optional) library instance number'''
+    instance - (optional) library instance number
+    """
     
     values = ['low', 'high']
     if value not in values:
@@ -762,7 +763,7 @@ def digital_out(int channel, int instance=0, value='low'):
 
 
 def get_channel_config(int channel, int instance=0):
-    '''
+    """
     Outputs:
         -chaninfo = A Python dictionary with the following fields:
         'time': system clock timestamp,
@@ -804,7 +805,7 @@ def get_channel_config(int channel, int instance=0):
         'amplrejpos': Amplitude rejection positive value,
         'amplrejneg': Amplitude rejection negative value,
         'refelecchan': Software reference electrode channel,
-    '''
+    """
     cdef cbSdkResult res
     cdef cbPKT_CHANINFO cb_chaninfo
     res = cbSdkGetChannelConfig(<uint32_t>instance, <uint16_t>channel, &cb_chaninfo)
@@ -831,8 +832,6 @@ def get_channel_config(int channel, int instance=0):
         'userflags': cb_chaninfo.userflags,
         'doutopts': cb_chaninfo.doutopts,
         'dinpopts': cb_chaninfo.dinpopts,
-        'aoutopts': cb_chaninfo.aoutopts,
-        'eopchar': cb_chaninfo.eopchar,
         'monsource': cb_chaninfo.monsource,
         'outvalue': cb_chaninfo.outvalue,
         'aoutopts': cb_chaninfo.aoutopts,
@@ -1008,19 +1007,19 @@ cdef class SpikeCache:
 
 
 cdef cbSdkResult handle_result(cbSdkResult res):
-    if (res == CBSDKRESULT_WARNCLOSED):
+    if res == CBSDKRESULT_WARNCLOSED:
         print("Library is already closed.")
-    if (res < 0):
+    if res < 0:
         errtext = "No associated error string. See cbsdk.h"
-        if (res == CBSDKRESULT_ERROFFLINE):
+        if res == CBSDKRESULT_ERROFFLINE:
             errtext = "Instrument is offline."
-        elif (res == CBSDKRESULT_CLOSED):
+        elif res == CBSDKRESULT_CLOSED:
             errtext = "Interface is closed; cannot do this operation."
-        elif (res == CBSDKRESULT_ERRCONFIG):
+        elif res == CBSDKRESULT_ERRCONFIG:
             errtext = "Trying to run an unconfigured method."
-        elif (res == CBSDKRESULT_NULLPTR):
+        elif res == CBSDKRESULT_NULLPTR:
             errtext = "Null pointer."
-        elif (res == CBSDKRESULT_INVALIDCHANNEL):
+        elif res == CBSDKRESULT_INVALIDCHANNEL:
             errtext = "Invalid channel number."
 
         raise RuntimeError(("%d, " + errtext) % res)
