@@ -3,6 +3,7 @@ build*/
 *.egg-info
 *.pyd
 cerebus/cbpy.cp*
+*.whl
 
 .*
 *.*~
