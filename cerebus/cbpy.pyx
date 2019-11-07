@@ -722,13 +722,15 @@ def analog_out(channel_out, channel_mon, track_last=True, spike_only=False, int 
     Monitor a channel.
     Inputs:
     channel_out - integer, analog output channel number (1-based)
-                  On NSP, should be >= MIN_CHANS_ANALOG_OUT (145) && <= MAX_CHANS_AUDIO (150)
+                  On NSP, should be >= MIN_CHANS_ANALOG_OUT (273) && <= MAX_CHANS_AUDIO (278)
     channel_mon - integer, channel to monitor (1-based)
     track_last - (optional) If True, track last channel clicked on in raster plot or hardware config window.
     spike_only - (optional) If True, only play spikes. If False, play continuous.
     """
     cdef cbSdkResult res
     cdef cbSdkAoutMon mon
+    if channel_out < 273:
+            channel_out += 128  # Recent NSP firmware upgrade added 128 more analog channels.
     if channel_mon is None:
         res = cbSdkSetAnalogOutput(<uint32_t>instance, <uint16_t>channel_out, NULL, NULL)
     else:
