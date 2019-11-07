@@ -90,4 +90,8 @@ for a primer.
 * Your Python environment must already have Cython installed and pip should be installed too.
 * Change to the CereLink directory.
 * Set the QTDIR environment variable: `set QTDIR=C:\Qt\5.13.1\msvc2017_64`
+* Make sure the CereLink Visual Studio project is closed.
 * `pip install .`
+* or, if you are making a wheel to bring to another machine,
+  * activate an environment matching the target machine,
+  * `pip wheel . -w dist/bin`

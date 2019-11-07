@@ -137,7 +137,7 @@ cbpy_module = Extension('cerebus.cbpy', **extension_kwargs)
 
 setup(
     name='cerebus',
-    version='0.0.3',
+    version='0.0.4',
     description='Cerebus Link',
     long_description='Cerebus Link Python Package',
     author='dashesy',
