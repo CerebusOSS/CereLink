@@ -211,7 +211,7 @@ void testSetAnaout(uint16_t channel)
     cbSdkWaveformData * wf = nullptr;
     cbSdkAoutMon mon = { channel, false, false };
     cbSdkResult res = cbSdkSetAnalogOutput(INST, 277, wf, &mon);
-    if (res == CBSDKRESULT_SUCCESS)
+    if (res != CBSDKRESULT_SUCCESS)
     {
         printf("Unable to cbSdkSetAnalogOutput audio1 to monitor channel %d.\n", channel);
     }
