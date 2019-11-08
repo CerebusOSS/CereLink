@@ -974,24 +974,34 @@ cdef class SpikeCache:
     cdef readonly int inst, chan, n_samples, n_pretrig
     cdef cbSPKCACHE *cache
     cdef int last_valid
+    # cache
+    # .chid: ID of the Channel
+    # .pktcnt: number of packets that can be saved
+    # .pktsize: size of an individual packet
+    # .head: Where (0 based index) in the circular buffer to place the NEXT packet
+    # .valid: How many packets have come in since the last configuration
+    # .spkpkt: Circular buffer of the cached spikes
 
     def __cinit__(self, int channel=1, int instance=0):
         self.inst = instance
         self.chan = channel
         cdef cbSPKCACHE ignoreme  # Just so self.cache is not NULL... but this won't be used by anything
         self.cache = &ignoreme    # because cbSdkGetSpkCache changes what self.cache is pointing to.
-        cdef cbSdkResult res = cbSdkGetSpkCache(self.inst, self.chan, &self.cache)
-        handle_result(res)
-        self.last_valid = self.cache.valid
+        self.reset_cache()
         sys_config_dict = get_sys_config(instance)
         self.n_samples = sys_config_dict['spklength']
         self.n_pretrig = sys_config_dict['spkpretrig']
+
+    def reset_cache(self):
+        cdef cbSdkResult res = cbSdkGetSpkCache(self.inst, self.chan, &self.cache)
+        handle_result(res)
+        self.last_valid = self.cache.valid
 
     @cython.boundscheck(False) # turn off bounds-checking for entire function
     def get_new_waveforms(self):
         cdef int new_valid = self.cache.valid
         cdef int new_head = self.cache.head
-        cdef int n_new = min(new_valid - self.last_valid, 400)
+        cdef int n_new = min(max(new_valid - self.last_valid, 0), 400)
         cdef np.ndarray[np.int16_t, ndim=2, mode="c"] np_waveforms = np.empty((n_new, self.n_samples), dtype=np.int16)
         cdef np.ndarray[np.uint8_t, ndim=1] np_unit_ids = np.empty(n_new, dtype=np.uint8)
         cdef int wf_ix, pkt_ix, samp_ix
