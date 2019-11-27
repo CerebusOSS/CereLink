@@ -38,9 +38,7 @@ public:
     void SetComment(std::string comment="", uint32_t t_bgr=255, uint8_t charset=0);
     //bool GetComment();
 	void PrefetchData(uint16_t &chan_count, uint32_t* samps_per_chan, uint16_t* chan_numbers);
-	void TransferData(uint32_t* timestamp = NULL);
-	void GetData(int16_t* buffer, int chan_idx);  // copy
-	void GetData(double* buffer, int chan_idx);  // copy
+	void TransferData(void** buffer, uint32_t* timestamp = NULL);
 	bool SetFileStorage(char* file_name, char* file_comment, bool* bStart);
 	void SetPatientInfo(char* ID, char* f_name, char* l_name, uint32_t DOB_month, uint32_t DOB_day, uint32_t DOB_year);
 	bool GetIsRecording();
@@ -71,9 +69,7 @@ extern "C"
     //__declspec(dllexport) bool CbSdkNative_GetComment(CbSdkNative* pCbSdk);
     __declspec(dllexport) void CbSdkNative_SetComment(CbSdkNative* pCbSdk, const char* comment, uint8_t red, uint8_t green, uint8_t blue, uint8_t charset);
 	__declspec(dllexport) void CbSdkNative_PrefetchData(CbSdkNative* pCbSdk, uint16_t &chan_count, uint32_t* samps_per_chan, uint16_t* chan_numbers);
-	__declspec(dllexport) void CbSdkNative_TransferData(CbSdkNative* pCbSdk, uint32_t* timestamp = NULL);
-	__declspec(dllexport) void CbSdkNative_GetDataInt(CbSdkNative* pCbSdk, int16_t* buffer, int chan_idx);
-	__declspec(dllexport) void CbSdkNative_GetDataDouble(CbSdkNative* pCbSdk, double* buffer, int chan_idx);
+	__declspec(dllexport) void CbSdkNative_TransferData(CbSdkNative* pCbSdk, void** buffer, uint32_t* timestamp = NULL);
 	__declspec(dllexport) void CbSdkNative_Delete(CbSdkNative* pCbSdk);
 	__declspec(dllexport) bool CbSdkNative_SetFileStorage(CbSdkNative* pCbSdk, char* file_name, char* file_comment, bool* bStart);
 	__declspec(dllexport) void CbSdkNative_SetPatientInfo(CbSdkNative* pCbSdk, char* ID, char* f_name, char* l_name, uint32_t DOB_month, uint32_t DOB_day, uint32_t DOB_year );

@@ -18,15 +18,16 @@ namespace SimpleClient
             int bufsize = 8 * 1024 * 1024;
             string inIP = "127.0.0.1";
             string outIP = "";
+            bool useDouble = false;
             // bool use_double = false;
 
-            CereLinkConnection conn = new CereLinkConnection(nInstance, inPort, outPort, bufsize, inIP, outIP);
+            CereLinkConnection conn = new CereLinkConnection(nInstance, inPort, outPort, bufsize, inIP, outIP, useDouble);
             if (conn.IsOnline())
             {
                 for (int fetch_ix = 0; fetch_ix < 5; fetch_ix++)
                 {
                     conn.SetComment("TestCSharp fetch", 255, 0, 0, 0);
-                    short[][] result = conn.FetchData();
+                    conn.FetchData(out Int16[][] result);
                     Console.WriteLine("Returned {0} chans.", result.Length);
                     for (int chan_ix = 0; chan_ix < result.Length; chan_ix++)
                     {

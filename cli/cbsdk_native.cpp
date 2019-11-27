@@ -110,43 +110,26 @@ void CbSdkNative::PrefetchData(uint16_t &chan_count, uint32_t* samps_per_chan, u
 	}
 }
 
-void CbSdkNative::TransferData(uint32_t* timestamp)
+// Receives a pointer to an array of pointers from C# to copy data to. 
+// We just need to pass the pointer to p_trialCont->samples.
+// Whether the data are double or int16 will be determined in C#. 
+void CbSdkNative::TransferData(void** buffer, uint32_t* timestamp)
 {
 	if (timestamp != NULL) *timestamp = p_trialCont->time;
 	if (p_trialCont->count > 0)
 	{
 		for (int chan_ix = 0; chan_ix < p_trialCont->count; chan_ix++)
 		{
-			// Create new vectors for each channel and copy the vector pointers to p_trialCont.
 			if (cfg.bDouble)
 			{
-				dblData[chan_ix] = std::vector<double>(p_trialCont->num_samples[chan_ix]);
-				p_trialCont->samples[chan_ix] = dblData[chan_ix].data();
+				p_trialCont->samples[chan_ix] = (double*)buffer[chan_ix];
 			}
 			else
 			{
-				intData[chan_ix] = std::vector<int16_t>(p_trialCont->num_samples[chan_ix]);
-				p_trialCont->samples[chan_ix] = intData[chan_ix].data();
+				p_trialCont->samples[chan_ix] = (int16_t*)buffer[chan_ix];
 			}
 		}
 		cbSdkResult sdkres = cbSdkGetTrialData(m_instance, 1, 0, p_trialCont.get(), 0, 0); // p_trialEvent.get()
-	}
-}
-
-void CbSdkNative::GetData(int16_t* buffer, int chan_idx)
-{
-	for (uint32_t samp_ix = 0; samp_ix < p_trialCont->num_samples[chan_idx]; samp_ix++)
-	{
-		buffer[samp_ix] = intData[chan_idx][samp_ix];
-	}
-}
-
-void CbSdkNative::GetData(double* buffer, int chan_idx)
-{
-	std::vector<double> native_data = dblData[chan_idx];
-	for (int samp_ix = 0; samp_ix < native_data.size(); samp_ix++)
-	{
-		buffer[samp_ix] = native_data[samp_ix];
 	}
 }
 
@@ -229,22 +212,10 @@ void CbSdkNative_PrefetchData(CbSdkNative* pCbSdk, uint16_t &chan_count, uint32_
 		
 }
 
-void CbSdkNative_TransferData(CbSdkNative* pCbSdk, uint32_t* timestamp)
+void CbSdkNative_TransferData(CbSdkNative* pCbSdk, void** buffer, uint32_t* timestamp)
 {
 	if (pCbSdk != NULL)
-		pCbSdk->TransferData(timestamp);
-}
-
-void CbSdkNative_GetDataInt(CbSdkNative* pCbSdk, int16_t* buffer, int chan_idx)
-{
-	if (pCbSdk != NULL)
-		pCbSdk->GetData(buffer, chan_idx);
-}
-
-void CbSdkNative_GetDataDouble(CbSdkNative* pCbSdk, double* buffer, int chan_idx)
-{
-	if (pCbSdk != NULL)
-		pCbSdk->GetData(buffer, chan_idx);
+		pCbSdk->TransferData(buffer, timestamp);
 }
 
 void CbSdkNative_Delete(CbSdkNative* pCbSdk) {

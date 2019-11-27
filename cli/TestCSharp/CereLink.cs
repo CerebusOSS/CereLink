@@ -40,7 +40,7 @@ namespace CereLink
     }
 
     public class CereLinkConnection
-    {  
+    {
         [DllImport("cbsdk_ext")]
         private static extern IntPtr CbSdkNative_Create(UInt32 nInstance, int inPort, int outPort, int bufsize, String inIP, String outIP, bool use_double);
 
@@ -57,13 +57,7 @@ namespace CereLink
         private static extern void CbSdkNative_PrefetchData(IntPtr pCbSdk, ref UInt16 chan_count, UInt32[] samps_per_chan, UInt16[] chan_numbers);
 
         [DllImport("cbsdk_ext")]
-        private static extern void CbSdkNative_TransferData(IntPtr pCbSdk, ref UInt32 timestamp);
-
-        [DllImport("cbsdk_ext")]
-        private static extern void CbSdkNative_GetDataInt(IntPtr pCbSdk, Int16[] buffer, int chan_idx);
-
-        [DllImport("cbsdk_ext")] 
-        private static extern void CbSdkNative_GetDataDouble(IntPtr pCbSdk, double[] buffer, int chan_idx);
+        private static extern void CbSdkNative_TransferData(IntPtr pCbSdk, IntPtr arr, ref UInt32 timestamp);
 
         [DllImport("cbsdk_ext")]
         private static extern void CbSdkNative_Delete(IntPtr value);
@@ -80,14 +74,19 @@ namespace CereLink
 
         private IntPtr pNative;
 
-        public CereLinkConnection(UInt32 nInstance, int inPort, int outPort, int bufsize, String inIP, String outIP)
+        public CereLinkConnection(UInt32 nInstance, int inPort, int outPort, int bufsize, String inIP, String outIP, bool useDouble)
         {
-            pNative = CbSdkNative_Create(nInstance, inPort, outPort, bufsize, inIP, outIP, false);
+            pNative = CbSdkNative_Create(nInstance, inPort, outPort, bufsize, inIP, outIP, useDouble);
         }
 
         public bool IsOnline()
         {
             return CbSdkNative_GetIsOnline(pNative);
+        }
+
+        public bool IsDouble()
+        {
+            return CbSdkNative_GetIsDouble(pNative);
         }
 
         // charset: (0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI)
@@ -96,23 +95,90 @@ namespace CereLink
             CbSdkNative_SetComment(pNative, comment, red, green, blue, charset);
         }
 
-        public Int16[][] FetchData()
+        public void FetchData(out double[][] data)
         {
             UInt16 chan_count = 0;
             UInt32[] samps_per_chan = new UInt32[Constants.cbNUM_ANALOG_CHANS];
             UInt16[] chan_numbers = new UInt16[Constants.cbNUM_ANALOG_CHANS];
             CbSdkNative_PrefetchData(pNative, ref chan_count, samps_per_chan, chan_numbers);
             UInt32 timestamp = 0;
-            CbSdkNative_TransferData(pNative, ref timestamp);
 
-            Int16[][] out_arr = new short[chan_count][];
+            data = new double[chan_count][];
 
-            for (int chan_ix = 0; chan_ix < chan_count; chan_ix++)
+            // Garbage collector handles and their pinned ptrs
+            GCHandle[] gchandles = new GCHandle[chan_count];
+            IntPtr[] gcptrs = new IntPtr[chan_count];
+
+            if (chan_count > 0)
             {
-                out_arr[chan_ix] = new short[samps_per_chan[chan_ix]];
-                CbSdkNative_GetDataInt(pNative, out_arr[chan_ix], chan_ix);
+                for (int i = 0; i < chan_count; i++)
+                {
+                    data[i] = new double[samps_per_chan[i]];
+                    gchandles[i] = GCHandle.Alloc(data[i], GCHandleType.Pinned);
+                    gcptrs[i] = gchandles[i].AddrOfPinnedObject();
+                }
+
+                // handle/ptr of pinned IntPtr[]
+                GCHandle arrH = GCHandle.Alloc(gcptrs, GCHandleType.Pinned);
+                IntPtr arr = arrH.AddrOfPinnedObject();
+
+                CbSdkNative_TransferData(pNative, arr, ref timestamp);
+
+                // Unpin the pointers
+                foreach (GCHandle han in gchandles)
+                {
+                    han.Free();
+                }
+                arrH.Free();
+
             }
-            return out_arr;
+            else
+            {
+                data = null;
+            }
+        }
+
+        public void FetchData(out Int16[][] data)
+        {
+            UInt16 chan_count = 0;
+            UInt32[] samps_per_chan = new UInt32[Constants.cbNUM_ANALOG_CHANS];
+            UInt16[] chan_numbers = new UInt16[Constants.cbNUM_ANALOG_CHANS];
+            CbSdkNative_PrefetchData(pNative, ref chan_count, samps_per_chan, chan_numbers);
+            UInt32 timestamp = 0;
+
+            data = new short[chan_count][];
+
+            // Garbage collector handles and their pinned ptrs
+            GCHandle[] gchandles = new GCHandle[chan_count];
+            IntPtr[] gcptrs = new IntPtr[chan_count];
+
+            if (chan_count > 0)
+            {
+                for (int i = 0; i < chan_count; i++)
+                {
+                    data[i] = new short[samps_per_chan[i]];
+                    gchandles[i] = GCHandle.Alloc(data[i], GCHandleType.Pinned);
+                    gcptrs[i] = gchandles[i].AddrOfPinnedObject();
+                }
+
+                // handle/ptr of pinned IntPtr[]
+                GCHandle arrH = GCHandle.Alloc(gcptrs, GCHandleType.Pinned);
+                IntPtr arr = arrH.AddrOfPinnedObject();
+
+                CbSdkNative_TransferData(pNative, arr, ref timestamp);
+
+                // Unpin the pointers
+                foreach (GCHandle han in gchandles)
+                {
+                    han.Free();
+                }
+                arrH.Free();
+
+            }
+            else
+            {
+                data = null;
+            }
         }
 
         public bool SetFileStorage(string file_name, string file_comment, bool bStart)
@@ -130,10 +196,15 @@ namespace CereLink
             return CbSdkNative_GetIsRecording(pNative);
         }
 
-        ~CereLinkConnection()
+        public void Clear()
         {
             CbSdkNative_Delete(pNative);
             pNative = IntPtr.Zero;
+        }
+
+        ~CereLinkConnection()
+        {
+            Clear();
         }
     }
 }
