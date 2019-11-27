@@ -15,12 +15,18 @@
 #    e.g., Matlab R2016a on Mac OS: -DMatlab_ROOT_DIR=/Applications/MATLAB_R2016a.app/
 #    -DCBMEX_INSTALL_PREFIX can be used to install cbmex to given directory
 #
+# General Windows:
+#    - If you are using MSVC and not logged-in as an administrator then you will not be
+#    able to build the INSTALL target, as by default it tries to install to C:\Program Files.
+#    Change the install target using CMAKE_INSTALL_PREFIX. See example CMAKE command below.
+#    - If you would like to build the C# libraries and examples then add -DBUILD_CLI=ON
 # QT:
 #     QT5 ships with its own cmake config files. We need to tell CMake where to find this.
 #     On Mac OS, assuming qt installed with homebrew,
 #     run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt5)
 #     On Windows, run CMake with -DQt5_DIR=path\to\qt\version\platform\lib\cmake\Qt5
-#     For example: cmake .. -G "Visual Studio 14 2015 Win64" -DQt5_DIR=C:\Qt\5.10.0\msvc2015_64\lib\cmake\Qt5
+#     For example: cmake .. -G "Visual Studio 15 2017 Win64" -DQt5_DIR=C:\Qt\5.13.1\msvc2017_64\lib\cmake\Qt5 -DCMAKE_INSTALL_PREFIX=..\dist -DBUILD_CLI=ON
+#
 
 
 CMAKE_MINIMUM_REQUIRED( VERSION 3.1.0 )
@@ -36,6 +42,8 @@ option(BUILD_STATIC "Build static cbsdk library" ON)
 option(BUILD_CBMEX "Build Matlab wrapper" ON)
 option(BUILD_CBOCT "Build Octave wrapper" ON)
 option(BUILD_TEST "Build testcbsdk" ON)
+option(BUILD_TEST_COMMENTS "Build test_comments" ON)
+option(BUILD_TEST_ANAOUT "Build test_anaout" ON)
 option(BUILD_HDF5 "Build HDF5" ON)
 
 ##########################################################################################
@@ -46,6 +54,8 @@ SET( LIB_NAME_STATIC cbsdk_static )
 SET( LIB_NAME_CBMEX cbmex )
 SET( LIB_NAME_CBOCT cboct )
 SET( TEST_NAME testcbsdk )
+SET( TEST_COMMENTS_NAME test_comments )
+SET( TEST_ANAOUT_NAME test_analog_out )
 SET( N2H5_NAME n2h5 )
 
 ##########################################################################################
@@ -221,10 +231,10 @@ IF (NOT WIN32)
     ENDIF( NOT APPLE )
 ENDIF(NOT WIN32)
 TARGET_INCLUDE_DIRECTORIES( ${LIB_NAME} PRIVATE ${LIB_INCL_DIRS})
-TARGET_LINK_LIBRARIES( ${LIB_NAME} ${QT_LIBRARIES} )
+TARGET_LINK_LIBRARIES( ${LIB_NAME} PRIVATE ${QT_LIBRARIES} )
 IF( WIN32 )
     # From cbhw/cbmex.vcproj: AdditionalDependencies="ws2_32.lib winmm.lib libmx.lib libmex.lib libmat.lib QtXmlx644.lib QtCorex644.lib"
-    TARGET_LINK_LIBRARIES( ${LIB_NAME} ws2_32 winmm )
+    TARGET_LINK_LIBRARIES( ${LIB_NAME} PRIVATE ws2_32 winmm )
 ENDIF( WIN32 )
 
 ##
@@ -232,9 +242,9 @@ ENDIF( WIN32 )
 IF(${BUILD_STATIC})
     ADD_LIBRARY( ${LIB_NAME_STATIC} STATIC ${LIB_SOURCE} ${LIB_HEADERS_MOC} )
     TARGET_INCLUDE_DIRECTORIES( ${LIB_NAME_STATIC} PRIVATE ${LIB_INCL_DIRS})
-    TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} ${QT_LIBRARIES} )
+    TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} PRIVATE ${QT_LIBRARIES} )
     IF (WIN32 )
-        TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} ws2_32 winmm )
+        TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} PRIVATE ws2_32 winmm )
     ENDIF( WIN32 )
     IF( WIN32 )
         SET_TARGET_PROPERTIES( ${LIB_NAME_STATIC} PROPERTIES COMPILE_FLAGS "-DSTATIC_CBSDK_LINK")
@@ -362,6 +372,38 @@ IF(${BUILD_TEST})
     ENDIF(WIN32)
 ENDIF(${BUILD_TEST})
 
+IF(${BUILD_TEST_COMMENTS})
+    ADD_EXECUTABLE( ${TEST_COMMENTS_NAME} ${PROJECT_SOURCE_DIR}/samples/TestComments/test_comments.cpp )
+    TARGET_INCLUDE_DIRECTORIES( ${TEST_COMMENTS_NAME} PRIVATE
+        ${LIB_INCL_DIRS}
+        ${PROJECT_SOURCE_DIR}/cbmex)
+    TARGET_LINK_LIBRARIES( ${TEST_COMMENTS_NAME} ${LIB_NAME} )
+    LIST(APPEND INSTALL_TARGET_LIST ${TEST_COMMENTS_NAME})
+    IF(WIN32)
+        get_target_property(QT5_QMAKE_EXECUTABLE Qt5::qmake IMPORTED_LOCATION)
+        get_filename_component(QT5_WINDEPLOYQT_EXECUTABLE ${QT5_QMAKE_EXECUTABLE} PATH)
+        set(QT5_WINDEPLOYQT_EXECUTABLE "${QT5_WINDEPLOYQT_EXECUTABLE}/windeployqt.exe")
+        add_custom_command(TARGET ${TEST_COMMENTS_NAME} POST_BUILD
+            COMMAND ${QT5_WINDEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
+    ENDIF(WIN32)
+ENDIF(${BUILD_TEST_COMMENTS})
+
+IF(${BUILD_TEST_ANAOUT})
+    ADD_EXECUTABLE( ${TEST_ANAOUT_NAME} ${PROJECT_SOURCE_DIR}/samples/TestAnalogOut/test_analog_out.cpp )
+    TARGET_INCLUDE_DIRECTORIES( ${TEST_ANAOUT_NAME} PRIVATE
+        ${LIB_INCL_DIRS}
+        ${PROJECT_SOURCE_DIR}/cbmex)
+    TARGET_LINK_LIBRARIES( ${TEST_ANAOUT_NAME} ${LIB_NAME} )
+    LIST(APPEND INSTALL_TARGET_LIST ${TEST_ANAOUT_NAME})
+    IF(WIN32)
+        get_target_property(QT5_QMAKE_EXECUTABLE Qt5::qmake IMPORTED_LOCATION)
+        get_filename_component(QT5_WINDEPLOYQT_EXECUTABLE ${QT5_QMAKE_EXECUTABLE} PATH)
+        set(QT5_WINDEPLOYQT_EXECUTABLE "${QT5_WINDEPLOYQT_EXECUTABLE}/windeployqt.exe")
+        add_custom_command(TARGET ${TEST_ANAOUT_NAME} POST_BUILD
+            COMMAND ${QT5_WINDEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
+    ENDIF(WIN32)
+ENDIF(${BUILD_TEST_ANAOUT})
+
 ##
 # n2h5
 IF(${BUILD_HDF5} AND HDF5_FOUND )
@@ -380,6 +422,10 @@ IF(${BUILD_HDF5} AND HDF5_FOUND )
     TARGET_LINK_LIBRARIES (${N2H5_NAME} ${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})
     LIST(APPEND INSTALL_TARGET_LIST ${N2H5_NAME})
 ENDIF(${BUILD_HDF5} AND HDF5_FOUND )
+
+##
+# C++ / CLI
+add_subdirectory(cli)
 
 #########################################################################################
 # Install libraries, test executable, and headers

@@ -47,7 +47,7 @@ Here are some cmake one-liners that work if your development environment
 happens to match perfectly. If not, then modify the cmake options following the instructions below.
 
 * Windows:
-    * `cmake .. -G "Visual Studio 15 2017 Win64" -DQt5_DIR="C:\Qt\5.12.0\msvc2017_64\lib\cmake\Qt5" -DBUILD_HDF5=OFF`
+    * `cmake .. -G "Visual Studio 15 2017 Win64" -DQt5_DIR=C:\Qt\5.13.1\msvc2017_64\lib\cmake\Qt5 -DCMAKE_INSTALL_PREFIX=..\dist -DBUILD_CLI=ON`
 * MacOS
     * `cmake .. -DQt5_DIR=$(brew --prefix qt5)/lib/cmake/Qt5`
 * Linux
@@ -82,11 +82,16 @@ for a primer.
     * e.g.: `-DMatlab_ROOT_DIR=/Applications/MATLAB_R2016a.app/`
     * Alternatively, you could populate the ../Matlab directories with the Matlab include and lib files.
 * `-DCBMEX_INSTALL_PREFIX` can be used to install cbmex to given directory.
+* `-DBUILD_CLI=ON`
 
 # cerebus (Python lib) Build Instructions
 
 * Open a Terminal or Anaconda prompt and activate your Python environment.
 * Your Python environment must already have Cython installed and pip should be installed too.
 * Change to the CereLink directory.
-* Set the QTDIR environment variable: `set QTDIR=C:\Qt\5.12.0\msvc2017_64`
+* Set the QTDIR environment variable: `set QTDIR=C:\Qt\5.13.1\msvc2017_64`
+* Make sure the CereLink Visual Studio project is closed.
 * `pip install .`
+* or, if you are making a wheel to bring to another machine,
+  * activate an environment matching the target machine,
+  * `pip wheel . -w dist/bin`

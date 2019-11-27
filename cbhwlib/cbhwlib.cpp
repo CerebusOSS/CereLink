@@ -2372,6 +2372,11 @@ cbRESULT cbGetAoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, u
 
     // Test that the addresses are valid and that necessary structures are not empty
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
+    // If cb_cfg_buffer_ptr was built for 128-channel system, but passed in channel is for 256-channel firmware.
+    // TODO: Again, maybe we need a m_ChanIdxInType array.
+    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT) & (chan > (cbNUM_FE_CHANS / 2)))
+    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT) & chan > (cbNUM_FE_CHANS / 2))
+        chan -= (cbNUM_FE_CHANS / 2);
     if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT)) return cbRESULT_INVALIDFUNCTION;
 
@@ -2394,6 +2399,10 @@ cbRESULT cbSetAoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uin
 
     // Test that the addresses are valid and that necessary structures are not empty
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
+    // If cb_cfg_buffer_ptr was built for 128-channel system, but passed in channel is for 256-channel firmware.
+    // TODO: Again, maybe we need a m_ChanIdxInType array.
+    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT) & (chan > (cbNUM_FE_CHANS / 2)))
+        chan -= (cbNUM_FE_CHANS / 2);
     if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT)) return cbRESULT_INVALIDFUNCTION;
 

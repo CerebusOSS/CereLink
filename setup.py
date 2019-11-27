@@ -57,7 +57,7 @@ def get_extras():
             except ImportError:
                 import winreg as _winreg
             try:
-                path = os.environ['QTDIR']  # e.g. `set QTDIR=C:\Qt\Qt5.10.0\msvc2015_64`
+                path = os.environ['QTDIR']  # e.g. `set QTDIR=C:\Qt\5.13.1\msvc2017_64`
             except:
                 pass
             if not path:
@@ -137,7 +137,7 @@ cbpy_module = Extension('cerebus.cbpy', **extension_kwargs)
 
 setup(
     name='cerebus',
-    version='0.0.3',
+    version='0.0.4',
     description='Cerebus Link',
     long_description='Cerebus Link Python Package',
     author='dashesy',
