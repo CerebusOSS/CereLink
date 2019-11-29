@@ -94,7 +94,8 @@ namespace CereLink
         {
             CbSdkNative_SetComment(pNative, comment, red, green, blue, charset);
         }
-
+        
+        // Should be running << 1ms. 
         public void FetchData(out double[][] data)
         {
             UInt16 chan_count = 0;
