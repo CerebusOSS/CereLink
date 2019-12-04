@@ -1,0 +1,551 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseBuild|Win32">
+      <Configuration>ReleaseBuild</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseBuild|x64">
+      <Configuration>ReleaseBuild</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseFinal|Win32">
+      <Configuration>ReleaseFinal</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseFinal|x64">
+      <Configuration>ReleaseFinal</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{38E1DEC0-D57E-4F17-ABDC-6E7947E945D2}</ProjectGuid>
+    <RootNamespace>cbmex</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v141</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v141</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v141</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v141</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v141</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>NotSet</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v141</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>NotSet</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v141</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>NotSet</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v141</PlatformToolset>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>NotSet</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>15.0.28127.55</_ProjectFileVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>..\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>..\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>..\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>..\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|Win32'">
+    <OutDir>..\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|x64'">
+    <OutDir>..\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|Win32'">
+    <OutDir>..\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|x64'">
+    <OutDir>..\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <PreBuildEvent>
+      <Command />
+    </PreBuildEvent>
+    <CustomBuildStep>
+      <Message>Creating Mex File</Message>
+      <Command>copy /Y "$(OutDir)cbsdk.dll" "$(OutDir)cbmex.mexw32"
+</Command>
+      <Outputs>$(OutDir)cbsdk.lib;$(OutDir)cbmex.mexw32;%(Outputs)</Outputs>
+    </CustomBuildStep>
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>../cbhwlib;../Central;../matlab/include;$(QTDIR)\include\QtCore;$(QTDIR)\include\QtXml;$(QTDIR)\include;$(QTDIR)\mkspecs\win32-msvc2005;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <AssemblerListingLocation>$(Platform)\$(Configuration)/</AssemblerListingLocation>
+      <ObjectFileName>$(Platform)\$(Configuration)/</ObjectFileName>
+      <ProgramDataBaseFileName>$(Platform)\$(Configuration)/</ProgramDataBaseFileName>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>/EXPORT:mexFunction %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalDependencies>ws2_32.lib;winmm.lib;libmx.lib;libmex.lib;libmat.lib;QtXmld4.lib;QtCored4.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>../$(Platform)\$(Configuration)\cbsdk.dll</OutputFile>
+      <AdditionalLibraryDirectories>..\Matlab\lib\win32\microsoft\msvc60;$(QTDIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ModuleDefinitionFile />
+      <DelayLoadDLLs>libmx.dll;libmex.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OptimizeReferences />
+      <EnableCOMDATFolding />
+      <NoEntryPoint>false</NoEntryPoint>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <DataExecutionPrevention />
+      <ImportLibrary>$(TargetDir)cbsdk.lib</ImportLibrary>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <CustomBuildStep>
+      <Message>Creating Mex File</Message>
+      <Command>copy /Y "$(OutDir)cbsdkx64.dll" "$(OutDir)cbmex.mexw64"
+</Command>
+      <Outputs>$(OutDir)cbsdkx64.lib;$(OutDir)cbmex.mexw64;%(Outputs)</Outputs>
+    </CustomBuildStep>
+    <Midl>
+      <TargetEnvironment>X64</TargetEnvironment>
+    </Midl>
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>../cbhwlib;../Central;../matlab/include;$(QTDIR)\include\QtCore;$(QTDIR)\include\QtXml;$(QTDIR)\include;$(QTDIR)\mkspecs\win32-msvc2005;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>true</MinimalRebuild>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <AssemblerListingLocation>$(Platform)\$(Configuration)/</AssemblerListingLocation>
+      <ObjectFileName>$(Platform)\$(Configuration)/</ObjectFileName>
+      <ProgramDataBaseFileName>$(Platform)\$(Configuration)/</ProgramDataBaseFileName>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>/EXPORT:mexFunction %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalDependencies>ws2_32.lib;winmm.lib;libmx.lib;libmex.lib;libmat.lib;QtXmlx64d4.lib;QtCorex64d4.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>../$(Platform)\$(Configuration)\cbsdkx64.dll</OutputFile>
+      <AdditionalLibraryDirectories>..\Matlab\lib\win64\microsoft;$(QTDIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ModuleDefinitionFile />
+      <DelayLoadDLLs>libmx.dll;libmex.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OptimizeReferences />
+      <EnableCOMDATFolding />
+      <NoEntryPoint>false</NoEntryPoint>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <DataExecutionPrevention />
+      <ImportLibrary>$(TargetDir)cbsdkx64.lib</ImportLibrary>
+      <TargetMachine>MachineX64</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <PreBuildEvent>
+      <Command />
+    </PreBuildEvent>
+    <CustomBuildStep>
+      <Message>Creating Mex File</Message>
+      <Command>copy /Y "$(OutDir)cbsdk.dll" "$(OutDir)cbmex.mexw32"
+</Command>
+      <Outputs>$(OutDir)cbsdk.lib;$(OutDir)cbmex.mexw32;%(Outputs)</Outputs>
+    </CustomBuildStep>
+    <ClCompile>
+      <AdditionalIncludeDirectories>../cbhwlib;../Central;../matlab/include;$(QTDIR)\include\QtCore;$(QTDIR)\include\QtXml;$(QTDIR)\include;$(QTDIR)\mkspecs\win32-msvc2005;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PrecompiledHeader />
+      <AssemblerListingLocation>$(Platform)\$(Configuration)/</AssemblerListingLocation>
+      <ObjectFileName>$(Platform)\$(Configuration)/</ObjectFileName>
+      <ProgramDataBaseFileName>$(Platform)\$(Configuration)/</ProgramDataBaseFileName>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat />
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>/EXPORT:mexFunction %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalDependencies>ws2_32.lib;winmm.lib;libmx.lib;libmex.lib;libmat.lib;QtXml4.lib;QtCore4.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>../$(Platform)\$(Configuration)\cbsdk.dll</OutputFile>
+      <AdditionalLibraryDirectories>..\Matlab\lib\win32\microsoft\msvc60;$(QTDIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ModuleDefinitionFile />
+      <DelayLoadDLLs>libmx.dll;libmex.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
+      <EntryPointSymbol />
+      <NoEntryPoint>false</NoEntryPoint>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <DataExecutionPrevention />
+      <ImportLibrary>$(TargetDir)cbsdk.lib</ImportLibrary>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <CustomBuildStep>
+      <Message>Creating Mex File</Message>
+      <Command>copy /Y "$(OutDir)cbsdkx64.dll" "$(OutDir)cbmex.mexw64"
+</Command>
+      <Outputs>$(OutDir)cbsdkx64.lib;$(OutDir)cbmex.mexw64;%(Outputs)</Outputs>
+    </CustomBuildStep>
+    <Midl>
+      <TargetEnvironment>X64</TargetEnvironment>
+    </Midl>
+    <ClCompile>
+      <AdditionalIncludeDirectories>../cbhwlib;../Central;../matlab/include;$(QTDIR)\include\QtCore;$(QTDIR)\include\QtXml;$(QTDIR)\include;$(QTDIR)\mkspecs\win32-msvc2005;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <AssemblerListingLocation>$(Platform)\$(Configuration)/</AssemblerListingLocation>
+      <ObjectFileName>$(Platform)\$(Configuration)/</ObjectFileName>
+      <ProgramDataBaseFileName>$(Platform)\$(Configuration)/</ProgramDataBaseFileName>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>/EXPORT:mexFunction %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalDependencies>ws2_32.lib;winmm.lib;libmx.lib;libmex.lib;libmat.lib;QtXmlx644.lib;QtCorex644.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>../$(Platform)\$(Configuration)\cbsdkx64.dll</OutputFile>
+      <AdditionalLibraryDirectories>..\Matlab\lib\win64\microsoft;$(QTDIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ModuleDefinitionFile />
+      <DelayLoadDLLs>libmx.dll;libmex.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
+      <EntryPointSymbol />
+      <NoEntryPoint>false</NoEntryPoint>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <DataExecutionPrevention />
+      <ImportLibrary>$(TargetDir)cbsdkx64.lib</ImportLibrary>
+      <TargetMachine>MachineX64</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|Win32'">
+    <PreBuildEvent>
+      <Command>"$(SolutionDir)IncBuildNumber.exe" "$(ProjectPath)" "$(ProjectDir)res\$(ProjectName).rc2" "$(Configuration)" "$(ProjectDir)..\CentralCommon\BmiVersion.h"</Command>
+    </PreBuildEvent>
+    <CustomBuildStep>
+      <Message>Creating Mex File</Message>
+      <Command>copy /Y "$(OutDir)cbsdk.dll" "$(OutDir)cbmex.mexw32"
+</Command>
+      <Outputs>$(OutDir)cbsdk.lib;$(OutDir)cbmex.mexw32;%(Outputs)</Outputs>
+    </CustomBuildStep>
+    <ClCompile>
+      <AdditionalIncludeDirectories>../cbhwlib;../Central;../matlab/include;$(QTDIR)\include\QtCore;$(QTDIR)\include\QtXml;$(QTDIR)\include;$(QTDIR)\mkspecs\win32-msvc2005;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PrecompiledHeader />
+      <AssemblerListingLocation>$(Platform)\$(Configuration)/</AssemblerListingLocation>
+      <ObjectFileName>$(Platform)\$(Configuration)/</ObjectFileName>
+      <ProgramDataBaseFileName>$(Platform)\$(Configuration)/</ProgramDataBaseFileName>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat />
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>/EXPORT:mexFunction %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalDependencies>ws2_32.lib;winmm.lib;libmx.lib;libmex.lib;libmat.lib;QtXml4.lib;QtCore4.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>../$(Platform)\$(Configuration)\cbsdk.dll</OutputFile>
+      <AdditionalLibraryDirectories>..\Matlab\lib\win32\microsoft\msvc60;$(QTDIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ModuleDefinitionFile />
+      <DelayLoadDLLs>libmx.dll;libmex.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
+      <EntryPointSymbol />
+      <NoEntryPoint>false</NoEntryPoint>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <DataExecutionPrevention />
+      <ImportLibrary>$(TargetDir)cbsdk.lib</ImportLibrary>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|x64'">
+    <PreBuildEvent>
+      <Command>"$(SolutionDir)IncBuildNumber.exe" "$(ProjectPath)" "$(ProjectDir)res\$(ProjectName).rc2" "$(Configuration)" "$(ProjectDir)..\CentralCommon\BmiVersion.h"</Command>
+    </PreBuildEvent>
+    <CustomBuildStep>
+      <Message>Creating Mex File</Message>
+      <Command>copy /Y "$(OutDir)cbsdkx64.dll" "$(OutDir)cbmex.mexw64"
+</Command>
+      <Outputs>$(OutDir)cbsdkx64.lib;$(OutDir)cbmex.mexw64;%(Outputs)</Outputs>
+    </CustomBuildStep>
+    <Midl>
+      <TargetEnvironment>X64</TargetEnvironment>
+    </Midl>
+    <ClCompile>
+      <AdditionalIncludeDirectories>../cbhwlib;../Central;../matlab/include;$(QTDIR)\include\QtCore;$(QTDIR)\include\QtXml;$(QTDIR)\include;$(QTDIR)\mkspecs\win32-msvc2005;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <AssemblerListingLocation>$(Platform)\$(Configuration)/</AssemblerListingLocation>
+      <ObjectFileName>$(Platform)\$(Configuration)/</ObjectFileName>
+      <ProgramDataBaseFileName>$(Platform)\$(Configuration)/</ProgramDataBaseFileName>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>/EXPORT:mexFunction %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalDependencies>ws2_32.lib;winmm.lib;libmx.lib;libmex.lib;libmat.lib;QtXmlx644.lib;QtCorex644.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>../$(Platform)\$(Configuration)\cbsdkx64.dll</OutputFile>
+      <AdditionalLibraryDirectories>..\Matlab\lib\win64\microsoft;$(QTDIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ModuleDefinitionFile />
+      <DelayLoadDLLs>libmx.dll;libmex.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
+      <EntryPointSymbol />
+      <NoEntryPoint>false</NoEntryPoint>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <DataExecutionPrevention />
+      <ImportLibrary>$(TargetDir)cbsdkx64.lib</ImportLibrary>
+      <TargetMachine>MachineX64</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|Win32'">
+    <PreBuildEvent>
+      <Command>"$(SolutionDir)IncBuildNumber.exe" "$(ProjectPath)" "$(ProjectDir)res\$(ProjectName).rc2" "$(Configuration)" "$(ProjectDir)..\CentralCommon\BmiVersion.h"</Command>
+    </PreBuildEvent>
+    <CustomBuildStep>
+      <Message>Creating Mex File</Message>
+      <Command>copy /Y "$(OutDir)cbsdk.dll" "$(OutDir)cbmex.mexw32"
+</Command>
+      <Outputs>$(OutDir)cbsdk.lib;$(OutDir)cbmex.mexw32;%(Outputs)</Outputs>
+    </CustomBuildStep>
+    <ClCompile>
+      <AdditionalIncludeDirectories>../cbhwlib;../Central;../matlab/include;$(QTDIR)\include\QtCore;$(QTDIR)\include\QtXml;$(QTDIR)\include;$(QTDIR)\mkspecs\win32-msvc2005;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PrecompiledHeader />
+      <AssemblerListingLocation>$(Platform)\$(Configuration)/</AssemblerListingLocation>
+      <ObjectFileName>$(Platform)\$(Configuration)/</ObjectFileName>
+      <ProgramDataBaseFileName>$(Platform)\$(Configuration)/</ProgramDataBaseFileName>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat />
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>/EXPORT:mexFunction %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalDependencies>ws2_32.lib;winmm.lib;libmx.lib;libmex.lib;libmat.lib;QtXml4.lib;QtCore4.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>../$(Platform)\$(Configuration)\cbsdk.dll</OutputFile>
+      <AdditionalLibraryDirectories>..\Matlab\lib\win32\microsoft\msvc60;$(QTDIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ModuleDefinitionFile />
+      <DelayLoadDLLs>libmx.dll;libmex.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
+      <EntryPointSymbol />
+      <NoEntryPoint>false</NoEntryPoint>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <DataExecutionPrevention />
+      <ImportLibrary>$(TargetDir)cbsdk.lib</ImportLibrary>
+      <TargetMachine>MachineX86</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|x64'">
+    <PreBuildEvent>
+      <Command>"$(SolutionDir)IncBuildNumber.exe" "$(ProjectPath)" "$(ProjectDir)res\$(ProjectName).rc2" "$(Configuration)" "$(ProjectDir)..\CentralCommon\BmiVersion.h"</Command>
+    </PreBuildEvent>
+    <CustomBuildStep>
+      <Message>Creating Mex File</Message>
+      <Command>copy /Y "$(OutDir)cbsdkx64.dll" "$(OutDir)cbmex.mexw64"
+</Command>
+      <Outputs>$(OutDir)cbsdkx64.lib;$(OutDir)cbmex.mexw64;%(Outputs)</Outputs>
+    </CustomBuildStep>
+    <Midl>
+      <TargetEnvironment>X64</TargetEnvironment>
+    </Midl>
+    <ClCompile>
+      <AdditionalIncludeDirectories>../cbhwlib;../Central;../matlab/include;$(QTDIR)\include\QtCore;$(QTDIR)\include\QtXml;$(QTDIR)\include;$(QTDIR)\mkspecs\win32-msvc2005;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <AssemblerListingLocation>$(Platform)\$(Configuration)/</AssemblerListingLocation>
+      <ObjectFileName>$(Platform)\$(Configuration)/</ObjectFileName>
+      <ProgramDataBaseFileName>$(Platform)\$(Configuration)/</ProgramDataBaseFileName>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>/EXPORT:mexFunction %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalDependencies>ws2_32.lib;winmm.lib;libmx.lib;libmex.lib;libmat.lib;QtXmlx644.lib;QtCorex644.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>../$(Platform)\$(Configuration)\cbsdkx64.dll</OutputFile>
+      <AdditionalLibraryDirectories>..\Matlab\lib\win64\microsoft;$(QTDIR)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ModuleDefinitionFile />
+      <DelayLoadDLLs>libmx.dll;libmex.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
+      <EntryPointSymbol />
+      <NoEntryPoint>false</NoEntryPoint>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <DataExecutionPrevention />
+      <ImportLibrary>$(TargetDir)cbsdkx64.lib</ImportLibrary>
+      <TargetMachine>MachineX64</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\cbhwlib\cbhwlib.cpp" />
+    <ClCompile Include="..\cbhwlib\cbHwlibHi.cpp" />
+    <ClCompile Include="..\cbhwlib\CCFUtils.cpp" />
+    <ClCompile Include="..\cbhwlib\CCFUtilsBinary.cpp" />
+    <ClCompile Include="..\cbhwlib\CCFUtilsConcurrent.cpp" />
+    <ClCompile Include="..\cbhwlib\CCFUtilsXml.cpp" />
+    <ClCompile Include="..\cbhwlib\CCFUtilsXmlItems.cpp" />
+    <ClCompile Include="..\cbhwlib\InstNetwork.cpp" />
+    <ClCompile Include="..\cbhwlib\XmlFile.cpp" />
+    <ClCompile Include="..\Central\Instrument.cpp" />
+    <ClCompile Include="..\Central\UDPsocket.cpp" />
+    <ClCompile Include="cbmex.cpp" />
+    <ClCompile Include="cbsdk.cpp" />
+    <ClCompile Include="Generated Files\moc_InstNetwork.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="cbMex.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\cbhwlib\cbhwlib.h" />
+    <ClInclude Include="..\cbhwlib\cbHwlibHi.h" />
+    <ClInclude Include="..\cbhwlib\CCFUtils.h" />
+    <ClInclude Include="..\cbhwlib\CCFUtilsBinary.h" />
+    <ClInclude Include="..\cbhwlib\CCFUtilsConcurrent.h" />
+    <ClInclude Include="..\cbhwlib\CCFUtilsXml.h" />
+    <ClInclude Include="..\cbhwlib\CCFUtilsXmlItems.h" />
+    <ClInclude Include="..\cbhwlib\CCFUtilsXmlItemsGenerate.h" />
+    <ClInclude Include="..\cbhwlib\CCFUtilsXmlItemsParse.h" />
+    <ClInclude Include="..\cbhwlib\compat.h" />
+    <CustomBuild Include="..\cbhwlib\InstNetwork.h">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Moc%27ing %(Filename)%(Extension)...</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">"$(QTDIR)\bin\moc.exe"   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I"." -I"$(QTDIR)\include\QtCore" -I"$(QTDIR)\include\QtXml" -I"$(QTDIR)\include" -I"$(QTDIR)\mkspecs\win32-msvc2005" "..\cbhwlib\InstNetwork.h" -o "Generated Files\moc_%(Filename).cpp"
+</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(QTDIR)\bin\moc.exe;%(FullPath);%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Generated Files\moc_%(Filename).cpp;%(Outputs)</Outputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Moc%27ing %(Filename)%(Extension)...</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">"$(QTDIR)\bin\moc.exe"   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I"." -I"$(QTDIR)\include\QtCore" -I"$(QTDIR)\include\QtXml" -I"$(QTDIR)\include" -I"$(QTDIR)\mkspecs\win32-msvc2005" "..\cbhwlib\InstNetwork.h" -o "Generated Files\moc_%(Filename).cpp"
+</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(QTDIR)\bin\moc.exe;%(FullPath);%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Generated Files\moc_%(Filename).cpp;%(Outputs)</Outputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|Win32'">Moc%27ing %(Filename)%(Extension)...</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|Win32'">"$(QTDIR)\bin\moc.exe"   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I"." -I"$(QTDIR)\include\QtCore" -I"$(QTDIR)\include\QtXml" -I"$(QTDIR)\include" -I"$(QTDIR)\mkspecs\win32-msvc2005" "..\cbhwlib\InstNetwork.h" -o "Generated Files\moc_%(Filename).cpp"
+</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|Win32'">$(QTDIR)\bin\moc.exe;%(FullPath);%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|Win32'">Generated Files\moc_%(Filename).cpp;%(Outputs)</Outputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|x64'">Moc%27ing %(Filename)%(Extension)...</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|x64'">"$(QTDIR)\bin\moc.exe"   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I"." -I"$(QTDIR)\include\QtCore" -I"$(QTDIR)\include\QtXml" -I"$(QTDIR)\include" -I"$(QTDIR)\mkspecs\win32-msvc2005" "..\cbhwlib\InstNetwork.h" -o "Generated Files\moc_%(Filename).cpp"
+</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|x64'">$(QTDIR)\bin\moc.exe;%(FullPath);%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='ReleaseBuild|x64'">Generated Files\moc_%(Filename).cpp;%(Outputs)</Outputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|Win32'">Moc%27ing %(Filename)%(Extension)...</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|Win32'">"$(QTDIR)\bin\moc.exe"   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I"." -I"$(QTDIR)\include\QtCore" -I"$(QTDIR)\include\QtXml" -I"$(QTDIR)\include" -I"$(QTDIR)\mkspecs\win32-msvc2005" "..\cbhwlib\InstNetwork.h" -o "Generated Files\moc_%(Filename).cpp"
+</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|Win32'">$(QTDIR)\bin\moc.exe;%(FullPath);%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|Win32'">Generated Files\moc_%(Filename).cpp;%(Outputs)</Outputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|x64'">Moc%27ing %(Filename)%(Extension)...</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|x64'">"$(QTDIR)\bin\moc.exe"   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I"." -I"$(QTDIR)\include\QtCore" -I"$(QTDIR)\include\QtXml" -I"$(QTDIR)\include" -I"$(QTDIR)\mkspecs\win32-msvc2005" "..\cbhwlib\InstNetwork.h" -o "Generated Files\moc_%(Filename).cpp"
+</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|x64'">$(QTDIR)\bin\moc.exe;%(FullPath);%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='ReleaseFinal|x64'">Generated Files\moc_%(Filename).cpp;%(Outputs)</Outputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Moc%27ing %(Filename)%(Extension)...</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">"$(QTDIR)\bin\moc.exe"   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I"." -I"$(QTDIR)\include\QtCore" -I"$(QTDIR)\include\QtXml" -I"$(QTDIR)\include" -I"$(QTDIR)\mkspecs\win32-msvc2005" "..\cbhwlib\InstNetwork.h" -o "Generated Files\moc_%(Filename).cpp"
+</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(QTDIR)\bin\moc.exe;%(FullPath);%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Generated Files\moc_%(Filename).cpp;%(Outputs)</Outputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Moc%27ing %(Filename)%(Extension)...</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">"$(QTDIR)\bin\moc.exe"   -DWINVER=0x0501 -D_WINDOWS -DWIN32 -DNO_AFX -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_DLL -DQT_XML_LIB -DQT_CORE_LIB  -I"." -I"$(QTDIR)\include\QtCore" -I"$(QTDIR)\include\QtXml" -I"$(QTDIR)\include" -I"$(QTDIR)\mkspecs\win32-msvc2005" "..\cbhwlib\InstNetwork.h" -o "Generated Files\moc_%(Filename).cpp"
+</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(QTDIR)\bin\moc.exe;%(FullPath);%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Generated Files\moc_%(Filename).cpp;%(Outputs)</Outputs>
+    </CustomBuild>
+    <ClInclude Include="..\cbhwlib\XmlFile.h" />
+    <ClInclude Include="..\cbhwlib\XmlItem.h" />
+    <ClInclude Include="..\Central\Instrument.h" />
+    <ClInclude Include="..\Central\UDPsocket.h" />
+    <ClInclude Include="cbmex.h" />
+    <ClInclude Include="cbsdk.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="SdkApp.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="res\cbmex.rc2" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

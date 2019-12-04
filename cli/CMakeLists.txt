@@ -4,7 +4,6 @@ IF(${BUILD_CLI})
     cmake_minimum_required(VERSION 3.12)
     SET( LIB_NAME_CLI cbsdk_cli)
     SET(cbsdk_cli_SOURCE
-        ${CMAKE_CURRENT_LIST_DIR}/cbsdk_cli.h ${CMAKE_CURRENT_LIST_DIR}/cbsdk_cli.cpp
         ${CMAKE_CURRENT_LIST_DIR}/cbsdk_native.h ${CMAKE_CURRENT_LIST_DIR}/cbsdk_native.cpp
         ${CMAKE_CURRENT_LIST_DIR}/AssemblyInfo.cpp)
     set_source_files_properties(${cbsdk_cli_SOURCE} PROPERTIES LANGUAGE "CXX")

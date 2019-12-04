@@ -11,12 +11,13 @@ public class CereLinkInterface : MonoBehaviour {
     public int bufsize = 8 * 1024 * 1024;
     public string inIP = "127.0.0.1";
     public string outIP = "";
+    public bool useDouble = false;
 
     private CereLinkConnection conn;
 
     // Use this for initialization
     void Start () {
-        conn = new CereLinkConnection(nInstance, inPort, outPort, bufsize, inIP, outIP);
+        conn = new CereLinkConnection(nInstance, inPort, outPort, bufsize, inIP, outIP, useDouble);
 
     }
 	
@@ -24,7 +25,7 @@ public class CereLinkInterface : MonoBehaviour {
 	void Update () {
         if (conn.IsOnline())
         {
-            short[][] result = conn.FetchData();
+            conn.FetchData(out short[][] result);
             Debug.Log(string.Format("Returned {0} chans.", result.Length));
             for (int chan_ix = 0; chan_ix < result.Length; chan_ix++)
             {
