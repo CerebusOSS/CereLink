@@ -687,7 +687,7 @@ typedef struct {
     float   fClusterHistMinPeakPercentage;     // larger number = less apt to split separated clusters
 } cbPKT_SS_STATISTICS_CB2005_32;
 
-typedef struct {
+typedef struct cbPKT_SS_STATISTICS_CB2005_37_type {
     uint32_t  time;           // system clock timestamp
     uint16_t  chid;           // 0x8000
     uint8_t   type;           // cbPKTTYPE_SS_STATISTICSREP or cbPKTTYPE_SS_STATISTICSSET depending on the direction
@@ -774,7 +774,7 @@ typedef struct {
     float   aTheta;             // the angle of rotation for the Noise Boundary (ellipse)
 } cbPKT_SS_NOISE_BOUNDARY_CB2005_34;
 
-typedef struct {
+typedef struct cbPKT_SS_NOISE_BOUNDARY_CB2005_37_type {
     uint32_t  time;               // system clock timestamp
     uint16_t  chid;               // 0x8000
     uint8_t   type;               // cbPKTTYPE_SS_NOISE_BOUNDARYREP or cbPKTTYPE_SS_NOISE_BOUNDARYSET depending on the direction
