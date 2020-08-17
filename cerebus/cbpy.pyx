@@ -1,3 +1,6 @@
+# distutils: language = c++
+# cython: language_level=2
+
 """
 Created on March 9, 2013
 
