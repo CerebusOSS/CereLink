@@ -686,9 +686,10 @@ def file_config(int instance=0, command='info', comment='', filename='', patient
     if start and patient_info is not None and 'ID' in patient_info:
         default_patient_info = {'firstname': 'J', 'lastname': 'Doe', 'DOBMonth': 1, 'DOBDay': 1, 'DOBYear': 1970}
         patient_info = {**default_patient_info, **patient_info}
-        patient_res = cbSdkSetPatientInfo(<uint32_t>instance, <const char *>patient_info['ID'],
-                                          <const char *>patient_info['firstname'],
-                                          <const char *>patient_info['lastname'],
+        patient_res = cbSdkSetPatientInfo(<uint32_t>instance,
+                                          <const char *>patient_info['ID'].encode('UTF-8'),
+                                          <const char *>patient_info['firstname'].encode('UTF-8'),
+                                          <const char *>patient_info['lastname'].encode('UTF-8'),
                                           <uint32_t>patient_info['DOBMonth'],
                                           <uint32_t>patient_info['DOBDay'],
                                           <uint32_t>patient_info['DOBYear'])
