@@ -1,3 +1,6 @@
+# distutils: language = c++
+# cython: language_level=2
+
 """
 Created on March 9, 2013
 
@@ -624,7 +627,7 @@ def trial_comment(int instance=0, bool reset=False, unsigned long wait_for_comme
     return <int>res, trial
 
 
-def file_config(int instance=0, command='info', comment='', filename=''):
+def file_config(int instance=0, command='info', comment='', filename='', patient_info=None):
     """ Configure remote file recording or get status of recording.
     Inputs:
        command - string, File configuration command, can be of of the following
@@ -636,6 +639,9 @@ def file_config(int instance=0, command='info', comment='', filename=''):
        filename - (optional) string, file name to use for recording
        comment - (optional) string, file comment to use for file recording
        instance - (optional) library instance number
+       patient_info - (optional) dict carrying patient info. If provided then valid keys and value types:
+                'ID': str - required, 'firstname': str - defaults to 'J', 'lastname': str - defaults to 'Doe',
+                'DOBMonth': int - defaults to 01, 'DOBDay': int - defaults to 01, 'DOBYear': int - defaults to 1970
     Outputs:
        Only if command is 'info' output is returned
        A dictionary with following keys:
@@ -661,25 +667,38 @@ def file_config(int instance=0, command='info', comment='', filename=''):
     cdef unsigned int options = cbFILECFG_OPT_NONE     
     if command == 'open':
         if filename or comment:
-            raise RuntimeError('filename and comment should not be specified for open')
+            raise RuntimeError('filename and comment must not be specified for open')
         options = cbFILECFG_OPT_OPEN
     elif command == 'close':
         options = cbFILECFG_OPT_CLOSE
     elif command == 'start':
         if not filename:
-            raise RuntimeError('filename should be specified for start')
+            raise RuntimeError('filename must be specified for start')
         start = 1
     elif command == 'stop':
         if not filename:
-            raise RuntimeError('filename should be specified for stop')
+            raise RuntimeError('filename must be specified for stop')
         start = 0
     else:
         raise RuntimeError("invalid file config command %s" % command)
+
+    cdef cbSdkResult patient_res
+    if start and patient_info is not None and 'ID' in patient_info:
+        default_patient_info = {'firstname': 'J', 'lastname': 'Doe', 'DOBMonth': 1, 'DOBDay': 1, 'DOBYear': 1970}
+        patient_info = {**default_patient_info, **patient_info}
+        patient_res = cbSdkSetPatientInfo(<uint32_t>instance, <const char *>patient_info['ID'],
+                                          <const char *>patient_info['firstname'],
+                                          <const char *>patient_info['lastname'],
+                                          <uint32_t>patient_info['DOBMonth'],
+                                          <uint32_t>patient_info['DOBDay'],
+                                          <uint32_t>patient_info['DOBYear'])
+        handle_result(patient_res)
 
     cdef int set_res
     filename_string = filename.encode('UTF-8')
     comment_string = comment.encode('UTF-8')
     set_res = cbsdk_file_config(<uint32_t>instance, <const char *>filename_string, <char *>comment_string, start, options)
+
     
     return set_res
 
