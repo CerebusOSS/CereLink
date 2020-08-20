@@ -54,8 +54,6 @@ SET( INSTALL_TARGET_LIST ${LIB_NAME} )
 SET( LIB_NAME_STATIC cbsdk_static )
 SET( LIB_NAME_CBMEX cbmex )
 SET( LIB_NAME_CBOCT cboct )
-SET( TEST_NAME testcbsdk )
-SET( TEST_COMMENTS_NAME test_comments )
 SET( TEST_ANAOUT_NAME test_analog_out )
 SET( N2H5_NAME n2h5 )
 
@@ -334,59 +332,70 @@ IF( ${BUILD_CBOCT} AND OCTAVE_FOUND )
     )
 ENDIF( ${BUILD_CBOCT} AND OCTAVE_FOUND )
 
+# Some Test applications.
+# These all use deployqt so let's create some helper functions for that.
+function(findQtInstallationTool qtdeploytoolname)
+    if(QT_DEPLOYQT_EXECUTABLE)
+        return()
+    endif()
+    get_target_property(QT_QMAKE_EXE Qt5::qmake IMPORTED_LOCATION)
+    get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXE}" DIRECTORY)
+    find_program (QT_DEPLOYQT_EXECUTABLE ${qtdeploytoolname} HINTS "${QT_BIN_DIR}")
+    if (QT_DEPLOYQT_EXECUTABLE)
+        message(STATUS "Qt deploy tool found at ${QT_DEPLOYQT_EXECUTABLE}")
+    else()
+        message(WARNING "Qt deploy tool wasn't found, installing ${PROJECT_NAME} will fail!")
+        return()
+    endif()
+endfunction()
+
 ##
 # test
 IF(${BUILD_TEST})
-    ADD_EXECUTABLE( ${TEST_NAME} ${PROJECT_SOURCE_DIR}/cbmex/testcbsdk.cpp )
-    TARGET_INCLUDE_DIRECTORIES( ${TEST_NAME} PRIVATE ${LIB_INCL_DIRS})
-    TARGET_LINK_LIBRARIES( ${TEST_NAME} ${LIB_NAME} )
-    LIST(APPEND INSTALL_TARGET_LIST ${TEST_NAME})
-    
-    IF(WIN32)
-        get_target_property(QT5_QMAKE_EXECUTABLE Qt5::qmake IMPORTED_LOCATION)
-        get_filename_component(QT5_WINDEPLOYQT_EXECUTABLE ${QT5_QMAKE_EXECUTABLE} PATH)
-        set(QT5_WINDEPLOYQT_EXECUTABLE "${QT5_WINDEPLOYQT_EXECUTABLE}/windeployqt.exe")
-        add_custom_command(TARGET ${TEST_NAME} POST_BUILD
-            COMMAND ${QT5_WINDEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
+    ADD_EXECUTABLE(testcbsdk ${PROJECT_SOURCE_DIR}/cbmex/testcbsdk.cpp )
+    TARGET_INCLUDE_DIRECTORIES(testcbsdk PRIVATE ${LIB_INCL_DIRS})
+    TARGET_LINK_LIBRARIES(testcbsdk ${LIB_NAME} )
 
-        ADD_EXECUTABLE( test_io ${PROJECT_SOURCE_DIR}/cbmex/test_io.cpp )
-        TARGET_INCLUDE_DIRECTORIES( test_io PRIVATE ${LIB_INCL_DIRS})
-        TARGET_LINK_LIBRARIES( test_io ${LIB_NAME} )
-        LIST(APPEND INSTALL_TARGET_LIST test_io)
+    ADD_EXECUTABLE(test_io ${PROJECT_SOURCE_DIR}/cbmex/test_io.cpp )
+    TARGET_INCLUDE_DIRECTORIES(test_io PRIVATE ${LIB_INCL_DIRS})
+    TARGET_LINK_LIBRARIES(test_io ${LIB_NAME} )
+
+    LIST(APPEND INSTALL_TARGET_LIST testcbsdk test_io)
+
+    IF(WIN32)
+        findQtInstallationTool("windeployqt")
+        add_custom_command(TARGET testcbsdk POST_BUILD
+            COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
         add_custom_command(TARGET test_io POST_BUILD
-            COMMAND ${QT5_WINDEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
+            COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
     ENDIF(WIN32)
 ENDIF(${BUILD_TEST})
 
 IF(${BUILD_TEST_COMMENTS})
-    ADD_EXECUTABLE( ${TEST_COMMENTS_NAME} ${PROJECT_SOURCE_DIR}/samples/TestComments/test_comments.cpp )
-    TARGET_INCLUDE_DIRECTORIES( ${TEST_COMMENTS_NAME} PRIVATE
+    ADD_EXECUTABLE(test_comments ${PROJECT_SOURCE_DIR}/samples/TestComments/test_comments.cpp )
+    TARGET_INCLUDE_DIRECTORIES(test_comments PRIVATE
         ${LIB_INCL_DIRS}
         ${PROJECT_SOURCE_DIR}/cbmex)
-    TARGET_LINK_LIBRARIES( ${TEST_COMMENTS_NAME} ${LIB_NAME} )
-    LIST(APPEND INSTALL_TARGET_LIST ${TEST_COMMENTS_NAME})
+    TARGET_LINK_LIBRARIES(test_comments ${LIB_NAME} )
+    LIST(APPEND INSTALL_TARGET_LIST test_comments)
     IF(WIN32)
-        get_target_property(QT5_QMAKE_EXECUTABLE Qt5::qmake IMPORTED_LOCATION)
-        get_filename_component(QT5_WINDEPLOYQT_EXECUTABLE ${QT5_QMAKE_EXECUTABLE} PATH)
-        set(QT5_WINDEPLOYQT_EXECUTABLE "${QT5_WINDEPLOYQT_EXECUTABLE}/windeployqt.exe")
-        add_custom_command(TARGET ${TEST_COMMENTS_NAME} POST_BUILD
-            COMMAND ${QT5_WINDEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
+        findQtInstallationTool("windeployqt")
+        add_custom_command(TARGET test_comments POST_BUILD
+            COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
     ENDIF(WIN32)
 ENDIF(${BUILD_TEST_COMMENTS})
 
 IF(${BUILD_TEST_ANAOUT})
-    ADD_EXECUTABLE( ${TEST_ANAOUT_NAME} ${PROJECT_SOURCE_DIR}/samples/TestAnalogOut/test_analog_out.cpp )
-    TARGET_INCLUDE_DIRECTORIES( ${TEST_ANAOUT_NAME} PRIVATE
+    ADD_EXECUTABLE(test_analog_out ${PROJECT_SOURCE_DIR}/samples/TestAnalogOut/test_analog_out.cpp )
+    TARGET_INCLUDE_DIRECTORIES(test_analog_out PRIVATE
         ${LIB_INCL_DIRS}
         ${PROJECT_SOURCE_DIR}/cbmex)
-    TARGET_LINK_LIBRARIES( ${TEST_ANAOUT_NAME} ${LIB_NAME} )
-    LIST(APPEND INSTALL_TARGET_LIST ${TEST_ANAOUT_NAME})
+    TARGET_LINK_LIBRARIES(test_analog_out ${LIB_NAME})
+    LIST(APPEND INSTALL_TARGET_LIST test_analog_out)
     IF(WIN32)
-        get_target_property(QT5_QMAKE_EXECUTABLE Qt5::qmake IMPORTED_LOCATION)
-        get_filename_component(QT5_WINDEPLOYQT_EXECUTABLE ${QT5_QMAKE_EXECUTABLE} PATH)
-        set(QT5_WINDEPLOYQT_EXECUTABLE "${QT5_WINDEPLOYQT_EXECUTABLE}/windeployqt.exe")
-        add_custom_command(TARGET ${TEST_ANAOUT_NAME} POST_BUILD
-            COMMAND ${QT5_WINDEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
+        findQtInstallationTool("windeployqt")
+        add_custom_command(TARGET test_analog_out POST_BUILD
+            COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
     ENDIF(WIN32)
 ENDIF(${BUILD_TEST_ANAOUT})
 
