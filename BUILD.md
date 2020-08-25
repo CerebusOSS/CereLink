@@ -29,7 +29,7 @@ Using Terminal or "x64 Native Tools Command Prompt for VS 2017" on Windows:
 Here are some cmake one-liners that work if your development environment happens to match perfectly. If not, then modify the cmake options according to the CMake Options instructions below.
 
 * Windows:
-    * `cmake .. -G "Visual Studio 15 2017 Win64" -DQt5_DIR=C:\Qt\5.9.9\msvc2017_64\lib\cmake\Qt5 -DCMAKE_INSTALL_PREFIX=..\dist -DBUILD_CLI=ON`
+    * `cmake .. -G "Visual Studio 15 2017 Win64" -DQt5_DIR=C:\Qt\5.15.0\msvc2019_64\lib\cmake\Qt5 -DCMAKE_INSTALL_PREFIX=..\dist -DBUILD_CLI=ON`
 * MacOS
     * `cmake .. -DQt5_DIR=$(brew --prefix qt5)/lib/cmake/Qt5`
 * Linux
@@ -69,7 +69,7 @@ Note: This may generate an error related to the CLI builds. Please see further i
 * Open a Terminal or Anaconda prompt and activate your Python environment.
 * Your Python environment must already have Cython installed and pip should be installed too.
 * Change to the CereLink directory.
-* Set the QTDIR environment variable: `set QTDIR=C:\Qt\5.9.9\msvc2017_64`
+* Set the QTDIR environment variable: `set QTDIR=C:\Qt\5.15.0\msvc2019_64`
 * Make sure the CereLink Visual Studio project is closed.
 * `pip install .`
 * or, if you are making a wheel to bring to another machine,
