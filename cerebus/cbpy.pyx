@@ -314,7 +314,7 @@ def trial_continuous(int instance=0, bool reset=False):
        instance - (optional) library instance number
     Outputs:
        res   - result code
-       trial - list of the form [channel, continuous_array]
+       trial - list of the form [channel, continuous_array, sampling_rate]
            channel: integer, channel number (1-based)
            continuous_array: array, continuous values for channel)
        timestamp of sample 0
@@ -360,6 +360,7 @@ def trial_continuous(int instance=0, bool reset=False):
             cont = np.asarray(mxa_i16)
             
         row.append(cont)
+        row.append(trialcont.sample_rates[channel])
         trial.append(row)
         
     # get the trial
@@ -394,7 +395,7 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
                 channel: integer, channel number (1-based)
                 digital_events: array, digital event values for channel (if a digital or serial channel)
                 unitN_ts: array, spike timestamps of unit N for channel (if an electrode channel));
-             continuous data: list of the form [channel, continuous_array]
+             continuous data: list of the form [channel, continuous_array, sampling_rate]
                 channel: integer, channel number (1-based)
                 continuous_array: array, continuous values for channel)
              t_zero: timestamp of sample 0
@@ -486,7 +487,7 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
     if do_cont:
         # allocate memory and prepare outputs.
         for channel in range(trialcont.count):
-            row = [trialcont.chan[channel]]  # each row will be [chan_id, dat_array]
+            row = [trialcont.chan[channel]]  # each row will be [chan_id, dat_array, sampling_rate]
             trialcont.samples[channel] = NULL
             num_samples = trialcont.num_samples[channel]
             if is_double:
@@ -501,6 +502,7 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
                 cont = np.asarray(mxa_i16)
 
             row.append(cont)
+            row.append(trialcont.sample_rates[channel])
             trial_cont.append(row)
 
     # Comments #
