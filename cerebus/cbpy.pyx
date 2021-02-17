@@ -910,14 +910,11 @@ def get_sample_group(int group_ix, int instance=0):
     cdef cbSdkResult res
     cdef uint32_t proc = 1
     cdef uint32_t nChansInGroup
-    res = cbSdkGetSampleGroupList(<uint32_t>instance, proc, group_ix, &nChansInGroup, NULL)
-    handle_result(res)
-    if (nChansInGroup <= 0):
-        return <int> res, []
-
     cdef uint16_t pGroupList[cbNUM_ANALOG_CHANS+0]
     res = cbSdkGetSampleGroupList(<uint32_t>instance, proc, <uint32_t>group_ix, &nChansInGroup, pGroupList)
-    handle_result(res)
+    if res:
+        handle_result(res)
+        return <int> res, []
 
     cdef cbPKT_CHANINFO chanInfo
     channels_info = []
