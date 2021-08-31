@@ -20,5 +20,4 @@ https://github.com/dashesy/CereLink/wiki
 
 # Build
 
-Some build information can be found in the comments at the top of the CMakeLists.txt.
-Additional information can be found in the wiki.
+The BUILD.md document has the most up to date build instructions.

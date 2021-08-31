@@ -4,6 +4,9 @@ build*/
 *.pyd
 cerebus/cbpy.cp*
 *.whl
+.idea/
+out/
+CMakeSettings.json
 
 .*
 *.*~

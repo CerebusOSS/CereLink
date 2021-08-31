@@ -2,9 +2,11 @@ option(BUILD_CLI "Build C++/CLI" OFF)
 
 IF(${BUILD_CLI})
     cmake_minimum_required(VERSION 3.12)
+    set(CMAKE_CSharp_FLAGS "/langversion:latest")
     SET( LIB_NAME_CLI cbsdk_cli)
     SET(cbsdk_cli_SOURCE
-        ${CMAKE_CURRENT_LIST_DIR}/cbsdk_native.h ${CMAKE_CURRENT_LIST_DIR}/cbsdk_native.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/cbsdk_native.h
+        ${CMAKE_CURRENT_LIST_DIR}/cbsdk_native.cpp
         ${CMAKE_CURRENT_LIST_DIR}/AssemblyInfo.cpp)
     set_source_files_properties(${cbsdk_cli_SOURCE} PROPERTIES LANGUAGE "CXX")
     ADD_LIBRARY(${LIB_NAME_CLI} MODULE ${cbsdk_cli_SOURCE})
@@ -22,7 +24,7 @@ IF(${BUILD_CLI})
         PROPERTIES
             COMMON_LANGUAGE_RUNTIME ""
             #DEBUG_POSTFIX ""  # With d postfix then the C# app can't find it.
-    )  
+    )
     # target_compile_options(${LIB_NAME_CLI} PRIVATE /clr)
     # target_compile_options(${LIB_NAME_CLI} PRIVATE /EHa)
     # STRING(REPLACE "/EHsc" "/EHa" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
