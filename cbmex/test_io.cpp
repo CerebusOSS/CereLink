@@ -20,7 +20,9 @@
 #include <string>
 #include <vector>
 #include <stdio.h>
+#ifdef WIN32
 #include <conio.h>
+#endif //win32
 #include <inttypes.h>
 #include "debugmacs.h"
 
@@ -398,10 +400,12 @@ int main(int argc, char *argv[])
             ptrialcont = nullptr;
         }
 
+#ifdef WIN32
         if (_kbhit())
         {
             kb_ch = _getch();
         }
+#endif
     }
 
     res = testClose();
