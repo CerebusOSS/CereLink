@@ -2,6 +2,7 @@
 #include <vector>
 #include <array>
 #include <string>
+#include <memory>
 
 // Incomplete types. Come from cbsdk.h
 struct my_cbSdkTrialEvent;
