@@ -16,27 +16,19 @@
 
 If you want to build the Matlab wrappers then you will need to have Matlab development libraries available. In most cases, if you have Matlab installed in a default location, then cmake should be able to find it.
 
-## Create your build directory
-
-Using Terminal or "x64 Native Tools Command Prompt for VS 2017" on Windows:
-* `cd` into the CereLink directory.
-* If the `build` directory already exists then delete it:
-    * (Windows: `rmdir /S build`, Others: `rm -Rf build`).
-* `mkdir build && cd build`
-
 ## Cmake command line - Try me first
 
 Here are some cmake one-liners that work if your development environment happens to match perfectly. If not, then modify the cmake options according to the CMake Options instructions below.
 
 * Windows:
-    * `cmake .. -G "Visual Studio 15 2017 Win64" -DQt5_DIR=C:\Qt\5.15.0\msvc2019_64\lib\cmake\Qt5 -DCMAKE_INSTALL_PREFIX=..\dist -DBUILD_CLI=ON`
+    * `cmake -B build -S . -G "Visual Studio 16 2019" -DQt5_DIR=C:\Qt\5.15.2\msvc2019_64\lib\cmake\Qt5 -DCMAKE_INSTALL_PREFIX=dist -DBUILD_STATIC=ON -DBUILD_CLI=ON`
 * MacOS
-    * `cmake .. -DQt5_DIR=$(brew --prefix qt5)/lib/cmake/Qt5`
+    * `cmake  -B build -S . -DQt5_DIR=$(brew --prefix qt5)/lib/cmake/Qt5`
 * Linux
-    * `cmake ..`
+    * `cmake -B build -S . `
 
 Then follow that up with:
-* `cmake --build . --config Release`
+* `cmake --build build --config Release`
 
 The build products should appear in the CereLink/dist directory.
 
@@ -45,7 +37,7 @@ Note: This may generate an error related to the CLI builds. Please see further i
 ### CMake Options
 
 * `-G <generator name>`
-    * [Generator](https://cmake.org/cmake/help/latest/manual/cmake-generators.7.html#cmake-generators)
+    * Call `cmake -G` to see a list of available generators.
 * `-DQt5_DIR=<path/to/qt/binaries>/lib/cmake/Qt5`
     * This is the path to the folder holding Qt5Config.cmake for the compiler+architecture you are using.
 * `-DBUILD_STATIC=ON`
@@ -67,9 +59,9 @@ Note: This may generate an error related to the CLI builds. Please see further i
 # cerebus.cbpy (Python lib) Build Instructions
 
 * Open a Terminal or Anaconda prompt and activate your Python environment.
-* Your Python environment must already have Cython installed and pip should be installed too.
+* Your Python environment must already have Cython, numpy, and pip installed.
 * Change to the CereLink directory.
-* Set the QTDIR environment variable: `set QTDIR=C:\Qt\5.15.0\msvc2019_64`
+* Set the QTDIR environment variable: `set QTDIR=C:\Qt\5.15.2\msvc2019_64`
 * Make sure the CereLink Visual Studio project is closed.
 * `pip install .`
 * or, if you are making a wheel to bring to another machine,
