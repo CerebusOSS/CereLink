@@ -25,7 +25,7 @@ Here are some cmake one-liners that work if your development environment happens
 * MacOS
     * `cmake  -B build -S . -DQt5_DIR=$(brew --prefix qt5)/lib/cmake/Qt5`
 * Linux
-    * `cmake -B build -S . `
+    * `cmake -B build -S . -DCMAKE_INSTALL_PREFIX=dist`
 
 Then follow that up with:
 * `cmake --build build --config Release`

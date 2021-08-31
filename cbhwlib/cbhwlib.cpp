@@ -29,9 +29,11 @@
 #ifndef WIN32
     // For non-windows Qt applications
     #include <QSharedMemory>
+    #include <sys/mman.h>
     #include <semaphore.h>
     #include <sys/file.h>
     #include <sys/types.h>
+    #include <sys/stat.h>
     #include <unistd.h>
 #endif
 #endif
@@ -118,7 +120,7 @@ uint32_t cbVersion()
 // Inputs:
 //  hMem - the handle to the memory to free up
 //  ppMem - the pointer to this same memory
-void DestroySharedObject(HANDLE & hMem, void ** ppMem)
+void DestroySharedObject(HANDLE & hMem, void ** ppMem, uint32_t size)
 {
 #ifdef WIN32
     if (*ppMem != NULL)
@@ -128,9 +130,14 @@ void DestroySharedObject(HANDLE & hMem, void ** ppMem)
 #else
     if (*ppMem != NULL)
     {
+        if (munmap(hMem, size) == -1)
+            /* Handle error */;
+
+        /*
         QSharedMemory * pHnd = static_cast<QSharedMemory *>(hMem);
         if (pHnd)
             pHnd->detach();
+        */
     }
 #endif
     hMem = 0;
@@ -173,22 +180,22 @@ void DestroySharedObjects(BOOL bStandAlone, uint32_t nInstance)
 #endif
 
     // release the shared pc status memory space
-    DestroySharedObject(cb_pc_status_buffer_hnd[nIdx], (void **)&cb_pc_status_buffer_ptr[nIdx]);
+    DestroySharedObject(cb_pc_status_buffer_hnd[nIdx], (void **)&cb_pc_status_buffer_ptr[nIdx], sizeof(cbPcStatus));
 
     // release the shared configuration memory space
-    DestroySharedObject(cb_spk_buffer_hnd[nIdx], (void **)&cb_spk_buffer_ptr[nIdx]);
+    DestroySharedObject(cb_spk_buffer_hnd[nIdx], (void **)&cb_spk_buffer_ptr[nIdx], sizeof(cbSPKBUFF));
 
     // release the shared configuration memory space
-    DestroySharedObject(cb_cfg_buffer_hnd[nIdx], (void **)&cb_cfg_buffer_ptr[nIdx]);
+    DestroySharedObject(cb_cfg_buffer_hnd[nIdx], (void **)&cb_cfg_buffer_ptr[nIdx], sizeof(cbCFGBUFF));
 
     // release the shared global transmit memory space
-    DestroySharedObject(cb_xmt_global_buffer_hnd[nIdx], (void **)&cb_xmt_global_buffer_ptr[nIdx]);
+    DestroySharedObject(cb_xmt_global_buffer_hnd[nIdx], (void **)&cb_xmt_global_buffer_ptr[nIdx], sizeof(cbXMTBUFF));
 
     // release the shared local transmit memory space
-    DestroySharedObject(cb_xmt_local_buffer_hnd[nIdx], (void **)&cb_xmt_local_buffer_ptr[nIdx]);
+    DestroySharedObject(cb_xmt_local_buffer_hnd[nIdx], (void **)&cb_xmt_local_buffer_ptr[nIdx], sizeof(cbXMTBUFF));
 
     // release the shared receive memory space
-    DestroySharedObject(cb_rec_buffer_hnd[nIdx], (void **)&cb_rec_buffer_ptr[nIdx]);
+    DestroySharedObject(cb_rec_buffer_hnd[nIdx], (void **)&cb_rec_buffer_ptr[nIdx], sizeof(cbRECBUFF));
 }
 
 // Author & Date:   Ehsan Azar     29 April 2012
@@ -203,6 +210,20 @@ HANDLE OpenSharedBuffer(LPCSTR szName, bool bReadOnly)
     // Keep windows version unchanged
     hnd = OpenFileMapping(bReadOnly ? FILE_MAP_READ : FILE_MAP_ALL_ACCESS, 0, szName);
 #else
+    int oflag = (bReadOnly ? O_RDONLY : O_RDWR);
+    mode_t omode = (bReadOnly ? 0444 : 0660);
+    int fd = shm_open(szName, oflag, omode);
+    if (fd == -1)
+        /* Handle error */;
+    struct stat shm_stat;
+    if (fstat(fd, &shm_stat) == -1)
+        /* Handle error */;
+    int prot = (bReadOnly ? PROT_READ : PROT_READ | PROT_WRITE);
+    hnd = mmap(NULL, shm_stat.st_size, prot, MAP_SHARED, fd, 0);
+    if (hnd == MAP_FAILED || !hnd)
+        /* Handle error */;
+
+        /*
     QString strKey(szName);
     QSharedMemory * pHnd = new QSharedMemory(strKey);
     if (pHnd)
@@ -212,6 +233,7 @@ HANDLE OpenSharedBuffer(LPCSTR szName, bool bReadOnly)
         else
             delete pHnd;
     }
+         */
 #endif
     return hnd;
 }
@@ -228,6 +250,19 @@ HANDLE CreateSharedBuffer(LPCSTR szName, uint32_t size)
     // Keep windows version unchanged
     hnd = CreateFileMapping((HANDLE)INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, size, szName);
 #else
+    int fd = shm_open(szName, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+    if (fd == -1)
+        /* Handle error */;
+    if (ftruncate(fd, size) == -1)
+        /* Handle error */;
+    void *rptr = mmap(NULL, size,
+                      PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (rptr == MAP_FAILED)
+        /* Handle error */;
+    else
+        hnd = rptr;
+
+    /*
     QString strKey(szName);
     QSharedMemory * pHnd = new QSharedMemory(strKey);
     if (pHnd)
@@ -240,6 +275,7 @@ HANDLE CreateSharedBuffer(LPCSTR szName, uint32_t size)
         else
             delete pHnd;
     }
+    */
 #endif
     return hnd;
 }
@@ -258,9 +294,11 @@ void * GetSharedBuffer(HANDLE hnd, bool bReadOnly)
     // Keep windows version unchanged
     ret = MapViewOfFile(hnd, bReadOnly ? FILE_MAP_READ : FILE_MAP_ALL_ACCESS, 0, 0, 0);
 #else
-    QSharedMemory * pHnd = static_cast<QSharedMemory *>(hnd);
+    ret = hnd;
+    /*QSharedMemory * pHnd = static_cast<QSharedMemory *>(hnd);
     if (pHnd)
         ret = pHnd->data();
+    */
 #endif
     return ret;
 }
