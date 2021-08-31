@@ -2187,6 +2187,7 @@ void OnDigitalOut(
             PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Last parameter requires value");
         }
 
+        // Ambiguous: (!nIdxTimed) == 0, or !(nIdxTimed == 0). I guess the former, otherwise one would use nIdxTimed != 0
         if (nIdxTrigger == 0 && nIdxMonitor == 0 && !nIdxTimed == 0 && !bDisable && !nValue)
         {
             PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true,

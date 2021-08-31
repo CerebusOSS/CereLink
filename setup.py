@@ -17,6 +17,7 @@ def get_extras():
     x_link_args = []
 
     if sys.platform == "darwin":
+        x_link_args += ['-L{path}'.format(path=os.path.join(cur, 'dist', 'lib'))]
         # Find Qt framework
         qtfwdir = '/usr/local/opt'  # Default search dir
         import subprocess

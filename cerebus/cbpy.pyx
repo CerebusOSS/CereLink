@@ -788,8 +788,12 @@ def digital_out(int channel, int instance=0, value='low'):
     return <int>res
 
 
-def get_channel_config(int channel, int instance=0):
-    """
+def get_channel_config(int channel, int instance=0, encoding='utf-8'):
+    """ Get channel configuration.
+    Inputs:
+        - channel: 1-based channel number 
+        - instance: (optional) library instance number
+        - encoding: (optional) encoding for string fields, default = 'utf-8'
     Outputs:
         -chaninfo = A Python dictionary with the following fields:
         'time': system clock timestamp,
@@ -854,7 +858,7 @@ def get_channel_config(int channel, int instance=0):
         'aoutcaps': cb_chaninfo.aoutcaps,
         'ainpcaps': cb_chaninfo.ainpcaps,
         'spkcaps': cb_chaninfo.spkcaps,
-        'label': cb_chaninfo.label.decode('utf-8'),
+        'label': cb_chaninfo.label.decode(encoding),
         'userflags': cb_chaninfo.userflags,
         'doutopts': cb_chaninfo.doutopts,
         'dinpopts': cb_chaninfo.dinpopts,
@@ -901,10 +905,13 @@ def get_channel_config(int channel, int instance=0):
     return <int>res, chaninfo
 
 
-def set_channel_config(int channel, chaninfo={}, int instance=0):
-    """
+def set_channel_config(int channel, chaninfo={}, int instance=0, encoding='utf-8'):
+    """ Set channel configuration.
     Inputs:
-        chaninfo: A Python dict. See fields descriptions in get_channel_config. All fields are optional.
+        - channel: 1-based channel number 
+        - chaninfo: A Python dict. See fields descriptions in get_channel_config. All fields are optional.
+        - instance: (optional) library instance number
+        - encoding: (optional) encoding for string fields, default = 'utf-8'
     """
     cdef cbSdkResult res
     cdef cbPKT_CHANINFO cb_chaninfo
@@ -914,7 +921,7 @@ def set_channel_config(int channel, chaninfo={}, int instance=0):
     if 'label' in chaninfo:
         new_label = chaninfo['label']
         if not isinstance(new_label, bytes):
-            new_label = new_label.encode()
+            new_label = new_label.encode(encoding)
         strncpy(cb_chaninfo.label, new_label, sizeof(new_label))
 
     if 'smpgroup' in chaninfo:
@@ -928,7 +935,7 @@ def set_channel_config(int channel, chaninfo={}, int instance=0):
     return <int>res
 
 
-def get_sample_group(int group_ix, int instance=0):
+def get_sample_group(int group_ix, int instance=0, encoding='utf-8'):
     """
     """
     cdef cbSdkResult res
@@ -957,8 +964,8 @@ def get_sample_group(int group_ix, int instance=0):
         chan_info['bank'] = chanInfo.bank
         chan_info['term'] = chanInfo.term
         chan_info['gain'] = anaRange / digRange
-        chan_info['label'] = chanInfo.label
-        chan_info['unit'] = chanInfo.physcalin.anaunit
+        chan_info['label'] = chanInfo.label.decode(encoding)
+        chan_info['unit'] = chanInfo.physcalin.anaunit.decode(encoding)
         channels_info.append(chan_info)
 
     return <int>res, channels_info
