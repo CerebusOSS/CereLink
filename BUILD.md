@@ -24,6 +24,7 @@ Here are some cmake one-liners that work if your development environment happens
     * `cmake -B build -S . -G "Visual Studio 16 2019" -DQt5_DIR=C:\Qt\5.15.2\msvc2019_64\lib\cmake\Qt5 -DCMAKE_INSTALL_PREFIX=dist -DBUILD_STATIC=ON -DBUILD_CLI=ON`
 * MacOS
     * `cmake  -B build -S . -DQt5_DIR=$(brew --prefix qt5)/lib/cmake/Qt5`
+    * If you are going to use the Xcode generator then you also need to use the old build system: `-G Xcode -T buildsystem=1`
 * Linux
     * `cmake -B build -S . -DCMAKE_INSTALL_PREFIX=dist`
 
