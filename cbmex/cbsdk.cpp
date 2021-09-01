@@ -842,7 +842,8 @@ cbSdkResult SdkApp::SdkOpen(uint32_t nInstance, cbSdkConnectionType conType, cbS
         {
             cbSdkResult sdkres = CBSDKRESULT_UNKNOWN;
             // Try to make sense of the error
-            switch (GetLastCbErr())
+            cbRESULT last_err = GetLastCbErr();
+            switch (last_err)
             {
             case cbRESULT_NOCENTRALAPP:
                 sdkres = CBSDKRESULT_ERROPENCENTRAL;
