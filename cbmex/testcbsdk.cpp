@@ -119,7 +119,8 @@ cbSdkResult testOpen(void)
 
 	// Open the device using default connection type.
 	cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
-	cbSdkResult res = cbSdkOpen(INST, conType);
+    cbSdkConnection con = cbSdkConnection();
+	cbSdkResult res = cbSdkOpen(INST, conType, con);
 	if (res != CBSDKRESULT_SUCCESS)
 		printf("Unable to open instrument connection.\n");
 	handleResult(res);
