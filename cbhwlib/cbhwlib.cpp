@@ -28,7 +28,6 @@
 #else
 #ifndef WIN32
     // For non-windows Qt applications
-    #include <QSharedMemory>
     #include <sys/mman.h>
     #include <semaphore.h>
     #include <sys/file.h>
@@ -132,12 +131,6 @@ void DestroySharedObject(HANDLE & hMem, void ** ppMem, uint32_t size)
     {
         if (munmap(hMem, size) == -1)
             /* Handle error */;
-
-        /*
-        QSharedMemory * pHnd = static_cast<QSharedMemory *>(hMem);
-        if (pHnd)
-            pHnd->detach();
-        */
     }
 #endif
     hMem = 0;
@@ -222,18 +215,6 @@ HANDLE OpenSharedBuffer(LPCSTR szName, bool bReadOnly)
     hnd = mmap(NULL, shm_stat.st_size, prot, MAP_SHARED, fd, 0);
     if (hnd == MAP_FAILED || !hnd)
         /* Handle error */;
-
-        /*
-    QString strKey(szName);
-    QSharedMemory * pHnd = new QSharedMemory(strKey);
-    if (pHnd)
-    {
-        if (pHnd->attach(bReadOnly ? QSharedMemory::ReadOnly : QSharedMemory::ReadWrite))
-            hnd = pHnd;
-        else
-            delete pHnd;
-    }
-         */
 #endif
     return hnd;
 }
@@ -261,21 +242,6 @@ HANDLE CreateSharedBuffer(LPCSTR szName, uint32_t size)
         /* Handle error */;
     else
         hnd = rptr;
-
-    /*
-    QString strKey(szName);
-    QSharedMemory * pHnd = new QSharedMemory(strKey);
-    if (pHnd)
-    {
-        if (pHnd->create(size))
-            hnd = pHnd;
-        // Reattach: This might happen as a result of previous crash
-        else if (pHnd->attach(QSharedMemory::ReadWrite))
-            hnd = pHnd;
-        else
-            delete pHnd;
-    }
-    */
 #endif
     return hnd;
 }
@@ -295,10 +261,6 @@ void * GetSharedBuffer(HANDLE hnd, bool bReadOnly)
     ret = MapViewOfFile(hnd, bReadOnly ? FILE_MAP_READ : FILE_MAP_ALL_ACCESS, 0, 0, 0);
 #else
     ret = hnd;
-    /*QSharedMemory * pHnd = static_cast<QSharedMemory *>(hnd);
-    if (pHnd)
-        ret = pHnd->data();
-    */
 #endif
     return ret;
 }
