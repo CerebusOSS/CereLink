@@ -197,6 +197,9 @@ QT5_WRAP_CPP( LIB_HEADERS_MOC ${LIB_HEADERS} )
 SET( LIB_SOURCE_CBMEX
     ${PROJECT_SOURCE_DIR}/cbmex/cbmex.cpp
 )
+IF( WIN32 )
+    LIST ( APPEND LIB_SOURCE_CBMEX ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc )
+ENDIF( WIN32 )
 
 
 ##########################################################################################
@@ -248,9 +251,6 @@ ENDIF(${BUILD_STATIC})
 # cbmex
 IF(${BUILD_CBMEX} AND MATLAB_FOUND )
     MESSAGE ( STATUS "Add cbmex build target using MATLAB libs at " ${Matlab_ROOT_DIR})
-    IF( WIN32 )
-        SET ( LIB_SOURCE_CBMEX ${LIB_SOURCE_CBMEX} ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc )
-    ENDIF( WIN32 )
     ADD_LIBRARY( ${LIB_NAME_CBMEX} SHARED ${LIB_SOURCE_CBMEX} )
     
     # Want package name to be cbmex without prefix
@@ -297,9 +297,6 @@ ENDIF( ${BUILD_CBMEX} AND MATLAB_FOUND )
 # octave
 IF( ${BUILD_CBOCT} AND OCTAVE_FOUND )
     MESSAGE ( STATUS "Add cbmex build target using Octave libs at " ${OCTAVE_OCT_LIB_DIR})
-    IF( WIN32 )
-        SET ( LIB_SOURCE_CBMEX ${LIB_SOURCE_CBMEX} ../cbmex/cbMex.rc )
-    ENDIF( WIN32 )
     ADD_LIBRARY( ${LIB_NAME_CBOCT} SHARED ${LIB_SOURCE_CBMEX} )
     
     # Want package name to be cbmex without prefix
