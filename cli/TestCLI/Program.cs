@@ -20,7 +20,7 @@ namespace SimpleClient
             string outIP = "";
             bool use_double = false;
 
-            CbSdkCLI managed = new CbSdkCLI(nInstance, inPort, outPort, bufsize, inIP, outIP, use_double);
+            CbSdkNative managed = new CbSdkNative(nInstance, inPort, outPort, bufsize, inIP, outIP, use_double);
             Console.WriteLine("C# - managed.GetIsOnline(): {0}", managed.GetIsOnline());
             if (managed.GetIsOnline())
             {
