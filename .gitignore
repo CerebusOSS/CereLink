@@ -1,5 +1,6 @@
 dist/
 build*/
+cmake-build*/
 *.egg-info
 *.pyd
 cerebus/cbpy.cp*
