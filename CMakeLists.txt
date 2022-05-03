@@ -29,13 +29,18 @@
 #
 
 
-CMAKE_MINIMUM_REQUIRED( VERSION 3.1.0 )
+CMAKE_MINIMUM_REQUIRED( VERSION 3.16 )
 # cmake_policy(SET CMP0091 NEW)
 
-PROJECT( CBSDK )
+project(CBSDK
+        DESCRIPTION "Blackrock Neurotech CereBus Software Development Kit"
+        LANGUAGES C CXX
+        VERSION 1.0
+        )
 
-SET( CBSDK_VERSION_MAJOR 1 )
-SET( CBSDK_VERSION_MINOR 0 )
+# Common Configuration
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED On)
 
 ##########################################################################################
 # Optional Targets
@@ -96,9 +101,18 @@ cmake_policy(SET CMP0042 NEW) # ENABLE CMP0042: MACOSX_RPATH is enabled by defau
 # Third party libraries
 
 # -Qt
-find_package(Qt5 REQUIRED COMPONENTS Core Xml Concurrent)
-SET(QT_LIBRARIES Qt5::Core Qt5::Xml Qt5::Concurrent)
-ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP )
+## For Qt
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTORCC ON)
+find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Xml Concurrent REQUIRED)
+find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Xml Concurrent REQUIRED)
+get_property(qtloc TARGET Qt${QT_VERSION_MAJOR}::Core PROPERTY IMPORTED_LOCATION_RELEASE)
+message(STATUS "Found Qt lib in ${qtloc} and version Qt${QT_VERSION_MAJOR}")
+SET(QT_LIBRARIES Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Xml Qt${QT_VERSION_MAJOR}::Concurrent)
+# qt_standard_project_setup()
+# ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP)
 
 # -HDF5
 IF(${BUILD_HDF5})
@@ -184,14 +198,17 @@ SET( LIB_SOURCE
     ${PROJECT_SOURCE_DIR}/Central/UDPsocket.h
 )
 IF( WIN32 )
-    LIST ( APPEND LIB_SOURCE ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc )  # ??
+    LIST ( APPEND LIB_SOURCE
+    ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc
+    ${PROJECT_SOURCE_DIR}/cbhwlib/DataVector.h
+    )  # ??
 ENDIF( WIN32 )
 
 # Qt-MOC headers that need it
 SET( LIB_HEADERS
     ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.h
 )
-QT5_WRAP_CPP( LIB_HEADERS_MOC ${LIB_HEADERS} )
+qt_wrap_cpp( LIB_HEADERS_MOC ${LIB_HEADERS} )
 
 # Source for both cbmex and octave targets
 SET( LIB_SOURCE_CBMEX
@@ -338,7 +355,7 @@ function(findQtInstallationTool qtdeploytoolname)
     if(QT_DEPLOYQT_EXECUTABLE)
         return()
     endif()
-    get_target_property(QT_QMAKE_EXE Qt5::qmake IMPORTED_LOCATION)
+    get_target_property(QT_QMAKE_EXE Qt${QT_VERSION_MAJOR}::qmake IMPORTED_LOCATION)
     get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXE}" DIRECTORY)
     find_program (QT_DEPLOYQT_EXECUTABLE ${qtdeploytoolname} HINTS "${QT_BIN_DIR}")
     if (QT_DEPLOYQT_EXECUTABLE)

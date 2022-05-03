@@ -252,7 +252,7 @@ ccfResult CCFUtilsXml_v1::ReadVersion(LPCSTR szFileName)
         // The very first element must be CCF
         if (xml.isStartElement())
         {
-            if (xml.name() == "CCF")
+            if (xml.name().compare(QString("CCF")))
             {
                 m_nInternalOriginalVersion = xml.attributes().value("Version").toString().toInt();
                 break;

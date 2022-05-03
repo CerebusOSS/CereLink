@@ -21,7 +21,7 @@ If you want to build the Matlab wrappers then you will need to have Matlab devel
 Here are some cmake one-liners that work if your development environment happens to match perfectly. If not, then modify the cmake options according to the CMake Options instructions below.
 
 * Windows:
-    * `cmake -B build -S . -G "Visual Studio 16 2019" -DQt5_DIR=C:\Qt\5.15.2\msvc2019_64\lib\cmake\Qt5 -DCMAKE_INSTALL_PREFIX=dist -DBUILD_STATIC=ON -DBUILD_CLI=ON`
+    * `cmake -B build -S . -G "Visual Studio 16 2019" -DCMAKE_PREFIX_PATH=C:\Qt\5.15.2\msvc2019_64\lib\cmake\Qt5 -DCMAKE_INSTALL_PREFIX=dist -DBUILD_STATIC=ON -DBUILD_CLI=ON`
 * MacOS
     * `cmake  -B build -S . -DQt5_DIR=$(brew --prefix qt5)/lib/cmake/Qt5`
 * Linux
@@ -41,7 +41,7 @@ Note: This may generate an error related to the CLI builds. Please see further i
 * `-DQt5_DIR=<path/to/qt/binaries>/lib/cmake/Qt5`
     * This is the path to the folder holding Qt5Config.cmake for the compiler+architecture you are using.
 * `-DBUILD_STATIC=ON`
-    * Whether or not to build cbsdk_static lib. This is required by the Python and Matlab wrappers.
+    * Whether to build cbsdk_static lib. This is required by the Python and Matlab wrappers.
 * `-DBUILD_CBMEX=ON`
     * To build Matlab binaries. Will only build if Matlab development libraries are found.
 * `-DBUILD_CBOCT=ON`
