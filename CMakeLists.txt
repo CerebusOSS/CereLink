@@ -112,7 +112,7 @@ get_property(qtloc TARGET Qt${QT_VERSION_MAJOR}::Core PROPERTY IMPORTED_LOCATION
 message(STATUS "Found Qt lib in ${qtloc} and version Qt${QT_VERSION_MAJOR}")
 SET(QT_LIBRARIES Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Xml Qt${QT_VERSION_MAJOR}::Concurrent)
 # qt_standard_project_setup()
-# ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP)
+ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP)
 
 # -HDF5
 IF(${BUILD_HDF5})
