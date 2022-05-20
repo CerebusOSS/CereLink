@@ -204,7 +204,7 @@ std::ostream& operator<<(std::ostream &s, const Vector<T,N> &v)
     {
         s << " " << v.data[i] << " ";
     }
-    s << "]" << endl;
+    s << "]" << std::endl;
     return s;
 }
 
@@ -419,7 +419,7 @@ inline T Vector<T,N>::Length()const
 template<class T, int N>
 inline void Vector<T,N>::SetLength(T len)
 {
-    len /= length();
+    len /= Length();
     for(int i = 0; i < N; i++)
         data[i] *= len;
 }
@@ -724,7 +724,7 @@ struct matrix
 // Data point from the NSP. Combination of unit and position
 struct data_point
 {
-    UINT unit;
+    unsigned int unit;
     Vector3f point;
 };
 
