@@ -112,14 +112,15 @@ cbSdkVersion testGetVersion(void)
 
 // Author & Date:   Ehsan Azar    24 Oct 2012
 // Purpose: Test openning the library
-cbSdkResult testOpen(void)
+cbSdkResult testOpen(LPCSTR inst_ip)
 {
     // Try to get the version. Should be a warning because we are not yet open.
     cbSdkVersion ver = testGetVersion();
 
 	// Open the device using default connection type.
 	cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
-    cbSdkConnection con = cbSdkConnection();
+	cbSdkConnection con = cbSdkConnection();
+	con.szOutIP = inst_ip;
 	cbSdkResult res = cbSdkOpen(INST, conType, con);
 	if (res != CBSDKRESULT_SUCCESS)
 		printf("Unable to open instrument connection.\n");
@@ -193,7 +194,9 @@ cbSdkResult testClose(void)
 // The test suit main entry
 int main(int argc, char *argv[])
 {
-    cbSdkResult res = testOpen();
+	LPCSTR inst_ip = "";
+	if (argc > 1) {inst_ip = argv[1];}
+    cbSdkResult res = testOpen(inst_ip);
     if (res < 0)
         printf("testOpen failed (%d)!\n", res);
     else
