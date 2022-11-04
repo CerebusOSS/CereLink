@@ -197,7 +197,7 @@ ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(LPCSTR szFileName)
                 xml.addGroup("Original", "", 0, m_nInternalOriginalVersion);
             }
             xml.endGroup(); // Version
-            xml.addGroup("Author", "", 0, szUsername);
+            xml.addGroup("Author", "", 0, QString(szUsername));
             xml.addGroup("Date", "", 0, QDateTime::currentDateTime());
         }
         xml.endGroup(); // Session

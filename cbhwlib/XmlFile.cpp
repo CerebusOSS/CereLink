@@ -104,9 +104,9 @@ bool XmlFile::AddList(QVariantList & list, QString nodeName)
         count++; // count all valid items
         QString strSubKey;
         QMap<QString, QVariant> attribs;
-        if (subval.type() == QVariant::UserType)
+        if (subval.typeId() == QMetaType::User)
         {
-            const XmlItem * item = static_cast<const XmlItem *>(subval.data());
+            const auto * item = static_cast<const XmlItem *>(subval.data());
             strSubKey = item->XmlName();
             attribs = item->XmlAttribs();
         }
@@ -202,31 +202,31 @@ bool XmlFile::beginGroup(QString nodeName, const QMap<QString, QVariant> attribs
     {
         bool bTextLeaf = false;
         QVariantList varlst;
-        switch (value.type())
+        switch (value.typeId())
         {
-        case QVariant::StringList:
-        case QVariant::List:
+        case QMetaType::QStringList:
+        case QMetaType::QVariantList:
             varlst = value.toList();
             if (AddList(varlst, nodepath.last()))
                 set.setAttribute("Type", "Array");
             break;
         default:
             QString text;
-            if (value.type() == QVariant::UserType)
+            if (value.typeId() == QMetaType::User)
             {
-                const XmlItem * item = static_cast<const XmlItem *>(value.data());
+                const auto * item = static_cast<const XmlItem *>(value.data());
                 QVariant subval = item->XmlValue();
                 
-                if (subval.type() == QVariant::UserType)
+                if (subval.typeId() == QMetaType::User)
                 {
-                    const XmlItem * subitem = static_cast<const XmlItem *>(subval.data());
+                    const auto * subitem = static_cast<const XmlItem *>(subval.data());
                     QString strSubKey = subitem->XmlName();
-                    QMap<QString, QVariant> attribs = subitem->XmlAttribs();
+                    QMap<QString, QVariant> _attribs = subitem->XmlAttribs();
                     // Recursively add this item
-                    beginGroup(strSubKey, attribs, subval);
+                    beginGroup(strSubKey, _attribs, subval);
                     endGroup();
                 } 
-                else if (subval.type() == QVariant::List || subval.type() == QVariant::StringList)
+                else if (subval.typeId() == QMetaType::QVariantList || subval.typeId() == QMetaType::QStringList)
                 {
                     varlst = subval.toList();
                     if (AddList(varlst, nodepath.last()))
@@ -262,23 +262,23 @@ bool XmlFile::beginGroup(QString nodeName, const QMap<QString, QVariant> attribs
     QMap<QString, QVariant>::const_iterator iterator;
     for (iterator = attribs.begin(); iterator != attribs.end(); ++iterator)
     {
-        QString attrName = iterator.key();
-        QVariant attrValue = iterator.value();
-        switch (attrValue.type())
+        const QString& attrName = iterator.key();
+        const QVariant& attrValue = iterator.value();
+        switch (attrValue.typeId())
         {
-        case QVariant::String:
+        case QMetaType::QString:
             set.setAttribute(attrName, attrValue.toString());
             break;
-        case QVariant::Int:
+        case QMetaType::Int:
             set.setAttribute(attrName, attrValue.toInt());
             break;
-        case QVariant::UInt:
+        case QMetaType::UInt:
             set.setAttribute(attrName, attrValue.toUInt());
             break;
-        case QVariant::LongLong:
+        case QMetaType::LongLong:
             set.setAttribute(attrName, attrValue.toLongLong());
             break;
-        case QVariant::ULongLong:
+        case QMetaType::ULongLong:
             set.setAttribute(attrName, attrValue.toULongLong());
             break;
         default:
