@@ -367,11 +367,18 @@ endfunction()
 ##
 # test
 IF(${BUILD_TEST})
-    ADD_EXECUTABLE(testcbsdk ${PROJECT_SOURCE_DIR}/samples/TestCBSDK/testcbsdk.cpp )
+    ADD_EXECUTABLE(testcbsdk
+            ${PROJECT_SOURCE_DIR}/samples/TestCBSDK/testcbsdk.cpp
+            ${LIB_SOURCE} ${LIB_HEADERS_MOC}
+    )
     TARGET_INCLUDE_DIRECTORIES(testcbsdk PRIVATE
         ${LIB_INCL_DIRS}
-        ${PROJECT_SOURCE_DIR}/cbsdk)
-    TARGET_LINK_LIBRARIES(testcbsdk ${LIB_NAME} )
+        ${PROJECT_SOURCE_DIR}/cbsdk
+    )
+    TARGET_LINK_LIBRARIES(testcbsdk
+            ${LIB_NAME}
+            ${QT_LIBRARIES}
+    )
 
     ADD_EXECUTABLE(test_io ${PROJECT_SOURCE_DIR}/samples/TestIO/test_io.cpp )
     TARGET_INCLUDE_DIRECTORIES(test_io PRIVATE
