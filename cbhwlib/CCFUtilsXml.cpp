@@ -197,7 +197,7 @@ ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(LPCSTR szFileName)
                 xml.addGroup("Original", "", 0, m_nInternalOriginalVersion);
             }
             xml.endGroup(); // Version
-            xml.addGroup("Author", "", 0, szUsername);
+            xml.addGroup("Author", "", 0, QString(szUsername));
             xml.addGroup("Date", "", 0, QDateTime::currentDateTime());
         }
         xml.endGroup(); // Session
@@ -252,7 +252,7 @@ ccfResult CCFUtilsXml_v1::ReadVersion(LPCSTR szFileName)
         // The very first element must be CCF
         if (xml.isStartElement())
         {
-            if (xml.name() == "CCF")
+            if (xml.name().compare(QString("CCF")))
             {
                 m_nInternalOriginalVersion = xml.attributes().value("Version").toString().toInt();
                 break;

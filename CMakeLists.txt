@@ -29,22 +29,25 @@
 #
 
 
-CMAKE_MINIMUM_REQUIRED( VERSION 3.1.0 )
+CMAKE_MINIMUM_REQUIRED( VERSION 3.16 )
 # cmake_policy(SET CMP0091 NEW)
 
-PROJECT( CBSDK )
+project(CBSDK
+        DESCRIPTION "Blackrock Neurotech CereBus Software Development Kit"
+        LANGUAGES C CXX
+        VERSION 1.0
+        )
 
-SET( CBSDK_VERSION_MAJOR 1 )
-SET( CBSDK_VERSION_MINOR 0 )
+# Common Configuration
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED On)
 
 ##########################################################################################
 # Optional Targets
 option(BUILD_STATIC "Build static cbsdk library" ON)
 option(BUILD_CBMEX "Build Matlab wrapper" ON)
 option(BUILD_CBOCT "Build Octave wrapper" ON)
-option(BUILD_TEST "Build testcbsdk" ON)
-option(BUILD_TEST_COMMENTS "Build test_comments" ON)
-option(BUILD_TEST_ANAOUT "Build test_anaout" ON)
+option(BUILD_TEST "Build tests" ON)
 option(BUILD_HDF5 "Build HDF5" ON)
 
 ##########################################################################################
@@ -96,9 +99,18 @@ cmake_policy(SET CMP0042 NEW) # ENABLE CMP0042: MACOSX_RPATH is enabled by defau
 # Third party libraries
 
 # -Qt
-find_package(Qt5 REQUIRED COMPONENTS Core Xml Concurrent)
-SET(QT_LIBRARIES Qt5::Core Qt5::Xml Qt5::Concurrent)
-ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP )
+## For Qt
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTORCC ON)
+find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Xml Concurrent REQUIRED)
+find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Xml Concurrent REQUIRED)
+get_property(qtloc TARGET Qt${QT_VERSION_MAJOR}::Core PROPERTY IMPORTED_LOCATION_RELEASE)
+message(STATUS "Found Qt lib in ${qtloc} and version Qt${QT_VERSION_MAJOR}")
+SET(QT_LIBRARIES Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Xml Qt${QT_VERSION_MAJOR}::Concurrent)
+# qt_standard_project_setup()
+ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP)
 
 # -HDF5
 IF(${BUILD_HDF5})
@@ -157,9 +169,9 @@ IF( WIN32 )
 ENDIF( WIN32 )
 
 SET( LIB_SOURCE
-    ${PROJECT_SOURCE_DIR}/cbmex/cbsdk.cpp
-    ${PROJECT_SOURCE_DIR}/cbmex/cbsdk.h
-    ${PROJECT_SOURCE_DIR}/cbmex/SdkApp.h
+    ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.cpp
+    ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.h
+    ${PROJECT_SOURCE_DIR}/cbsdk/SdkApp.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.cpp
     ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/cbHwlibHi.cpp
@@ -184,14 +196,17 @@ SET( LIB_SOURCE
     ${PROJECT_SOURCE_DIR}/Central/UDPsocket.h
 )
 IF( WIN32 )
-    LIST ( APPEND LIB_SOURCE ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc )  # ??
+    LIST ( APPEND LIB_SOURCE
+    ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc
+    ${PROJECT_SOURCE_DIR}/cbhwlib/DataVector.h
+    )  # ??
 ENDIF( WIN32 )
 
 # Qt-MOC headers that need it
 SET( LIB_HEADERS
     ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.h
 )
-QT5_WRAP_CPP( LIB_HEADERS_MOC ${LIB_HEADERS} )
+qt_wrap_cpp( LIB_HEADERS_MOC ${LIB_HEADERS} )
 
 # Source for both cbmex and octave targets
 SET( LIB_SOURCE_CBMEX
@@ -279,7 +294,7 @@ IF(${BUILD_CBMEX} AND MATLAB_FOUND )
     # Use static library to build cbmex
     ADD_DEPENDENCIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} )
     TARGET_INCLUDE_DIRECTORIES( ${LIB_NAME_CBMEX}
-        PRIVATE ${LIB_INCL_DIRS} ${Matlab_INCLUDE_DIRS}
+        PRIVATE ${LIB_INCL_DIRS} ${Matlab_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/cbsdk
     )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_CBMEX}
         ${LIB_NAME_STATIC}
@@ -322,7 +337,7 @@ IF( ${BUILD_CBOCT} AND OCTAVE_FOUND )
     # Use static library to build cbmex
     ADD_DEPENDENCIES( ${LIB_NAME_CBOCT} ${LIB_NAME_STATIC} )
     TARGET_INCLUDE_DIRECTORIES( ${LIB_NAME_CBOCT}
-        PRIVATE ${LIB_INCL_DIRS} ${OCTAVE_INCLUDE_DIR}
+        PRIVATE ${LIB_INCL_DIRS} ${OCTAVE_INCLUDE_DIR} ${PROJECT_SOURCE_DIR}/cbsdk
     )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_CBOCT} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${OCTAVE_LIBRARIES} )
     INSTALL( TARGETS ${LIB_NAME_CBOCT}
@@ -338,7 +353,7 @@ function(findQtInstallationTool qtdeploytoolname)
     if(QT_DEPLOYQT_EXECUTABLE)
         return()
     endif()
-    get_target_property(QT_QMAKE_EXE Qt5::qmake IMPORTED_LOCATION)
+    get_target_property(QT_QMAKE_EXE Qt${QT_VERSION_MAJOR}::qmake IMPORTED_LOCATION)
     get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXE}" DIRECTORY)
     find_program (QT_DEPLOYQT_EXECUTABLE ${qtdeploytoolname} HINTS "${QT_BIN_DIR}")
     if (QT_DEPLOYQT_EXECUTABLE)
@@ -352,15 +367,38 @@ endfunction()
 ##
 # test
 IF(${BUILD_TEST})
-    ADD_EXECUTABLE(testcbsdk ${PROJECT_SOURCE_DIR}/cbmex/testcbsdk.cpp )
-    TARGET_INCLUDE_DIRECTORIES(testcbsdk PRIVATE ${LIB_INCL_DIRS})
-    TARGET_LINK_LIBRARIES(testcbsdk ${LIB_NAME} )
+    ADD_EXECUTABLE(testcbsdk
+            ${PROJECT_SOURCE_DIR}/samples/TestCBSDK/testcbsdk.cpp
+            ${LIB_SOURCE} ${LIB_HEADERS_MOC}
+    )
+    TARGET_INCLUDE_DIRECTORIES(testcbsdk PRIVATE
+        ${LIB_INCL_DIRS}
+        ${PROJECT_SOURCE_DIR}/cbsdk
+    )
+    TARGET_LINK_LIBRARIES(testcbsdk
+            ${LIB_NAME}
+            ${QT_LIBRARIES}
+    )
 
-    ADD_EXECUTABLE(test_io ${PROJECT_SOURCE_DIR}/cbmex/test_io.cpp )
-    TARGET_INCLUDE_DIRECTORIES(test_io PRIVATE ${LIB_INCL_DIRS})
+    ADD_EXECUTABLE(test_io ${PROJECT_SOURCE_DIR}/samples/TestIO/test_io.cpp )
+    TARGET_INCLUDE_DIRECTORIES(test_io PRIVATE
+        ${LIB_INCL_DIRS}
+        ${PROJECT_SOURCE_DIR}/cbsdk)
     TARGET_LINK_LIBRARIES(test_io ${LIB_NAME} )
 
-    LIST(APPEND INSTALL_TARGET_LIST testcbsdk test_io)
+    ADD_EXECUTABLE(test_comments ${PROJECT_SOURCE_DIR}/samples/TestComments/test_comments.cpp )
+    TARGET_INCLUDE_DIRECTORIES(test_comments PRIVATE
+        ${LIB_INCL_DIRS}
+        ${PROJECT_SOURCE_DIR}/cbsdk)
+    TARGET_LINK_LIBRARIES(test_comments ${LIB_NAME} )
+
+    ADD_EXECUTABLE(test_analog_out ${PROJECT_SOURCE_DIR}/samples/TestAnalogOut/test_analog_out.cpp )
+    TARGET_INCLUDE_DIRECTORIES(test_analog_out PRIVATE
+        ${LIB_INCL_DIRS}
+        ${PROJECT_SOURCE_DIR}/cbsdk)
+    TARGET_LINK_LIBRARIES(test_analog_out ${LIB_NAME})
+
+    LIST(APPEND INSTALL_TARGET_LIST testcbsdk test_io test_comments test_analog_out)
 
     IF(WIN32)
         findQtInstallationTool("windeployqt")
@@ -368,36 +406,12 @@ IF(${BUILD_TEST})
             COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
         add_custom_command(TARGET test_io POST_BUILD
             COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
-    ENDIF(WIN32)
-ENDIF(${BUILD_TEST})
-
-IF(${BUILD_TEST_COMMENTS})
-    ADD_EXECUTABLE(test_comments ${PROJECT_SOURCE_DIR}/samples/TestComments/test_comments.cpp )
-    TARGET_INCLUDE_DIRECTORIES(test_comments PRIVATE
-        ${LIB_INCL_DIRS}
-        ${PROJECT_SOURCE_DIR}/cbmex)
-    TARGET_LINK_LIBRARIES(test_comments ${LIB_NAME} )
-    LIST(APPEND INSTALL_TARGET_LIST test_comments)
-    IF(WIN32)
-        findQtInstallationTool("windeployqt")
         add_custom_command(TARGET test_comments POST_BUILD
             COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
-    ENDIF(WIN32)
-ENDIF(${BUILD_TEST_COMMENTS})
-
-IF(${BUILD_TEST_ANAOUT})
-    ADD_EXECUTABLE(test_analog_out ${PROJECT_SOURCE_DIR}/samples/TestAnalogOut/test_analog_out.cpp )
-    TARGET_INCLUDE_DIRECTORIES(test_analog_out PRIVATE
-        ${LIB_INCL_DIRS}
-        ${PROJECT_SOURCE_DIR}/cbmex)
-    TARGET_LINK_LIBRARIES(test_analog_out ${LIB_NAME})
-    LIST(APPEND INSTALL_TARGET_LIST test_analog_out)
-    IF(WIN32)
-        findQtInstallationTool("windeployqt")
         add_custom_command(TARGET test_analog_out POST_BUILD
             COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
     ENDIF(WIN32)
-ENDIF(${BUILD_TEST_ANAOUT})
+ENDIF(${BUILD_TEST})
 
 ##
 # n2h5
@@ -429,13 +443,13 @@ INSTALL( TARGETS ${INSTALL_TARGET_LIST}
     LIBRARY DESTINATION lib${LIB_SUFFIX}
     ARCHIVE DESTINATION lib${LIB_SUFFIX}
 )
-INSTALL( FILES ${PROJECT_SOURCE_DIR}/cbmex/cbsdk.h ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h DESTINATION include )
+INSTALL( FILES ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.h ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h DESTINATION include )
 
 #########################################################################################
 # Shared & Static post-build copy the header files into the dist directory.
 ADD_CUSTOM_COMMAND(
     TARGET "${LIB_NAME}"
     POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/cbmex/cbsdk.h" "${CMAKE_CURRENT_SOURCE_DIR}/dist/include/cbsdk.h"
+    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/cbsdk/cbsdk.h" "${CMAKE_CURRENT_SOURCE_DIR}/dist/include/cbsdk.h"
     COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/cbhwlib/cbhwlib.h" "${CMAKE_CURRENT_SOURCE_DIR}/dist/include/cbhwlib.h"
 )
