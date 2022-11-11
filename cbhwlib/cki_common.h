@@ -18,6 +18,7 @@
 
 #ifdef _MSC_VER
 #include <vector>
+#include<algorithm>
 
 typedef std::vector<int> INTVECTOR;
 #endif

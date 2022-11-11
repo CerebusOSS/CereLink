@@ -2425,7 +2425,7 @@ cbSdkResult SdkApp::SdkSetFileConfig(const char * filename, const char * comment
     // get computer name
 #ifdef WIN32
     DWORD cchBuff = sizeof(fcpkt.username);
-    GetComputerName(fcpkt.username, &cchBuff) ;
+    GetComputerNameA(fcpkt.username, &cchBuff) ;
 #else
     char * szHost = getenv("HOSTNAME");
     strncpy(fcpkt.username, szHost == NULL ? "" : szHost, sizeof(fcpkt.username));
@@ -2645,7 +2645,7 @@ cbSdkResult SdkApp::SdkSendPoll(const char* appname, uint32_t mode, uint32_t fla
     // get computer name
 #ifdef WIN32
     DWORD cchBuff = sizeof(polepkt.username);
-    GetComputerName(polepkt.username, &cchBuff) ;
+    GetComputerNameA(polepkt.username, &cchBuff) ;
 #else
     strncpy(polepkt.username, getenv("HOSTNAME"), sizeof(polepkt.username));
 #endif

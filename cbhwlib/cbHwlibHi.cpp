@@ -37,7 +37,7 @@ bool IsSimRunning(uint32_t nInstance)
 #ifdef WIN32
     uint32_t nIdx = cb_library_index[nInstance];
     char szTitle[255] = "";
-    ::GetWindowText(static_cast<HWND>(cb_cfg_buffer_ptr[nIdx]->hwndCentral), szTitle, sizeof(szTitle));
+    ::GetWindowTextA(static_cast<HWND>(cb_cfg_buffer_ptr[nIdx]->hwndCentral), szTitle, sizeof(szTitle));
     if (strstr(szTitle, "SIM"))
         return true;
     else

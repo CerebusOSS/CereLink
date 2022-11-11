@@ -201,7 +201,7 @@ HANDLE OpenSharedBuffer(LPCSTR szName, bool bReadOnly)
     HANDLE hnd = NULL;
 #ifdef WIN32
     // Keep windows version unchanged
-    hnd = OpenFileMapping(bReadOnly ? FILE_MAP_READ : FILE_MAP_ALL_ACCESS, 0, szName);
+    hnd = OpenFileMappingA(bReadOnly ? FILE_MAP_READ : FILE_MAP_ALL_ACCESS, 0, szName);
 #else
     int oflag = (bReadOnly ? O_RDONLY : O_RDWR);
     mode_t omode = (bReadOnly ? 0444 : 0660);
@@ -229,7 +229,7 @@ HANDLE CreateSharedBuffer(LPCSTR szName, uint32_t size)
     HANDLE hnd = NULL;
 #ifdef WIN32
     // Keep windows version unchanged
-    hnd = CreateFileMapping((HANDLE)INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, size, szName);
+    hnd = CreateFileMappingA((HANDLE)INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, size, szName);
 #else
     int fd = shm_open(szName, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
     if (fd == -1)
@@ -395,7 +395,7 @@ cbRESULT cbOpen(BOOL bStandAlone, uint32_t nInstance)
     else
         _snprintf(buf, sizeof(buf), "%s%d", SIG_EVT_NAME, nInstance);
 #ifdef WIN32
-    cb_sig_event_hnd[nIdx] = OpenEvent(SYNCHRONIZE, TRUE, buf);
+    cb_sig_event_hnd[nIdx] = OpenEventA(SYNCHRONIZE, TRUE, buf);
     if (cb_sig_event_hnd[nIdx] == NULL)  {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
 #else
     sem_t *sem = sem_open(buf, 0);
@@ -425,7 +425,7 @@ cbRESULT cbCheckApp(const char * lpName)
         return cbRESULT_SYSLOCK;
 #ifdef WIN32
     // Test for availability of central application by attempting to open/close Central App Mutex
-    HANDLE hCentralMutex = OpenMutex(MUTEX_ALL_ACCESS, FALSE, lpName);
+    HANDLE hCentralMutex = OpenMutexA(MUTEX_ALL_ACCESS, FALSE, lpName);
     CloseHandle(hCentralMutex);
     if (hCentralMutex == NULL)
         cbRet = cbRESULT_NOCENTRALAPP;
@@ -463,7 +463,7 @@ cbRESULT cbAquireSystemLock(const char * lpName, HANDLE & hLock)
         return cbRESULT_SYSLOCK;
 #ifdef WIN32
     // Try creating the system mutex
-    HANDLE hMutex = CreateMutex(NULL, TRUE, lpName);
+    HANDLE hMutex = CreateMutexA(NULL, TRUE, lpName);
     if (hMutex == 0 || GetLastError() == ERROR_ACCESS_DENIED || GetLastError() == ERROR_ALREADY_EXISTS)
         return cbRESULT_SYSLOCK;
     hLock = hMutex;
@@ -2401,7 +2401,7 @@ cbRESULT cbSetAoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uin
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
     // If cb_cfg_buffer_ptr was built for 128-channel system, but passed in channel is for 256-channel firmware.
     // TODO: Again, maybe we need a m_ChanIdxInType array.
-    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT) & (chan > (cbNUM_FE_CHANS / 2)))
+    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT) && (chan > (cbNUM_FE_CHANS / 2)))
         chan -= (cbNUM_FE_CHANS / 2);
     if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT)) return cbRESULT_INVALIDFUNCTION;
@@ -3334,7 +3334,7 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
     else
         _snprintf(buf, sizeof(buf), "%s%d", SIG_EVT_NAME, nInstance);
 #ifdef WIN32
-    cb_sig_event_hnd[nIdx] = CreateEvent(NULL, TRUE, FALSE, buf);
+    cb_sig_event_hnd[nIdx] = CreateEventA(NULL, TRUE, FALSE, buf);
     if (cb_sig_event_hnd[nIdx] == NULL)
         return cbRESULT_EVSIGERR;
 #else
