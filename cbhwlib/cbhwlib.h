@@ -2,12 +2,9 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // (c) Copyright 2002 - 2008 Cyberkinetics, Inc.
-// (c) Copyright 2008 - 2017 Blackrock Microsystems
+// (c) Copyright 2008 - 2021 Blackrock Microsystems LLC. All rights reserved.
 //
 // $Workfile: cbhwlib.h $
-// $Archive: /Cerebus/Human/LinuxApps/player/cbhwlib.h $
-// $Revision: 50 $
-// $Date: 5/17/05 10:07a $
 // $Author: Dsebald $
 //
 // $NoKeywords: $
@@ -72,10 +69,11 @@
 
 #pragma pack(push, 1)
 
-#define cbVERSION_MAJOR  3
-#define cbVERSION_MINOR  11
+#define cbVERSION_MAJOR  4
+#define cbVERSION_MINOR  0
 
 // Version history:
+// 4.00 - 12 Jul 2017 ahr - changing time values form 32 uint to 64 uint. creating header typedef to be included in structs.
 // 3.11 - 17 Jan 2017 hls - Changed list in cbPKT_GROUPINFO from UINT32 to UINT16 to allow for 256-channels
 // 3.10 - 23 Oct 2014 hls - Added reboot capability for extension loader
 //        26 Jul 2014 js  - Added analog output to extension
@@ -180,6 +178,9 @@ typedef uint8_t DLEN;
 #define MAX_PATH 1024
 #endif
 
+typedef uint64_t        PROCTIME;
+typedef INT16           A2D_DATA;
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Default Cerebus networking connection parameters
@@ -194,6 +195,10 @@ typedef uint8_t DLEN;
 #define cbNET_UDP_PORT_CNT          51001             // Neuroflow Control Port
 // maximum udp datagram size used to transport cerebus packets, taken from MTU size
 #define cbCER_UDP_SIZE_MAX          1452 // Note that multiple packets may reside in one udp datagram as aggregate
+#define cbNET_UDP_ADDR_HOST         "192.168.137.199" // Cerebus (central) default address
+
+#define PROTOCOL_UDP        0
+#define PROTOCOL_TCP        1
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -317,6 +322,7 @@ enum UnitClassification
 #define cbLEN_STR_LABEL         16
 #define cbLEN_STR_FILT_LABEL    16
 #define cbLEN_STR_IDENT         64
+#define cbLEN_STR_COMMENT       256
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -399,12 +405,16 @@ cbRESULT cbAquireSystemLock(const char * lpName, HANDLE & hLock);
 cbRESULT cbReleaseSystemLock(const char * lpName, HANDLE & hLock);
 // Aquire or release application system lock
 
+uint32_t GetInstrumentLocalChan(uint32_t nChan, uint32_t nInstance = 0);
+// Get the instrument local channel number
+
 #define  cbINSTINFO_READY      0x0001     // Instrument is connected
 #define  cbINSTINFO_LOCAL      0x0002     // Instrument runs on the localhost
 #define  cbINSTINFO_NPLAY      0x0004     // Instrument is nPlay
 #define  cbINSTINFO_CEREPLEX   0x0008     // Instrument is Cereplex
 #define  cbINSTINFO_EMULATOR   0x0010     // Instrument is Emulator
 #define  cbINSTINFO_NSP1       0x0020     // Instrument is NSP1
+#define  cbINSTINFO_WNSP       0x0040     // Instrument is WNSP
 cbRESULT cbGetInstInfo(uint32_t *instInfo, uint32_t nInstance = 0);
 // Purpose: get instrument information.
 
@@ -420,49 +430,72 @@ cbRESULT cbGetSystemClockFreq(uint32_t *freq, uint32_t nInstance = 0);
 //          cbRESULT_NOLIBRARY if the library was not properly initialized
 
 
-cbRESULT cbGetSystemClockTime(uint32_t *time, uint32_t nInstance = 0);
+cbRESULT cbGetSystemClockTime(PROCTIME *time, uint32_t nInstance = 0);
 // Retrieves the last 32-bit timestamp from the Central App cache.
 //
 // Returns: cbRESULT_OK if data successfully retrieved.
 //          cbRESULT_NOLIBRARY if the library was not properly initialized
 
-#endif
+#endif  // __cplusplus
+
+/// @brief Cerebus packet header data structure 
+///
+/// Every packet defined in this document contains this header (must be a multiple of 32 bytes)
+typedef struct {
+    PROCTIME time;      //!< system clock timestamp
+    uint16_t chid;        //!< channel identifier
+    uint8_t type;         //!< packet type
+    uint16_t dlen;        //!< length of data field in 32-bit chunks
+    uint8_t instrument;   //!< instrument number to transmit this packets
+    uint8_t reserved[2];  //!< reserved for future
+} cbPKT_HEADER;
+
+/// @brief Old Cerebus packet header data structure
+///
+/// This is used to read old CCF files (must be a multiple of 32 bytes)
+typedef struct {
+    PROCTIME time;    //!< system clock timestamp
+    uint16_t chid;    //!< channel identifier
+    uint8_t  type;    //!< packet type
+    uint8_t  dlen;    //!< length of data field in 32-bit chunks
+} cbPKT_HEADER_OLD;
+
+//changing header size to size w/ uint64. used to be 8.
+#define cbPKT_MAX_SIZE        1024                    // the maximum size of the packet in bytes for 128 channels
+
+#define cbPKT_HEADER_SIZE     sizeof(cbPKT_HEADER)    // define the size of the packet header in bytes
+#define cbPKT_HEADER_SIZE_OLD sizeof(cbPKT_HEADER_OLD) // define the size of the packet header in bytes
+#define cbPKT_HEADER_32SIZE   (cbPKT_HEADER_SIZE / 4) // define the size of the packet header in uint32_t's
 
 // .nev packet data structure (1024 bytes total)
 typedef struct {
-    uint32_t time;        // system clock timestamp
+    PROCTIME time;        // system clock timestamp
     uint16_t chid;        // channel identifier
     uint8_t  type;        // packet type
     uint8_t  dlen;        // length of data field in 32-bit chunks
     uint32_t data[254];   // data buffer (up to 1016 bytes)
 } nevPKT_GENERIC;
 
-
 #define nevPKT_HEADER_SIZE 8  // define the size of the packet header in bytes
-#define cbPKT_MAX_SIZE        1024                     // the maximum size of the packet in bytes for 128 channels
 
-#define cbPKT_HEADER_SIZE     sizeof(cbPKT_HEADER)     // define the size of the packet header in bytes
-#define cbPKT_HEADER_32SIZE   (cbPKT_HEADER_SIZE / 4)  // define the size of the packet header in uint32_t's
-
-// Cerebus packet header data structure (must be a multiple of uint32_t)
+/// @brief Generic Cerebus packet data structure (1024 bytes total)
+///
+/// This packet contains the header and the data is just a series of uint32_t data points.  All other packets are
+/// based on this structure
 typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // channel identifier
-    uint8_t type;      // packet type
-    uint8_t dlen;      // length of data field in 32-bit chunks
+    cbPKT_HEADER cbpkt_header;  //!< packet header
 
-} cbPKT_HEADER;
-
-
-// Generic Cerebus packet data structure (1024 bytes total)
-typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // channel identifier
-    uint8_t type;      // packet type
-    uint8_t dlen;      // length of data field in 32-bit chunks
-
-    uint32_t data[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE) / 4];   // data buffer (up to 1016 bytes)
+    uint32_t data[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE) / 4];   //!< data buffer (up to 1016 bytes)
 } cbPKT_GENERIC;
+
+/// @brief Old Generic Cerebus packet data structure (1024 bytes total)
+///
+/// This is used to read old CCF files
+typedef struct {
+    cbPKT_HEADER_OLD cbpkt_header;
+
+    uint32_t data[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE_OLD) / 4];   //!< data buffer (up to 1016 bytes)
+} cbPKT_GENERIC_OLD;
 
 #ifdef __cplusplus
 
@@ -519,7 +552,8 @@ cbPKT_GENERIC *cbGetNextPacketPtr(uint32_t nInstance = 0);
 cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance = 0);
 cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance = 0);
 
-#endif
+#endif  // __cplusplus
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Configuration/Report Packet Definitions (chid = 0x8000)
@@ -594,7 +628,7 @@ typedef struct {
 } cbBANKINFO;
 
 typedef struct {
-    char    name[cbLEN_STR_LABEL];
+    char    name[cbLEN_STR_LABEL];  // filename of the video file
     float   fps;        // nominal record fps
 } cbVIDEOSOURCE;
 
@@ -648,12 +682,12 @@ typedef struct {
 
 typedef struct {
     uint32_t bEnabled;    // BOOL implemented as uint32_t - for structure alignment at paragraph boundary
-    int16_t  nAmplPos;
-    int16_t  nAmplNeg;
+    int16_t  nAmplPos;    // any spike that has a value above nAmplPos will be rejected
+    int16_t  nAmplNeg;    // any spike that has a value below nAmplNeg will be rejected
 } cbAMPLITUDEREJECT;
 
 typedef struct {
-    int16_t       nOverride;
+    int16_t       nOverride;        // override to unit if in ellipsoid
     int16_t       afOrigin[3];
     int16_t       afShape[3][3];
     int16_t       aPhi;
@@ -787,7 +821,7 @@ cbRESULT cbSetDinpOptions(uint32_t chan, uint32_t options, uint32_t eopchar, uin
 #define  cbDOUT_TRIGGER_DINPFALLING   2   // digital input falling edge trigger
 #define  cbDOUT_TRIGGER_SPIKEUNIT     3   // spike unit
 #define  cbDOUT_TRIGGER_NM			  4   // comment RGBA color (A being big byte)
-#define  cbDOUT_TRIGGER_SOFTRESET     5   // soft-reset trigger
+#define  cbDOUT_TRIGGER_RECORDINGSTART     5   // recording start trigger
 #define  cbDOUT_TRIGGER_EXTENSION     6   // extension trigger
 
 #ifdef __cplusplus
@@ -1217,10 +1251,12 @@ cbRESULT cbSSSetStatus(cbAdaptControl cntlUnitStats, cbAdaptControl cntlNumUnits
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-////////////////////////////////////////////////////////////////////
-// Declarations of firmware update packet structures and constants
-//  Never change anything about this packet
-////////////////////////////////////////////////////////////////////
+/// @brief PKT Set:0xF1 Rep:0x71 - Update Packet
+///
+/// Update the firmware of the NSP.  This will copy data received into files in a temporary location and if
+/// completed, on reboot will copy the files to the proper location to run.
+///
+/// Since the NSP needs to work with old versions of the firmware, this packet retains the old header format.
 #define cbRUNLEVEL_UPDATE   78
 #define cbPKTTYPE_UPDATESET 0xF1
 #define cbPKTTYPE_UPDATEREP 0x71
@@ -1237,25 +1273,27 @@ typedef struct {
     uint8_t  block[512];
 } cbPKT_UPDATE;
 
-// Sample Group data packet
+/// @brief Data packet - Sample Group data packet
+///
+/// This packet contains each sample for the specified group.  The group is specified in the type member of the
+/// header. Groups are currently 1=500S/s, 2=1kS/s, 3=2kS/s, 4=10kS/s, 5=30kS/s, 6=raw (3-kS/s no filter). The
+/// list of channels associated with each group is transmitted using the cbPKT_GROUPINFO when the list of channels
+/// changes.  cbpkt_header.chid is always zero.  cbpkt_header.type is the group number
 typedef struct {
-    uint32_t time;                        // system clock timestamp
-    uint16_t chid;                        // 0x0000
-    uint8_t type;                      // sample group ID (1-127)
-    uint8_t dlen;                      // packet length equal
-
+    cbPKT_HEADER cbpkt_header;
     int16_t  data[cbNUM_ANALOG_CHANS];    // variable length address list
 } cbPKT_GROUP;
 
 
-// DINP digital value data
+/// @brief Data packet - Digital input data value.
+///
+/// This packet is sent when a digital input value has met the criteria set in Hardware Configuration.
 typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // channel identifier
-    uint8_t unit;      // reserved
-    uint8_t dlen;      // length of waveform in 32-bit chunks
+    cbPKT_HEADER cbpkt_header;  //!< packet header
 
-    uint32_t data[254];   // data buffer (up to 1016 bytes)
+    uint32_t valueRead;       //!< data read from the digital input port
+    uint32_t bitsChanged;     //!< bits that have changed from the last packet sent
+    uint32_t eventType;       //!< type of event, eg DINP_EVENT_ANYBIT, DINP_EVENT_STROBE
 } cbPKT_DINP;
 
 
@@ -1265,27 +1303,32 @@ typedef struct {
 
 #define cbPKTDLEN_SPK   ((sizeof(cbPKT_SPK)/4) - cbPKT_HEADER_32SIZE)
 #define cbPKTDLEN_SPKSHORT (cbPKTDLEN_SPK - ((sizeof(int16_t)*cbMAX_PNTS)/4))
+/// @brief Data packet - Spike waveform data
+///
+/// Detected spikes are sent through this packet.  The spike waveform may or may not be sent depending
+/// on the dlen contained in the header.  The waveform can be anywhere from 30 samples to 128 samples
+/// based on user configuration.  The default spike length is 48 samples.  cbpkt_header.chid is the
+/// channel number of the spike.  cbpkt_header.type is the sorted unit number (0=unsorted, 255=noise).
 typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // channel identifier
-    uint8_t unit;      // unit identification (0=unclassified, 1-5=classified, 30=background, 31=artifact)
-    uint8_t dlen;      // length of what follows ... always  cbPKTDLEN_SPK
+    cbPKT_HEADER cbpkt_header;  //!< in the header for this packet, the type is used as the unit number
 
-    float  fPattern[3]; // values of the pattern space (Normal uses only 2, PCA uses third)
-    int16_t  nPeak;
-    int16_t  nValley;
-    // wave must be the last item in the structure because it can be variable length to a max of cbMAX_PNTS
-    int16_t  wave[cbMAX_PNTS];    // Room for all possible points collected
+    float  fPattern[3]; //!< values of the pattern space (Normal uses only 2, PCA uses third)
+    int16_t  nPeak;     //!< highest datapoint of the waveform
+    int16_t  nValley;   //!< lowest datapoint of the waveform
+
+    int16_t  wave[cbMAX_PNTS];    //!< datapoints of each sample of the waveform. Room for all possible points collected
+    //!< wave must be the last item in the structure because it can be variable length to a max of cbMAX_PNTS
 } cbPKT_SPK;
 
 // System Heartbeat Packet (sent every 10ms)
 #define cbPKTTYPE_SYSHEARTBEAT    0x00
 #define cbPKTDLEN_SYSHEARTBEAT    ((sizeof(cbPKT_SYSHEARTBEAT)/4) - cbPKT_HEADER_32SIZE)
+#define HEARTBEAT_MS              100
+/// @brief PKT Set:N/A  Rep:0x00 - System Heartbeat packet
+///
+/// This is sent every 100ms
 typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // 0x8000
-    uint8_t type;      // 0
-    uint8_t dlen;      // cbPKTDLEN_SYSHEARTBEAT
+    cbPKT_HEADER cbpkt_header;  //!< packet header
 
 } cbPKT_SYSHEARTBEAT;
 
@@ -1294,11 +1337,12 @@ typedef struct {
 // nPlay file version (first byte NSx version, second byte NEV version)
 #define cbNPLAY_FILE_NS21            1   // NSX 2.1 file
 #define cbNPLAY_FILE_NS22            2   // NSX 2.2 file
+#define cbNPLAY_FILE_NS30            3   // NSX 3.0 file
 #define cbNPLAY_FILE_NEV21           (1 << 8)   // Nev 2.1 file
 #define cbNPLAY_FILE_NEV22           (2 << 8)   // Nev 2.2 file
 #define cbNPLAY_FILE_NEV23           (3 << 8)   // Nev 2.3 file
 // nPlay commands and status changes (cbPKT_NPLAY.mode)
-#define cbNPLAY_FNAME_LEN            992  // length of the file name (with terminating null)
+#define cbNPLAY_FNAME_LEN            cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - 40 //!< length of the file name (with terminating null) Note: if changing info in the packet, change the constant
 #define cbNPLAY_MODE_NONE            0    // no command (parameters)
 #define cbNPLAY_MODE_PAUSE           1    // PC->NPLAY pause if "val" is non-zero, un-pause otherwise
 #define cbNPLAY_MODE_SEEK            2    // PC->NPLAY seek to time "val"
@@ -1320,28 +1364,26 @@ typedef struct {
 #define cbPKTTYPE_NPLAYREP   0x5C /* NPLAY->PC response */
 #define cbPKTTYPE_NPLAYSET   0xDC /* PC->NPLAY request */
 #define cbPKTDLEN_NPLAY    ((sizeof(cbPKT_NPLAY)/4) - cbPKT_HEADER_32SIZE)
+/// @brief PKT Set:0xDC Rep:0x5C - nPlay configuration packet(sent on restart together with config packet)
 typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // 0x8000
-    uint8_t type;      // cbPKTTYPE_NPLAY*
-    uint8_t dlen;      // cbPKTDLEN_NPLAY
+    cbPKT_HEADER cbpkt_header;  //!< packet header
 
     union {
-        uint32_t ftime;   // the total time of the file.
-        uint32_t opt;     // optional value
+        PROCTIME ftime;   //!< the total time of the file.
+        PROCTIME opt;     //!< optional value
     };
-    uint32_t stime;       // start time
-    uint32_t etime;       // stime < end time < ftime
-    uint32_t val;         // Used for current time to traverse, file index, file version, ...
-    uint16_t mode;        // cbNPLAY_MODE_* command to nPlay
-    uint16_t flags;       // cbNPLAY_FLAG_* status of nPlay
-    float speed;        // positive means fast forward, negative means rewind, 0 means go as fast as you can.
-    char  fname[cbNPLAY_FNAME_LEN];   // This is a String with the file name.
+    PROCTIME stime;       //!< start time
+    PROCTIME etime;       //!< stime < end time < ftime
+    PROCTIME val;         //!< Used for current time to traverse, file index, file version, ...
+    uint16_t mode;        //!< cbNPLAY_MODE_* command to nPlay
+    uint16_t flags;       //!< cbNPLAY_FLAG_* status of nPlay
+    float speed;          //!< positive means fast forward, negative means rewind, 0 means go as fast as you can.
+    char  fname[cbNPLAY_FNAME_LEN];   //!< This is a String with the file name.
 } cbPKT_NPLAY;
 
 #ifdef __cplusplus
-cbRESULT cbGetNplay(char *fname, float *speed, uint32_t *flags, uint32_t *ftime, uint32_t *stime, uint32_t *etime, uint32_t * filever, uint32_t nInstance = 0);
-cbRESULT cbSetNplay(const char *fname, float speed, uint32_t mode, uint32_t val, uint32_t stime, uint32_t etime, uint32_t nInstance = 0);
+cbRESULT cbGetNplay(char *fname, float *speed, uint32_t *flags, PROCTIME *ftime, PROCTIME *stime, PROCTIME *etime, PROCTIME * filever, uint32_t nInstance = 0);
+cbRESULT cbSetNplay(const char *fname, float speed, uint32_t mode, PROCTIME val, PROCTIME stime, PROCTIME etime, uint32_t nInstance = 0);
 // Get/Set the nPlay parameters.
 //
 // Returns: cbRESULT_OK if data successfully retrieved.
@@ -1357,13 +1399,11 @@ cbRESULT cbSetNplay(const char *fname, float speed, uint32_t mode, uint32_t val,
 #define cbPKTTYPE_TRIGGERREP   0x5E /* NPLAY->PC response */
 #define cbPKTTYPE_TRIGGERSET   0xDE /* PC->NPLAY request */
 #define cbPKTDLEN_TRIGGER    ((sizeof(cbPKT_TRIGGER)/4) - cbPKT_HEADER_32SIZE)
+/// @brief PKT Set:0xDE Rep:0x5E - Trigger Packet used for Cervello system
 typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // 0x8000
-    uint8_t type;      // cbPKTTYPE_TRIGGER*
-    uint8_t dlen;      // cbPKTDLEN_TRIGGER
+    cbPKT_HEADER cbpkt_header;  //!< packet header
 
-    uint32_t mode;        // cbTRIGGER_MODE_*
+    uint32_t mode;        //!< cbTRIGGER_MODE_*
 } cbPKT_TRIGGER;
 
 // Video tracking event packet
@@ -1373,10 +1413,7 @@ typedef struct {
 #define cbPKTDLEN_VIDEOTRACK    ((sizeof(cbPKT_VIDEOTRACK)/4) - cbPKT_HEADER_32SIZE)
 #define cbPKTDLEN_VIDEOTRACKSHORT (cbPKTDLEN_VIDEOTRACK - ((sizeof(uint16_t)*cbMAX_TRACKCOORDS)/4))
 typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // 0x8000
-    uint8_t type;      // cbPKTTYPE_VIDEOTRACK*
-    uint8_t dlen;      // cbPKTDLEN_VIDEOTRACK
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint16_t parentID;    // parent ID
     uint16_t nodeID;      // node ID (cross-referenced in the TrackObj header)
@@ -1410,10 +1447,7 @@ typedef struct {
 #define cbPKTDLEN_LOG    ((sizeof(cbPKT_LOG)/4) - cbPKT_HEADER_32SIZE)
 #define cbPKTDLEN_LOGSHORT    (cbPKTDLEN_LOG - ((sizeof(char)*cbMAX_LOG)/4)) // All but description
 typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // 0x8000
-    uint8_t type;      // cbPKTTYPE_LOG*
-    uint8_t dlen;      // cbPKTDLEN_LOG
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint16_t mode;        // log mode (cbLOG_MODE_*)
     char   name[cbLEN_STR_LABEL];  // Logger source name (Computer name, Plugin name, ...)
@@ -1424,10 +1458,7 @@ typedef struct {
 #define cbPKTTYPE_SYSPROTOCOLMONITOR    0x01
 #define cbPKTDLEN_SYSPROTOCOLMONITOR    ((sizeof(cbPKT_SYSPROTOCOLMONITOR)/4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // 0x8000
-    uint8_t type;      // 1
-    uint8_t dlen;      // cbPKTDLEN_SYSPROTOCOLMONITOR
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t sentpkts;    // Packets sent since last cbPKT_SYSPROTOCOLMONITOR (or 0 if timestamp=0);
                         //  the cbPKT_SYSPROTOCOLMONITOR packets are counted as well so this must
@@ -1448,10 +1479,7 @@ typedef struct {
 #define cbPKTTYPE_SYSSETRUNLEV  0x92
 #define cbPKTDLEN_SYSINFO       ((sizeof(cbPKT_SYSINFO)/4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // 0x8000
-    uint8_t type;      // PKTTYPE_SYS*
-    uint8_t dlen;      // cbPKT_SYSINFODLEN
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t sysfreq;     // System clock frequency in Hz
     uint32_t spikelen;    // The length of the spike events
@@ -1487,7 +1515,7 @@ cbRESULT cbSetSpikeLength(uint32_t length, uint32_t pretrig, uint32_t nInstance 
 
 #ifdef __cplusplus
 cbRESULT cbGetSystemRunLevel(uint32_t *runlevel, uint32_t *runflags, uint32_t *resetque, uint32_t nInstance = 0);
-cbRESULT cbSetSystemRunLevel(uint32_t runlevel, uint32_t runflags, uint32_t resetque, uint32_t nInstance = 0);
+cbRESULT cbSetSystemRunLevel(uint32_t runlevel, uint32_t runflags, uint32_t resetque, uint8_t nInstrument = 0, uint32_t nInstance = 0);
 // Get Set the System Condition
 // Returns: cbRESULT_OK if data successfully retrieved.
 //          cbRESULT_NOLIBRARY if the library was not properly initialized
@@ -1500,10 +1528,7 @@ cbRESULT cbSetSystemRunLevel(uint32_t runlevel, uint32_t runflags, uint32_t rese
 #define cbPKTTYPE_VIDEOSYNCHSET   0xA9  /* PC->NSP request */
 #define cbPKTDLEN_VIDEOSYNCH  ((sizeof(cbPKT_VIDEOSYNCH)/4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t time;       // System clock timestamp
-    uint16_t chid;       // 0x8000
-    uint8_t type;     // cbPKTTYPE_VIDEOSYNCH*
-    uint8_t dlen;     // cbPKTDLEN_VIDEOSYNCH
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint16_t split;      // file split number of the video file
     uint32_t frame;      // frame number in last video
@@ -1521,22 +1546,19 @@ typedef struct {
 #define cbPKTDLEN_COMMENT  ((sizeof(cbPKT_COMMENT)/4) - cbPKT_HEADER_32SIZE)
 #define cbPKTDLEN_COMMENTSHORT (cbPKTDLEN_COMMENT - ((sizeof(uint8_t)*cbMAX_COMMENT)/4))
 typedef struct {
-    uint32_t  time;       // System clock timestamp
-    uint16_t  chid;       // 0x8000
-    uint8_t   type;       // cbPKTTYPE_COMMENT*
-    uint8_t   dlen;       // cbPKTDLEN_COMMENT
+    cbPKT_HEADER cbpkt_header; //!< packet header
     struct {
         uint8_t   charset;        // Character set (0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI)
-        uint8_t   flags;          // Can be any of cbCOMMENT_FLAG_*
-        uint8_t   reserved[2];    // Reserved (must be 0)
+        uint8_t   reserved[3]; //!< Reserved (must be 0)
     } info;
-    uint32_t  data;       // depends on flags (see flags above)
+    PROCTIME timeStarted;
+    uint32_t rgba;
     char   comment[cbMAX_COMMENT]; // Comment
 } cbPKT_COMMENT;
 
 
 #ifdef __cplusplus
-cbRESULT cbSetComment(uint8_t charset, uint8_t flags, uint32_t data, const char * comment, uint32_t nInstance = 0);
+cbRESULT cbSetComment(uint8_t charset, uint32_t rgba, PROCTIME time, const char* comment, uint32_t nInstance = 0);
 // Set one comment event.
 //
 // Returns: cbRESULT_OK if data successfully retrieved.
@@ -1568,10 +1590,7 @@ cbRESULT cbSetComment(uint8_t charset, uint8_t flags, uint32_t data, const char 
 #define cbPKTTYPE_NMSET   0xB2  /* PC->NSP request */
 #define cbPKTDLEN_NM  ((sizeof(cbPKT_NM)/4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t time;        // System clock timestamp
-    uint16_t chid;        // 0x8000
-    uint8_t type;      // cbPKTTYPE_NM*
-    uint8_t dlen;      // cbPKTDLEN_NM
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t mode;        // cbNM_MODE_* command to NeuroMotive or Central
     uint32_t flags;       // cbNM_FLAG_* status of NeuroMotive
@@ -1587,10 +1606,7 @@ typedef struct {
 #define cbPKTTYPE_PROCREP   0x21
 #define cbPKTDLEN_PROCINFO  ((sizeof(cbPKT_PROCINFO)/4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // 0x8000
-    uint8_t type;      // cbPKTTYPE_PROC*
-    uint8_t dlen;      // cbPKT_PROCINFODLEN
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t proc;        // index of the bank
     uint32_t idcode;      // manufacturer part and rom ID code of the Signal Processor
@@ -1627,10 +1643,7 @@ cbRESULT cbGetChanCount(uint32_t *count, uint32_t nInstance = 0);
 #define cbPKTTYPE_BANKREP   0x22
 #define cbPKTDLEN_BANKINFO  ((sizeof(cbPKT_BANKINFO)/4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // 0x8000
-    uint8_t type;      // cbPKTTYPE_BANK*
-    uint8_t dlen;      // cbPKT_BANKINFODLEN
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t proc;        // the address of the processor on which the bank resides
     uint32_t bank;        // the address of the bank reported by the packet
@@ -1657,10 +1670,7 @@ cbRESULT cbGetBankInfo(uint32_t proc, uint32_t bank, cbBANKINFO *bankinfo, uint3
 #define cbPKTTYPE_FILTSET   0xA3
 #define cbPKTDLEN_FILTINFO  ((sizeof(cbPKT_FILTINFO)/4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t time;       // system clock timestamp
-    uint16_t chid;       // 0x8000
-    uint8_t type;     // cbPKTTYPE_GROUP*
-    uint8_t dlen;     // packet length equal to length of list + 6 quadlets
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t proc;       //
     uint32_t filt;       //
@@ -1698,10 +1708,7 @@ cbRESULT cbGetFilterDesc(uint32_t proc, uint32_t filt, cbFILTDESC *filtdesc, uin
 #define cbPKTTYPE_CHANRESET     0xA4        /* PC->NSP request */
 #define cbPKTDLEN_CHANRESET ((sizeof(cbPKT_CHANRESET) / 4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t time;           // system clock timestamp
-    uint16_t chid;           // 0x8000
-    uint8_t type;         // cbPKTTYPE_AINP*
-    uint8_t dlen;         // cbPKT_DLENCHANINFO
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t chan;           // actual channel id of the channel being configured
 
@@ -1745,10 +1752,7 @@ typedef struct {
 #define ADAPT_FILT_ALL          1
 #define ADAPT_FILT_SPIKES       2
 typedef struct {
-    uint32_t time;           // system clock timestamp
-    uint16_t chid;           // 0x8000
-    uint8_t type;         // cbPKTTYPE_ADAPTFILTSET or cbPKTTYPE_ADAPTFILTREP
-    uint8_t dlen;         // cbPKTDLEN_ADAPTFILTINFO
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t chan;           // Ignored
 
@@ -1782,9 +1786,9 @@ struct PktAdaptFiltInfo : public cbPKT_ADAPTFILTINFO
 {
     PktAdaptFiltInfo(uint32_t nMode, float dLearningRate, uint32_t nRefChan1, uint32_t nRefChan2)
     {
-        this->chid = 0x8000;
-        this->type = cbPKTTYPE_ADAPTFILTSET;
-        this->dlen = cbPKTDLEN_ADAPTFILTINFO;
+        this->cbpkt_header.chid = 0x8000;
+        this->cbpkt_header.type = cbPKTTYPE_ADAPTFILTSET;
+        this->cbpkt_header.dlen = cbPKTDLEN_ADAPTFILTINFO;
 
         this->nMode = nMode;
         this->dLearningRate = dLearningRate;
@@ -1805,10 +1809,7 @@ struct PktAdaptFiltInfo : public cbPKT_ADAPTFILTINFO
 #define REFELEC_FILT_ALL        1
 #define REFELEC_FILT_SPIKES     2
 typedef struct cbPKT_REFELECFILTINFO_type {
-    uint32_t time;           // system clock timestamp
-    uint16_t chid;           // 0x8000
-    uint8_t type;         // cbPKTTYPE_REFELECFILTSET or cbPKTTYPE_REFELECFILTREP
-    uint8_t dlen;         // cbPKTDLEN_REFELECFILTINFO
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t chan;           // Ignored
 
@@ -1818,9 +1819,9 @@ typedef struct cbPKT_REFELECFILTINFO_type {
 #ifdef __cplusplus
     void set(uint32_t nMode, uint32_t nRefChan)
     {
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_REFELECFILTSET;
-        dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_REFELECFILTSET;
+        cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
         this->nMode = nMode;
         this->nRefChan = nRefChan;
     }
@@ -1844,16 +1845,12 @@ cbRESULT cbSetRefElecFilter(uint32_t  proc,           // which NSP processor?
 #endif
 
 // NTrode Information Packets
-#define cbNTRODEINFO_FS_PEAK           0         // Ntrode peak feature space
-#define cbNTRODEINFO_FS_VALLEY         1         // Ntrode valley feature space
+enum cbNTRODEINFO_FS_MODE { cbNTRODEINFO_FS_PEAK, cbNTRODEINFO_FS_VALLEY, cbNTRODEINFO_FS_AMPLITUDE, cbNTRODEINFO_FS_COUNT };
 #define cbPKTTYPE_REPNTRODEINFO      0x27        /* NSP->PC response...*/
 #define cbPKTTYPE_SETNTRODEINFO      0xA7        /* PC->NSP request */
 #define cbPKTDLEN_NTRODEINFO         ((sizeof(cbPKT_NTRODEINFO) / 4) - cbPKT_HEADER_32SIZE)
 typedef struct cbPKT_NTRODEINFO_type {
-    uint32_t time;           // system clock timestamp
-    uint16_t chid;           // 0x8000
-    uint8_t type;         // cbPKTTYPE_REPNTRODEINFO or cbPKTTYPE_SETNTRODEINFO
-    uint8_t dlen;         // cbPKTDLEN_NTRODEGRPINFO
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t ntrode;         // ntrode with which we are working (1-based)
     char   label[cbLEN_STR_LABEL];   // Label of the Ntrode (null terminated if < 16 characters)
@@ -1865,9 +1862,9 @@ typedef struct cbPKT_NTRODEINFO_type {
 #ifdef __cplusplus
     void set(uint32_t ntrode, char label[cbLEN_STR_LABEL])
     {
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_SETNTRODEINFO;
-        dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_SETNTRODEINFO;
+        cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
         this->ntrode = ntrode;
         memcpy(this->label, label, sizeof(this->label));
         memset(this->ellipses, 0, sizeof(ellipses));
@@ -1887,10 +1884,7 @@ cbRESULT cbSetNTrodeInfo( const uint32_t ntrode, const char *label, cbMANUALUNIT
 #define cbPKTDLEN_GROUPINFO  ((sizeof(cbPKT_GROUPINFO)/4) - cbPKT_HEADER_32SIZE)
 #define cbPKTDLEN_GROUPINFOSHORT  (8)       // basic length without list
 typedef struct {
-    uint32_t time;       // system clock timestamp
-    uint16_t chid;       // 0x8000
-    uint8_t type;     // cbPKTTYPE_GROUP*
-    uint8_t dlen;     // packet length equal to length of list + 6 quadlets
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t proc;       //
     uint32_t group;      //
@@ -1950,10 +1944,7 @@ cbRESULT cbSetSampleGroupOptions(uint32_t proc, uint32_t group, uint32_t period,
 #define cbPKTDLEN_CHANINFO      ((sizeof(cbPKT_CHANINFO)/4) - cbPKT_HEADER_32SIZE)
 #define cbPKTDLEN_CHANINFOSHORT (cbPKTDLEN_CHANINFO - ((sizeof(cbHOOP)*cbMAXUNITS*cbMAXHOOPS)/4))
 typedef struct {
-    uint32_t     time;           // system clock timestamp
-    uint16_t     chid;           // 0x8000
-    uint8_t   type;           // cbPKTTYPE_AINP*
-    uint8_t   dlen;           // cbPKT_DLENCHANINFO
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t     chan;           // actual channel id of the channel being configured
     uint32_t     proc;           // the address of the processor on which the channel resides
@@ -2088,24 +2079,21 @@ cbRESULT cbSetChanNTrodeGroup(uint32_t chan, const uint32_t NTrodeGroup, uint32_
 // Packet which says that these channels are now selected
 typedef struct _cbPKT_UNIT_SELECTION
 {
-    uint32_t time;            // system clock timestamp
-    uint16_t chid;            // 0x8000
-    uint8_t type;          //
-    uint8_t dlen;          // How many dwords follow......end of standard header
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     int32_t  lastchan;         // Which channel was clicked last.
-    uint16_t   abyUnitSelections[cbMAXCHANS];     // one for each channel, channels are 0 based here
+    uint16_t abyUnitSelections[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - sizeof(int32_t))];  // one for each channel, channels are 0 based here
 
 #ifdef __cplusplus
     // Inputs:
     //  ulastchan = 0 based channel that was most recently selected
-    _cbPKT_UNIT_SELECTION(int16_t iLastchan = 1) :
-        chid(0x8000),
-        type(TYPE_OUTGOING),
-        lastchan(iLastchan)
+    void set(int16_t iLastchan = 1)
     {
         // Can't use 'this' in a member-initialization
-        dlen = sizeof(*this) / 4 - cbPKT_HEADER_32SIZE;
+        cbpkt_header.dlen = (uint8_t)(sizeof(*this) / 4 - cbPKT_HEADER_32SIZE);
+        cbpkt_header.chid = 0x8000;
+        cbpkt_header.type = TYPE_OUTGOING;
+        lastchan = iLastchan;
         memset(abyUnitSelections, 0, sizeof(abyUnitSelections));
     }
 
@@ -2130,7 +2118,8 @@ typedef struct _cbPKT_UNIT_SELECTION
                         UNIT_3_MASK |
                         UNIT_4_MASK |
                         UNIT_5_MASK |
-                        CONTINUOUS_MASK,
+                        CONTINUOUS_MASK |
+                        0xFF80,         // this is here to select all digital input bits in raster when expanded
     };
 
     static int UnitToUnitmask(int nUnit) { return 1 << nUnit; }
@@ -2138,7 +2127,7 @@ typedef struct _cbPKT_UNIT_SELECTION
 } cbPKT_UNIT_SELECTION;
 
 #ifdef __cplusplus
-cbRESULT cbGetChannelSelection(cbPKT_UNIT_SELECTION * pPktUnitSel, uint32_t nInstance = 0);
+cbRESULT cbGetChannelSelection(cbPKT_UNIT_SELECTION* pPktUnitSel, uint32_t nProc, uint32_t nInstance = 0);
 // Retreives the channel unit selection status
 // Returns: cbRESULT_OK if data successfully retreived.
 //          cbRESULT_NOLIBRARY if the library was not properly initialized.
@@ -2154,17 +2143,16 @@ cbRESULT cbGetChannelSelection(cbPKT_UNIT_SELECTION * pPktUnitSel, uint32_t nIns
 #define cbFILECFG_OPT_CLOSE        0x00000005  // Close file application
 #define cbFILECFG_OPT_SYNCH        0x00000006  // Recording datetime
 #define cbFILECFG_OPT_OPEN         0x00000007  // Launch File dialog, do not set or do anything
+#define cbFILECFG_OPT_TIMEOUT      0x00000008  // Keep alive not received so it timed out
+#define cbFILECFG_OPT_PAUSE        0x00000009  // Recording paused
 
 // file save configuration packet
 #define cbPKTTYPE_REPFILECFG 0x61
 #define cbPKTTYPE_SETFILECFG 0xE1
 #define cbPKTDLEN_FILECFG ((sizeof(cbPKT_FILECFG)/4) - cbPKT_HEADER_32SIZE)
-#define cbPKTDLEN_FILECFGSHORT (cbPKTDLEN_FILECFG - ((sizeof(char)*3*256)/4)) // used for keep-alive messages
+#define cbPKTDLEN_FILECFGSHORT (cbPKTDLEN_FILECFG - ((sizeof(char)*3*cbLEN_STR_COMMENT)/4)) // used for keep-alive messages
 typedef struct {
-    uint32_t time;            // system clock timestamp
-    uint16_t chid;            // 0x8000
-    uint8_t type;
-    uint8_t dlen;
+    cbPKT_HEADER cbpkt_header;
 
     uint32_t options;         // cbFILECFG_OPT_*
     uint32_t duration;
@@ -2177,7 +2165,7 @@ typedef struct {
         char   filename[256];
         char   datetime[256];
     };
-    char   comment[256];
+    char   comment[cbLEN_STR_COMMENT];
 } cbPKT_FILECFG;
 
 #ifdef __cplusplus
@@ -2194,10 +2182,7 @@ cbRESULT cbGetFileInfo(cbPKT_FILECFG * filecfg, uint32_t nInstance = 0);
 #define cbPKTTYPE_SETPATIENTINFO 0xE4
 #define cbPKTDLEN_PATIENTINFO ((sizeof(cbPKT_PATIENTINFO)/4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t time;            // system clock timestamp
-    uint16_t chid;            // 0x8000
-    uint8_t type;          // cbPKTTYPE_SETPATIENTINFO
-    uint8_t dlen;
+    cbPKT_HEADER cbpkt_header;
 
     char   ID[cbMAX_PATIENTSTRING];
     char   firstname[cbMAX_PATIENTSTRING];
@@ -2212,12 +2197,9 @@ typedef struct {
 #define cbPKTTYPE_SETIMPEDANCE   0xE5
 #define cbPKTDLEN_IMPEDANCE ((sizeof(cbPKT_IMPEDANCE)/4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t time;       // system clock timestamp
-    uint16_t chid;       // 0x8000
-    uint8_t type;     // E5
-    uint8_t dlen;     // packet length equal
+    cbPKT_HEADER cbpkt_header;
 
-    float  data[cbNUM_FE_CHANS];  // variable length address list
+    float  data[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE) / sizeof(float)];  // variable length address list
 } cbPKT_IMPEDANCE;
 
 // Poll packet command
@@ -2236,10 +2218,7 @@ typedef struct {
 #define cbPKTTYPE_SETPOLL   0xE7
 #define cbPKTDLEN_POLL ((sizeof(cbPKT_POLL)/4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t  time;          // system clock timestamp
-    uint16_t  chid;          // 0x8000
-    uint8_t type;         // E7
-    uint8_t dlen;         // packet length equal
+    cbPKT_HEADER cbpkt_header;
 
     uint32_t  mode;          // any of cbPOLL_MODE_* commands
     uint32_t  flags;         // any of the cbPOLL_FLAG_* status
@@ -2255,10 +2234,7 @@ typedef struct {
 #define cbPKTTYPE_SETINITIMPEDANCE   0xE6
 #define cbPKTDLEN_INITIMPEDANCE ((sizeof(cbPKT_INITIMPEDANCE)/4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t time;       // system clock timestamp
-    uint16_t chid;       // 0x8000
-    uint8_t type;     // E6
-    uint8_t dlen;     // packet length equal
+    cbPKT_HEADER cbpkt_header;
 
     uint32_t initiate;    // on set call -> 1 to start autoimpedance
                         // on response -> 1 initiated
@@ -2269,19 +2245,16 @@ typedef struct {
 #define cbPKTTYPE_SETMAPFILE 0xE8
 #define cbPKTDLEN_MAPFILE ((sizeof(cbPKT_MAPFILE)/4) - cbPKT_HEADER_32SIZE)
 typedef struct cbPKT_MAPFILE_type {
-    uint32_t time;            // system clock timestamp
-    uint16_t chid;            // 0x8000
-    uint8_t type;
-    uint8_t dlen;
+    cbPKT_HEADER cbpkt_header;
 
     char   filename[512];
 
 #ifdef __cplusplus
-    void set(const char *szMapFilename)
+    void set(const char* szMapFilename)
     {
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_SETMAPFILE;
-        dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_SETMAPFILE;
+        cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
         memset(filename, 0, sizeof(filename));
         strncpy(filename, szMapFilename, sizeof(filename));
     }
@@ -2299,10 +2272,7 @@ typedef struct cbPKT_MAPFILE_type {
 #define cbPKTTYPE_SS_MODELALLSET   0xD0        /* PC->NSP request  */
 #define cbPKTDLEN_SS_MODELALLSET ((sizeof(cbPKT_SS_MODELALLSET) / 4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t time;           // system clock timestamp
-    uint16_t chid;           // 0x8000
-    uint8_t type;         // cbPKTTYPE_MODELALLSET or cbPKTTYPE_MODELALLREP depending on the direction
-    uint8_t dlen;         // 0
+    cbPKT_HEADER cbpkt_header;
 
 } cbPKT_SS_MODELALLSET;
 
@@ -2312,10 +2282,7 @@ typedef struct {
 #define cbPKTDLEN_SS_MODELSET ((sizeof(cbPKT_SS_MODELSET) / 4) - cbPKT_HEADER_32SIZE)
 #define MAX_REPEL_POINTS 3
 typedef struct {
-    uint32_t time;           // system clock timestamp
-    uint16_t chid;           // 0x8000
-    uint8_t type;         // cbPKTTYPE_SS_MODELREP or cbPKTTYPE_SS_MODELSET depending on the direction
-    uint8_t dlen;         // cbPKTDLEN_SS_MODELSET
+    cbPKT_HEADER cbpkt_header;
 
     uint32_t chan;           // actual channel id of the channel being configured (0 based)
     uint32_t unit_number;    // unit label (0 based, 0 is noise cluster)
@@ -2344,10 +2311,7 @@ typedef struct {
 #define cbPKTTYPE_SS_DETECTSET  0xD2        /* PC->NSP request  */
 #define cbPKTDLEN_SS_DETECT ((sizeof(cbPKT_SS_DETECT) / 4) - cbPKT_HEADER_32SIZE)
 typedef struct cbPKT_SS_DETECT_type {
-    uint32_t time;           // system clock timestamp
-    uint16_t chid;           // 0x8000
-    uint8_t type;         // cbPKTTYPE_SS_DETECTREP or cbPKTTYPE_SS_DETECTSET depending on the direction
-    uint8_t dlen;         // cbPKTDLEN_SS_DETECT
+    cbPKT_HEADER cbpkt_header;
 
     float  fThreshold;     // current detection threshold
     float  fMultiplier;    // multiplier
@@ -2355,9 +2319,9 @@ typedef struct cbPKT_SS_DETECT_type {
 #ifdef __cplusplus
     void set(float fThreshold, float fMultiplier)
     {
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_SS_DETECTSET;
-        dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_SS_DETECTSET;
+        cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
         this->fThreshold = fThreshold;
         this->fMultiplier = fMultiplier;
     }
@@ -2371,10 +2335,7 @@ typedef struct cbPKT_SS_DETECT_type {
 #define cbPKTTYPE_SS_ARTIF_REJECTSET  0xD3        /* PC->NSP request  */
 #define cbPKTDLEN_SS_ARTIF_REJECT ((sizeof(cbPKT_SS_ARTIF_REJECT) / 4) - cbPKT_HEADER_32SIZE)
 typedef struct cbPKT_SS_ARTIF_REJECT_type {
-    uint32_t time;               // system clock timestamp
-    uint16_t chid;               // 0x8000
-    uint8_t type;             // cbPKTTYPE_SS_ARTIF_REJECTREP or cbPKTTYPE_SS_ARTIF_REJECTSET depending on the direction
-    uint8_t dlen;             // cbPKTDLEN_SS_ARTIF_REJECT
+    cbPKT_HEADER cbpkt_header;
 
     uint32_t nMaxSimulChans;     // how many channels can fire exactly at the same time???
     uint32_t nRefractoryCount;   // for how many samples (30 kHz) is a neuron refractory, so can't re-trigger
@@ -2382,9 +2343,9 @@ typedef struct cbPKT_SS_ARTIF_REJECT_type {
 #ifdef __cplusplus
     void set(uint32_t nMaxSimulChans, uint32_t nRefractoryCount)
     {
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_SS_ARTIF_REJECTSET;
-        dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_SS_ARTIF_REJECTSET;
+        cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
         this->nMaxSimulChans = nMaxSimulChans;
         this->nRefractoryCount = nRefractoryCount;
     }
@@ -2398,10 +2359,7 @@ typedef struct cbPKT_SS_ARTIF_REJECT_type {
 #define cbPKTTYPE_SS_NOISE_BOUNDARYSET  0xD4        /* PC->NSP request  */
 #define cbPKTDLEN_SS_NOISE_BOUNDARY ((sizeof(cbPKT_SS_NOISE_BOUNDARY) / 4) - cbPKT_HEADER_32SIZE)
 typedef struct cbPKT_SS_NOISE_BOUNDARY_type {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // 0x8000
-    uint8_t type;      // cbPKTTYPE_SS_NOISE_BOUNDARYREP or cbPKTTYPE_SS_NOISE_BOUNDARYSET depending on the direction
-    uint8_t dlen;      // cbPKTDLEN_SS_ARTIF_REJECT
+    cbPKT_HEADER cbpkt_header;
 
     uint32_t chan;        // which channel we belong to
     float  afc[3];      // the center of the ellipsoid
@@ -2416,9 +2374,9 @@ typedef struct cbPKT_SS_NOISE_BOUNDARY_type {
     void set(uint32_t chan, float cen1,float cen2, float cen3, float maj1, float maj2, float maj3,
         float min11, float min12, float min13, float min21, float min22, float min23)
     {
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_SS_NOISE_BOUNDARYSET;
-        dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_SS_NOISE_BOUNDARYSET;
+        cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
         this->chan = chan;
         this->afc[0] = cen1;
         this->afc[1] = cen2;
@@ -2465,10 +2423,7 @@ typedef struct cbPKT_SS_NOISE_BOUNDARY_type {
 #define cbPKTTYPE_SS_STATISTICSSET  0xD5        /* PC->NSP request  */
 #define cbPKTDLEN_SS_STATISTICS ((sizeof(cbPKT_SS_STATISTICS) / 4) - cbPKT_HEADER_32SIZE)
 typedef struct cbPKT_SS_STATISTICS_type{
-    uint32_t time;           // system clock timestamp
-    uint16_t chid;           // 0x8000
-    uint8_t type;         // cbPKTTYPE_SS_STATISTICSREP or cbPKTTYPE_SS_STATISTICSSET depending on the direction
-    uint8_t dlen;         // cbPKTDLEN_SS_STATISTICS
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
 
     uint32_t nUpdateSpikes;  // update rate in spike counts
@@ -2498,9 +2453,9 @@ typedef struct cbPKT_SS_STATISTICS_type{
              float fClusterHistValleyPercentage, float fClusterHistClosePeakPercentage, float fClusterHistMinPeakPercentage,
              uint32_t nWaveBasisSize, uint32_t nWaveSampleSize)
     {
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_SS_STATISTICSSET;
-        dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_SS_STATISTICSSET;
+        cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
 
         this->nUpdateSpikes = nUpdateSpikes;
         this->nAutoalg = nAutoalg;
@@ -2525,18 +2480,14 @@ typedef struct cbPKT_SS_STATISTICS_type{
 #define cbPKTDLEN_SS_RESET ((sizeof(cbPKT_SS_RESET) / 4) - cbPKT_HEADER_32SIZE)
 typedef struct cbPKT_SS_RESET_type
 {
-    uint32_t time;           // system clock timestamp
-    uint16_t chid;           // 0x8000
-    uint8_t type;         // cbPKTTYPE_SS_RESETREP or cbPKTTYPE_SS_RESETSET depending on the direction
-    uint8_t dlen;         // cbPKTDLEN_SS_RESET
-
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     #ifdef __cplusplus
     void set()
     {
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_SS_RESETSET;
-        dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_SS_RESETSET;
+        cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
     }
     #endif
 } cbPKT_SS_RESET;
@@ -2548,11 +2499,7 @@ typedef struct cbPKT_SS_RESET_type
 #define cbPKTTYPE_SS_STATUSSET  0xD7        /* PC->NSP request  */
 #define cbPKTDLEN_SS_STATUS ((sizeof(cbPKT_SS_STATUS) / 4) - cbPKT_HEADER_32SIZE)
 typedef struct cbPKT_SS_STATUS_type {
-    uint32_t time;           // system clock timestamp
-    uint16_t chid;           // 0x8000
-    uint8_t type;         // cbPKTTYPE_SS_STATUSREP or cbPKTTYPE_SS_STATUSSET depending on the direction
-    uint8_t dlen;         // cbPKTDLEN_SS_STATUS
-
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     cbAdaptControl cntlUnitStats;
     cbAdaptControl cntlNumUnits;
@@ -2560,9 +2507,9 @@ typedef struct cbPKT_SS_STATUS_type {
 #ifdef __cplusplus
     void set(cbAdaptControl cntlUnitStats, cbAdaptControl cntlNumUnits)
     {
-        chid = cbPKTCHAN_CONFIGURATION;     //0x8000
-        type = cbPKTTYPE_SS_STATUSSET;
-        dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;     //0x8000
+        cbpkt_header.type = cbPKTTYPE_SS_STATUSSET;
+        cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
 
         this->cntlUnitStats = cntlUnitStats;
         this->cntlNumUnits = cntlNumUnits;
@@ -2577,18 +2524,14 @@ typedef struct cbPKT_SS_STATUS_type {
 #define cbPKTDLEN_SS_RESET_MODEL ((sizeof(cbPKT_SS_RESET_MODEL) / 4) - cbPKT_HEADER_32SIZE)
 typedef struct cbPKT_SS_RESET_MODEL_type
 {
-    uint32_t time;           // system clock timestamp
-    uint16_t chid;           // 0x8000
-    uint8_t type;         // cbPKTTYPE_SS_RESET_MODEL_REP or cbPKTTYPE_SS_RESET_MODEL_SET depending on the direction
-    uint8_t dlen;         // cbPKTDLEN_SS_RESET_MODEL
-
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     #ifdef __cplusplus
     void set()
     {
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_SS_RESET_MODEL_SET;
-        dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_SS_RESET_MODEL_SET;
+        cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
     }
     #endif
 } cbPKT_SS_RESET_MODEL;
@@ -2608,20 +2551,17 @@ typedef struct cbPKT_SS_RESET_MODEL_type
 #define cbPKTDLEN_SS_RECALC ((sizeof(cbPKT_SS_RECALC) / 4) - cbPKT_HEADER_32SIZE)
 typedef struct cbPKT_SS_RECALC_type
 {
-    uint32_t time;           // system clock timestamp
-    uint16_t chid;           // 0x8000
-    uint8_t type;         // cbPKTTYPE_SS_RECALCREP or cbPKTTYPE_SS_RECALCSET depending on the direction
-    uint8_t dlen;         // cbPKTDLEN_SS_RECALC
-
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t chan;           // 1 based channel we want to recalc (0 = All channels)
     uint32_t mode;           // cbPCA_RECALC_START -> Start PCa basis, cbPCA_RECALC_STOPPED-> PCA basis stopped, cbPCA_COLLECTION_STARTED -> PCA waveform collection started
     #ifdef __cplusplus
-    void set(uint32_t chan, uint32_t mode)
+    void set(uint8_t proc, uint32_t chan, uint32_t mode)
     {
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_SS_RECALCSET;
-        dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_SS_RECALCSET;
+        cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+        cbpkt_header.instrument = proc - 1;
         this->chan = chan;
         this->mode = mode;
     }
@@ -2636,11 +2576,7 @@ typedef struct cbPKT_SS_RECALC_type
 #define cbPKTDLEN_FS_BASISSHORT (cbPKTDLEN_FS_BASIS - ((sizeof(float)* cbMAX_PNTS * 3)/4))
 typedef struct cbPKT_FS_BASIS_type
 {
-    uint32_t time;           // system clock timestamp
-    uint16_t chid;           // 0x8000
-    uint8_t type;         // cbPKTTYPE_FS_BASISREP or cbPKTTYPE_FS_BASISSET depending on the direction
-    uint8_t dlen;         // cbPKTDLEN_FS_BASIS
-
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t chan;           // 1-based channel number
     uint32_t mode;           // cbBASIS_CHANGE, cbUNDO_BASIS_CHANGE, cbREDO_BASIS_CHANGE, cbINVALIDATE_BASIS ...
@@ -2652,10 +2588,10 @@ typedef struct cbPKT_FS_BASIS_type
     void set(uint32_t chan, uint32_t mode, uint32_t fs, float * basis[], int spikeLen)
     {
         int i = 0, j = 0;
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_FS_BASISSET;
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_FS_BASISSET;
         uint16_t dlenShort = uint16_t(((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE) - ((sizeof(float)* cbMAX_PNTS * 3)/4));
-        dlen = uint8_t(dlenShort + sizeof(float) * spikeLen / 4 * 3);
+        cbpkt_header.dlen = uint8_t(dlenShort + sizeof(float) * spikeLen / 4 * 3);
         this->chan = chan;
         this->mode = mode;
         this->fs   = fs;
@@ -2674,11 +2610,7 @@ typedef struct cbPKT_FS_BASIS_type
 #define cbPKTDLEN_LNC ((sizeof(cbPKT_LNC) / 4) - cbPKT_HEADER_32SIZE)
 typedef struct cbPKT_LNC_type
 {
-    uint32_t time;           // system clock timestamp
-    uint16_t chid;           // 0x8000
-    uint8_t type;         // cbPKTTYPE_LNCSET or cbPKTTYPE_LNCREP depending on the direction
-    uint8_t dlen;         // cbPKTDLEN_LNC
-
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t lncFreq;        // Nominal line noise frequency to be canceled  (in Hz)
     uint32_t lncRefChan;     // Reference channel for lnc synch (1-based)
@@ -2687,9 +2619,9 @@ typedef struct cbPKT_LNC_type
     #ifdef __cplusplus
     void set(uint32_t lncFreq, uint32_t lncRefChan, uint32_t lncGlobalMode)
     {
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_LNCSET;
-        dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_LNCSET;
+        cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
         this->lncFreq = lncFreq;
         this->lncRefChan = lncRefChan;
         this->lncGlobalMode   = lncGlobalMode;
@@ -2698,8 +2630,8 @@ typedef struct cbPKT_LNC_type
 } cbPKT_LNC;
 
 #ifdef __cplusplus
-cbRESULT cbGetLncParameters(uint32_t *nLncFreq, uint32_t *nLncRefChan, uint32_t *nLncGMode, uint32_t nInstance = 0);
-cbRESULT cbSetLncParameters(uint32_t nLncFreq, uint32_t nLncRefChan, uint32_t nLncGMode, uint32_t nInstance = 0);
+cbRESULT cbGetLncParameters(uint32_t nProc, uint32_t* nLncFreq, uint32_t* nLncRefChan, uint32_t* nLncGMode, uint32_t nInstance = 0);
+cbRESULT cbSetLncParameters(uint32_t nProc, uint32_t nLncFreq, uint32_t nLncRefChan, uint32_t nLncGMode, uint32_t nInstance = 0);
 // Get/Set the system-wide LNC parameters.
 //
 // Returns: cbRESULT_OK if data successfully retrieved.
@@ -2711,10 +2643,7 @@ cbRESULT cbSetLncParameters(uint32_t nLncFreq, uint32_t nLncRefChan, uint32_t nL
 #define cbPKTTYPE_SET_DOUTSET       0xDD        /* PC->NSP request  */
 #define cbPKTDLEN_SET_DOUT ((sizeof(cbPKT_SET_DOUT) / 4) - cbPKT_HEADER_32SIZE)
 typedef struct cbPKT_SET_DOUT_type {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // 0x8000
-    uint8_t type;      // cbPKTTYPE_SET_DOUTREP or cbPKTTYPE_SET_DOUTSET depending on direction
-    uint8_t dlen;      // length of waveform in 32-bit chunks
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint16_t chan;        // which digital output channel (1 based, will equal chan from GetDoutCaps)
     uint16_t value;       // Which value to set? zero = 0; non-zero = 1 (output is 1 bit)
@@ -2725,9 +2654,9 @@ typedef struct cbPKT_SET_DOUT_type {
     //  bSet - TRUE means to assert the port (1); FALSE, unassert (0)
     void set(uint32_t nChan, bool bSet)
     {
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_SET_DOUTSET;
-        dlen = sizeof(*this) / 4 - cbPKT_HEADER_32SIZE;
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_SET_DOUTSET;
+        cbpkt_header.dlen = sizeof(*this) / 4 - cbPKT_HEADER_32SIZE;
 
         chan = nChan;
         value = bSet ? 1 : 0;
@@ -2759,6 +2688,8 @@ cbRESULT cbGetAoutWaveform(uint32_t channel, uint8_t  trigNum, uint16_t  * mode,
                            uint16_t  * trigChan, uint16_t  * trigValue, cbWaveformData * wave, uint32_t nInstance = 0);
 // Returns anallog output waveform information
 // Returns cbRESULT_OK if successful, cbRESULT_NOLIBRARY if library was never initialized.
+
+cbRESULT cbGetAoutWaveformNumber(uint32_t channel, uint32_t* wavenum, uint32_t nInstance = 0);
 #endif
 
 // signal generator waveform type
@@ -2771,17 +2702,14 @@ cbRESULT cbGetAoutWaveform(uint32_t channel, uint8_t  trigNum, uint16_t  * mode,
 #define    cbWAVEFORM_TRIGGER_DINPFEG       2   // digital input falling edge trigger
 #define    cbWAVEFORM_TRIGGER_SPIKEUNIT     3   // spike unit
 #define    cbWAVEFORM_TRIGGER_COMMENTCOLOR  4   // comment RGBA color (A being big byte)
-#define    cbWAVEFORM_TRIGGER_SOFTRESET     5   // soft-reset trigger
+#define    cbWAVEFORM_TRIGGER_RECORDINGSTART     5   // recording start trigger
 #define    cbWAVEFORM_TRIGGER_EXTENSION     6   // extension trigger
 // AOUT signal generator waveform data
 #define cbPKTTYPE_WAVEFORMREP       0x33        /* NSP->PC response */
 #define cbPKTTYPE_WAVEFORMSET       0xB3        /* PC->NSP request  */
 #define cbPKTDLEN_WAVEFORM   ((sizeof(cbPKT_AOUT_WAVEFORM)/4) - cbPKT_HEADER_32SIZE)
 typedef struct cbPKT_AOUT_WAVEFORM_type {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // cbPKTCHAN_CONFIGURATION
-    uint8_t type;      // cbPKTTYPE_WAVEFORMREP or cbPKTTYPE_WAVEFORMSET depending on direction
-    uint8_t dlen;      // packet size
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint16_t chan;        // which analog output/audio output channel (1-based, will equal chan from GetAoutCaps)
 
@@ -2806,9 +2734,9 @@ typedef struct cbPKT_AOUT_WAVEFORM_type {
     void reset(uint16_t nChan, uint8_t nTrigNum)
     {
         memset(this, 0, sizeof(*this));
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_WAVEFORMSET;
-        dlen = sizeof(*this) / 4 - cbPKT_HEADER_32SIZE;
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_WAVEFORMSET;
+        cbpkt_header.dlen = sizeof(*this) / 4 - cbPKT_HEADER_32SIZE;
         chan = nChan;
         mode = cbWAVEFORM_MODE_NONE;
         trigNum = nTrigNum;
@@ -2818,9 +2746,9 @@ typedef struct cbPKT_AOUT_WAVEFORM_type {
     void set(uint16_t nChan, int16_t offset, uint16_t nSineFrequency, int16_t  nSineAmplitude, uint16_t nTrigChan = 0, uint16_t nTrig = cbWAVEFORM_TRIGGER_NONE,
             uint32_t nRepeats = 0, uint16_t nTrigValue = 0, uint8_t nTrigNum = 0)
     {
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_WAVEFORMSET;
-        dlen = sizeof(*this) / 4 - cbPKT_HEADER_32SIZE;
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_WAVEFORMSET;
+        cbpkt_header.dlen = sizeof(*this) / 4 - cbPKT_HEADER_32SIZE;
         chan = nChan;
         wave.offset        = offset;
         wave.sineFrequency = nSineFrequency;
@@ -2841,9 +2769,9 @@ typedef struct cbPKT_AOUT_WAVEFORM_type {
     void set(uint16_t nChan, uint16_t nPhases, uint16_t nDuration[], int16_t  nAmplitude[], uint16_t nTrigChan = 0, uint32_t nTrig = cbWAVEFORM_TRIGGER_NONE,
             uint32_t  nRepeats = 0, uint32_t  nSeqTotal = 1, uint16_t nSeq = 0, int16_t offset = 0, uint16_t  nTrigValue = 0, uint8_t nTrigNum = 0)
     {
-        chid = cbPKTCHAN_CONFIGURATION;
-        type = cbPKTTYPE_WAVEFORMSET;
-        dlen = sizeof(*this) / 4 - cbPKT_HEADER_32SIZE;
+        cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        cbpkt_header.type = cbPKTTYPE_WAVEFORMSET;
+        cbpkt_header.dlen = sizeof(*this) / 4 - cbPKT_HEADER_32SIZE;
         chan = nChan;
         if (nPhases > cbMAX_WAVEFORM_PHASES)
             nPhases = cbMAX_WAVEFORM_PHASES;
@@ -2883,10 +2811,7 @@ typedef struct cbPKT_AOUT_WAVEFORM_type {
 #define cbPKTTYPE_PREVREPLNC    0x01
 #define cbPKTDLEN_PREVREPLNC    ((sizeof(cbPKT_LNCPREV)/4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // 0x8000 + channel identifier
-    uint8_t type;      // cbPKT_LNCPREVLEN
-    uint8_t dlen;      // length of the waveform/2
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     uint32_t freq;        // Estimated line noise frequency * 1000 (zero means not valid)
     int16_t  wave[300];   // lnc cancellation waveform (downsampled by 2)
@@ -2903,10 +2828,7 @@ typedef struct {
 #define cbPKTTYPE_PREVREPSTREAM  0x02
 #define cbPKTDLEN_PREVREPSTREAM  ((sizeof(cbPKT_STREAMPREV)/4) - cbPKT_HEADER_32SIZE)
 typedef struct {
-    uint32_t time;        // system clock timestamp
-    uint16_t chid;        // 0x8000 + channel identifier
-    uint8_t type;      // cbPKTTYPE_PREVREPSTREAM
-    uint8_t dlen;      // cbPKTDLEN_PREVREPSTREAM
+    cbPKT_HEADER cbpkt_header; //!< packet header
 
     int16_t  rawmin;      // minimum raw channel value over last preview period
     int16_t  rawmax;      // maximum raw channel value over last preview period
@@ -3004,7 +2926,7 @@ enum WM_USER_GLOBAL
 #define cbRECBUFFLEN cbNUM_FE_CHANS * 32768 * 4
 typedef struct {
     uint32_t received;
-    uint32_t lasttime;
+    PROCTIME lasttime;
     uint32_t headwrap;
     uint32_t headindex;
     uint32_t buffer[cbRECBUFFLEN];
@@ -3048,7 +2970,7 @@ typedef struct {
     //////// These are spike sorting options
     cbPKT_SS_DETECT         pktDetect;        // parameters dealing with actual detection
     cbPKT_SS_ARTIF_REJECT   pktArtifReject;   // artifact rejection
-    cbPKT_SS_NOISE_BOUNDARY pktNoiseBoundary[cbNUM_ANALOG_CHANS]; // where o'where are the noise boundaries
+    cbPKT_SS_NOISE_BOUNDARY pktNoiseBoundary[cbMAXCHANS]; // where o'where are the noise boundaries
     cbPKT_SS_STATISTICS     pktStatistics;    // information about statistics
     cbPKT_SS_STATUS         pktStatus;        // Spike sorting status
 
@@ -3057,10 +2979,12 @@ typedef struct {
 #define PCSTAT_TYPE_CERVELLO        0x00000001      // Cervello type system
 #define PCSTAT_DISABLE_RAW          0x00000002      // Disable recording of raw data
 
+enum NSP_STATUS { NSP_INIT, NSP_NOIPADDR, NSP_NOREPLY, NSP_FOUND, NSP_INVALID };
+
 class cbPcStatus
 {
 public:
-    cbPKT_UNIT_SELECTION isSelection;
+    cbPKT_UNIT_SELECTION isSelection[cbMAXPROCS];
 
 private:
     int32_t m_iBlockRecording;
@@ -3075,14 +2999,30 @@ private:
     uint32_t m_nNumSerialChans;
     uint32_t m_nNumDigoutChans;
     uint32_t m_nNumTotalChans;
+    NSP_STATUS  m_nNspStatus[cbMAXPROCS];       // true if the nsp has received a sysinfo from each NSP
+    uint32_t m_nNumNTrodesPerInstrument[cbMAXPROCS];
 
 public:
     cbPcStatus() :
-        isSelection(1),
         m_iBlockRecording(0),
-        m_nPCStatusFlags(0)
+        m_nPCStatusFlags(0),
+        m_nNumFEChans(0),
+        m_nNumAnainChans(0),
+        m_nNumAnalogChans(0),
+        m_nNumAoutChans(0),
+        m_nNumAudioChans(0),
+        m_nNumAnalogoutChans(0),
+        m_nNumDiginChans(0),
+        m_nNumSerialChans(0),
+        m_nNumDigoutChans(0),
+        m_nNumTotalChans(0)
+    {
+        for (uint32_t nProc = 0; nProc < cbMAXPROCS; ++nProc)
         {
+            isSelection[nProc].lastchan = 1;
+            m_nNspStatus[nProc] = NSP_INIT;
         }
+    }
     bool IsRecordingBlocked()           { return m_iBlockRecording != 0; }
     uint32_t cbGetPCStatusFlags()       { return m_nPCStatusFlags; }
     uint32_t cbGetNumFEChans()          { return m_nNumFEChans; }
@@ -3095,6 +3035,8 @@ public:
     uint32_t cbGetNumSerialChans()      { return m_nNumSerialChans; }
     uint32_t cbGetNumDigoutChans()      { return m_nNumDigoutChans; }
     uint32_t cbGetNumTotalChans()       { return m_nNumTotalChans; }
+    NSP_STATUS cbGetNspStatus(uint32_t nProc) { return m_nNspStatus[nProc]; }
+    uint32_t cbGetNumNTrodesPerInstrument(uint32_t nProc) { return m_nNumNTrodesPerInstrument[nProc - 1]; }
     void SetBlockRecording(bool bBlockRecording)                { m_iBlockRecording += bBlockRecording ? 1 : -1; }
     void cbSetPCStatusFlags(uint32_t nPCStatusFlags)            { m_nPCStatusFlags = nPCStatusFlags; }
     void cbSetNumFEChans(uint32_t nNumFEChans)                  { m_nNumFEChans = nNumFEChans; }
@@ -3107,6 +3049,8 @@ public:
     void cbSetNumSerialChans(uint32_t nNumSerialChans)          { m_nNumSerialChans = nNumSerialChans; }
     void cbSetNumDigoutChans(uint32_t nNumDigoutChans)          { m_nNumDigoutChans = nNumDigoutChans; }
     void cbSetNumTotalChans(uint32_t nNumTotalChans)            { m_nNumTotalChans = nNumTotalChans; }
+    void cbSetNspStatus(uint32_t nInstrument, NSP_STATUS nStatus) { m_nNspStatus[nInstrument] = nStatus; }
+    void cbSetNumNTrodesPerInstrument(uint32_t nInstrument, uint32_t nNumNTrodesPerInstrument) { m_nNumNTrodesPerInstrument[nInstrument - 1] = nNumNTrodesPerInstrument; }
 };
 
 typedef struct {
@@ -3119,13 +3063,13 @@ typedef struct {
     cbPKT_BANKINFO  bankinfo[cbMAXPROCS][cbMAXBANKS];
     cbPKT_GROUPINFO groupinfo[cbMAXPROCS][cbMAXGROUPS]; // sample group ID (1-4=proc1, 5-8=proc2, etc)
     cbPKT_FILTINFO  filtinfo[cbMAXPROCS][cbMAXFILTS];
-    cbPKT_ADAPTFILTINFO adaptinfo;          //  Settings about adapting
-    cbPKT_REFELECFILTINFO refelecinfo;          //  Settings about reference electrode filtering
+    cbPKT_ADAPTFILTINFO adaptinfo[cbMAXPROCS];          //  Settings about adapting
+    cbPKT_REFELECFILTINFO refelecinfo[cbMAXPROCS];      //  Settings about reference electrode filtering
     cbPKT_CHANINFO  chaninfo[cbMAXCHANS];
     cbSPIKE_SORTING isSortingOptions;   // parameters dealing with spike sorting
     cbPKT_NTRODEINFO isNTrodeInfo[cbMAXNTRODES];  // allow for the max number of ntrodes (if all are stereo-trodes)
     cbPKT_AOUT_WAVEFORM isWaveform[AOUT_NUM_GAIN_CHANS][cbMAX_AOUT_TRIGGER]; // Waveform parameters
-    cbPKT_LNC       isLnc; //LNC parameters
+    cbPKT_LNC       isLnc[cbMAXPROCS]; //LNC parameters
     cbPKT_NPLAY     isNPlay; // nPlay Info
     cbVIDEOSOURCE   isVideoSource[cbMAXVIDEOSOURCE]; // Video source
     cbTRACKOBJ      isTrackObj[cbMAXTRACKOBJ];       // Trackable objects

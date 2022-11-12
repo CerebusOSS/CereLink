@@ -47,9 +47,15 @@ public:
     virtual ~UDPSocket();
 
     // Open UDP socket
-    cbRESULT Open(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bool bVerbose, LPCSTR szInIP,
-          LPCSTR szOutIP, bool bBroadcast, bool bDontRoute, bool bNonBlocking,
-          int nRecBufSize, int nInPort, int nOutPort, int nPacketSize);
+    // Open Network socket (UDP version)
+    cbRESULT OpenUDP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bool bVerbose, LPCSTR szInIP,
+        LPCSTR szOutIP, bool bBroadcast, bool bDontRoute, bool bNonBlocking,
+        int nRecBufSize, int nInPort, int nOutPort, int nPacketSize);
+
+    // Open Network socket (TCP version)
+    cbRESULT OpenTCP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bool bVerbose, LPCSTR szInIP,
+        LPCSTR szOutIP, bool bBroadcast, bool bDontRoute, bool bNonBlocking,
+        int nRecBufSize, int nInPort, int nOutPort, int nPacketSize);
 
     void OutPort(int nOutPort);
 
@@ -58,10 +64,12 @@ public:
     SOCKET GetSocket() {return inst_sock;}
 
     // Receive one packet if queued
-    int Recv(void * packet) const;
+    int RecvUDP(void* packet) const;
+    int RecvTCP(void* packet) const;
 
     // Send this packet, it has cbBytes of length
-    int Send(void *ppkt, int cbBytes) const;
+    int SendUDP(void* ppkt, int cbBytes) const;
+    int SendTCP(void* ppkt, int cbBytes) const;
 
 protected:
     SOCKET      inst_sock;     // instrument socket for input
@@ -69,6 +77,7 @@ protected:
     STARTUP_OPTIONS m_nStartupOptionsFlags;
     int m_nPacketSize; // packet size
     bool m_bVerbose;   // verbose output
+    bool m_TCPconnected;
 };
 
 #endif // include guard

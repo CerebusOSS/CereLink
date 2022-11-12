@@ -1,7 +1,7 @@
 // =STS=> cbsdk.cpp[5021].aa03   open     SMID:3 
 //////////////////////////////////////////////////////////////////////
 //
-// (c) Copyright 2010 - 2016 Blackrock Microsystems
+// (c) Copyright 2010 - 2021 Blackrock Microsystems, LLC
 //
 // $Workfile: cbsdk.cpp $
 // $Archive: /Cerebus/Human/WindowsApps/cbmex/cbsdk.cpp $
@@ -90,22 +90,43 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 */
 void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
 {
+    uint32_t nChanProcStart = 0;
+    uint32_t nChanProcMax = 0;
+    cbPROCINFO isProcInfo;
+    uint32_t nInstrument = pkt->cbpkt_header.instrument;
+    if (IsStandAlone())
+        nInstrument = 0;
+
     if (!m_bWithinTrial || m_CD == NULL)
         return;
 
-    int group = pkt->type;
+    int group = pkt->cbpkt_header.type;
 
-    /// \todo FIXME: add raw group to cbsdk
-    if (group >= 6)
+    if (group >= SMPGRP_RAW)
         return;
+
+    if (pkt->cbpkt_header.instrument >= cbMAXPROCS)
+        nInstrument = 0;
+
+    for (uint32_t nProc = 0; nProc < cbMAXPROCS; ++nProc)
+    {
+        if (NSP_FOUND == cbGetNspStatus(nProc + 1))
+        {
+            if (cbRESULT_OK == ::cbGetProcInfo(nProc + 1, &isProcInfo))
+                nChanProcMax += isProcInfo.chancount;
+            if (pkt->cbpkt_header.instrument == nProc)
+                break;
+            nChanProcStart = nChanProcMax;
+        }
+    }
 
     // Get information about this group...
     uint32_t  period;
     uint32_t  length;
     uint16_t  list[cbNUM_ANALOG_CHANS];
-    if (cbGetSampleGroupInfo(1, group, NULL, &period, &length, m_nInstance) != cbRESULT_OK)
+    if (cbGetSampleGroupInfo(nInstrument + 1, group, NULL, &period, &length, m_nInstance) != cbRESULT_OK)
         return;
-    if (cbGetSampleGroupList(1, group, &length, list, m_nInstance) != cbRESULT_OK)
+    if (cbGetSampleGroupList(nInstrument + 1, group, &length, list, m_nInstance) != cbRESULT_OK)
         return;
 
     int rate = (int)(cbSdk_TICKS_PER_SECOND / double(period) );
@@ -122,7 +143,7 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
             if (list[i] == 0 || list[i] > cbNUM_ANALOG_CHANS)
                 continue;
 
-            int ch = list[i] - 1;
+            int ch = list[i] - 1 + nChanProcStart;
 
             if (m_CD->write_index[ch] == m_CD->write_start_index[ch]) // New continuous channel
             {
@@ -171,7 +192,7 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
 void SdkApp::OnPktEvent(const cbPKT_GENERIC * const pPkt)
 {
     // check for trial beginning notification
-    if (pPkt->chid == m_uTrialBeginChannel)
+    if (pPkt->cbpkt_header.chid == m_uTrialBeginChannel)
     {
         if ( (m_uTrialBeginMask & pPkt->data[0]) == m_uTrialBeginValue )
         {
@@ -189,7 +210,7 @@ void SdkApp::OnPktEvent(const cbPKT_GENERIC * const pPkt)
     {
         bool bOverFlow = false;
 
-        uint16_t ch = pPkt->chid - 1;
+        uint16_t ch = pPkt->cbpkt_header.chid - 1;
 
         m_lockTrialEvent.lock();
         // double check if buffer is still valid
@@ -205,17 +226,17 @@ void SdkApp::OnPktEvent(const cbPKT_GENERIC * const pPkt)
             if (new_write_index != m_ED->write_start_index[ch])
             {
                 // Store more data
-                m_ED->timestamps[ch][old_write_index] = pPkt->time;
-                if ((m_ChannelType[ch] == cbCHANTYPE_DIGIN) || (m_ChannelType[ch] == cbCHANTYPE_SERIAL))
+                m_ED->timestamps[ch][old_write_index] = pPkt->cbpkt_header.time;
+                if (IsChanDigin(pPkt->cbpkt_header.chid) || IsChanSerial(pPkt->cbpkt_header.chid))
                     m_ED->units[ch][old_write_index] = (uint16_t)(pPkt->data[0] & 0x0000ffff);  // Store the 0th data sample (truncated to 16-bit).
                 else
-                    m_ED->units[ch][old_write_index] = pPkt->type; // Store the type.
+                    m_ED->units[ch][old_write_index] = pPkt->cbpkt_header.type; // Store the type.
                 m_ED->write_index[ch] = new_write_index;
 
                 if (m_bPacketsEvent)
                 {
                     m_lockGetPacketsEvent.lock();
-                        if (pPkt->time > m_uTrialStartTime)
+                        if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
                             m_bPacketsEvent = FALSE;
                             m_waitPacketsEvent.wakeAll();
@@ -223,7 +244,7 @@ void SdkApp::OnPktEvent(const cbPKT_GENERIC * const pPkt)
                     m_lockGetPacketsEvent.unlock();
                 }
             }
-            else if (m_bChannelMask[pPkt->chid - 1])
+            else if (m_bChannelMask[pPkt->cbpkt_header.chid - 1])
                 bOverFlow = true;
         }
         m_lockTrialEvent.unlock();
@@ -235,7 +256,7 @@ void SdkApp::OnPktEvent(const cbPKT_GENERIC * const pPkt)
     }
 
     // check for trial end notification
-    if (pPkt->chid == m_uTrialEndChannel)
+    if (pPkt->cbpkt_header.chid == m_uTrialEndChannel)
     {
         if ( (m_uTrialEndMask & pPkt->data[0]) == m_uTrialEndValue )
             m_bWithinTrial = FALSE;
@@ -266,16 +287,8 @@ void SdkApp::OnPktComment(const cbPKT_COMMENT * const pPkt)
                 uint32_t write_index = m_CMT->write_index;
                 // Store more data
                 m_CMT->charset[write_index]  = pPkt->info.charset;
-                if (pPkt->info.flags == cbCOMMENT_FLAG_TIMESTAMP)
-                {
-                    m_CMT->rgba[write_index] = 0;
-                    m_CMT->timestamps[write_index] = pPkt->data;
-                }
-                else
-                {
-                    m_CMT->rgba[write_index]  = pPkt->data;
-                    m_CMT->timestamps[write_index] = pPkt->time;
-                }
+                m_CMT->timestamps[write_index] = pPkt->timeStarted;
+                m_CMT->rgba[write_index] = pPkt->rgba;
 
                 strncpy((char *)m_CMT->comments[write_index], (const char *)(&pPkt->comment[0]), cbMAX_COMMENT);
                 m_CMT->write_index = new_write_index;
@@ -283,7 +296,7 @@ void SdkApp::OnPktComment(const cbPKT_COMMENT * const pPkt)
                 if (m_bPacketsCmt)
                 {
                     m_lockGetPacketsCmt.lock();
-                        if (pPkt->time > m_uTrialStartTime)
+                        if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
                             m_bPacketsCmt = FALSE;
                             m_waitPacketsCmt.wakeAll();
@@ -321,7 +334,7 @@ void SdkApp::OnPktLog(const cbPKT_LOG * const pPkt)
                 // Store more data
                 m_CMT->charset[write_index]  = 0;   // force to ANSI charset
                 m_CMT->rgba[write_index]  = 0xFFFFFFFF;
-                m_CMT->timestamps[write_index] = pPkt->time;
+                m_CMT->timestamps[write_index] = pPkt->cbpkt_header.time;
 
                 strncpy((char *)m_CMT->comments[write_index], (const char *)(&pPkt->desc[0]), cbMAX_LOG);
                 m_CMT->write_index = new_write_index;
@@ -329,7 +342,7 @@ void SdkApp::OnPktLog(const cbPKT_LOG * const pPkt)
                 if (m_bPacketsCmt)
                 {
                     m_lockGetPacketsCmt.lock();
-                        if (pPkt->time > m_uTrialStartTime)
+                        if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
                             m_bPacketsCmt = FALSE;
                             m_waitPacketsCmt.wakeAll();
@@ -351,7 +364,7 @@ void SdkApp::OnPktLog(const cbPKT_LOG * const pPkt)
 */
 void SdkApp::OnPktTrack(const cbPKT_VIDEOTRACK * const pPkt)
 {
-    if (m_TR && m_bWithinTrial && m_lastPktVideoSynch.chid == cbPKTCHAN_CONFIGURATION)
+    if (m_TR && m_bWithinTrial && m_lastPktVideoSynch.cbpkt_header.chid == cbPKTCHAN_CONFIGURATION)
     {
         uint16_t id = pPkt->nodeID; // 0-based node id
         // double check if buffer is still valid
@@ -385,7 +398,7 @@ void SdkApp::OnPktTrack(const cbPKT_VIDEOTRACK * const pPkt)
             {
                 uint32_t write_index = m_TR->write_index[id];
                 // Store more data
-                m_TR->timestamps[id][write_index] = pPkt->time;
+                m_TR->timestamps[id][write_index] = pPkt->cbpkt_header.time;
                 m_TR->synch_timestamps[id][write_index] = m_lastPktVideoSynch.etime;
                 m_TR->synch_frame_numbers[id][write_index] = m_lastPktVideoSynch.frame;
                 m_TR->point_counts[id][write_index] = pPkt->pointCount;
@@ -425,7 +438,7 @@ void SdkApp::OnPktTrack(const cbPKT_VIDEOTRACK * const pPkt)
                 if (m_bPacketsTrack)
                 {
                     m_lockGetPacketsTrack.lock();
-                        if (pPkt->time > m_uTrialStartTime)
+                        if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
                             m_bPacketsTrack = FALSE;
                             m_waitPacketsTrack.wakeAll();
@@ -821,7 +834,7 @@ cbSdkResult SdkApp::SdkOpen(uint32_t nInstance, cbSdkConnectionType conType, cbS
     if (conType == CBSDKCONNECTION_UDP)
     {
         m_connectLock.lock();
-        Open(nInstance, con.nInPort, con.nOutPort, con.szInIP, con.szOutIP, con.nRecBufSize);
+        Open(nInstance, con.nInPort, con.nOutPort, con.szInIP, con.szOutIP, con.nRecBufSize, con.nRange);
     }
     else if (conType == CBSDKCONNECTION_CENTRAL)
     {
@@ -1069,7 +1082,7 @@ cbSdkResult SdkApp::unsetTrialConfig(cbSdkTrialType type)
     case CBSDKTRIAL_CONTINUOUS:
         if (m_CD == NULL)
             return CBSDKRESULT_ERRCONFIG;
-        for (uint32_t i = 0; i < cbNUM_ANALOG_CHANS; ++i)
+        for (uint32_t i = 0; i < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++i)
         {
             if (m_CD->continuous_channel_data[i])
             {
@@ -1245,7 +1258,7 @@ CBSDKAPI    cbSdkResult cbSdkUnsetTrialConfig(uint32_t nInstance, cbSdkTrialType
 
 * \n This function returns the error code
 */
-cbSdkResult SdkApp::SdkGetTime(uint32_t * cbtime)
+cbSdkResult SdkApp::SdkGetTime(PROCTIME * cbtime)
 {
     if (m_instInfo == 0)
         return CBSDKRESULT_CLOSED;
@@ -1258,7 +1271,7 @@ cbSdkResult SdkApp::SdkGetTime(uint32_t * cbtime)
 }
 
 /// sdk stub for SdkApp::SdkGetTime
-CBSDKAPI    cbSdkResult cbSdkGetTime(uint32_t nInstance, uint32_t * cbtime)
+CBSDKAPI    cbSdkResult cbSdkGetTime(uint32_t nInstance, PROCTIME * cbtime)
 {
     if (cbtime == NULL)
         return CBSDKRESULT_NULLPTR;
@@ -1429,7 +1442,7 @@ cbSdkResult SdkApp::SdkSetTrialConfig(uint32_t bActive, uint16_t begchan, uint32
             m_CD->size = uConts;
             bool bErr = false;
             try {
-                for (uint32_t i = 0; i < cbNUM_ANALOG_CHANS; ++i)
+                for (uint32_t i = 0; i < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++i)
                 {
                     m_CD->continuous_channel_data[i] = new int16_t[m_CD->size];
                     if (m_CD->continuous_channel_data[i] == NULL)
@@ -1698,14 +1711,14 @@ cbSdkResult SdkApp::SdkGetChannelLabel(uint16_t channel, uint32_t * bValid, char
         for (int i = 0; i < 6; ++i)
             bValid[i] = 0;
         cbHOOP hoops[cbMAXUNITS][cbMAXHOOPS];
-        if (m_ChannelType[channel-1] == cbCHANTYPE_ANAIN)
+        if (channel <= cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans())
         {
             cbGetAinpSpikeHoops(channel, &hoops[0][0], m_nInstance);
             bValid[0] = IsSpikeProcessingEnabled(channel);
             for (int i = 0; i < cbMAXUNITS; ++i)
                 bValid[i + 1] = hoops[i][0].valid;
         }
-        else if ((m_ChannelType[channel - 1] == cbCHANTYPE_DIGIN) || (m_ChannelType[channel - 1] == cbCHANTYPE_SERIAL))
+        else if (IsChanDigin(channel) || IsChanSerial(channel))
         {
             uint32_t options;
             cbGetDinpOptions(channel, &options, NULL, m_nInstance);
@@ -1769,27 +1782,6 @@ CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(uint32_t nInstance,
     return g_app[nInstance]->SdkSetChannelLabel(channel, label, userflags, position);
 }
 
-cbSdkResult SdkApp::SdkGetChannelType(uint16_t channel, uint8_t * chType)
-{
-    if (m_instInfo == 0)
-        return CBSDKRESULT_CLOSED;
-
-    *chType = m_ChannelType[channel - 1];
-    return CBSDKRESULT_SUCCESS;
-}
-
-CBSDKAPI    cbSdkResult cbSdkGetChannelType(uint32_t nInstance, uint16_t channel, uint8_t *chType)
-{
-    if (channel == 0 || channel > cbMAXCHANS)
-        return CBSDKRESULT_INVALIDCHANNEL;
-    if (chType == NULL)
-        return CBSDKRESULT_NULLPTR;
-    if (nInstance >= cbMAXOPEN)
-        return CBSDKRESULT_INVALIDPARAM;
-    if (g_app[nInstance] == NULL)
-        return CBSDKRESULT_CLOSED;
-    return g_app[nInstance]->SdkGetChannelType(channel, chType);
-}
 
 // Author & Date:   Ehsan Azar     11 March 2011
 /** Retrieve data of a configured trial.
@@ -1844,7 +1836,7 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
         for (uint32_t channel = 0; channel < trialcont->count; channel++)
         {
             uint16_t ch = trialcont->chan[channel]; // channel number (index + 1 in cache)
-            if (ch == 0 || ch > cbNUM_ANALOG_CHANS)
+            if (ch == 0 || ch > cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans())
                 return CBSDKRESULT_INVALIDCHANNEL;
             // Ignore masked channels
             if (!m_bChannelMask[ch - 1])
@@ -1910,7 +1902,7 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
         for (uint32_t ev_ix = 0; ev_ix < trialevent->count; ev_ix++)
         {
             uint16_t ch = trialevent->chan[ev_ix]; // channel number, 1-based
-            if ((m_ChannelType[ch - 1] != cbCHANTYPE_ANAIN) && (m_ChannelType[ch - 1] != cbCHANTYPE_DIGIN) && (m_ChannelType[ch - 1] != cbCHANTYPE_SERIAL))
+            if (ch == 0 || (ch > cb_pc_status_buffer_ptr[0]->cbGetNumTotalChans()))
                 return CBSDKRESULT_INVALIDCHANNEL;
             // Ignore masked channels
             if (!m_bChannelMask[ch - 1])
@@ -1942,7 +1934,7 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
 
                 // For digital or serial data, 'unit' holds data, and is not indicating the unit number.
                 // So here we copy the data to trialevent->waveforms, then set unit to 0.
-                if ((m_ChannelType[ch - 1] == cbCHANTYPE_DIGIN) || (m_ChannelType[ch - 1] == cbCHANTYPE_SERIAL))
+                if (IsChanDigin(ch) || IsChanSerial(ch))
                 {
                     if (num_samples_unit[0] < trialevent->num_samples[ev_ix][0])
                     {
@@ -2252,7 +2244,7 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
                 while (i != read_end_index[channel])
                 {
                     uint16_t unit = m_ED->units[channel][i];
-                    if ((unit > cbMAXUNITS) || (m_ChannelType[channel] != cbCHANTYPE_ANAIN))
+                    if (unit > cbMAXUNITS || IsChanDigin(channel + 1) || IsChanSerial(channel + 1))
                         unit = 0;
                     trialevent->num_samples[count][unit]++;
                     if (++i >= m_ED->size)
@@ -2270,23 +2262,23 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
         if (m_instInfo == 0)
         {
             memset(trialcont->chan, 0, sizeof(trialcont->chan));
-            memset(trialcont->sample_rates, 0, sizeof(trialcont->samples));
+            memset(trialcont->sample_rates, 0, sizeof(trialcont->sample_rates));
             return CBSDKRESULT_WARNCLOSED;
         }
         else
         {
             if (m_CD == NULL)
                 return CBSDKRESULT_ERRCONFIG;
-            uint32_t read_end_index[cbNUM_ANALOG_CHANS];
+
             // Take a snapshot of the current write pointer
             m_lockTrial.lock();
-            memcpy(read_end_index, m_CD->write_index, sizeof(read_end_index));
+            memcpy(m_CD->read_end_index, m_CD->write_index, sizeof(m_CD->read_end_index));
             m_lockTrial.unlock();
             int count = 0;
-            for (uint32_t channel = 0; channel < cbNUM_ANALOG_CHANS; channel++)
+            for (uint32_t channel = 0; channel < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); channel++)
             {
-                int num_samples = read_end_index[channel] - m_CD->write_start_index[channel];
-                if (num_samples < 0)
+                int num_samples = m_CD->read_end_index[channel] - m_CD->write_start_index[channel];
+                if (m_CD->read_end_index[channel] < m_CD->write_start_index[channel])
                     num_samples += m_CD->size;
                 if (num_samples && m_bChannelMask[channel])
                 {
@@ -2413,10 +2405,10 @@ cbSdkResult SdkApp::SdkSetFileConfig(const char * filename, const char * comment
     // declare the packet that will be sent
     cbPKT_FILECFG fcpkt;
     memset(&fcpkt, 0, sizeof(cbPKT_FILECFG));
-    fcpkt.time    = 1;
-    fcpkt.chid    = 0x8000;
-    fcpkt.type    = cbPKTTYPE_SETFILECFG;
-    fcpkt.dlen    = cbPKTDLEN_FILECFG;
+    fcpkt.cbpkt_header.time    = 1;
+    fcpkt.cbpkt_header.chid    = 0x8000;
+    fcpkt.cbpkt_header.type    = cbPKTTYPE_SETFILECFG;
+    fcpkt.cbpkt_header.dlen    = cbPKTDLEN_FILECFG;
     fcpkt.options = options;
     fcpkt.extctrl = 0;
     fcpkt.filename[0] = 0;
@@ -2526,10 +2518,10 @@ cbSdkResult SdkApp::SdkSetPatientInfo(const char * ID, const char * firstname, c
     // declare the packet that will be sent
     cbPKT_PATIENTINFO fcpkt;
     memset(&fcpkt, 0, sizeof(cbPKT_PATIENTINFO));
-    fcpkt.time    = 1;
-    fcpkt.chid    = 0x8000;
-    fcpkt.type    = cbPKTTYPE_SETPATIENTINFO;
-    fcpkt.dlen    = cbPKTDLEN_PATIENTINFO;
+    fcpkt.cbpkt_header.time    = 1;
+    fcpkt.cbpkt_header.chid    = 0x8000;
+    fcpkt.cbpkt_header.type    = cbPKTTYPE_SETPATIENTINFO;
+    fcpkt.cbpkt_header.dlen    = cbPKTDLEN_PATIENTINFO;
     fcpkt.ID[0] = 0;
     fcpkt.firstname[0] = 0;
     fcpkt.lastname[0] = 0;
@@ -2591,10 +2583,10 @@ cbSdkResult SdkApp::SdkInitiateImpedance()
     // declare the packet that will be sent
     cbPKT_INITIMPEDANCE iipkt;
     memset(&iipkt, 0, sizeof(cbPKT_INITIMPEDANCE));
-    iipkt.time    = 1;
-    iipkt.chid    = 0x8000;
-    iipkt.type    = cbPKTTYPE_SETINITIMPEDANCE;
-    iipkt.dlen    = cbPKTDLEN_INITIMPEDANCE;
+    iipkt.cbpkt_header.time    = 1;
+    iipkt.cbpkt_header.chid    = 0x8000;
+    iipkt.cbpkt_header.type    = cbPKTTYPE_SETINITIMPEDANCE;
+    iipkt.cbpkt_header.dlen    = cbPKTDLEN_INITIMPEDANCE;
 
     iipkt.initiate = 1;        // start autoimpedance
     // send the packet
@@ -2635,9 +2627,9 @@ cbSdkResult SdkApp::SdkSendPoll(const char* appname, uint32_t mode, uint32_t fla
     // declare the packet that will be sent
     cbPKT_POLL polepkt;
     memset(&polepkt, 0, sizeof(cbPKT_POLL));
-    polepkt.chid = 0x8000;
-    polepkt.type = cbPKTTYPE_SETPOLL;
-    polepkt.dlen = cbPKTDLEN_POLL;
+    polepkt.cbpkt_header.chid = 0x8000;
+    polepkt.cbpkt_header.type = cbPKTTYPE_SETPOLL;
+    polepkt.cbpkt_header.dlen = cbPKTDLEN_POLL;
     polepkt.mode = mode;
     polepkt.flags = flags;
     polepkt.extra = extra;
@@ -2723,10 +2715,10 @@ cbSdkResult SdkApp::SdkSetSystemRunLevel(uint32_t runlevel, uint32_t locked, uin
         return CBSDKRESULT_CLOSED;
     // send the packet
     cbPKT_SYSINFO sysinfo;
-    sysinfo.time     = 1;
-    sysinfo.chid     = 0x8000;
-    sysinfo.type     = cbPKTTYPE_SYSSETRUNLEV;
-    sysinfo.dlen     = cbPKTDLEN_SYSINFO;
+    sysinfo.cbpkt_header.time     = 1;
+    sysinfo.cbpkt_header.chid     = 0x8000;
+    sysinfo.cbpkt_header.type     = cbPKTTYPE_SYSSETRUNLEV;
+    sysinfo.cbpkt_header.dlen     = cbPKTDLEN_SYSINFO;
     sysinfo.runlevel = runlevel;
     sysinfo.resetque = resetque;
     sysinfo.runflags = locked;
@@ -2801,13 +2793,14 @@ cbSdkResult SdkApp::SdkSetDigitalOutput(uint16_t channel, uint16_t value)
 
     // declare the packet that will be sent
     cbPKT_SET_DOUT dopkt;
-    dopkt.time = 1;
-    dopkt.chid = 0x8000;
-    dopkt.type = cbPKTTYPE_SET_DOUTSET;
-    dopkt.dlen = cbPKTDLEN_SET_DOUT;
+    dopkt.cbpkt_header.time = 1;
+    dopkt.cbpkt_header.chid = 0x8000;
+    dopkt.cbpkt_header.type = cbPKTTYPE_SET_DOUTSET;
+    dopkt.cbpkt_header.dlen = cbPKTDLEN_SET_DOUT;
+    dopkt.cbpkt_header.instrument = cbGetChanInstrument(channel) - 1;
 
     // get the channel number
-    dopkt.chan = channel;
+    dopkt.chan = cb_cfg_buffer_ptr[0]->chaninfo[channel - 1].chan;
 
     // fill in the boolean on/off field
     dopkt.value = value;
@@ -2823,14 +2816,23 @@ cbSdkResult SdkApp::SdkSetDigitalOutput(uint16_t channel, uint16_t value)
 /// sdk stub for SdkApp::SdkSetDigitalOutput
 CBSDKAPI    cbSdkResult cbSdkSetDigitalOutput(uint32_t nInstance, uint16_t channel, uint16_t value)
 {
-    if (channel < MIN_CHANS_DIGITAL_OUT || channel > MAX_CHANS_DIGITAL_OUT)
-        return CBSDKRESULT_INVALIDCHANNEL; // Not a digital output channel
+    uint32_t nChan = channel;
+
+    // verify that the connection is open
     if (nInstance >= cbMAXOPEN)
         return CBSDKRESULT_INVALIDPARAM;
     if (g_app[nInstance] == NULL)
         return CBSDKRESULT_CLOSED;
 
-    return g_app[nInstance]->SdkSetDigitalOutput(channel, value);
+    // get the channel number
+    if (!IsChanDigout(channel))
+        nChan = GetDigoutChanNumber(channel);
+
+    // verify we didn't get an invalid channel back
+    if (!IsChanDigout(nChan))
+        return CBSDKRESULT_INVALIDCHANNEL; // Not a digital output channel
+
+    return g_app[nInstance]->SdkSetDigitalOutput(nChan, value);
 }
 
 // Author & Date:   Ehsan Azar     25 Feb 2013
@@ -2858,9 +2860,9 @@ cbSdkResult SdkApp::SdkSetSynchOutput(uint16_t channel, uint32_t nFreq, uint32_t
 
     // declare the packet that will be sent
     cbPKT_NM nmpkt;
-    nmpkt.chid = 0x8000;
-    nmpkt.type = cbPKTTYPE_NMSET;
-    nmpkt.dlen = cbPKTDLEN_NM;
+    nmpkt.cbpkt_header.chid = 0x8000;
+    nmpkt.cbpkt_header.type = cbPKTTYPE_NMSET;
+    nmpkt.cbpkt_header.dlen = cbPKTDLEN_NM;
     nmpkt.mode = cbNM_MODE_SYNCHCLOCK;
     nmpkt.value = nFreq;
     nmpkt.opt[0] = nRepeats;
@@ -3032,9 +3034,9 @@ cbSdkResult SdkApp::SdkExtDoCommand(cbSdkExtCmd * extCmd)
     cbPKT_LOG pktLog;
     memset(&pktLog, 0, sizeof(pktLog));
     strcpy(pktLog.name, "cbSDK");
-    pktLog.chid = 0x8000;
-    pktLog.type = cbPKTTYPE_LOGSET;
-    pktLog.dlen = cbPKTDLEN_LOG;
+    pktLog.cbpkt_header.chid = 0x8000;
+    pktLog.cbpkt_header.type = cbPKTTYPE_LOGSET;
+    pktLog.cbpkt_header.dlen = cbPKTDLEN_LOG;
 
     switch (extCmd->cmd)
     {
@@ -3073,6 +3075,13 @@ cbSdkResult SdkApp::SdkExtDoCommand(cbSdkExtCmd * extCmd)
         break;
     case cbSdkExtCmd_NSP_REBOOT:
         pktLog.mode = cbLOG_MODE_NSP_REBOOT;
+        // send the packet
+        cbres = cbSendPacket(&pktLog, m_nInstance);
+        if (cbres)
+            return CBSDKRESULT_UNKNOWN;
+        break;
+    case cbSdkExtCmd_PLUGINFO:
+        pktLog.mode = cbLOG_MODE_PLUGINFO;
         // send the packet
         cbres = cbSendPacket(&pktLog, m_nInstance);
         if (cbres)
@@ -3156,6 +3165,7 @@ cbSdkResult SdkApp::SdkSetAnalogOutput(uint16_t channel, cbSdkWaveformData * wf,
     {
         cbPKT_AOUT_WAVEFORM wfPkt;
         memset(&wfPkt, 0, sizeof(wfPkt));
+        wfPkt.cbpkt_header.instrument = cbGetChanInstrument(channel) - 1;
         wfPkt.mode = wf->type;
         if (wfPkt.mode == cbWAVEFORM_MODE_PARAMETERS)
         {
@@ -3172,6 +3182,7 @@ cbSdkResult SdkApp::SdkSetAnalogOutput(uint16_t channel, cbSdkWaveformData * wf,
         // Sending a none-trigger we turn it into instant activation
         if (wfPkt.trig == cbWAVEFORM_TRIGGER_NONE)
             wfPkt.active = 1;
+        wfPkt.chan = cb_cfg_buffer_ptr[0]->chaninfo[channel - 1].chan;
         // send the waveform packet
         cbSendPacket(&wfPkt, m_nInstance);
         // Also make sure channel is to output waveform
@@ -3191,7 +3202,7 @@ cbSdkResult SdkApp::SdkSetAnalogOutput(uint16_t channel, cbSdkWaveformData * wf,
     }
     else
     {
-        dwOptions &= ~(cbAOUT_MONITORSMP | cbAOUT_MONITORSPK);
+        dwOptions &= ~(cbAOUT_MONITORSMP | cbAOUT_MONITORSPK | cbAOUT_WAVEFORM | cbAOUT_EXTENSION);
     }
 
     // Set monitoring option
@@ -3215,16 +3226,23 @@ cbSdkResult SdkApp::SdkSetAnalogOutput(uint16_t channel, cbSdkWaveformData * wf,
 CBSDKAPI    cbSdkResult cbSdkSetAnalogOutput(uint32_t nInstance,
                                              uint16_t channel, cbSdkWaveformData * wf, cbSdkAoutMon * mon)
 {
-    if (wf != NULL && mon != NULL)
-        return CBSDKRESULT_INVALIDPARAM; // cannot specify both
-    if (channel < MIN_CHANS_ANALOG_OUT || channel > MAX_CHANS_AUDIO)
-        return CBSDKRESULT_INVALIDCHANNEL;
+    uint32_t nChan = channel;
+
+    // verify that the connection is open
     if (nInstance >= cbMAXOPEN)
         return CBSDKRESULT_INVALIDPARAM;
     if (g_app[nInstance] == NULL)
         return CBSDKRESULT_CLOSED;
 
-    return g_app[nInstance]->SdkSetAnalogOutput(channel, wf, mon);
+    if (!IsChanAnalogOut(channel) && !IsChanAudioOut(channel))
+        nChan = GetAnalogOrAudioOutChanNumber(channel);
+
+    if (wf != NULL && mon != NULL)
+        return CBSDKRESULT_INVALIDPARAM; // cannot specify both
+    if (!IsChanAnalogOut(nChan) && !IsChanAudioOut(nChan))
+        return CBSDKRESULT_INVALIDCHANNEL;
+
+    return g_app[nInstance]->SdkSetAnalogOutput(nChan, wf, mon);
 }
 
 // Author & Date:   Ehsan Azar     25 Feb 2011
@@ -3276,7 +3294,7 @@ cbSdkResult SdkApp::SdkSetComment(uint32_t rgba, uint8_t charset, const char * c
 {
     if (m_instInfo == 0)
         return CBSDKRESULT_CLOSED;
-    cbRESULT cbres = cbSetComment(charset, cbCOMMENT_FLAG_RGBA, rgba, comment, m_nInstance);
+    cbRESULT cbres = cbSetComment(charset, rgba, 0, comment, m_nInstance);
     if (cbres)
         return CBSDKRESULT_UNKNOWN;
     return CBSDKRESULT_SUCCESS;
@@ -3310,11 +3328,11 @@ cbSdkResult SdkApp::SdkSetChannelConfig(uint16_t channel, cbPKT_CHANINFO * chani
 {
     if (m_instInfo == 0)
         return CBSDKRESULT_CLOSED;
-    if (cb_cfg_buffer_ptr[m_nIdx]->chaninfo[channel - 1].chid == 0)
+    if (cb_cfg_buffer_ptr[m_nIdx]->chaninfo[channel - 1].cbpkt_header.chid == 0)
         return CBSDKRESULT_INVALIDCHANNEL;
 
-    chaninfo->type = cbPKTTYPE_CHANSET;
-    chaninfo->dlen = cbPKTDLEN_CHANINFO;
+    chaninfo->cbpkt_header.type = cbPKTTYPE_CHANSET;
+    chaninfo->cbpkt_header.dlen = cbPKTDLEN_CHANINFO;
     cbRESULT cbres = cbSendPacket(chaninfo, m_nInstance);
     if (cbres == cbRESULT_NOLIBRARY)
         return CBSDKRESULT_CLOSED;
@@ -3330,9 +3348,9 @@ CBSDKAPI    cbSdkResult cbSdkSetChannelConfig(uint32_t nInstance, uint16_t chann
         return CBSDKRESULT_INVALIDCHANNEL;
     if (chaninfo == NULL)
         return CBSDKRESULT_NULLPTR;
-    if (chaninfo->chid != cbPKTCHAN_CONFIGURATION)
+    if (chaninfo->cbpkt_header.chid != cbPKTCHAN_CONFIGURATION)
         return CBSDKRESULT_INVALIDPARAM;
-    if (chaninfo->dlen > cbPKTDLEN_CHANINFO || chaninfo->dlen < cbPKTDLEN_CHANINFOSHORT)
+    if (chaninfo->cbpkt_header.dlen > cbPKTDLEN_CHANINFO || chaninfo->cbpkt_header.dlen < cbPKTDLEN_CHANINFOSHORT)
         return CBSDKRESULT_INVALIDPARAM;
     if (chaninfo->chan != channel)
         return CBSDKRESULT_INVALIDCHANNEL;
@@ -3661,10 +3679,11 @@ cbSdkResult SdkApp::SdkSystem(cbSdkSystemType cmd)
     if (m_instInfo == 0)
         return CBSDKRESULT_CLOSED;
     cbPKT_SYSINFO pktsysinfo;
-    pktsysinfo.time = 0;
-    pktsysinfo.chid = 0x8000;
-    pktsysinfo.type = cbPKTTYPE_SYSSETRUNLEV;
-    pktsysinfo.dlen = cbPKTDLEN_SYSINFO;
+    pktsysinfo.cbpkt_header.time = 0;
+    pktsysinfo.cbpkt_header.chid = 0x8000;
+    pktsysinfo.cbpkt_header.type = cbPKTTYPE_SYSSETRUNLEV;
+    pktsysinfo.cbpkt_header.dlen = cbPKTDLEN_SYSINFO;
+    pktsysinfo.cbpkt_header.instrument = 0;
     switch (cmd)
     {
     case cbSdkSystem_RESET:
@@ -3947,7 +3966,7 @@ SdkApp::~SdkApp()
 * @param[in]	szInIP			Client IPv4 address
 * @param[in]	szOutIP			Instrument IPv4 address
 */
-void SdkApp::Open(uint32_t nInstance, int nInPort, int nOutPort, LPCSTR szInIP, LPCSTR szOutIP, int nRecBufSize)
+void SdkApp::Open(uint32_t nInstance, int nInPort, int nOutPort, LPCSTR szInIP, LPCSTR szOutIP, int nRecBufSize, int nRange)
 {
     // clear las library error
     m_lastCbErr = cbRESULT_OK;
@@ -3957,11 +3976,11 @@ void SdkApp::Open(uint32_t nInstance, int nInPort, int nOutPort, LPCSTR szInIP, 
     if (!m_bInitialized)
     {
         m_bInitialized = true;
-        // Add myself as the sole listener
-        InstNetwork::Open(this);
         // connect the network events and commands
         QObject::connect(this, SIGNAL(InstNetworkEvent(NetEventType, unsigned int)),
                 this, SLOT(OnInstNetworkEvent(NetEventType, unsigned int)), Qt::DirectConnection);
+        // Add myself as the sole listener
+        InstNetwork::Open(this);
     }
     // instance id and connection details are persistent in the process
     m_nInstance = nInstance;
@@ -3997,12 +4016,12 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
     bool b_checkEvent = false;
 
     // check for configuration class packets
-    if (pPkt->chid & cbPKTCHAN_CONFIGURATION)
+    if (pPkt->cbpkt_header.chid & cbPKTCHAN_CONFIGURATION)
     {
         // Check for configuration packets
-        if (pPkt->chid == cbPKTCHAN_CONFIGURATION)
+        if (pPkt->cbpkt_header.chid == cbPKTCHAN_CONFIGURATION)
         {
-            if (pPkt->type == cbPKTTYPE_SYSHEARTBEAT)
+            if (pPkt->cbpkt_header.type == cbPKTTYPE_SYSHEARTBEAT)
             {
                 if (m_pLateCallback[CBSDKCALLBACK_ALL])
                     m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_SYSHEARTBEAT, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
@@ -4011,7 +4030,7 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 if (m_pLateCallback[CBSDKCALLBACK_SYSHEARTBEAT])
                     m_pLateCallback[CBSDKCALLBACK_SYSHEARTBEAT](m_nInstance, cbSdkPkt_SYSHEARTBEAT, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_SYSHEARTBEAT]);
             }
-            else if (pPkt->type == cbPKTTYPE_REPIMPEDANCE)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_REPIMPEDANCE)
             {
                 if (m_pLateCallback[CBSDKCALLBACK_ALL])
                     m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_IMPEDANCE, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
@@ -4020,7 +4039,7 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 if (m_pLateCallback[CBSDKCALLBACK_IMPEDENCE])
                     m_pLateCallback[CBSDKCALLBACK_IMPEDENCE](m_nInstance, cbSdkPkt_IMPEDANCE, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_IMPEDENCE]);
             }
-            else if ((pPkt->type & 0xF0) == cbPKTTYPE_CHANREP)
+            else if ((pPkt->cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP)
             {
                 if (m_pLateCallback[CBSDKCALLBACK_ALL])
                     m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_CHANINFO, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
@@ -4029,7 +4048,7 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 if (m_pLateCallback[CBSDKCALLBACK_CHANINFO])
                     m_pLateCallback[CBSDKCALLBACK_CHANINFO](m_nInstance, cbSdkPkt_CHANINFO, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_CHANINFO]);
             }
-            else if (pPkt->type == cbPKTTYPE_NMREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_NMREP)
             {
                 if (m_pLateCallback[CBSDKCALLBACK_ALL])
                     m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_NM, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
@@ -4038,7 +4057,7 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 if (m_pLateCallback[CBSDKCALLBACK_NM])
                     m_pLateCallback[CBSDKCALLBACK_NM](m_nInstance, cbSdkPkt_NM, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_NM]);
             }
-            else if (pPkt->type == cbPKTTYPE_GROUPREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_GROUPREP)
             {
                 if (m_pLateCallback[CBSDKCALLBACK_ALL])
                     m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_GROUPINFO, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
@@ -4047,7 +4066,7 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 if (m_pLateCallback[CBSDKCALLBACK_GROUPINFO])
                     m_pLateCallback[CBSDKCALLBACK_GROUPINFO](m_nInstance, cbSdkPkt_GROUPINFO, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_GROUPINFO]);
             }
-            else if (pPkt->type == cbPKTTYPE_COMMENTREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_COMMENTREP)
             {
                 if (m_pLateCallback[CBSDKCALLBACK_ALL])
                     m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_COMMENT, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
@@ -4058,7 +4077,7 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 // Fillout trial if setup
                 OnPktComment(reinterpret_cast<const cbPKT_COMMENT*>(pPkt));
             }
-            else if (pPkt->type == cbPKTTYPE_REPFILECFG)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_REPFILECFG)
             {
                 if (m_pLateCallback[CBSDKCALLBACK_ALL])
                     m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_FILECFG, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
@@ -4067,7 +4086,7 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 if (m_pLateCallback[CBSDKCALLBACK_FILECFG])
                     m_pLateCallback[CBSDKCALLBACK_FILECFG](m_nInstance, cbSdkPkt_FILECFG, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_COMMENT]);
             }
-            else if (pPkt->type == cbPKTTYPE_REPPOLL)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_REPPOLL)
             {
                 // The callee should check flags to find if it is a response to poll, and do accordingly
                 if (m_pLateCallback[CBSDKCALLBACK_ALL])
@@ -4077,7 +4096,7 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 if (m_pLateCallback[CBSDKCALLBACK_POLL])
                     m_pLateCallback[CBSDKCALLBACK_POLL](m_nInstance, cbSdkPkt_POLL, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_POLL]);
             }
-            else if (pPkt->type == cbPKTTYPE_VIDEOTRACKREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_VIDEOTRACKREP)
             {
                 if (m_pLateCallback[CBSDKCALLBACK_ALL])
                     m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_TRACKING, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
@@ -4088,7 +4107,7 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 // Fillout trial if setup
                 OnPktTrack(reinterpret_cast<const cbPKT_VIDEOTRACK*>(pPkt));
             }
-            else if (pPkt->type == cbPKTTYPE_VIDEOSYNCHREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_VIDEOSYNCHREP)
             {
                 m_lastPktVideoSynch = *reinterpret_cast<const cbPKT_VIDEOSYNCH*>(pPkt);
                 if (m_pLateCallback[CBSDKCALLBACK_ALL])
@@ -4098,7 +4117,7 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 if (m_pLateCallback[CBSDKCALLBACK_SYNCH])
                     m_pLateCallback[CBSDKCALLBACK_SYNCH](m_nInstance, cbSdkPkt_SYNCH, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_SYNCH]);
             }
-            else if (pPkt->type == cbPKTTYPE_LOGREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_LOGREP)
             {
                 if (m_pLateCallback[CBSDKCALLBACK_ALL])
                     m_pLateCallback[CBSDKCALLBACK_ALL](m_nInstance, cbSdkPkt_LOG, pPkt, m_pLateCallbackParams[CBSDKCALLBACK_ALL]);
@@ -4112,11 +4131,11 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
             }
         } // end if (pPkt->chid==0x8000
     } // end if (pPkt->chid & 0x8000
-    else if (pPkt->chid == 0)
+    else if (pPkt->cbpkt_header.chid == 0)
     {
         // No mask applied here
         // Inside the callback cbPKT_GROUP.type can be used to find the sample group number
-        uint8_t smpgroup = ((cbPKT_GROUP *)pPkt)->type; // sample group
+        uint8_t smpgroup = ((cbPKT_GROUP *)pPkt)->cbpkt_header.type; // sample group
         if (smpgroup > 0 && smpgroup <= cbMAXGROUPS)
         {
             if (m_pLateCallback[CBSDKCALLBACK_ALL])
@@ -4128,9 +4147,9 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
         }
     }
     // check for channel event packets cerebus channels 1-272
-    else if (m_ChannelType[pPkt->chid-1] == cbCHANTYPE_ANAIN) // channels are 1-based, m_ChannelType is 0-based.
+    else if (IsChanAnalogIn(pPkt->cbpkt_header.chid))
     {
-        if (m_bChannelMask[pPkt->chid - 1])
+        if (m_bChannelMask[pPkt->cbpkt_header.chid - 1])
         {
             b_checkEvent = true;
             if (m_pLateCallback[CBSDKCALLBACK_ALL])
@@ -4142,9 +4161,9 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
         }
     }
     // catch digital input port events and save them as NSAS experiment event packets
-    else if (m_ChannelType[pPkt->chid - 1] == cbCHANTYPE_DIGIN)
+    else if (IsChanDigin(pPkt->cbpkt_header.chid))
     {
-        if (m_bChannelMask[pPkt->chid - 1])
+        if (m_bChannelMask[pPkt->cbpkt_header.chid - 1])
         {
             b_checkEvent = true;
             if (m_pLateCallback[CBSDKCALLBACK_ALL])
@@ -4156,9 +4175,9 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
         }
     }
     // catch serial input port events and save them as NSAS experiment event packets
-    else if (m_ChannelType[pPkt->chid - 1] == cbCHANTYPE_SERIAL)
+    else if (IsChanSerial(pPkt->cbpkt_header.chid))
     {
-        if (m_bChannelMask[pPkt->chid - 1])
+        if (m_bChannelMask[pPkt->cbpkt_header.chid - 1])
         {
             b_checkEvent = true;
             if (m_pLateCallback[CBSDKCALLBACK_ALL])
@@ -4173,10 +4192,10 @@ void SdkApp::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
     // save the timestamp to overcome the case where the reset button is pressed
     // (or recording started) which resets the timestamp to 0, but Central doesn't
     // reset it's timer to 0 for cbGetSystemClockTime
-    m_uCbsdkTime = pPkt->time;
+    m_uCbsdkTime = pPkt->cbpkt_header.time;
 
     // Process continuous data if we're within a trial...
-    if (pPkt->chid == 0)
+    if (pPkt->cbpkt_header.chid == 0)
         OnPktGroup(reinterpret_cast<const cbPKT_GROUP*>(pPkt));
 
     // and only look at event data packets

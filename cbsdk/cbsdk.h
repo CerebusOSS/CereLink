@@ -1,7 +1,7 @@
 /* =STS=> cbsdk.h[4901].aa20   submit     SMID:22 */
 //////////////////////////////////////////////////////////////////////////////
 //
-// (c) Copyright 2010 - 2011 Blackrock Microsystems
+// (c) Copyright 2010 - 2021 Blackrock Microsystems, LLC
 //
 // $Workfile: cbsdk.h $
 // $Archive: /Cerebus/Human/WindowsApps/cbmex/cbsdk.h $
@@ -283,12 +283,14 @@ typedef struct _cbSdkConnection
         #endif
         szInIP = "";
         szOutIP = "";
+        nRange = 0;
     }
     int nInPort;  ///< Client port number
     int nOutPort; ///< Instrument port number
     int nRecBufSize; ///< Receive buffer size (0 to ignore altogether)
     LPCSTR szInIP;  ///< Client IPv4 address
     LPCSTR szOutIP; ///< Instrument IPv4 address
+    int nRange; ///< Range of IP addresses to try to open
 } cbSdkConnection;
 
 /// Trial continuous data
@@ -404,6 +406,7 @@ typedef enum _cbSdkExtCmdType
     cbSdkExtCmd_INPUT,      // Input to RPC command
     cbSdkExtCmd_END_PLUGIN, // Signal to end plugin
     cbSdkExtCmd_NSP_REBOOT, // Restart the NSP
+    cbSdkExtCmd_PLUGINFO,   // Get plugin info
 } cbSdkExtCmdType;
 
 /// Extension command

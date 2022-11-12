@@ -5,7 +5,7 @@
 //
 // Copyright (C) 2001-2003 Bionic Technologies, Inc.
 // (c) Copyright 2003-2008 Cyberkinetics, Inc
-// (c) Copyright 2008-2013 Blackrock Microsystems
+// (c) Copyright 2008-2021 Blackrock Microsystems
 //
 // Developed by Shane Guillory and Angela Wang
 //
@@ -42,7 +42,7 @@
 #endif                                // so it should probably be moved...
 #include "debugmacs.h"
 #include "cbhwlib.h"
-
+#include "cbHwlibHi.h"
 
 
 // forward reference
@@ -86,7 +86,7 @@ uint32_t      cb_library_initialized[cbMAXOPEN] = {FALSE};
 uint32_t      cb_recbuff_tailwrap[cbMAXOPEN]  = {0};
 uint32_t      cb_recbuff_tailindex[cbMAXOPEN] = {0};
 uint32_t      cb_recbuff_processed[cbMAXOPEN] = {0};
-uint32_t      cb_recbuff_lasttime[cbMAXOPEN] = {0};
+PROCTIME      cb_recbuff_lasttime[cbMAXOPEN] = {0};
 
 // Handle to system lock associated with shared resources
 HANDLE      cb_sys_lock_hnd[cbMAXOPEN] = {NULL};
@@ -360,7 +360,7 @@ cbRESULT cbOpen(BOOL bStandAlone, uint32_t nInstance)
     if (cb_cfg_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
 
     // Check version of hardware protocol if available
-    if (cb_cfg_buffer_ptr[nIdx]->procinfo[0].chid != 0) {
+    if (cb_cfg_buffer_ptr[nIdx]->procinfo[0].cbpkt_header.chid != 0) {
         if (cb_cfg_buffer_ptr[nIdx]->procinfo[0].version > cbVersion()) {
             cbClose(false, nInstance);
             return cbRESULT_LIBOUTDATED;
@@ -538,6 +538,8 @@ cbRESULT cbGetInstInfo(uint32_t *instInfo, uint32_t nInstance)
             type = cbINSTINFO_CEREPLEX;
         else if (strstr(isInfo.ident, "Emulator") != NULL)
             type = cbINSTINFO_EMULATOR;
+        else if (strstr(isInfo.ident, "wNSP") != NULL)
+            type = cbINSTINFO_WNSP;
         if (strstr(isInfo.ident, "NSP1 ") != NULL)
             type |= cbINSTINFO_NSP1;
     }
@@ -557,7 +559,7 @@ cbRESULT cbGetInstInfo(uint32_t *instInfo, uint32_t nInstance)
     }
 
     // Sysinfo is the last config packet
-    if (cb_cfg_buffer_ptr[nIdx]->sysinfo.chid == 0)
+    if (cb_cfg_buffer_ptr[nIdx]->sysinfo.cbpkt_header.chid == 0)
         return cbRESULT_HARDWAREOFFLINE;
 
     // If this is reached instrument is ready and known
@@ -639,7 +641,7 @@ cbRESULT cbGetProcInfo(uint32_t proc, cbPROCINFO *procinfo, uint32_t nInstance)
     // Test that the proc address is valid and that requested procinfo structure is not empty
     if ((proc - 1) >= cbMAXPROCS) return cbRESULT_INVALIDADDRESS;
     if (!cb_cfg_buffer_ptr[nIdx]) return cbRESULT_NOLIBRARY;
-    if (cb_cfg_buffer_ptr[nIdx]->procinfo[proc - 1].chid == 0) return cbRESULT_INVALIDADDRESS;
+    if (cb_cfg_buffer_ptr[nIdx]->procinfo[proc - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDADDRESS;
 
     // otherwise, return the data
     if (procinfo) memcpy(procinfo, &(cb_cfg_buffer_ptr[nIdx]->procinfo[proc-1].idcode), sizeof(cbPROCINFO));
@@ -657,12 +659,19 @@ cbRESULT cbGetBankInfo(uint32_t proc, uint32_t bank, cbBANKINFO *bankinfo, uint3
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
     // Test that the addresses are valid and that requested procinfo structure is not empty
-    if (((proc - 1) >= cbMAXPROCS) || ((bank - 1) >= cbMAXBANKS)) return cbRESULT_INVALIDADDRESS;
-    if (cb_cfg_buffer_ptr[nIdx]->bankinfo[proc - 1][bank - 1].chid == 0) return cbRESULT_INVALIDADDRESS;
+    if (((proc - 1) >= cbMAXPROCS) || ((bank - 1) >= cb_cfg_buffer_ptr[nIdx]->procinfo[0].bankcount)) return cbRESULT_INVALIDADDRESS;
+    if (cb_cfg_buffer_ptr[nIdx]->bankinfo[proc - 1][bank - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDADDRESS;
 
     // otherwise, return the data
     if (bankinfo) memcpy(bankinfo, &(cb_cfg_buffer_ptr[nIdx]->bankinfo[proc - 1][bank - 1].idcode), sizeof(cbBANKINFO));
     return cbRESULT_OK;
+}
+
+
+uint32_t GetInstrumentLocalChan(uint32_t nChan, uint32_t nInstance)
+{
+    uint32_t nIdx = cb_library_index[nInstance];
+    return cb_cfg_buffer_ptr[nIdx]->chaninfo[nChan - 1].chan;
 }
 
 
@@ -680,7 +689,7 @@ cbRESULT cbGetChanCount(uint32_t *count, uint32_t nInstance)
     // Sweep through the processor information banks and sum up the number of channels
     *count = 0;
     for(int p = 0; p < cbMAXPROCS; p++)
-        if (cb_cfg_buffer_ptr[nIdx]->procinfo[p].chid) *count += cb_cfg_buffer_ptr[nIdx]->procinfo[p].chancount;
+        if (cb_cfg_buffer_ptr[nIdx]->procinfo[p].cbpkt_header.chid) *count += cb_cfg_buffer_ptr[nIdx]->procinfo[p].chancount;
 
     return cbRESULT_OK;
 }
@@ -703,22 +712,22 @@ cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance)
     cbPKT_GENERIC * pPkt = static_cast<cbPKT_GENERIC*>(pPacket);
 
     // The logic here is quite complicated. Data is filled in from other processes
-    // in a 2 pass mode. First they fill all except they skip the first 4 bytes.
-    // The final step in the process is to convert the 1st dword from "0" to some other number.
+    // in a 2 pass mode. First they fill all except they skip the first sizeof(PROCTIME) bytes.
+    // The final step in the process is to convert the 1st PROCTIME from "0" to some other number.
     // This step is done in a thread-safe manner
-    // Consequently, all packets can not have "0" as the first DWORD. At the time of writing,
+    // Consequently, all packets can not have "0" as the first PROCTIME. At the time of writing,
     // We were looking at the "time" value of a packet.
 
-    pPkt->time = cb_rec_buffer_ptr[nIdx]->lasttime;
+    pPkt->cbpkt_header.time = cb_rec_buffer_ptr[nIdx]->lasttime;
 
     // Time cannot be equal to 0
-    if (pPkt->time == 0)
-        pPkt->time = 1;
+    if (pPkt->cbpkt_header.time == 0)
+        pPkt->cbpkt_header.time = 1;
 
-    ASSERT( *(static_cast<DWORD const *>(pPacket)) != 0);
+    ASSERT( *(static_cast<PROCTIME const *>(pPacket)) != 0);
 
 
-    uint32_t quadletcount = pPkt->dlen + cbPKT_HEADER_32SIZE;
+    uint32_t quadletcount = pPkt->cbpkt_header.dlen + cbPKT_HEADER_32SIZE;
     uint32_t orig_headindex;
 
     // give 3 attempts to claim a spot in the circular xmt buffer for the packet
@@ -822,15 +831,15 @@ cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance)
     // Consequently, all packets can not have "0" as the first DWORD. At the time of writing,
     // We were looking at the "time" value of a packet.
 
-    pPkt->time = cb_rec_buffer_ptr[nIdx]->lasttime;
+    pPkt->cbpkt_header.time = cb_rec_buffer_ptr[nIdx]->lasttime;
 
     // Time cannot be equal to 0
-    if (pPkt->time == 0)
-        pPkt->time = 1;
+    if (pPkt->cbpkt_header.time == 0)
+        pPkt->cbpkt_header.time = 1;
 
     ASSERT( *(static_cast<DWORD const *>(pPacket)) != 0);
 
-    uint32_t quadletcount = pPkt->dlen + cbPKT_HEADER_32SIZE;
+    uint32_t quadletcount = pPkt->cbpkt_header.dlen + cbPKT_HEADER_32SIZE;
     uint32_t orig_headindex;
 
     // give 3 attempts to claim a spot in the circular xmt buffer for the packet
@@ -923,7 +932,7 @@ cbRESULT cbGetSystemRunLevel(uint32_t *runlevel, uint32_t *runflags, uint32_t *r
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
     // Check for cached packet available and initialized
-    if ((cb_cfg_buffer_ptr[nIdx]->sysinfo.chid == 0)||(cb_cfg_buffer_ptr[nIdx]->sysinfo.runlevel == 0))
+    if ((cb_cfg_buffer_ptr[nIdx]->sysinfo.cbpkt_header.chid == 0)||(cb_cfg_buffer_ptr[nIdx]->sysinfo.runlevel == 0))
     {
         if (runlevel) *runlevel=0;
         if (resetque) *resetque=0;
@@ -939,7 +948,7 @@ cbRESULT cbGetSystemRunLevel(uint32_t *runlevel, uint32_t *runflags, uint32_t *r
 }
 
 
-cbRESULT cbSetSystemRunLevel(uint32_t runlevel, uint32_t runflags, uint32_t resetque, uint32_t nInstance)
+cbRESULT cbSetSystemRunLevel(uint32_t runlevel, uint32_t runflags, uint32_t resetque, uint8_t nInstrument, uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
 
@@ -948,10 +957,10 @@ cbRESULT cbSetSystemRunLevel(uint32_t runlevel, uint32_t runflags, uint32_t rese
 
     // Create the packet data structure and fill it in
     cbPKT_SYSINFO sysinfo;
-    sysinfo.time     = cb_rec_buffer_ptr[nIdx]->lasttime;
-    sysinfo.chid     = 0x8000;
-    sysinfo.type     = cbPKTTYPE_SYSSETRUNLEV;
-    sysinfo.dlen     = cbPKTDLEN_SYSINFO;
+    sysinfo.cbpkt_header.time     = cb_rec_buffer_ptr[nIdx]->lasttime;
+    sysinfo.cbpkt_header.chid     = 0x8000;
+    sysinfo.cbpkt_header.type     = cbPKTTYPE_SYSSETRUNLEV;
+    sysinfo.cbpkt_header.dlen     = cbPKTDLEN_SYSINFO;
     sysinfo.runlevel = runlevel;
     sysinfo.resetque = resetque;
     sysinfo.runflags = runflags;
@@ -975,7 +984,7 @@ cbRESULT cbGetSystemClockFreq(uint32_t *freq, uint32_t nInstance)
 }
 
 
-cbRESULT cbGetSystemClockTime(uint32_t *time, uint32_t nInstance)
+cbRESULT cbGetSystemClockTime(PROCTIME *time, uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
 
@@ -987,8 +996,9 @@ cbRESULT cbGetSystemClockTime(uint32_t *time, uint32_t nInstance)
     return cbRESULT_OK;
 }
 
-cbRESULT cbSetComment(uint8_t charset, uint8_t flags, uint32_t data, const char * comment, uint32_t nInstance)
+cbRESULT cbSetComment(uint8_t charset, uint32_t rgba, PROCTIME time, const char* comment, uint32_t nInstance)
 {
+    cbRESULT bRes = cbRESULT_OK;
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
@@ -998,24 +1008,32 @@ cbRESULT cbSetComment(uint8_t charset, uint8_t flags, uint32_t data, const char 
     // Create the packet data structure and fill it in
     cbPKT_COMMENT pktComment;
     memset(&pktComment, 0, sizeof(pktComment));
-    pktComment.time           = cb_rec_buffer_ptr[nIdx]->lasttime;
-    pktComment.chid           = 0x8000;
-    pktComment.type           = cbPKTTYPE_COMMENTSET;
+    pktComment.cbpkt_header.time           = cb_rec_buffer_ptr[nIdx]->lasttime;
+    pktComment.cbpkt_header.chid           = 0x8000;
+    pktComment.cbpkt_header.type           = cbPKTTYPE_COMMENTSET;
     pktComment.info.charset   = charset;
-    pktComment.info.flags     = flags;
-    pktComment.data           = data;
+    pktComment.rgba = rgba;
+    pktComment.timeStarted = time;
     uint32_t nLen = 0;
     if (comment)
         strncpy(pktComment.comment, comment, cbMAX_COMMENT);
     pktComment.comment[cbMAX_COMMENT - 1] = 0;
     nLen = (uint32_t)strlen(pktComment.comment) + 1;      // include terminating null
-    pktComment.dlen           = (uint32_t)cbPKTDLEN_COMMENTSHORT + (nLen + 3) / 4;
+    pktComment.cbpkt_header.dlen           = (uint32_t)cbPKTDLEN_COMMENTSHORT + (nLen + 3) / 4;
 
-    // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&pktComment, nInstance);
+    // Send it to all NSPs
+    for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
+    {
+        if ((cbRESULT_OK == bRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
+        {
+            pktComment.cbpkt_header.instrument = nProc - 1;
+            bRes = cbSendPacket(&pktComment, nInstance);
+        }
+    }
+    return bRes;
 }
 
-cbRESULT cbGetLncParameters(uint32_t *nLncFreq, uint32_t *nLncRefChan, uint32_t *nLncGMode, uint32_t nInstance)
+cbRESULT cbGetLncParameters(uint32_t proc, uint32_t* nLncFreq, uint32_t* nLncRefChan, uint32_t* nLncGMode, uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
 
@@ -1023,17 +1041,17 @@ cbRESULT cbGetLncParameters(uint32_t *nLncFreq, uint32_t *nLncRefChan, uint32_t 
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
     // Check for cached sysinfo packet initialized
-    if (cb_cfg_buffer_ptr[nIdx]->isLnc.chid == 0) return cbRESULT_HARDWAREOFFLINE;
+    if (cb_cfg_buffer_ptr[nIdx]->isLnc[proc - 1].cbpkt_header.chid == 0) return cbRESULT_HARDWAREOFFLINE;
 
     // otherwise, return the data
-    if (nLncFreq)     *nLncFreq     = cb_cfg_buffer_ptr[nIdx]->isLnc.lncFreq;
-    if (nLncRefChan)  *nLncRefChan  = cb_cfg_buffer_ptr[nIdx]->isLnc.lncRefChan;
-    if (nLncGMode)    *nLncGMode    = cb_cfg_buffer_ptr[nIdx]->isLnc.lncGlobalMode;
+    if (nLncFreq)     *nLncFreq = cb_cfg_buffer_ptr[nIdx]->isLnc[proc - 1].lncFreq;
+    if (nLncRefChan)  *nLncRefChan = cb_cfg_buffer_ptr[nIdx]->isLnc[proc - 1].lncRefChan;
+    if (nLncGMode)    *nLncGMode = cb_cfg_buffer_ptr[nIdx]->isLnc[proc - 1].lncGlobalMode;
     return cbRESULT_OK;
 }
 
 
-cbRESULT cbSetLncParameters(uint32_t nLncFreq, uint32_t nLncRefChan, uint32_t nLncGMode, uint32_t nInstance)
+cbRESULT cbSetLncParameters(uint32_t proc, uint32_t nLncFreq, uint32_t nLncRefChan, uint32_t nLncGMode, uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
 
@@ -1042,10 +1060,11 @@ cbRESULT cbSetLncParameters(uint32_t nLncFreq, uint32_t nLncRefChan, uint32_t nL
 
     // Create the packet data structure and fill it in
     cbPKT_LNC pktLnc;
-    pktLnc.time           = cb_rec_buffer_ptr[nIdx]->lasttime;
-    pktLnc.chid           = 0x8000;
-    pktLnc.type           = cbPKTTYPE_LNCSET;
-    pktLnc.dlen           = cbPKTDLEN_LNC;
+    pktLnc.cbpkt_header.time           = cb_rec_buffer_ptr[nIdx]->lasttime;
+    pktLnc.cbpkt_header.chid           = 0x8000;
+    pktLnc.cbpkt_header.type           = cbPKTTYPE_LNCSET;
+    pktLnc.cbpkt_header.dlen           = cbPKTDLEN_LNC;
+    pktLnc.cbpkt_header.instrument     = proc - 1;
     pktLnc.lncFreq        = nLncFreq;
     pktLnc.lncRefChan     = nLncRefChan;
     pktLnc.lncGlobalMode  = nLncGMode;
@@ -1054,7 +1073,7 @@ cbRESULT cbSetLncParameters(uint32_t nLncFreq, uint32_t nLncRefChan, uint32_t nL
     return cbSendPacket(&pktLnc, nInstance);
 }
 
-cbRESULT cbGetNplay(char *fname, float *speed, uint32_t *flags, uint32_t *ftime, uint32_t *stime, uint32_t *etime, uint32_t * filever, uint32_t nInstance)
+cbRESULT cbGetNplay(char *fname, float *speed, uint32_t *flags, PROCTIME *ftime, PROCTIME *stime, PROCTIME *etime, PROCTIME * filever, uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
 
@@ -1062,7 +1081,7 @@ cbRESULT cbGetNplay(char *fname, float *speed, uint32_t *flags, uint32_t *ftime,
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
     // Check for cached sysinfo packet initialized
-    if (cb_cfg_buffer_ptr[nIdx]->isNPlay.chid == 0) return cbRESULT_HARDWAREOFFLINE;
+    if (cb_cfg_buffer_ptr[nIdx]->isNPlay.cbpkt_header.chid == 0) return cbRESULT_HARDWAREOFFLINE;
 
     // otherwise, return the data
     if (fname)     strncpy(fname, cb_cfg_buffer_ptr[nIdx]->isNPlay.fname, cbNPLAY_FNAME_LEN);
@@ -1075,7 +1094,7 @@ cbRESULT cbGetNplay(char *fname, float *speed, uint32_t *flags, uint32_t *ftime,
     return cbRESULT_OK;
 }
 
-cbRESULT cbSetNplay(const char *fname, float speed, uint32_t mode, uint32_t val, uint32_t stime, uint32_t etime, uint32_t nInstance)
+cbRESULT cbSetNplay(const char *fname, float speed, uint32_t mode, PROCTIME val, PROCTIME stime, PROCTIME etime, uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
 
@@ -1083,14 +1102,15 @@ cbRESULT cbSetNplay(const char *fname, float speed, uint32_t mode, uint32_t val,
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
     // Check for cached sysinfo packet initialized
-    if (cb_cfg_buffer_ptr[nIdx]->isNPlay.chid == 0) return cbRESULT_HARDWAREOFFLINE;
+    if (cb_cfg_buffer_ptr[nIdx]->isNPlay.cbpkt_header.chid == 0) return cbRESULT_HARDWAREOFFLINE;
 
     // Create the packet data structure and fill it in
     cbPKT_NPLAY pktNPlay;
-    pktNPlay.time           = cb_rec_buffer_ptr[nIdx]->lasttime;
-    pktNPlay.chid           = 0x8000;
-    pktNPlay.type           = cbPKTTYPE_NPLAYSET;
-    pktNPlay.dlen           = cbPKTDLEN_NPLAY;
+    pktNPlay.cbpkt_header.time           = cb_rec_buffer_ptr[nIdx]->lasttime;
+    pktNPlay.cbpkt_header.chid           = 0x8000;
+    pktNPlay.cbpkt_header.type           = cbPKTTYPE_NPLAYSET;
+    pktNPlay.cbpkt_header.dlen           = cbPKTDLEN_NPLAY;
+    pktNPlay.cbpkt_header.instrument     = cbNSP1 - 1;
     pktNPlay.speed          = speed;
     pktNPlay.mode           = mode;
     pktNPlay.flags          = cbNPLAY_FLAG_NONE; // No flags here
@@ -1160,6 +1180,7 @@ cbRESULT cbGetTrackObj(char *name, uint16_t *type, uint16_t *pointCount, uint32_
 //   fps  - the frame rate of the video source
 cbRESULT cbSetVideoSource(const char *name, float fps, uint32_t vs, uint32_t nInstance)
 {
+    cbRESULT cbRes = cbRESULT_OK;
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
@@ -1167,16 +1188,24 @@ cbRESULT cbSetVideoSource(const char *name, float fps, uint32_t vs, uint32_t nIn
 
     cbPKT_NM pktNm;
     memset(&pktNm, 0, sizeof(pktNm));
-    pktNm.chid = cbPKTCHAN_CONFIGURATION;
-    pktNm.type = cbPKTTYPE_NMSET;
-    pktNm.dlen = cbPKTDLEN_NM;
+    pktNm.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pktNm.cbpkt_header.type = cbPKTTYPE_NMSET;
+    pktNm.cbpkt_header.dlen = cbPKTDLEN_NM;
     pktNm.mode = cbNM_MODE_SETVIDEOSOURCE;
     pktNm.flags = vs + 1;
     pktNm.value = uint32_t(fps * 1000); // frame rate times 1000
     strncpy(pktNm.name, name, cbLEN_STR_LABEL);
 
-    // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&pktNm, nInstance);
+    // Send it to all NSPs
+    for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
+    {
+        if ((cbRESULT_OK == cbRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
+        {
+            pktNm.cbpkt_header.instrument = nProc - 1;
+            cbRes = cbSendPacket(&pktNm, nInstance);
+        }
+    }
+    return cbRes;
 }
 
 // Author & Date: Ehsan Azar       25 May 2010
@@ -1187,6 +1216,7 @@ cbRESULT cbSetVideoSource(const char *name, float fps, uint32_t vs, uint32_t nIn
 //   pointCount - the maximum number of points for this trackable object
 cbRESULT cbSetTrackObj(const char *name, uint16_t type, uint16_t pointCount, uint32_t id, uint32_t nInstance)
 {
+    cbRESULT cbRes = cbRESULT_OK;
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
@@ -1194,16 +1224,24 @@ cbRESULT cbSetTrackObj(const char *name, uint16_t type, uint16_t pointCount, uin
 
     cbPKT_NM pktNm;
     memset(&pktNm, 0, sizeof(pktNm));
-    pktNm.chid = cbPKTCHAN_CONFIGURATION;
-    pktNm.type = cbPKTTYPE_NMSET;
-    pktNm.dlen = cbPKTDLEN_NM;
+    pktNm.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pktNm.cbpkt_header.type = cbPKTTYPE_NMSET;
+    pktNm.cbpkt_header.dlen = cbPKTDLEN_NM;
     pktNm.mode = cbNM_MODE_SETTRACKABLE;
     pktNm.flags = id + 1;
     pktNm.value = type | (pointCount << 16);
     strncpy(pktNm.name, name, cbLEN_STR_LABEL);
 
-    // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&pktNm, nInstance);
+    // Send it to all NSPs
+    for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
+    {
+        if ((cbRESULT_OK == cbRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
+        {
+            pktNm.cbpkt_header.instrument = nProc - 1;
+            cbRes = cbSendPacket(&pktNm, nInstance);
+        }
+    }
+    return cbRes;
 }
 
 cbRESULT cbGetSpikeLength(uint32_t *length, uint32_t *pretrig, uint32_t * pSysfreq, uint32_t nInstance)
@@ -1214,7 +1252,7 @@ cbRESULT cbGetSpikeLength(uint32_t *length, uint32_t *pretrig, uint32_t * pSysfr
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
     // Check for cached sysinfo packet initialized
-    if (cb_cfg_buffer_ptr[nIdx]->sysinfo.chid == 0) return cbRESULT_HARDWAREOFFLINE;
+    if (cb_cfg_buffer_ptr[nIdx]->sysinfo.cbpkt_header.chid == 0) return cbRESULT_HARDWAREOFFLINE;
 
     // otherwise, return the data
     if (length)      *length      = cb_cfg_buffer_ptr[nIdx]->sysinfo.spikelen;
@@ -1226,6 +1264,7 @@ cbRESULT cbGetSpikeLength(uint32_t *length, uint32_t *pretrig, uint32_t * pSysfr
 
 cbRESULT cbSetSpikeLength(uint32_t length, uint32_t pretrig, uint32_t nInstance)
 {
+    cbRESULT bRes = cbRESULT_OK;
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
@@ -1233,15 +1272,23 @@ cbRESULT cbSetSpikeLength(uint32_t length, uint32_t pretrig, uint32_t nInstance)
 
     // Create the packet data structure and fill it in
     cbPKT_SYSINFO sysinfo;
-    sysinfo.time        = cb_rec_buffer_ptr[nIdx]->lasttime;
-    sysinfo.chid        = 0x8000;
-    sysinfo.type        = cbPKTTYPE_SYSSETSPKLEN;
-    sysinfo.dlen        = cbPKTDLEN_SYSINFO;
+    sysinfo.cbpkt_header.time        = cb_rec_buffer_ptr[nIdx]->lasttime;
+    sysinfo.cbpkt_header.chid        = 0x8000;
+    sysinfo.cbpkt_header.type        = cbPKTTYPE_SYSSETSPKLEN;
+    sysinfo.cbpkt_header.dlen        = cbPKTDLEN_SYSINFO;
     sysinfo.spikelen    = length;
     sysinfo.spikepre    = pretrig;
 
-    // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&sysinfo, nInstance);
+    // Send it to all NSPs
+    for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
+    {
+        if ((cbRESULT_OK == bRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
+        {
+            sysinfo.cbpkt_header.instrument = nProc - 1;
+            bRes = cbSendPacket(&sysinfo, nInstance);  // Enter the packet into the XMT buffer queue
+        }
+    }
+    return bRes;
 }
 
 // Author & Date: Ehsan Azar       16 Jan 2012
@@ -1256,18 +1303,19 @@ cbRESULT cbGetAoutWaveform(uint32_t channel, uint8_t  trigNum, uint16_t  * mode,
                            uint16_t  * trigChan, uint16_t  * trigValue, cbWaveformData * wave, uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
+    uint32_t wavenum = 0;
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[channel - 1].chancaps & cbCHAN_AOUT)) return cbRESULT_INVALIDFUNCTION;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[channel - 1].aoutcaps & cbAOUT_WAVEFORM)) return cbRESULT_INVALIDFUNCTION;
     if (trigNum >= cbMAX_AOUT_TRIGGER) return cbRESULT_INVALIDFUNCTION;
-    // TODO: Maybe we need a m_ChanIdxInType array.
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[cbNUM_ANALOG_CHANS - 1].chancaps & cbCHANTYPE_ANAIN)
-        channel -= (cbNUM_ANALOG_CHANS + 1); // make it 0-based
-    else
-        channel -= (128 + cbNUM_ANAIN_CHANS + 1);
-    if (cb_cfg_buffer_ptr[nIdx]->isWaveform[channel][trigNum].type == 0) return cbRESULT_INVALIDCHANNEL;
+    //hls channels not in contiguous order anymore  if (channel <= cb_pc_status_buffer_ptr[0]->GetNumAnalogChans()) return cbRESULT_INVALIDCHANNEL;
+    if (cbRESULT_OK != cbGetAoutWaveformNumber(channel, &wavenum)) return cbRESULT_INVALIDCHANNEL;
+    channel = wavenum;
+    //hls channel -= (cb_pc_status_buffer_ptr[0]->GetNumAnalogChans() + 1); // make it 0-based
+    if (channel >= AOUT_NUM_GAIN_CHANS) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->isWaveform[channel][trigNum].cbpkt_header.type == 0) return cbRESULT_INVALIDCHANNEL;
 
     // otherwise, return the data
     if (mode)     *mode = cb_cfg_buffer_ptr[nIdx]->isWaveform[channel][trigNum].mode;
@@ -1279,6 +1327,45 @@ cbRESULT cbGetAoutWaveform(uint32_t channel, uint8_t  trigNum, uint16_t  * mode,
     return cbRESULT_OK;
 }
 
+
+/// @author     Hyrum L. Sessions
+/// @date       1 Aug 2019
+/// @brief      Get the waveform number for a specific aout channel
+///
+/// since channels are not contiguous, we can't just subtract the number of analog channels to
+/// get the number.
+///
+/// @param [in] channel  - 1-based channel number
+cbRESULT cbGetAoutWaveformNumber(uint32_t channel, uint32_t* wavenum, uint32_t nInstance)
+{
+    uint32_t nIdx = cb_library_index[nInstance];
+    uint32_t nWaveNum = 0;
+
+    // Test for prior library initialization
+    if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
+    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[channel - 1].chancaps & cbCHAN_AOUT)) return cbRESULT_INVALIDFUNCTION;
+    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[channel - 1].aoutcaps & cbAOUT_WAVEFORM)) return cbRESULT_INVALIDFUNCTION;
+
+    for (uint32_t nChan = 0; nChan < cb_pc_status_buffer_ptr[0]->cbGetNumTotalChans(); ++nChan)
+    {
+        if (IsChanAnalogOut(nChan) || IsChanAudioOut(nChan))
+        {
+            if (nChan == channel)
+            {
+                break;
+            }
+            ++nWaveNum;
+        }
+    }
+
+    if (nWaveNum >= AOUT_NUM_GAIN_CHANS) return cbRESULT_INVALIDCHANNEL;
+
+    // otherwise, return the data
+    if (wavenum)    *wavenum = nWaveNum;
+    return cbRESULT_OK;
+}
+
+
 cbRESULT cbGetFilterDesc(uint32_t proc, uint32_t filt, cbFILTDESC *filtdesc, uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
@@ -1289,7 +1376,7 @@ cbRESULT cbGetFilterDesc(uint32_t proc, uint32_t filt, cbFILTDESC *filtdesc, uin
     // Test that the proc address is valid and that requested procinfo structure is not empty
     if ((proc - 1) >= cbMAXPROCS) return cbRESULT_INVALIDADDRESS;
     if ((filt-1) >= cbMAXFILTS) return cbRESULT_INVALIDADDRESS;
-    if (cb_cfg_buffer_ptr[nIdx]->filtinfo[proc-1][filt-1].chid == 0) return cbRESULT_INVALIDADDRESS;
+    if (cb_cfg_buffer_ptr[nIdx]->filtinfo[proc-1][filt-1].cbpkt_header.chid == 0) return cbRESULT_INVALIDADDRESS;
 
     // otherwise, return the data
     memcpy(filtdesc,&(cb_cfg_buffer_ptr[nIdx]->filtinfo[proc-1][filt-1].label[0]),sizeof(cbFILTDESC));
@@ -1302,7 +1389,7 @@ cbRESULT cbGetFileInfo(cbPKT_FILECFG * filecfg, uint32_t nInstance)
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
-    if (cb_cfg_buffer_ptr[nIdx]->fileinfo.chid == 0) return cbRESULT_HARDWAREOFFLINE;
+    if (cb_cfg_buffer_ptr[nIdx]->fileinfo.cbpkt_header.chid == 0) return cbRESULT_HARDWAREOFFLINE;
 
     // otherwise, return the data
     if (filecfg) *filecfg = cb_cfg_buffer_ptr[nIdx]->fileinfo;
@@ -1318,7 +1405,7 @@ cbRESULT cbGetSampleGroupInfo( uint32_t proc, uint32_t group, char *label, uint3
 
     // Test that the proc address is valid and that requested procinfo structure is not empty
     if (((proc - 1) >= cbMAXPROCS)||((group - 1) >= cbMAXGROUPS)) return cbRESULT_INVALIDADDRESS;
-    if (cb_cfg_buffer_ptr[nIdx]->groupinfo[proc - 1][group - 1].chid == 0) return cbRESULT_INVALIDADDRESS;
+    if (cb_cfg_buffer_ptr[nIdx]->groupinfo[proc - 1][group - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDADDRESS;
 
     // otherwise, return the data
     if (label)  memcpy(label,cb_cfg_buffer_ptr[nIdx]->groupinfo[proc-1][group-1].label, cbLEN_STR_LABEL);
@@ -1339,7 +1426,7 @@ cbRESULT cbGetSampleGroupList( uint32_t proc, uint32_t group, uint32_t *length, 
     // Test that the proc address is valid and that requested procinfo structure is not empty
     if (((proc - 1) >= cbMAXPROCS)||((group - 1) >= cbMAXGROUPS))
         return cbRESULT_INVALIDADDRESS;
-    if (cb_cfg_buffer_ptr[nIdx]->groupinfo[proc - 1][group - 1].chid == 0)
+    if (cb_cfg_buffer_ptr[nIdx]->groupinfo[proc - 1][group - 1].cbpkt_header.chid == 0)
         return cbRESULT_INVALIDADDRESS;
 
     // otherwise, return the data
@@ -1362,7 +1449,7 @@ cbRESULT cbGetChanLoc(uint32_t chan, uint32_t *proc, uint32_t *bank, char *bankl
 
     // Test that the addresses are valid and that requested procinfo structure is not empty
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     uint32_t nProcessor = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].proc;
     uint32_t nBank = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].bank;
@@ -1390,7 +1477,7 @@ cbRESULT cbGetChanCaps(uint32_t chan, uint32_t *chancaps, uint32_t nInstance)
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Return the requested data from the rec buffer
     if (chancaps) *chancaps = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps;
@@ -1407,7 +1494,7 @@ cbRESULT cbGetChanLabel( uint32_t chan, char *label, uint32_t *userflags, int32_
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Return the requested data from the rec buffer
     if (label) memcpy(label,cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].label, cbLEN_STR_LABEL);
@@ -1426,15 +1513,16 @@ cbRESULT cbSetChanLabel(uint32_t chan, const char *label, uint32_t userflags, in
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid      = 0x8000;
-    chaninfo.type      = cbPKTTYPE_CHANSETLABEL;
-    chaninfo.dlen      = cbPKTDLEN_CHANINFO;
-    chaninfo.chan      = chan;
+    chaninfo.cbpkt_header.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid      = 0x8000;
+    chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETLABEL;
+    chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan                   = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     memcpy(chaninfo.label, label, cbLEN_STR_LABEL);
     chaninfo.userflags = userflags;
     if (position)
@@ -1456,7 +1544,7 @@ cbRESULT cbGetChanUnitMapping(uint32_t chan, cbMANUALUNITMAPPING *unitmapping, u
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Return the requested data from the rec buffer
     if (unitmapping)
@@ -1475,18 +1563,19 @@ cbRESULT cbSetChanUnitMapping(uint32_t chan, cbMANUALUNITMAPPING *unitmapping, u
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // if null pointer, nothing to do so return cbRESULT_OK
     if (!unitmapping) return cbRESULT_OK;
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid      = 0x8000;
-    chaninfo.type      = cbPKTTYPE_CHANSETUNITOVERRIDES;
-    chaninfo.dlen      = cbPKTDLEN_CHANINFO;
-    chaninfo.chan      = chan;
+    chaninfo.cbpkt_header.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid      = 0x8000;
+    chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETUNITOVERRIDES;
+    chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan                    = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     if (unitmapping)
         memcpy(&chaninfo.unitmapping, unitmapping, cbMAXUNITS * sizeof(cbMANUALUNITMAPPING));
 
@@ -1504,7 +1593,7 @@ cbRESULT cbGetChanNTrodeGroup(uint32_t chan, uint32_t *NTrodeGroup, uint32_t nIn
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Return the requested data from the rec buffer
     if (NTrodeGroup) *NTrodeGroup = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].spkgroup;
@@ -1522,16 +1611,20 @@ cbRESULT cbSetChanNTrodeGroup( uint32_t chan, const uint32_t NTrodeGroup, uint32
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid      = 0x8000;
-    chaninfo.type      = cbPKTTYPE_CHANSETNTRODEGROUP;
-    chaninfo.dlen      = cbPKTDLEN_CHANINFOSHORT;
-    chaninfo.chan      = chan;
-    chaninfo.spkgroup  = NTrodeGroup;
+    chaninfo.cbpkt_header.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid      = 0x8000;
+    chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETNTRODEGROUP;
+    chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFOSHORT;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan                    = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
+    if (0 == NTrodeGroup)
+        chaninfo.spkgroup = 0;
+    else
+        chaninfo.spkgroup = cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[NTrodeGroup - 1].ntrode;  //NTrodeGroup;
     // Enter the packet into the XMT buffer queue
     return cbSendPacket(&chaninfo, nInstance);
 }
@@ -1545,7 +1638,7 @@ cbRESULT cbGetChanAmplitudeReject(uint32_t chan, cbAMPLITUDEREJECT *AmplitudeRej
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Return the requested data from the rec buffer
     if (AmplitudeReject)
@@ -1568,15 +1661,16 @@ cbRESULT cbSetChanAmplitudeReject(uint32_t chan, const cbAMPLITUDEREJECT Amplitu
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid      = 0x8000;
-    chaninfo.type      = cbPKTTYPE_CHANSETREJECTAMPLITUDE;
-    chaninfo.dlen      = cbPKTDLEN_CHANINFOSHORT;
-    chaninfo.chan      = chan;
+    chaninfo.cbpkt_header.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid      = 0x8000;
+    chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETREJECTAMPLITUDE;
+    chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFOSHORT;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan      = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.spkopts   = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].spkopts & ~cbAINPSPK_REJAMPL;
     chaninfo.spkopts  |= AmplitudeReject.bEnabled ? cbAINPSPK_REJAMPL : 0;
     chaninfo.amplrejpos = AmplitudeReject.nAmplPos;
@@ -1602,7 +1696,7 @@ cbRESULT cbGetChanInfo(uint32_t chan, cbPKT_CHANINFO *chaninfo, uint32_t nInstan
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Return the requested data from the rec buffer
     if (chaninfo) memcpy(chaninfo, &(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1]), sizeof(cbPKT_CHANINFO));
@@ -1619,7 +1713,7 @@ cbRESULT cbGetChanAutoThreshold(uint32_t chan, uint32_t *bEnabled, uint32_t nIns
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Return the requested data from the rec buffer
     if (bEnabled)
@@ -1638,16 +1732,17 @@ cbRESULT cbSetChanAutoThreshold( uint32_t chan, const uint32_t bEnabled, uint32_
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // if null pointer, nothing to do so return cbRESULT_OK
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid      = 0x8000;
-    chaninfo.type      = cbPKTTYPE_CHANSETAUTOTHRESHOLD;
-    chaninfo.dlen      = cbPKTDLEN_CHANINFOSHORT;
-    chaninfo.chan      = chan;
+    chaninfo.cbpkt_header.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid      = 0x8000;
+    chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETAUTOTHRESHOLD;
+    chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFOSHORT;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan      = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.spkopts   = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].spkopts & ~cbAINPSPK_THRAUTO;
     chaninfo.spkopts  |= bEnabled ? cbAINPSPK_THRAUTO : 0;
 
@@ -1666,7 +1761,7 @@ cbRESULT cbGetNTrodeInfo( const uint32_t ntrode, char *label, cbMANUALUNITMAPPIN
 
     // Test that the NTrode number is valid and initialized
     if ((ntrode - 1) >= cbMAXNTRODES) return cbRESULT_INVALIDNTRODE;
-    if (cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[ntrode-1].chid == 0) return cbRESULT_INVALIDNTRODE;
+    if (cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[ntrode-1].cbpkt_header.chid == 0) return cbRESULT_INVALIDNTRODE;
 
     if (label)  memcpy(label, cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[ntrode - 1].label, cbLEN_STR_LABEL);
     int n_size = sizeof(cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[ntrode - 1].ellipses);
@@ -1689,11 +1784,12 @@ cbRESULT cbSetNTrodeInfo( const uint32_t ntrode, const char *label, cbMANUALUNIT
 
     // Create the packet data structure and fill it in
     cbPKT_NTRODEINFO ntrodeinfo;
-    ntrodeinfo.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
-    ntrodeinfo.chid      = 0x8000;
-    ntrodeinfo.type      = cbPKTTYPE_SETNTRODEINFO;
-    ntrodeinfo.dlen      = cbPKTDLEN_NTRODEINFO;
-    ntrodeinfo.ntrode    = ntrode;
+    ntrodeinfo.cbpkt_header.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
+    ntrodeinfo.cbpkt_header.chid      = 0x8000;
+    ntrodeinfo.cbpkt_header.type      = cbPKTTYPE_SETNTRODEINFO;
+    ntrodeinfo.cbpkt_header.dlen      = cbPKTDLEN_NTRODEINFO;
+    ntrodeinfo.cbpkt_header.instrument = cbGetNTrodeInstrument(ntrode) - 1;
+    ntrodeinfo.ntrode = cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[ntrode - 1].ntrode;
     ntrodeinfo.fs        = fs;
     if (label) memcpy(ntrodeinfo.label, label, sizeof(ntrodeinfo.label));
     int size_ell = sizeof(ntrodeinfo.ellipses);
@@ -1704,6 +1800,37 @@ cbRESULT cbSetNTrodeInfo( const uint32_t ntrode, const char *label, cbMANUALUNIT
 
     return cbSendPacket(&ntrodeinfo, nInstance);
 }
+
+
+/// @author Hyrum L. Sessions
+/// @date   May the Forth be with you 2020
+/// @brief  Set the N-Trode label without affecting other data
+cbRESULT cbSetNTrodeLabel(const uint32_t ntrode, const char* label, uint32_t nInstance)
+{
+    uint32_t nIdx = cb_library_index[nInstance];
+
+    // Test for prior library initialization
+    if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
+
+    // Test that the NTrode number is valid and initialized
+    if ((ntrode - 1) >= cbMAXCHANS / 2) return cbRESULT_INVALIDNTRODE;
+
+    // Create the packet data structure and fill it in
+    cbPKT_NTRODEINFO ntrodeinfo;
+    ntrodeinfo.cbpkt_header.time = cb_rec_buffer_ptr[nIdx]->lasttime;
+    ntrodeinfo.cbpkt_header.chid = 0x8000;
+    ntrodeinfo.cbpkt_header.type = cbPKTTYPE_SETNTRODEINFO;
+    ntrodeinfo.cbpkt_header.dlen = cbPKTDLEN_NTRODEINFO;
+    ntrodeinfo.cbpkt_header.instrument = cbGetNTrodeInstrument(ntrode) - 1;
+    ntrodeinfo.ntrode = cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[ntrode - 1].ntrode;
+    ntrodeinfo.fs = cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[ntrode - 1].fs;
+    if (label) memcpy(ntrodeinfo.label, label, sizeof(ntrodeinfo.label));
+    int size_ell = sizeof(ntrodeinfo.ellipses);
+    memcpy(ntrodeinfo.ellipses, cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[ntrode - 1].ellipses, size_ell);
+
+    return cbSendPacket(&ntrodeinfo, nInstance);
+}
+
 
 // Purpose: Digital Input Inquiry and Configuration Functions
 //
@@ -1716,7 +1843,7 @@ cbRESULT cbGetDinpCaps(uint32_t chan, uint32_t *dinpcaps, uint32_t nInstance)
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Return the requested data from the rec buffer
     if (dinpcaps) *dinpcaps = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].dinpcaps;
@@ -1735,7 +1862,7 @@ cbRESULT cbGetDinpOptions(uint32_t chan, uint32_t *options, uint32_t *eopchar, u
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_DINP)) return cbRESULT_INVALIDFUNCTION;
 
     // Return the requested data from the rec buffer
@@ -1757,16 +1884,17 @@ cbRESULT cbSetDinpOptions(uint32_t chan, uint32_t options, uint32_t eopchar, uin
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_DINP)) return cbRESULT_INVALIDFUNCTION;
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid      = 0x8000;
-    chaninfo.type      = cbPKTTYPE_CHANSETDINP;
-    chaninfo.dlen      = cbPKTDLEN_CHANINFO;
-    chaninfo.chan      = chan;
+    chaninfo.cbpkt_header.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid      = 0x8000;
+    chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETDINP;
+    chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.dinpopts  = options;     // digital input options (composed of nmDINP_* flags)
     chaninfo.eopchar   = eopchar;     // digital input capablities (given by nmDINP_* flags)
 
@@ -1785,7 +1913,7 @@ cbRESULT cbGetDoutCaps(uint32_t chan, uint32_t *doutcaps, uint32_t nInstance)
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Return the requested data from the rec buffer
     if (doutcaps) *doutcaps = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].doutcaps;
@@ -1805,7 +1933,7 @@ cbRESULT cbGetDoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, u
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_DOUT)) return cbRESULT_INVALIDFUNCTION;
 
     // Return the requested data from the rec buffer
@@ -1824,32 +1952,46 @@ cbRESULT cbGetDoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, u
 cbRESULT cbSetDoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uint32_t value,
                           uint8_t triggertype, uint16_t trigchan, uint16_t trigval, uint32_t nInstance)
 {
+    cbRESULT nResult = cbRESULT_OK;
     uint32_t nIdx = cb_library_index[nInstance];
+    uint32_t nMonChan = monchan & 0xFFFF;
+    uint32_t nMonSamples = monchan & 0xFFFF0000;
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_DOUT)) return cbRESULT_INVALIDFUNCTION;
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid      = 0x8000;
-    chaninfo.type      = cbPKTTYPE_CHANSETDOUT;
-    chaninfo.dlen      = cbPKTDLEN_CHANINFO;
-    chaninfo.chan      = chan;
+    chaninfo.cbpkt_header.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid      = 0x8000;
+    chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETDOUT;
+    chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.doutopts  = options;
-    chaninfo.monsource = monchan;
+    if (cbDOUT_FREQUENCY & options)
+        chaninfo.monsource = nMonChan | nMonSamples;
+    else
+        chaninfo.monsource = (0 == nMonChan) ? 0 : cb_cfg_buffer_ptr[nIdx]->chaninfo[nMonChan - 1].chan | nMonSamples;
     chaninfo.outvalue  = value;
     chaninfo.trigtype  = triggertype;
     chaninfo.trigchan  = trigchan;
     chaninfo.trigval   = trigval;
 
-    // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
+    {
+        if ((cbRESULT_OK == nResult) && (NSP_FOUND == cbGetNspStatus(nProc)))
+        {
+            chaninfo.cbpkt_header.instrument = nProc - 1;
+            nResult = cbSendPacket(&chaninfo, nInstance);
+        }
+    }
+    return nResult;
 }
 
 
@@ -1864,7 +2006,7 @@ cbRESULT cbGetAinpCaps( uint32_t chan, uint32_t *ainpcaps, cbSCALING *physcalin,
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Return the requested data from the rec buffer
     if (ainpcaps)  *ainpcaps  = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].ainpcaps;
@@ -1886,7 +2028,7 @@ cbRESULT cbGetAinpOpts(uint32_t chan, uint32_t *ainpopts, uint32_t *LNCrate, uin
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].ainpcaps & cbAINP_LNC)) return cbRESULT_INVALIDFUNCTION;
 
     // Return the requested data from the rec buffer
@@ -1909,16 +2051,17 @@ cbRESULT cbSetAinpOpts(uint32_t chan, const uint32_t ainpopts,  uint32_t LNCrate
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].ainpcaps & cbAINP_LNC)) return cbRESULT_INVALIDFUNCTION;
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time		 = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid		 = 0x8000;
-    chaninfo.type		 = cbPKTTYPE_CHANSETAINP;
-    chaninfo.dlen		 = cbPKTDLEN_CHANINFOSHORT;
-    chaninfo.chan		 = chan;
+    chaninfo.cbpkt_header.time		 = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid		 = 0x8000;
+    chaninfo.cbpkt_header.type		 = cbPKTTYPE_CHANSETAINP;
+    chaninfo.cbpkt_header.dlen		 = cbPKTDLEN_CHANINFOSHORT;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan        = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.ainpopts    = ainpopts;
     chaninfo.lncrate	 = LNCrate;
     chaninfo.refelecchan = refElecChan;
@@ -1938,7 +2081,7 @@ cbRESULT cbGetAinpScaling(uint32_t chan, cbSCALING *scalin, uint32_t nInstance)
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AINP)) return cbRESULT_INVALIDFUNCTION;
 
     // Return the requested data from the rec buffer
@@ -1958,16 +2101,17 @@ cbRESULT cbSetAinpScaling(uint32_t chan, cbSCALING *scalin, uint32_t nInstance)
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AINP)) return cbRESULT_INVALIDFUNCTION;
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid      = 0x8000;
-    chaninfo.type      = cbPKTTYPE_CHANSETSCALE;
-    chaninfo.dlen      = cbPKTDLEN_CHANINFO;
-    chaninfo.chan      = chan;
+    chaninfo.cbpkt_header.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid      = 0x8000;
+    chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETSCALE;
+    chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+    chaninfo.cbpkt_header.instrument = cbGetChanInstrument(chan) - 1;
+    chaninfo.chan      = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.scalin    = *scalin;
     chaninfo.scalout   = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].scalout;
 
@@ -1986,7 +2130,8 @@ cbRESULT cbGetAinpDisplay(uint32_t chan, int32_t *smpdispmin, int32_t *smpdispma
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if ((cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AINP) != cbCHAN_AINP) return cbRESULT_INVALIDCHANNEL;
 
     // Return the requested data from the cfg buffer
     if (smpdispmin) *smpdispmin = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].smpdispmin;
@@ -2009,15 +2154,16 @@ cbRESULT cbSetAinpDisplay( uint32_t chan, int32_t smpdispmin, int32_t smpdispmax
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid      = 0x8000;
-    chaninfo.type      = cbPKTTYPE_CHANSETDISP;
-    chaninfo.dlen      = cbPKTDLEN_CHANINFO;
-    chaninfo.chan      = chan;
+    chaninfo.cbpkt_header.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid      = 0x8000;
+    chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETDISP;
+    chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     if (smpdispmin) chaninfo.smpdispmin = smpdispmin;
         else chaninfo.smpdispmin = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].smpdispmin;
     if (smpdispmax) chaninfo.smpdispmax = smpdispmax;
@@ -2036,6 +2182,7 @@ cbRESULT cbSetAinpDisplay( uint32_t chan, int32_t smpdispmin, int32_t smpdispmax
 //
 cbRESULT cbSetAinpPreview(uint32_t chan, uint32_t prevopts, uint32_t nInstance)
 {
+    cbRESULT res = cbRESULT_OK;
     uint32_t nIdx = cb_library_index[nInstance];
 
     ASSERT(prevopts == cbAINPPREV_LNC ||
@@ -2051,8 +2198,8 @@ cbRESULT cbSetAinpPreview(uint32_t chan, uint32_t prevopts, uint32_t nInstance)
     //  to worry about the testing
     if (chan != 0)
     {
-        if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-        if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+        if ((chan - 1) >= cb_pc_status_buffer_ptr[0]->cbGetNumTotalChans()) return cbRESULT_INVALIDCHANNEL;
+        if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
         if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AINP)) return cbRESULT_INVALIDFUNCTION;
     }
 
@@ -2066,13 +2213,32 @@ cbRESULT cbSetAinpPreview(uint32_t chan, uint32_t prevopts, uint32_t nInstance)
 
     // Create the packet data structure and fill it in
     cbPKT_GENERIC packet;
-    packet.time     = cb_rec_buffer_ptr[nIdx]->lasttime;
-    packet.chid     = 0x8000 + chan;
-    packet.type     = prevopts;
-    packet.dlen     = 0;
+    packet.cbpkt_header.time     = cb_rec_buffer_ptr[nIdx]->lasttime;
+    packet.cbpkt_header.type     = prevopts;
+    packet.cbpkt_header.dlen     = 0;
+    if (0 == chan)
+    {
+        packet.cbpkt_header.chid = 0x8000;
+        // Send it to all NSPs
+        for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
+        {
+            if ((cbRESULT_OK == res) && (NSP_FOUND == cbGetNspStatus(nProc)))
+            {
+                packet.cbpkt_header.instrument = nProc - 1;
+                res = cbSendPacket(&packet, nInstance);
+            }
+        }
+    }
+    else
+    {
+        packet.cbpkt_header.chid = 0x8000 + cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
+        packet.cbpkt_header.instrument = cbGetChanInstrument(chan) - 1;
 
-    // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&packet, nInstance);
+        // Enter the packet into the XMT buffer queue
+        res = cbSendPacket(&packet, nInstance);
+    }
+
+    return res;
 }
 
 // Purpose: AINP Sampling Stream Functions
@@ -2085,7 +2251,7 @@ cbRESULT cbGetAinpSampling(uint32_t chan, uint32_t *filter, uint32_t *group, uin
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].ainpcaps & cbAINP_SMPSTREAM)) return cbRESULT_INVALIDFUNCTION;
 
     // Return the requested data from the rec buffer for non-null pointers
@@ -2105,16 +2271,17 @@ cbRESULT cbSetAinpSampling(uint32_t chan, uint32_t filter, uint32_t group, uint3
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].ainpcaps & cbAINP_SMPSTREAM)) return cbRESULT_INVALIDFUNCTION;
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid      = 0x8000;
-    chaninfo.type      = cbPKTTYPE_CHANSETSMP;
-    chaninfo.dlen      = cbPKTDLEN_CHANINFO;
-    chaninfo.chan      = chan;
+    chaninfo.cbpkt_header.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid      = 0x8000;
+    chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETSMP;
+    chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.smpfilter = filter;
     chaninfo.smpgroup  = group;
 
@@ -2132,7 +2299,7 @@ cbRESULT cbGetAinpSpikeCaps(uint32_t chan, uint32_t *spkcaps, uint32_t nInstance
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].ainpcaps & cbAINP_SPKSTREAM)) return cbRESULT_INVALIDFUNCTION;
 
     // Return the requested data from the cfg buffer
@@ -2151,7 +2318,7 @@ cbRESULT cbGetAinpSpikeOptions(uint32_t chan, uint32_t *options, uint32_t *filte
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].ainpcaps & cbAINP_SPKSTREAM)) return cbRESULT_INVALIDFUNCTION;
 
     // Return the requested data from the cfg buffer
@@ -2171,16 +2338,17 @@ cbRESULT cbSetAinpSpikeOptions(uint32_t chan, uint32_t spkopts, uint32_t spkfilt
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].ainpcaps & cbAINP_SPKSTREAM)) return cbRESULT_INVALIDFUNCTION;
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid      = 0x8000;
-    chaninfo.type      = cbPKTTYPE_CHANSETSPK;
-    chaninfo.dlen      = cbPKTDLEN_CHANINFO;
-    chaninfo.chan      = chan;
+    chaninfo.cbpkt_header.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid      = 0x8000;
+    chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETSPK;
+    chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.spkopts   = spkopts;
     chaninfo.spkfilter = spkfilter;
 
@@ -2198,7 +2366,7 @@ cbRESULT cbGetAinpSpikeThreshold(uint32_t chan, int32_t *spkthrlevel, uint32_t n
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].spkcaps & cbAINPSPK_EXTRACT)) return cbRESULT_INVALIDFUNCTION;
 
     // Return the requested data from the cfg buffer
@@ -2220,7 +2388,7 @@ cbRESULT cbSetAinpSpikeThreshold(uint32_t chan, int32_t spkthrlevel, uint32_t nI
     if ((chan - 1) >= cbMAXCHANS)
         return cbRESULT_INVALIDCHANNEL;
 
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0)
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0)
         return cbRESULT_INVALIDCHANNEL;
 
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].spkcaps & cbAINPSPK_EXTRACT))
@@ -2228,11 +2396,12 @@ cbRESULT cbSetAinpSpikeThreshold(uint32_t chan, int32_t spkthrlevel, uint32_t nI
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time        = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid        = 0x8000;
-    chaninfo.type        = cbPKTTYPE_CHANSETSPKTHR;
-    chaninfo.dlen        = cbPKTDLEN_CHANINFO;
-    chaninfo.chan        = chan;
+    chaninfo.cbpkt_header.time        = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid        = 0x8000;
+    chaninfo.cbpkt_header.type        = cbPKTTYPE_CHANSETSPKTHR;
+    chaninfo.cbpkt_header.dlen        = cbPKTDLEN_CHANINFO;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.spkthrlevel = spkthrlevel;
 
     // Enter the packet into the XMT buffer queue
@@ -2249,7 +2418,7 @@ cbRESULT cbGetAinpSpikeHoops(uint32_t chan, cbHOOP *hoops, uint32_t nInstance)
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].spkcaps & cbAINPSPK_HOOPSORT)) return cbRESULT_INVALIDFUNCTION;
 
     memcpy(hoops, &(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].spkhoops[0][0]),
@@ -2269,16 +2438,17 @@ cbRESULT cbSetAinpSpikeHoops(uint32_t chan, cbHOOP *hoops, uint32_t nInstance)
 
     // Test that the channel address is valid and initialized
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].spkcaps & cbAINPSPK_HOOPSORT)) return cbRESULT_INVALIDFUNCTION;
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time        = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid        = 0x8000;
-    chaninfo.type        = cbPKTTYPE_CHANSETSPKHPS;
-    chaninfo.dlen        = cbPKTDLEN_CHANINFO;
-    chaninfo.chan        = chan;
+    chaninfo.cbpkt_header.time        = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid        = 0x8000;
+    chaninfo.cbpkt_header.type        = cbPKTTYPE_CHANSETSPKHPS;
+    chaninfo.cbpkt_header.dlen        = cbPKTDLEN_CHANINFO;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
 
     memcpy(&(chaninfo.spkhoops[0][0]), hoops, sizeof(cbHOOP)*cbMAXUNITS*cbMAXHOOPS );
 
@@ -2303,7 +2473,7 @@ cbRESULT cbGetAoutCaps( uint32_t chan, uint32_t *aoutcaps, cbSCALING *physcalout
 
     // Test that the addresses are valid and that necessary structures are not empty
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Return the requested data from the rec buffer
     if (aoutcaps)   *aoutcaps  = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].aoutcaps;
@@ -2324,7 +2494,7 @@ cbRESULT cbGetAoutScaling(uint32_t chan, cbSCALING *scalout, uint32_t nInstance)
 
     // Test that the addresses are valid and that necessary structures are not empty
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT)) return cbRESULT_INVALIDFUNCTION;
 
     // Return the requested data from the rec buffer
@@ -2344,16 +2514,17 @@ cbRESULT cbSetAoutScaling(uint32_t chan, cbSCALING *scalout, uint32_t nInstance)
 
     // Test that the addresses are valid and that necessary structures are not empty
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT)) return cbRESULT_INVALIDFUNCTION;
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid      = 0x8000;
-    chaninfo.type      = cbPKTTYPE_CHANSETSCALE;
-    chaninfo.dlen      = cbPKTDLEN_CHANINFO;
-    chaninfo.chan      = chan;
+    chaninfo.cbpkt_header.time      = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid      = 0x8000;
+    chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETSCALE;
+    chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.scalin    = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].scalin;
     chaninfo.scalout   = *scalout;
 
@@ -2372,12 +2543,7 @@ cbRESULT cbGetAoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, u
 
     // Test that the addresses are valid and that necessary structures are not empty
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
-    // If cb_cfg_buffer_ptr was built for 128-channel system, but passed in channel is for 256-channel firmware.
-    // TODO: Again, maybe we need a m_ChanIdxInType array.
-    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT) && (chan > (cbNUM_FE_CHANS / 2)))
-    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT) && (chan > (cbNUM_FE_CHANS / 2)))
-        chan -= (cbNUM_FE_CHANS / 2);
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT)) return cbRESULT_INVALIDFUNCTION;
 
     // Return the requested data from the rec buffer
@@ -2392,6 +2558,7 @@ cbRESULT cbGetAoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, u
 //
 cbRESULT cbSetAoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uint32_t value, uint32_t nInstance)
 {
+    cbRESULT nResult = cbRESULT_OK;
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
@@ -2403,28 +2570,37 @@ cbRESULT cbSetAoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uin
     // TODO: Again, maybe we need a m_ChanIdxInType array.
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT) && (chan > (cbNUM_FE_CHANS / 2)))
         chan -= (cbNUM_FE_CHANS / 2);
-    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chid == 0) return cbRESULT_INVALIDCHANNEL;
+    if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AOUT)) return cbRESULT_INVALIDFUNCTION;
 
     // Create the packet data structure and fill it in
     cbPKT_CHANINFO chaninfo;
-    chaninfo.time       = cb_rec_buffer_ptr[nIdx]->lasttime;
-    chaninfo.chid       = 0x8000;
-    chaninfo.type       = cbPKTTYPE_CHANSETAOUT;
-    chaninfo.dlen       = cbPKTDLEN_CHANINFO;
-    chaninfo.chan       = chan;
+    chaninfo.cbpkt_header.time       = cb_rec_buffer_ptr[nIdx]->lasttime;
+    chaninfo.cbpkt_header.chid       = 0x8000;
+    chaninfo.cbpkt_header.type       = cbPKTTYPE_CHANSETAOUT;
+    chaninfo.cbpkt_header.dlen       = cbPKTDLEN_CHANINFO;
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+    chaninfo.chan       = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.aoutopts   = options;
-    chaninfo.monsource  = monchan;
+    chaninfo.monsource  = chaninfo.monsource = (0 == monchan) ? 0 : cb_cfg_buffer_ptr[nIdx]->chaninfo[monchan - 1].chan;
     chaninfo.outvalue   = value;
 
-    // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
+    {
+        if ((cbRESULT_OK == nResult) && (NSP_FOUND == cbGetNspStatus(nProc)))
+        {
+            chaninfo.cbpkt_header.instrument = nProc - 1;
+            nResult = cbSendPacket(&chaninfo, nInstance);
+        }
+    }
+    return nResult;
 }
 
 // Author & Date:   Kirk Korver     26 Apr 2005
 // Purpose: Request that the ENTIRE sorting model be updated
 cbRESULT cbGetSortingModel(uint32_t nInstance)
 {
+    cbRESULT ret = cbRESULT_OK;
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
@@ -2432,12 +2608,21 @@ cbRESULT cbGetSortingModel(uint32_t nInstance)
 
     // Send out the request for the sorting rules
     cbPKT_SS_MODELALLSET isPkt;
-    isPkt.time = cb_rec_buffer_ptr[nIdx]->lasttime;
-    isPkt.chid = 0x8000;
-    isPkt.type = cbPKTTYPE_SS_MODELALLSET;
-    isPkt.dlen = 0;
+    isPkt.cbpkt_header.time = cb_rec_buffer_ptr[nIdx]->lasttime;
+    isPkt.cbpkt_header.chid = 0x8000;
+    isPkt.cbpkt_header.type = cbPKTTYPE_SS_MODELALLSET;
+    isPkt.cbpkt_header.dlen = 0;
 
-    cbRESULT ret = cbSendPacket(&isPkt, nInstance);
+    // Send it to all NSPs
+    for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
+    {
+        if ((cbRESULT_OK == ret) && (NSP_FOUND == cbGetNspStatus(nProc)))
+        {
+            isPkt.cbpkt_header.instrument = nProc - 1;
+            ret = cbSendPacket(&isPkt, nInstance);
+        }
+    }
+
     // FIXME: relying on sleep is racy, refactor the code
     Sleep(250);           // give the "model" packets a chance to show up
 
@@ -2449,6 +2634,7 @@ cbRESULT cbGetSortingModel(uint32_t nInstance)
 // Purpose: Request that the ENTIRE sorting model be updated
 cbRESULT cbGetFeatureSpaceDomain(uint32_t nInstance)
 {
+    cbRESULT ret = cbRESULT_OK;
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
@@ -2456,16 +2642,25 @@ cbRESULT cbGetFeatureSpaceDomain(uint32_t nInstance)
 
     // Send out the request for the sorting rules
     cbPKT_FS_BASIS isPkt;
-    isPkt.time = cb_rec_buffer_ptr[nIdx]->lasttime;
-    isPkt.chid = 0x8000;
-    isPkt.type = cbPKTTYPE_FS_BASISSET;
-    isPkt.dlen = cbPKTDLEN_FS_BASISSHORT;
+    isPkt.cbpkt_header.time = cb_rec_buffer_ptr[nIdx]->lasttime;
+    isPkt.cbpkt_header.chid = 0x8000;
+    isPkt.cbpkt_header.type = cbPKTTYPE_FS_BASISSET;
+    isPkt.cbpkt_header.dlen = cbPKTDLEN_FS_BASISSHORT;
 
     isPkt.chan = 0;
     isPkt.mode = cbBASIS_CHANGE;
     isPkt.fs = cbAUTOALG_PCA;
 
-    cbRESULT ret = cbSendPacket(&isPkt, nInstance);
+    // Send it to all NSPs
+    for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
+    {
+        if ((cbRESULT_OK == ret) && (NSP_FOUND == cbGetNspStatus(nProc)))
+        {
+            isPkt.cbpkt_header.instrument = nProc - 1;
+            ret = cbSendPacket(&isPkt, nInstance);
+        }
+    }
+
     // FIXME: relying on sleep is racy, refactor the code
     Sleep(250);           // give the packets a chance to show up
 
@@ -2510,7 +2705,8 @@ cbRESULT cbSSGetNoiseBoundary(uint32_t chanIdx, float afCentroid[3], float afMaj
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
-    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chancaps & cbCHAN_AINP)) return cbRESULT_INVALIDCHANNEL;
+    if ((chanIdx - 1) >= cb_pc_status_buffer_ptr[0]->cbGetNumTotalChans()) return cbRESULT_INVALIDCHANNEL;
+    if (!IsChanAnalogIn(chanIdx)) return cbRESULT_INVALIDCHANNEL;
 
     cbPKT_SS_NOISE_BOUNDARY const & rPkt = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktNoiseBoundary[chanIdx - 1];
     if (afCentroid)
@@ -2560,13 +2756,16 @@ cbRESULT cbSSSetNoiseBoundary(uint32_t chanIdx, float afCentroid[3], float afMaj
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
-    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chancaps & cbCHAN_AINP)) return cbRESULT_INVALIDCHANNEL;
+    if ((chanIdx - 1) >= cb_pc_status_buffer_ptr[0]->cbGetNumTotalChans()) return cbRESULT_INVALIDCHANNEL;
+    if (!IsChanAnalogIn(chanIdx)) return cbRESULT_INVALIDCHANNEL;
 
     cbPKT_SS_NOISE_BOUNDARY icPkt;
     icPkt.set(chanIdx, afCentroid[0], afCentroid[1], afCentroid[2],
         afMajor[0], afMajor[1], afMajor[2],
         afMinor_1[0], afMinor_1[1], afMinor_1[2],
         afMinor_2[0], afMinor_2[1], afMinor_2[2]);
+    icPkt.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].cbpkt_header.instrument;
+    icPkt.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chan;
 
     return cbSendPacket(&icPkt, nInstance);
 }
@@ -2587,7 +2786,8 @@ cbRESULT cbSSGetNoiseBoundaryByTheta(uint32_t chanIdx, float afCentroid[3], floa
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
-    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chancaps & cbCHAN_AINP)) return cbRESULT_INVALIDCHANNEL;
+    if ((chanIdx - 1) >= cb_pc_status_buffer_ptr[0]->cbGetNumTotalChans()) return cbRESULT_INVALIDCHANNEL;
+    if (!IsChanAnalogIn(chanIdx)) return cbRESULT_INVALIDCHANNEL;
 
     // get noise boundary info
     cbPKT_SS_NOISE_BOUNDARY const & rPkt = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktNoiseBoundary[chanIdx - 1];
@@ -2631,7 +2831,8 @@ cbRESULT cbSSSetNoiseBoundaryByTheta(uint32_t chanIdx, const float afCentroid[3]
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
-    if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chancaps & cbCHAN_AINP)) return cbRESULT_INVALIDCHANNEL;
+    if ((chanIdx - 1) >= cb_pc_status_buffer_ptr[0]->cbGetNumTotalChans()) return cbRESULT_INVALIDCHANNEL;
+    if (!IsChanAnalogIn(chanIdx)) return cbRESULT_INVALIDCHANNEL;
 
     // TODO: must be implemented for non MSC
 #ifndef QT_APP
@@ -2647,11 +2848,14 @@ cbRESULT cbSSSetNoiseBoundaryByTheta(uint32_t chanIdx, const float afCentroid[3]
 
     // Create the packet
     cbPKT_SS_NOISE_BOUNDARY icPkt;
+    memset(&icPkt, 0, sizeof(icPkt));
     icPkt.set(chanIdx,
         afCentroid[0], afCentroid[1], afCentroid[2],
         major[0], major[1], major[2],
         minor_1[0], minor_1[1], minor_1[2],
         minor_2[0], minor_2[1], minor_2[2]);
+    icPkt.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chan;
+    icPkt.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].cbpkt_header.instrument;
     // Send it
     return cbSendPacket(&icPkt, nInstance);
 #else
@@ -2741,6 +2945,7 @@ cbRESULT cbSSSetStatistics(uint32_t nUpdateSpikes, uint32_t nAutoalg, uint32_t n
                            uint32_t nWaveSampleSize,
                            uint32_t nInstance)
 {
+    cbRESULT cbRes = cbRESULT_OK;
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
@@ -2752,7 +2957,16 @@ cbRESULT cbSSSetStatistics(uint32_t nUpdateSpikes, uint32_t nAutoalg, uint32_t n
               fClusterHistValleyPercentage, fClusterHistClosePeakPercentage,
               fClusterHistMinPeakPercentage, nWaveBasisSize, nWaveSampleSize);
 
-    return cbSendPacket(&icPkt, nInstance);
+    // Send it to all NSPs
+    for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
+    {
+        if ((cbRESULT_OK == cbRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
+        {
+            icPkt.cbpkt_header.instrument = nProc - 1;
+            cbRes = cbSendPacket(&icPkt, nInstance);
+        }
+    }
+    return cbRes;
 }
 
 // Author & Date:   Kirk Korver     21 Jun 2005
@@ -2783,6 +2997,7 @@ cbRESULT cbSSGetArtifactReject(uint32_t * pnMaxChans, uint32_t * pnRefractorySam
 //  cbRESULT_OK if life is good
 cbRESULT cbSSSetArtifactReject(uint32_t nMaxChans, uint32_t nRefractorySamples, uint32_t nInstance)
 {
+    cbRESULT cbRes = cbRESULT_OK;
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
@@ -2790,7 +3005,17 @@ cbRESULT cbSSSetArtifactReject(uint32_t nMaxChans, uint32_t nRefractorySamples, 
 
     cbPKT_SS_ARTIF_REJECT isPkt;
     isPkt.set(nMaxChans, nRefractorySamples);
-    return cbSendPacket(&isPkt, nInstance);
+    
+    // Send it to all NSPs
+    for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
+    {
+        if ((cbRESULT_OK == cbRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
+        {
+            isPkt.cbpkt_header.instrument = nProc - 1;
+            cbRes = cbSendPacket(&isPkt, nInstance);
+        }
+    }
+    return cbRes;
 }
 
 
@@ -2823,6 +3048,7 @@ cbRESULT cbSSGetDetect(float * pfThreshold, float * pfScaling, uint32_t nInstanc
 //  cbRESULT_OK if life is good
 cbRESULT cbSSSetDetect(float fThreshold, float fScaling, uint32_t nInstance)
 {
+    cbRESULT cbRes = cbRESULT_OK;
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
@@ -2830,7 +3056,17 @@ cbRESULT cbSSSetDetect(float fThreshold, float fScaling, uint32_t nInstance)
 
     cbPKT_SS_DETECT isPkt;
     isPkt.set(fThreshold, fScaling);
-    return cbSendPacket(&isPkt, nInstance);
+    
+    // Send it to all NSPs
+    for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
+    {
+        if ((cbRESULT_OK == cbRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
+        {
+            isPkt.cbpkt_header.instrument = nProc - 1;
+            cbRes = cbSendPacket(&isPkt, nInstance);
+        }
+    }
+    return cbRes;
 }
 
 
@@ -2864,6 +3100,7 @@ cbRESULT cbSSGetStatus(cbAdaptControl * pcntlUnitStats, cbAdaptControl * pcntlNu
 //  cbRESULT_OK if life is good
 cbRESULT cbSSSetStatus(cbAdaptControl cntlUnitStats, cbAdaptControl cntlNumUnits, uint32_t nInstance)
 {
+    cbRESULT cbRes = cbRESULT_OK;
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
@@ -2872,7 +3109,16 @@ cbRESULT cbSSSetStatus(cbAdaptControl cntlUnitStats, cbAdaptControl cntlNumUnits
     cbPKT_SS_STATUS icPkt;
     icPkt.set(cntlUnitStats, cntlNumUnits);
 
-    return cbSendPacket(&icPkt, nInstance);
+    // Send it to all NSPs
+    for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
+    {
+        if ((cbRESULT_OK == cbRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
+        {
+            icPkt.cbpkt_header.instrument = nProc - 1;
+            cbRes = cbSendPacket(&icPkt, nInstance);
+        }
+    }
+    return cbRes;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2915,7 +3161,15 @@ cbRESULT cbCheckforData(cbLevelOfConcern & nLevelOfConcern, uint32_t *pktstogo /
     if (nDiff < 0)
         nDiff += cbRECBUFFLEN;
 
-    nLevelOfConcern = static_cast<cbLevelOfConcern>( (nDiff * LOC_COUNT) / cbRECBUFFLEN );
+    int xxx = nDiff * LOC_COUNT;
+    int xx = cbRECBUFFLEN;
+    nLevelOfConcern = static_cast<cbLevelOfConcern>(xxx / xx);
+
+    // make sure to return a valid value
+    if (nLevelOfConcern < LOC_LOW)
+        nLevelOfConcern = LOC_LOW;
+    if (nLevelOfConcern > LOC_CRITICAL)
+        nLevelOfConcern = LOC_CRITICAL;
 
     return cbRESULT_OK;
 }
@@ -2985,7 +3239,7 @@ cbPKT_GENERIC * cbGetNextPacketPtr(uint32_t nInstance)
         cbPKT_GENERIC *packetptr = (cbPKT_GENERIC*)&(cb_rec_buffer_ptr[nIdx]->buffer[cb_recbuff_tailindex[nIdx]]);
 
         // increament the read index
-        cb_recbuff_tailindex[nIdx] += (cbPKT_HEADER_32SIZE + packetptr->dlen);
+        cb_recbuff_tailindex[nIdx] += (cbPKT_HEADER_32SIZE + packetptr->cbpkt_header.dlen);
 
         // check for read buffer wraparound, if so increment relevant variables
         if (cb_recbuff_tailindex[nIdx] > (cbRECBUFFLEN - (cbCER_UDP_SIZE_MAX / 4)))
@@ -2998,7 +3252,7 @@ cbPKT_GENERIC * cbGetNextPacketPtr(uint32_t nInstance)
         cb_recbuff_processed[nIdx]++;
 
         // update the timestamp index
-        cb_recbuff_lasttime[nIdx] = packetptr->time;
+        cb_recbuff_lasttime[nIdx] = packetptr->cbpkt_header.time;
 
         // return the packet
         return packetptr;
@@ -3066,10 +3320,10 @@ cbRESULT cbGetAdaptFilter(uint32_t  proc,             // which NSP processor?
     if ((proc - 1) >= cbMAXPROCS) return cbRESULT_INVALIDADDRESS;
 
     // Allow the parameters to be NULL
-    if (pnMode)         *pnMode         = cb_cfg_buffer_ptr[nIdx]->adaptinfo.nMode;
-    if (pdLearningRate) *pdLearningRate = cb_cfg_buffer_ptr[nIdx]->adaptinfo.dLearningRate;
-    if (pnRefChan1)     *pnRefChan1     = cb_cfg_buffer_ptr[nIdx]->adaptinfo.nRefChan1;
-    if (pnRefChan2)     *pnRefChan2     = cb_cfg_buffer_ptr[nIdx]->adaptinfo.nRefChan2;
+    if (pnMode)         *pnMode         = cb_cfg_buffer_ptr[nIdx]->adaptinfo[proc - 1].nMode;
+    if (pdLearningRate) *pdLearningRate = cb_cfg_buffer_ptr[nIdx]->adaptinfo[proc - 1].dLearningRate;
+    if (pnRefChan1)     *pnRefChan1     = cb_cfg_buffer_ptr[nIdx]->adaptinfo[proc - 1].nRefChan1;
+    if (pnRefChan2)     *pnRefChan2     = cb_cfg_buffer_ptr[nIdx]->adaptinfo[proc - 1].nRefChan2;
 
     return cbRESULT_OK;
 }
@@ -3110,6 +3364,7 @@ cbRESULT cbSetAdaptFilter(uint32_t  proc,             // which NSP processor?
     if (pnRefChan2)     nRefChan2 =     *pnRefChan2;
 
     PktAdaptFiltInfo icPkt(nMode, dLearningRate, nRefChan1, nRefChan2);
+    icPkt.cbpkt_header.instrument = proc - 1;
     return cbSendPacket(&icPkt, nInstance);
 }
 
@@ -3128,8 +3383,8 @@ cbRESULT cbGetRefElecFilter(uint32_t  proc,             // which NSP processor?
     if ((proc - 1) >= cbMAXPROCS) return cbRESULT_INVALIDADDRESS;
 
     // Allow the parameters to be NULL
-    if (pnMode)         *pnMode         = cb_cfg_buffer_ptr[nIdx]->refelecinfo.nMode;
-    if (pnRefChan)      *pnRefChan      = cb_cfg_buffer_ptr[nIdx]->refelecinfo.nRefChan;
+    if (pnMode)         *pnMode     = cb_cfg_buffer_ptr[nIdx]->refelecinfo[proc - 1].nMode;
+    if (pnRefChan)      *pnRefChan  = cb_cfg_buffer_ptr[nIdx]->refelecinfo[proc - 1].nRefChan;
 
     return cbRESULT_OK;
 }
@@ -3173,17 +3428,17 @@ cbRESULT cbSetRefElecFilter(uint32_t  proc,             // which NSP processor?
 // Inputs:
 //   szName    - buffer name
 //   bReadOnly - if should open memory for read-only operation
-cbRESULT cbGetChannelSelection(cbPKT_UNIT_SELECTION * pPktUnitSel, uint32_t nInstance)
+cbRESULT cbGetChannelSelection(cbPKT_UNIT_SELECTION* pPktUnitSel, uint32_t nProc, uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
-    if (cb_pc_status_buffer_ptr[nIdx]->isSelection.chid == 0)
+    if (cb_pc_status_buffer_ptr[nIdx]->isSelection[nProc].cbpkt_header.chid == 0)
         return cbRESULT_HARDWAREOFFLINE;
 
-    if (pPktUnitSel) *pPktUnitSel = cb_pc_status_buffer_ptr[nIdx]->isSelection;
+    if (pPktUnitSel) *pPktUnitSel = cb_pc_status_buffer_ptr[nIdx]->isSelection[nProc];
 
     return cbRESULT_OK;
 }
@@ -3213,8 +3468,8 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
     // Create the shared transmit buffer; if unsuccessful, release rec buffer and associated error code
     {
         // declare the length of the buffer in uint32_t units
-        const uint32_t cbXMT_GLOBAL_BUFFLEN = (cbCER_UDP_SIZE_MAX / 4) * 500 + 2;    // room for 500 packets
-        const uint32_t cbXMT_LOCAL_BUFFLEN  = (cbCER_UDP_SIZE_MAX / 4) * 200 + 2;    // room for 200 packets
+        const uint32_t cbXMT_GLOBAL_BUFFLEN = (cbCER_UDP_SIZE_MAX / 4) * 5000 + 2;    // room for 500 packets
+        const uint32_t cbXMT_LOCAL_BUFFLEN = (cbCER_UDP_SIZE_MAX / 4) * 2000 + 2;    // room for 200 packets
 
         // determine the XMT buffer structure size (header + data field)
         const uint32_t cbXMT_GLOBAL_BUFFSTRUCTSIZE = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_GLOBAL_BUFFLEN);
@@ -3350,7 +3605,7 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
     cb_sig_event_hnd[nIdx] = sem;
 #endif
 
-    // No erro happned
+    // No error happened
     return cbRESULT_OK;
 }
 

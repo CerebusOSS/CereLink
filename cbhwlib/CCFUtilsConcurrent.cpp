@@ -72,7 +72,7 @@ void WriteCCFHelper(QString strFileName, cbCCF ccf, cbCCFCallback pCallbackFn, u
     if (pCallbackFn)
         pCallbackFn(nInstance, CCFRESULT_SUCCESS, szFileName, CCFSTATE_THREADWRITE, 0);
     // If valid ccf is passed, use it as initial data, otherwise use NULL to have it read from NSP
-    CCFUtils config(false, false, ccf.isChan[0].chid == 0 ? NULL : &ccf, pCallbackFn, nInstance);
+    CCFUtils config(false, false, ccf.isChan[0].cbpkt_header.chid == 0 ? NULL : &ccf, pCallbackFn, nInstance);
     ccf::ccfResult res = config.WriteCCFNoPrompt(szFileName);
     if (pCallbackFn)
         pCallbackFn(nInstance, res, szFileName, CCFSTATE_THREADWRITE, 100);

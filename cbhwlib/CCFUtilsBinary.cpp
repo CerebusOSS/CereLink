@@ -202,10 +202,10 @@ void CCFUtilsBinary::SetChannelDefaults(cbPKT_CHANINFO &isChan)
 {
     memset(&isChan, 0, sizeof(isChan));
 
-    isChan.time             = 0;
-    isChan.chid             = 0x8000;
-    isChan.type             = cbPKTTYPE_CHANSET;
-    isChan.dlen             = cbPKTDLEN_CHANINFO_CB2005_37;
+    isChan.cbpkt_header.time             = 0;
+    isChan.cbpkt_header.chid             = 0x8000;
+    isChan.cbpkt_header.type             = cbPKTTYPE_CHANSET;
+    isChan.cbpkt_header.dlen             = cbPKTDLEN_CHANINFO_CB2005_37;
     isChan.lncdispmax       = 511;
     isChan.refelecchan      = 0;
 
@@ -969,9 +969,9 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_310(FILE * hFile)
         {
             // We might as well use this RAM to set the packet types.
             //  The space is already allocated, and won't be used later
-            isChanFile.chid = 0x8000;
-            isChanFile.type = cbPKTTYPE_CHANSET;
-            isChanFile.dlen = cbPKTDLEN_CHANINFO_CB2005_37;
+            isChanFile.cbpkt_header.chid = 0x8000;
+            isChanFile.cbpkt_header.type = cbPKTTYPE_CHANSET;
+            isChanFile.cbpkt_header.dlen = cbPKTDLEN_CHANINFO_CB2005_37;
         }
     } // end for(int i = 0
     // now read the rest of the file as individual packets and transmit it to the NSP

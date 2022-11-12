@@ -1,7 +1,7 @@
 /* =STS=> InstNetwork.h[2733].aa08   open     SMID:8 */
 //////////////////////////////////////////////////////////////////////////////
 //
-// (c) Copyright 2010 - 2011 Blackrock Microsystems
+// (c) Copyright 2010 - 2017 Blackrock Microsystems
 //
 // $Workfile: InstNetwork.h $
 // $Archive: /common/InstNetwork.h $
@@ -23,6 +23,7 @@
 
 #include "debugmacs.h"
 #include "cbhwlib.h"
+#include "cbHwlibHi.h"
 #include "Instrument.h"
 #include "cki_common.h"
 #include <QThread>
@@ -86,6 +87,7 @@ public:
     bool IsStandAlone() {return m_bStandAlone;} // If running in stand-alone
     uint32_t getPacketCounter() {return m_nRecentPacketCount;}
     uint32_t getDataCounter() {return m_dataCounter;}
+    void SetNumChans();
 protected:
     enum { INST_TICK_COUNT = 10 };
     void run();
@@ -97,6 +99,7 @@ private:
     void UpdateSortModel(const cbPKT_SS_MODELSET & rUnitModel);
     void UpdateBasisModel(const cbPKT_FS_BASIS & rBasisModel);
 private:
+    static const uint32_t MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS;
     cbLevelOfConcern m_enLOC; // level of concern
     STARTUP_OPTIONS m_nStartupOptionsFlags;
     QVector<Listener *> m_listener;   // instrument network listeners
@@ -107,8 +110,8 @@ private:
     uint32_t m_dataCounter;        // data counter
     uint32_t m_nLastNumberOfPacketsReceived;
     uint32_t m_runlevel; // Last runlevel
+    bool m_bInitChanCount;
 protected:
-    static const uint32_t MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS;
     bool m_bStandAlone;  // If it is stand-alone
     Instrument m_icInstrument;   // The instrument
     uint32_t m_instInfo; // Last instrument state
@@ -122,8 +125,7 @@ protected:
     int m_nRecBufSize;
     QString m_strInIP;  // Client IPv4 address
     QString m_strOutIP; // Instrument IPv4 address
-    uint8_t m_ChannelType[cbMAXCHANS]; // Holds an integer for each channel indicating its type. See cbCHTYPE_ in cbhwlib.h
-    // TODO: Maybe we need a m_ChanIdxInType array for indexing waveform arrays.
+    int m_nRange; // number of IP addresses to try (default is 16)
 
 public Q_SLOTS:
     void Close(); // stop timer and close the message loop
