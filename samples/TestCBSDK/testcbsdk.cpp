@@ -34,6 +34,8 @@ void handleResult(cbSdkResult res)
 	{
 	case CBSDKRESULT_SUCCESS:
 		break;
+	case CBSDKRESULT_CLOSED:
+		printf("Instrument closed\n");
 	case CBSDKRESULT_NOTIMPLEMENTED:
 		printf("Not implemented\n");
 		break;
@@ -87,7 +89,7 @@ void handleResult(cbSdkResult res)
 		printf("Instrument is offline\n");
 		break;
 	default:
-		printf("Unexpected error\n");
+		printf("Unexpected error (%d)\n", res);
 		break;
 	}
 }
@@ -112,7 +114,7 @@ cbSdkVersion testGetVersion(void)
 
 // Author & Date:   Ehsan Azar    24 Oct 2012
 // Purpose: Test openning the library
-cbSdkResult testOpen(LPCSTR inst_ip, int inst_port)
+cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
 {
     // Try to get the version. Should be a warning because we are not yet open.
     cbSdkVersion ver = testGetVersion();
@@ -122,6 +124,7 @@ cbSdkResult testOpen(LPCSTR inst_ip, int inst_port)
 	cbSdkConnection con = cbSdkConnection();
 	con.szOutIP = inst_ip;
     con.nOutPort = inst_port;
+	con.szInIP = client_ip;
 	cbSdkResult res = cbSdkOpen(INST, conType, con);
 	if (res != CBSDKRESULT_SUCCESS)
 		printf("Unable to open instrument connection.\n");
@@ -197,9 +200,11 @@ int main(int argc, char *argv[])
 {
 	LPCSTR inst_ip = "";
     int inst_port = cbNET_UDP_PORT_CNT;
+	LPCSTR client_ip = "";
 	if (argc > 1) {inst_ip = argv[1];}
     if (argc > 2) {inst_port = strtol(argv[2], NULL, 10);}
-    cbSdkResult res = testOpen(inst_ip, inst_port);
+	if (argc > 3) { client_ip = argv[3]; }
+    cbSdkResult res = testOpen(inst_ip, inst_port, client_ip);
     if (res < 0)
         printf("testOpen failed (%d)!\n", res);
     else

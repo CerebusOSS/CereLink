@@ -197,7 +197,7 @@ void testSetConfig(void)
 
 void testGetTime(void)
 {
-	uint32_t cbtime = 0;
+	PROCTIME cbtime = 0;
 	cbSdkResult res = cbSdkGetTime(INST, &cbtime);
 	if (res == CBSDKRESULT_SUCCESS)
 	{
