@@ -704,7 +704,7 @@ void OnTime(
         PrintHelp(CBMEX_FUNCTION_TIME, true, "Last parameter requires value");
     }
 
-    uint32_t cbtime;
+    PROCTIME cbtime;
     cbSdkResult res = cbSdkGetTime(nInstance, &cbtime);
     PrintErrorSDK(res, "cbSdkGetTime()");
 

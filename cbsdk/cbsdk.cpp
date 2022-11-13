@@ -1782,6 +1782,34 @@ CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(uint32_t nInstance,
     return g_app[nInstance]->SdkSetChannelLabel(channel, label, userflags, position);
 }
 
+CBSDKAPI    cbSdkResult cbSdkIsChanAnalogIn(uint32_t nInstance, uint16_t channel, uint32_t* bResult)
+{
+    *bResult = IsChanAnalogIn(channel, nInstance);
+    return CBSDKRESULT_SUCCESS;
+}
+
+CBSDKAPI    cbSdkResult cbSdkIsChanAnyDigIn(uint32_t nInstance, uint16_t channel, uint32_t* bResult)
+{
+    *bResult = IsChanAnyDigIn(channel, nInstance);
+    return CBSDKRESULT_SUCCESS;
+}
+
+CBSDKAPI    cbSdkResult cbSdkIsChanCont(uint32_t nInstance, uint16_t channel, uint32_t* bResult)
+{
+    *bResult = IsChanCont(channel, nInstance);
+    return CBSDKRESULT_SUCCESS;
+}
+
+/*
+bool IsChanFEAnalogIn(uint32_t dwChan, uint32_t nInstance = 0);           // TRUE means yes; FALSE, no
+bool IsChanAIAnalogIn(uint32_t dwChan, uint32_t nInstance = 0);           // TRUE means yes; FALSE, no
+bool IsChanSerial(uint32_t dwChan, uint32_t nInstance = 0); // TRUE means yes; FALSE, no
+bool IsChanDigin(uint32_t dwChan, uint32_t nInstance = 0);  // TRUE means yes; FALSE, no
+bool IsChanDigout(uint32_t dwChan, uint32_t nInstance = 0);               // TRUE means yes; FALSE, no
+bool IsChanAnalogOut(uint32_t dwChan, uint32_t nInstance = 0);            // TRUE means yes; FALSE, no
+bool IsChanAudioOut(uint32_t dwChan, uint32_t nInstance = 0);             // TRUE means yes; FALSE, no
+*/
+
 
 // Author & Date:   Ehsan Azar     11 March 2011
 /** Retrieve data of a configured trial.
@@ -3991,7 +4019,7 @@ void SdkApp::Open(uint32_t nInstance, int nInPort, int nOutPort, LPCSTR szInIP, 
     m_strOutIP = szOutIP;
 
 #ifndef WIN32
-    // On Linux bind ot broadcast
+    // On Linux bind to broadcast
     if (m_strInIP.endsWith(".255"))
         m_bBroadcast = true;
 #endif

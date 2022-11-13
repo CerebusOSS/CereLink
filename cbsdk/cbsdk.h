@@ -439,7 +439,7 @@ CBSDKAPI    cbSdkResult cbSdkGetType(uint32_t nInstance, cbSdkConnectionType * c
 CBSDKAPI    cbSdkResult cbSdkClose(uint32_t nInstance);
 
 /*! Get the instrument sample clock time */
-CBSDKAPI    cbSdkResult cbSdkGetTime(uint32_t nInstance, uint32_t * cbtime);
+CBSDKAPI    cbSdkResult cbSdkGetTime(uint32_t nInstance, PROCTIME * cbtime);
 
 /*! Get direct access to internal spike cache shared memory */
 CBSDKAPI    cbSdkResult cbSdkGetSpkCache(uint32_t nInstance, uint16_t channel, cbSPKCACHE **cache);
@@ -469,8 +469,17 @@ CBSDKAPI    cbSdkResult cbSdkGetChannelLabel(uint32_t nInstance, uint16_t channe
 /*! Set channel label */
 CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(uint32_t nInstance, uint16_t channel, const char * label, uint32_t userflags, int32_t * position); // Set channel label
 
-/*! Get channel type */
-CBSDKAPI    cbSdkResult cbSdkGetChannelType(uint32_t nInstance, uint16_t channel, uint8_t* ch_type);
+/* Get channel capabilities */
+// CBSDKAPI    cbSdkResult cbSdkIsChanAnalogIn(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
+// CBSDKAPI    cbSdkResult cbSdkIsChanFEAnalogIn(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
+// CBSDKAPI    cbSdkResult cbSdkIsChanAIAnalogIn(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
+CBSDKAPI    cbSdkResult cbSdkIsChanAnyDigIn(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
+// CBSDKAPI    cbSdkResult cbSdkIsChanSerial(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
+// CBSDKAPI    cbSdkResult cbSdkIsChanDigin(uint32_t nInstance, uint16_t channel, uint32_t* bValid);
+// CBSDKAPI    cbSdkResult cbSdkIsChanDigout(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
+// CBSDKAPI    cbSdkResult cbSdkIsChanAnalogOut(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
+// CBSDKAPI    cbSdkResult cbSdkIsChanAudioOut(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
+// CBSDKAPI    cbSdkResult cbSdkIsChanCont(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
 
 /*! Retrieve data of a trial (NULL means ignore), user should allocate enough buffers beforehand, and trial should not be closed during this call */
 CBSDKAPI    cbSdkResult cbSdkGetTrialData(uint32_t nInstance,

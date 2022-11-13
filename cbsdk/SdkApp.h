@@ -74,7 +74,6 @@ public:
                                   bool bAbsolute);
     cbSdkResult SdkGetChannelLabel(uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position);
     cbSdkResult SdkSetChannelLabel(uint16_t channel, const char * label, uint32_t userflags, int32_t * position);
-	cbSdkResult SdkGetChannelType(uint16_t channel, uint8_t * chtype);
     cbSdkResult SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                 cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
     cbSdkResult SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent* trialevent, cbSdkTrialCont * trialcont,

@@ -327,7 +327,7 @@ bool Instrument::CachedPacket::AddPacket(void * pPacket, int cbBytes)
     m_nTickCount = m_nMaxTickCount;              // How many ticks have passed since we sent?
     m_nRetryCount = m_nMaxRetryCount;           // How many times have we re-sent this packet?
 
-//    TRACE("Outgoing Pkt Type: 0x%2X\n", ((cbPKT_GENERIC*)pPacket)->type);
+//    TRACE("Outgoing Pkt Type: 0x%2X\n", ((cbPKT_GENERIC*)pPacket)->cbpkt_header.type);
     return true;
 }
 
@@ -339,20 +339,20 @@ void Instrument::CachedPacket::CheckForReply(void * pPacket)
         cbPKT_GENERIC * pIn = static_cast<cbPKT_GENERIC *>(pPacket);
         cbPKT_GENERIC * pOut = reinterpret_cast<cbPKT_GENERIC *>(m_abyPacket);
 
-/*
+        /*
         DEBUG_CODE
-            (
+        (
             // If it is a "hearbeat" packet, then just don't look at it
-            if (pIn->chid == 0x8000 && pIn->type == 0)
+            if (pIn->cbpkt_header.chid == 0x8000 && pIn->cbpkt_header.type == 0)
                 return;
 
-            TRACE("Incoming Pkt chid: 0x%04X type:  0x%02X,   SENT chid: 0x%04X, type: 0x%02X,  chan: %d\n",
-                     pIn->chid, pIn->type,
-                     pOut->chid, pOut->type,
+            TRACE("Incoming Pkt chid: 0x%04X type:  0x%02X,   SENT chid: 0x%04X, type: 0x%02X (type: 0x%02X),  chan: %d\n",
+                     pIn->cbpkt_header.chid, pIn->cbpkt_header.type,
+                     pOut->cbpkt_header.chid, pOut->cbpkt_header.type, pOut->cbpkt_header.type & ~0x80,
                      ((cbPKT_CHANINFO *)(pOut))->chan  );
 
-            );
-*/
+        );
+        */
 
         if (pIn->cbpkt_header.type != (pOut->cbpkt_header.type & ~0x80))    // mask off the highest bit
             return;
