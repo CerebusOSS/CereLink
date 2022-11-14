@@ -34,6 +34,7 @@
     #include <sys/types.h>
     #include <sys/stat.h>
     #include <unistd.h>
+    #include <errno.h>
 #endif
 #endif
 #ifndef _MSC_VER
@@ -129,8 +130,13 @@ void DestroySharedObject(HANDLE & hMem, void ** ppMem, uint32_t size)
 #else
     if (*ppMem != NULL)
     {
+        // Get the number of current attachments
+        int errsv = 0;
         if (munmap(hMem, size) == -1)
-            /* Handle error */;
+        {
+            errsv = errno;
+            printf("munmap() failed with errno %d\n", errsv);
+        }
     }
 #endif
     hMem = 0;
@@ -231,15 +237,29 @@ HANDLE CreateSharedBuffer(LPCSTR szName, uint32_t size)
     // Keep windows version unchanged
     hnd = CreateFileMappingA((HANDLE)INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, size, szName);
 #else
-    int fd = shm_open(szName, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
-    if (fd == -1)
-        /* Handle error */;
-    if (ftruncate(fd, size) == -1)
-        /* Handle error */;
+    int pagesize = getpagesize();
+    size = size - (size % pagesize) + pagesize;
+    int errsv = 0;
+    int fd = shm_open(szName, O_CREAT | O_RDWR, 0660);
+    if (fd == -1){
+        errsv = errno;
+        printf("shm_open() failed with errno %d\n", errsv);
+    }
+    if (ftruncate(fd, size) == -1) {
+        errsv = errno;
+        printf("ftruncate() failed with errno %d\n", errsv);
+        close(fd);
+        shm_unlink(szName);
+        return hnd;
+    }
     void *rptr = mmap(NULL, size,
                       PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (rptr == MAP_FAILED)
-        /* Handle error */;
+    if (rptr == MAP_FAILED) {
+        errsv = errno;
+        printf("mmap() failed with errno %d\n", errsv);
+        close(fd);
+        shm_unlink(szName);
+    }
     else
         hnd = rptr;
 #endif
@@ -313,6 +333,7 @@ cbRESULT cbOpen(BOOL bStandAlone, uint32_t nInstance)
             cb_library_initialized[nIdx] = TRUE;      // We are in the library, so it is initialized
         } else {
             cbReleaseSystemLock(szLockName, cb_sys_lock_hnd[nInstance]);
+            cbClose(bStandAlone, nInstance);
         }
         return cbRet;
     } else {

@@ -179,7 +179,7 @@ typedef uint8_t DLEN;
 #endif
 
 typedef uint64_t        PROCTIME;
-typedef INT16           A2D_DATA;
+typedef int16_t         A2D_DATA;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -194,7 +194,11 @@ typedef INT16           A2D_DATA;
 #define cbNET_UDP_PORT_BCAST        51002             // Neuroflow Data Port
 #define cbNET_UDP_PORT_CNT          51001             // Neuroflow Control Port
 // maximum udp datagram size used to transport cerebus packets, taken from MTU size
+#ifdef WIN32
 #define cbCER_UDP_SIZE_MAX          58080             // Note that multiple packets may reside in one udp datagram as aggregate
+#else
+#define cbCER_UDP_SIZE_MAX          1452
+#endif
 #define cbNET_UDP_ADDR_HOST         "192.168.137.199" // Cerebus (central) default address
 
 #define PROTOCOL_UDP        0
