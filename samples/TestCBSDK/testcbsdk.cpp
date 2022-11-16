@@ -161,20 +161,22 @@ cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
 }
 
 
-void testGetConfig(void)
+cbSdkResult testGetConfig(void)
 {
 	uint32_t proc = 1;
 	uint32_t nChansInGroup;
 	uint16_t pGroupList[cbNUM_ANALOG_CHANS];
+    cbSdkResult res = CBSDKRESULT_SUCCESS;
 	for (uint32_t group_ix = 1; group_ix < 7; group_ix++)
 	{
-		cbSdkResult res = cbSdkGetSampleGroupList(INST, proc, group_ix, &nChansInGroup, pGroupList);
+		res = cbSdkGetSampleGroupList(INST, proc, group_ix, &nChansInGroup, pGroupList);
 		if (res == CBSDKRESULT_SUCCESS)
 		{
 			printf("In sampling group %d, found %d channels.\n", group_ix, nChansInGroup);
 		}
 		handleResult(res);
 	}
+    return res;
 }
 
 // Author & Date:   Ehsan Azar    25 Oct 2012
@@ -206,11 +208,21 @@ int main(int argc, char *argv[])
 	if (argc > 3) { client_ip = argv[3]; }
     cbSdkResult res = testOpen(inst_ip, inst_port, client_ip);
     if (res < 0)
+    {
         printf("testOpen failed (%d)!\n", res);
+        return 0;
+    }
     else
         printf("testOpen succeeded\n");
 	
-	testGetConfig();
+	res = testGetConfig();
+    if (res < 0)
+    {
+        printf("testGetConfig failed (%d)!\n", res);
+        return 0;
+    }
+    else
+        printf("testGetConfig succeeded\n");
 
     res = testClose();
     if (res < 0)
