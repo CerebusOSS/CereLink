@@ -208,7 +208,11 @@ ENDIF( WIN32 )
 SET( LIB_HEADERS
     ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.h
 )
-qt_wrap_cpp( LIB_HEADERS_MOC ${LIB_HEADERS} )
+if (${QT_VERSION_MAJOR} EQUAL 5)
+    qt5_wrap_cpp( LIB_HEADERS_MOC ${LIB_HEADERS} )
+else()
+    qt_wrap_cpp( LIB_HEADERS_MOC ${LIB_HEADERS} )
+endif()
 
 # Source for both cbmex and octave targets
 SET( LIB_SOURCE_CBMEX
