@@ -241,6 +241,11 @@ HANDLE CreateSharedBuffer(LPCSTR szName, uint32_t size)
     int pagesize = getpagesize();
     size = size - (size % pagesize) + pagesize;
     int errsv = 0;
+    if (shm_unlink(szName)) {
+        errsv = errno;
+        if (errsv != ENOENT)
+            printf("shm_unlink() failed with errno %d\n", errsv);
+    }
     int fd = shm_open(szName, O_CREAT | O_RDWR, 0660);
     if (fd == -1){
         errsv = errno;
@@ -248,7 +253,7 @@ HANDLE CreateSharedBuffer(LPCSTR szName, uint32_t size)
     }
     if (ftruncate(fd, size) == -1) {
         errsv = errno;
-        printf("ftruncate() failed with errno %d\n", errsv);
+        printf("ftruncate(fd, %d) failed with errno %d\n", size, errsv);
         close(fd);
         shm_unlink(szName);
         return hnd;
@@ -257,7 +262,7 @@ HANDLE CreateSharedBuffer(LPCSTR szName, uint32_t size)
                       PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (rptr == MAP_FAILED) {
         errsv = errno;
-        printf("mmap() failed with errno %d\n", errsv);
+        printf("mmap(NULL, %d, ...) failed with errno %d\n", size, errsv);
         close(fd);
         shm_unlink(szName);
     }
