@@ -35,6 +35,7 @@
     #include <sys/stat.h>
     #include <unistd.h>
     #include <errno.h>
+    #include <time.h>
 #endif
 #endif
 #ifndef _MSC_VER
