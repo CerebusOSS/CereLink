@@ -455,10 +455,12 @@ int UDPSocket::RecvTCP(void* packet) const
 {
     while (1)
     {
-
+        int err = 0;
         int ret = recv(inst_sock, (char*)packet, m_nPacketSize, 0);
 #ifdef WIN32
         int err = ::WSAGetLastError();
+#else
+        err = errno;
 #endif
 
         if (ret != SOCKET_ERROR)
@@ -525,7 +527,7 @@ int UDPSocket::RecvTCP(void* packet) const
     //	}
     //    else
     //    {
-    //		TRACE("TCP rcv - packet received doesnt have the right length\n");
+    //		TRACE("TCP rcv - packet received does not have the right length\n");
     //		return -1;
     //	}
 }

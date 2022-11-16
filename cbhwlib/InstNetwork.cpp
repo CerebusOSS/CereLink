@@ -198,6 +198,8 @@ void InstNetwork::SetNumChans()
 //  pPkt      - pointer to the packet
 void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
 {
+//    if (!(pPkt->cbpkt_header.chid & cbPKTCHAN_CONFIGURATION) || (pPkt->cbpkt_header.type != cbPKTTYPE_SYSHEARTBEAT))
+//        TRACE("ProcessIncomingPacket of type 0x%2X\n", pPkt->cbpkt_header.type);
     // -------- Process some incoming packet here -----------
     // check for configuration class packets
     if (pPkt->cbpkt_header.chid & 0x8000)
@@ -537,6 +539,7 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
     m_timerTicks++; // number of intervals
     int burstcount = 0;
     int recv_returned = 0;
+//    TRACE("m_timerTicks: %d\n", m_timerTicks);
     if (m_bDone)
     {
         if (m_timerId)
@@ -557,7 +560,7 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
             InstNetworkEvent(NET_EVENT_INSTCONNECTING);
             cbSetSystemRunLevel(cbRUNLEVEL_RUNNING, 0, 0, cbNSP1 - 1, m_nInstance);
         }
-        // at 0.5 seconds, reset the hardware
+        // at 0.5 seconds, if not already running, reset the hardware
         else if (m_timerTicks == 50)
         {
             // get runlevel
@@ -569,7 +572,7 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
                 cbSetSystemRunLevel(cbRUNLEVEL_HARDRESET, 0, 0, cbNSP1 - 1, m_nInstance);
             }
         }
-        // at 1.0 seconds, retreive the hardware config
+        // at 1.0 seconds, retrieve the hardware config
         else if (m_timerTicks == 100)
         {
             InstNetworkEvent(NET_EVENT_INSTCONFIG);
@@ -581,7 +584,7 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
             pktgeneric.cbpkt_header.instrument = 0;
             cbSendPacket(&pktgeneric, m_nInstance);
         }
-        // at 2.0 seconds, start running
+        // at 2.0 seconds, if not already running, do soft reset, which will lead to running state.
         else if (m_timerTicks == 200)
         {
             InstNetworkEvent(NET_EVENT_INSTRUN); // going to soft reset and run
