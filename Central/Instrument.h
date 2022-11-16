@@ -141,7 +141,7 @@ protected:
         int m_nMaxRetryCount;           // How many times to "resend" a packet before erroring out.
 
         // This array MUST be larger than the largest data packet
-        char m_abyPacket[2048];         // This is the packet that was sent out.
+        char m_abyPacket[cbPKT_MAX_SIZE * 2];  // This is the packet that was sent out.
         int m_cbPacketBytes;            // The size of the most recent packet addition
 
     };
