@@ -34,6 +34,7 @@
     #include <sys/types.h>
     #include <sys/stat.h>
     #include <unistd.h>
+    #include <time.h>
 #endif
 #endif
 #ifndef _MSC_VER
