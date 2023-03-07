@@ -458,7 +458,7 @@ int UDPSocket::RecvTCP(void* packet) const
         int err = 0;
         int ret = recv(inst_sock, (char*)packet, m_nPacketSize, 0);
 #ifdef WIN32
-        int err = ::WSAGetLastError();
+        err = ::WSAGetLastError();
 #else
         err = errno;
 #endif
