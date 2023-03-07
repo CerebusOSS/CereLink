@@ -10,6 +10,9 @@ Purpose: Cython interface for cbsdk_small
 from libc.stdint cimport uint32_t, int32_t, uint16_t, int16_t, uint8_t
 from libcpp cimport bool
 
+cdef extern from "stdint.h":
+    ctypedef unsigned long long uint64_t
+
 cdef extern from "cbhwlib.h":
 
     cdef char* cbNET_UDP_ADDR_INST  "cbNET_UDP_ADDR_INST"   # Cerebus default address
@@ -372,12 +375,15 @@ cdef extern from "cbsdk.h":
     cbSdkResult cbSdkOpen(uint32_t nInstance, cbSdkConnectionType conType, cbSdkConnection con) nogil
     cbSdkResult cbSdkGetType(uint32_t nInstance, cbSdkConnectionType * conType, cbSdkInstrumentType * instType)  # Get connection and instrument type
     cbSdkResult cbSdkClose(uint32_t nInstance)  # Close the library
-    cbSdkResult cbSdkGetTime(uint32_t nInstance, uint32_t * cbtime)  # Get the instrument sample clock time
+    cbSdkResult cbSdkGetTime(uint32_t nInstance, uint64_t * cbtime)  # Get the instrument sample clock time
     cbSdkResult cbSdkGetSpkCache(uint32_t nInstance, uint16_t channel, cbSPKCACHE **cache)
     cbSdkResult cbSdkUnsetTrialConfig(uint32_t nInstance, cbSdkTrialType type)
     cbSdkResult cbSdkGetChannelLabel(int nInstance, uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position)
     cbSdkResult cbSdkSetChannelLabel(uint32_t nInstance, uint16_t channel, const char * label, uint32_t userflags, int32_t * position)
-    cbSdkResult cbSdkGetChannelType(uint32_t nInstance, uint16_t channel, uint8_t* ch_type)
+    # cbSdkResult cbSdkGetChannelType(uint32_t nInstance, uint16_t channel, uint8_t* ch_type)
+    # TODO: wrap Get channel capabilities section from cbsdk.h
+    cbSdkResult cbSdkIsChanAnyDigIn(uint32_t nInstance, uint16_t channel, uint32_t * bResult)
+    cbSdkResult cbSdkIsChanSerial(uint32_t nInstance, uint16_t channel, uint32_t * bResult);
     # Retrieve data of a trial (NULL means ignore), user should allocate enough buffers beforehand, and trial should not be closed during this call
     cbSdkResult cbSdkGetTrialData(  uint32_t nInstance,
                                     uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,

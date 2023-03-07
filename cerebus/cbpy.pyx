@@ -241,7 +241,8 @@ def trial_event(int instance=0, bool reset=False, bool reset_clock=False):
     cdef cbSdkResult res
     cdef cbSdkConfigParam cfg_param
     cdef cbSdkTrialEvent trialevent
-    cdef uint8_t ch_type
+    cdef uint32_t b_dig_in
+    cdef uint32_t b_serial
     
     trial = []
     
@@ -283,10 +284,12 @@ def trial_event(int instance=0, bool reset=False, bool reset_clock=False):
         
         trialevent.waveforms[ev_ix] = NULL
         dig_events = []
-        res = cbSdkGetChannelType(<uint32_t>instance, ch, &ch_type)
+        res = cbSdkIsChanAnyDigIn(<uint32_t> instance, ch, &b_dig_in)
+        res = cbSdkIsChanSerial(<uint32_t> instance, ch, &b_serial)
+
         handle_result(res)
         # Fill values for non-empty digital or serial channels
-        if (ch_type == cbhwlib_cbCHANTYPES.cbCHANTYPE_DIGIN) or (ch_type == cbhwlib_cbCHANTYPES.cbCHANTYPE_SERIAL):
+        if b_dig_in or b_serial:
             num_samples = trialevent.num_samples[ev_ix][0]
             if num_samples:
                 if cfg_param.bDouble:
@@ -412,7 +415,9 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
     cdef cbSdkTrialCont trialcont
     cdef cbSdkTrialEvent trialevent
     cdef cbSdkTrialComment trialcomm
-    cdef uint8_t ch_type
+    # cdef uint8_t ch_type
+    cdef uint32_t b_dig_in
+    cdef uint32_t b_serial
 
     cdef uint32_t tzero = 0
     cdef int comm_ix
@@ -467,10 +472,13 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
             ch = trialevent.chan[channel] # Actual channel number
             trialevent.waveforms[channel] = NULL
             dig_events = []
-            res = cbSdkGetChannelType(<uint32_t>instance, ch, &ch_type)
+
+            res = cbSdkIsChanAnyDigIn(<uint32_t>instance, ch, &b_dig_in)
+            res = cbSdkIsChanSerial(<uint32_t> instance, ch, &b_serial)
+
             handle_result(res)
             # Fill values for non-empty digital or serial channels
-            if (ch_type == cbhwlib_cbCHANTYPES.cbCHANTYPE_DIGIN) or (ch_type == cbhwlib_cbCHANTYPES.cbCHANTYPE_SERIAL):
+            if b_dig_in or b_serial:
                 num_samples = trialevent.num_samples[channel][0]
                 if num_samples > 0:
                     if is_double:
@@ -732,7 +740,7 @@ def time(int instance=0, unit='samples'):
     else:
         raise RuntimeError("Invalid time unit %s" % unit)
 
-    cdef uint32_t cbtime
+    cdef uint64_t cbtime
     res = cbSdkGetTime(<uint32_t>instance, &cbtime)
     handle_result(res)
 
@@ -844,10 +852,10 @@ def get_channel_config(int channel, int instance=0, encoding='utf-8'):
         return <int>res, {}
 
     chaninfo = {
-        'time': cb_chaninfo.time,
-        'chid': cb_chaninfo.chid,
-        'type': cb_chaninfo.type,  # cbPKTTYPE_AINP*
-        'dlen': cb_chaninfo.dlen,  # cbPKT_DLENCHANINFO
+        'time': cb_chaninfo.cbpkt_header.time,
+        'chid': cb_chaninfo.cbpkt_header.chid,
+        'type': cb_chaninfo.cbpkt_header.type,  # cbPKTTYPE_AINP*
+        'dlen': cb_chaninfo.cbpkt_header.dlen,  # cbPKT_DLENCHANINFO
         'chan': cb_chaninfo.chan,
         'proc': cb_chaninfo.proc,
         'bank': cb_chaninfo.bank,
