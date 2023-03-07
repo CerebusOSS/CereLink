@@ -35,7 +35,7 @@ CMAKE_MINIMUM_REQUIRED( VERSION 3.16 )
 project(CBSDK
         DESCRIPTION "Blackrock Neurotech CereBus Software Development Kit"
         LANGUAGES C CXX
-        VERSION 1.0
+        VERSION 7.5.1
         )
 
 # Common Configuration
@@ -463,3 +463,5 @@ ADD_CUSTOM_COMMAND(
     COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/cbsdk/cbsdk.h" "${CMAKE_CURRENT_SOURCE_DIR}/dist/include/cbsdk.h"
     COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/cbhwlib/cbhwlib.h" "${CMAKE_CURRENT_SOURCE_DIR}/dist/include/cbhwlib.h"
 )
+
+include(Packing)
