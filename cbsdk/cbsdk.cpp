@@ -1795,6 +1795,12 @@ CBSDKAPI    cbSdkResult cbSdkIsChanAnyDigIn(uint32_t nInstance, uint16_t channel
     return CBSDKRESULT_SUCCESS;
 }
 
+CBSDKAPI    cbSdkResult cbSdkIsChanSerial(uint32_t nInstance, uint16_t channel, uint32_t* bResult)
+{
+    *bResult = IsChanSerial(channel, nInstance);
+    return CBSDKRESULT_SUCCESS;
+}
+
 CBSDKAPI    cbSdkResult cbSdkIsChanCont(uint32_t nInstance, uint16_t channel, uint32_t* bResult)
 {
     *bResult = IsChanCont(channel, nInstance);

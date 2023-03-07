@@ -474,7 +474,7 @@ CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(uint32_t nInstance, uint16_t channe
 // CBSDKAPI    cbSdkResult cbSdkIsChanFEAnalogIn(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
 // CBSDKAPI    cbSdkResult cbSdkIsChanAIAnalogIn(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
 CBSDKAPI    cbSdkResult cbSdkIsChanAnyDigIn(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
-// CBSDKAPI    cbSdkResult cbSdkIsChanSerial(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
+CBSDKAPI    cbSdkResult cbSdkIsChanSerial(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
 // CBSDKAPI    cbSdkResult cbSdkIsChanDigin(uint32_t nInstance, uint16_t channel, uint32_t* bValid);
 // CBSDKAPI    cbSdkResult cbSdkIsChanDigout(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
 // CBSDKAPI    cbSdkResult cbSdkIsChanAnalogOut(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
