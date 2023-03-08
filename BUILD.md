@@ -21,7 +21,7 @@ If you want to build the Matlab wrappers then you will need to have Matlab devel
 Here are some cmake one-liners that work if your development environment happens to match perfectly. If not, then modify the cmake options according to the [CMake Options](#cmake-options) instructions below.
 
 * Windows:
-    * `cmake -B build -S . -G "Visual Studio 16 2019" -DCMAKE_PREFIX_PATH=C:\Qt\6.4.0\msvc2019_64\lib\cmake\Qt6 -DCMAKE_INSTALL_PREFIX=dist -DBUILD_STATIC=ON -DBUILD_CLI=ON`
+    * `cmake -B build -S . -G "Visual Studio 16 2019" -DCMAKE_PREFIX_PATH=C:\Qt\6.4.2\msvc2019_64\lib\cmake\Qt6 -DCMAKE_INSTALL_PREFIX=dist -DBUILD_STATIC=ON -DBUILD_CLI=ON`
 * MacOS
     * `cmake  -B build -S . -DQt6_DIR=$(brew --prefix qt6)/lib/cmake/Qt6`
     * If you are going to use the Xcode generator then you also need to use the old build system: `-G Xcode -T buildsystem=1`
@@ -62,7 +62,7 @@ Note: This may generate an error related to the CLI builds. Please see further i
 * Open a Terminal or Anaconda prompt and activate your Python environment.
 * Your Python environment must already have Cython, numpy, and pip installed.
 * Change to the CereLink directory.
-* Set the QTDIR environment variable: `set QTDIR=C:\Qt\6.4.0\msvc2019_64`
+* Set the QTDIR environment variable: `set QTDIR=C:\Qt\6.4.2\msvc2019_64`
 * Make sure the CereLink Visual Studio project is closed.
 * `pip install .`
 * or, if you are making a wheel to bring to another machine,
