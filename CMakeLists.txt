@@ -140,6 +140,11 @@ IF(${BUILD_CBMEX})
         ELSE( CMAKE_SIZEOF_VOID_P EQUAL 4 )
             SET( PLATFORM_NAME ${PLATFORM_NAME}64 )
         ENDIF( CMAKE_SIZEOF_VOID_P EQUAL 4 )
+        IF(MSVC)
+            SET( PLATFORM_NAME ${PLATFORM_NAME}/microsoft )
+        ELSEIF(WIN32)
+            SET( PLATFORM_NAME ${PLATFORM_NAME}/mingw64 )
+        ENDIF(MSVC)
         
         SET( MATLAB_ROOT "${PROJECT_SOURCE_DIR}/Matlab" )
         MESSAGE ( STATUS "Search mex libraries at " ${Matlab_INCLUDE_DIRS}/../lib/${PLATFORM_NAME} )
@@ -198,10 +203,10 @@ SET( LIB_SOURCE
     ${PROJECT_SOURCE_DIR}/Central/UDPsocket.h
 )
 IF( WIN32 )
-    LIST ( APPEND LIB_SOURCE
-    ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc
-    ${PROJECT_SOURCE_DIR}/cbhwlib/DataVector.h
-    )  # ??
+    LIST (APPEND LIB_SOURCE ${PROJECT_SOURCE_DIR}/cbhwlib/DataVector.h)
+    IF(MSVC)
+        LIST (APPEND LIB_SOURCE ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc)
+    ENDIF(MSVC)
 ENDIF( WIN32 )
 
 # Qt-MOC headers that need it
@@ -218,9 +223,9 @@ endif()
 SET( LIB_SOURCE_CBMEX
     ${PROJECT_SOURCE_DIR}/cbmex/cbmex.cpp
 )
-IF( WIN32 )
+IF( MSVC )
     LIST ( APPEND LIB_SOURCE_CBMEX ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc )
-ENDIF( WIN32 )
+ENDIF( MSVC )
 
 
 ##########################################################################################
@@ -276,13 +281,15 @@ IF(${BUILD_CBMEX} AND MATLAB_FOUND )
     
     # Want package name to be cbmex without prefix
     IF( WIN32 )
-        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES
-            # Do not output to Debug/Release directories on Windows
-            PREFIX "../" 
+        # Do not output to Debug/Release directories on Windows
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "../")
+        IF (MSVC)
             # Manually export mexFunction because __declspec(dllexport) conflicts with its definition in mex.h
-            LINK_FLAGS "/EXPORT:mexFunction"
-            # MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
-        )
+            SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES
+                LINK_FLAGS "/EXPORT:mexFunction"
+                # MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+            )
+        ENDIF(MSVC)
     ELSEIF( APPLE )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "" )
         # This is for normal users of MATLAB on OSX without homebrew 
@@ -433,9 +440,9 @@ IF(${BUILD_HDF5} AND HDF5_FOUND )
         ${PROJECT_SOURCE_DIR}/n2h5/NevNsx.h
     )
     MESSAGE ( STATUS "Add n2h5 utility build target")
-    IF( WIN32 )
+    IF( MSVC )
         SET ( N2H5_SOURCE ${N2H5_SOURCE} ${PROJECT_SOURCE_DIR}/n2h5/res/n2h5_res.rc )
-    ENDIF( WIN32 )
+    ENDIF( MSVC )
     ADD_EXECUTABLE( ${N2H5_NAME} ${N2H5_SOURCE} )
     TARGET_INCLUDE_DIRECTORIES( ${N2H5_NAME} PRIVATE ${LIB_INCL_DIRS} ${HDF5_INCLUDE_DIRS})
     TARGET_LINK_LIBRARIES (${N2H5_NAME} ${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})

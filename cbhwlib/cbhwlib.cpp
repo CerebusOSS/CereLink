@@ -33,12 +33,14 @@
     #include <sys/file.h>
     #include <sys/types.h>
     #include <sys/stat.h>
-    #include <unistd.h>
     #include <errno.h>
     #include <time.h>
 #endif
 #endif
 #ifndef _MSC_VER
+#include <unistd.h>
+#endif
+#ifndef WIN32
     #define Sleep(x) usleep((x) * 1000)
     #define strncpy_s( dst, dstSize, src, count ) strncpy( dst, src, count < dstSize ? count : dstSize )
 #endif                                // so it should probably be moved...
