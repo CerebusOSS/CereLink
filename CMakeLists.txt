@@ -461,6 +461,13 @@ INSTALL( TARGETS ${INSTALL_TARGET_LIST}
     ARCHIVE DESTINATION lib${LIB_SUFFIX}
 )
 INSTALL( FILES ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.h ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h DESTINATION include )
+if(WIN32)
+    install(
+            FILES
+            $<TARGET_RUNTIME_DLLS:${LIB_NAME}>
+            TYPE BIN
+    )
+endif(WIN32)
 
 #########################################################################################
 # Shared & Static post-build copy the header files into the dist directory.
