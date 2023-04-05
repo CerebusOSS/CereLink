@@ -70,16 +70,6 @@ ENDIF()
 
 ##########################################################################################
 # Misc Configuration
-# -output directory
-SET( CMAKE_ARCHIVE_OUTPUT_DIRECTORY         ${CMAKE_CURRENT_SOURCE_DIR}/dist/lib${LIB_SUFFIX} )
-SET( CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG   ${CMAKE_CURRENT_SOURCE_DIR}/dist/lib${LIB_SUFFIX} )
-SET( CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_SOURCE_DIR}/dist/lib${LIB_SUFFIX} )
-SET( CMAKE_LIBRARY_OUTPUT_DIRECTORY         ${CMAKE_CURRENT_SOURCE_DIR}/dist/lib${LIB_SUFFIX} )
-SET( CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG   ${CMAKE_CURRENT_SOURCE_DIR}/dist/lib${LIB_SUFFIX} )
-SET( CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_SOURCE_DIR}/dist/lib${LIB_SUFFIX} )
-SET( CMAKE_RUNTIME_OUTPUT_DIRECTORY         ${CMAKE_CURRENT_SOURCE_DIR}/dist/bin )
-SET( CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG   ${CMAKE_CURRENT_SOURCE_DIR}/dist/bin )
-SET( CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_SOURCE_DIR}/dist/bin )
 # -Make sure debug builds are recognized
 SET(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
 
@@ -145,7 +135,7 @@ IF(${BUILD_CBMEX})
         ELSEIF(WIN32)
             SET( PLATFORM_NAME ${PLATFORM_NAME}/mingw64 )
         ENDIF(MSVC)
-        
+
         SET( MATLAB_ROOT "${PROJECT_SOURCE_DIR}/Matlab" )
         MESSAGE ( STATUS "Search mex libraries at " ${Matlab_INCLUDE_DIRS}/../lib/${PLATFORM_NAME} )
         FILE( GLOB_RECURSE Matlab_LIBRARIES ${Matlab_INCLUDE_DIRS}/../lib/${PLATFORM_NAME}/libm*.* )
@@ -246,6 +236,11 @@ ELSE()
         SET_TARGET_PROPERTIES( ${LIB_NAME} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
     ENDIF(NOT APPLE)
 ENDIF( WIN32 )
+SET_TARGET_PROPERTIES(
+        ${LIB_NAME}
+        PROPERTIES
+        SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
+)
 
 
 ##
@@ -380,6 +375,8 @@ endfunction()
 ##
 # test
 IF(${BUILD_TEST})
+    SET(TEST_TARGET_LIST)
+
     ADD_EXECUTABLE(testcbsdk
             ${PROJECT_SOURCE_DIR}/samples/TestCBSDK/testcbsdk.cpp
             ${LIB_SOURCE} ${LIB_HEADERS_MOC}
@@ -396,26 +393,30 @@ IF(${BUILD_TEST})
                wsock32 ws2_32 winmm
         )
     ENDIF(WIN32)
+    LIST(APPEND TEST_TARGET_LIST testcbsdk)
 
     ADD_EXECUTABLE(test_io ${PROJECT_SOURCE_DIR}/samples/TestIO/test_io.cpp )
     TARGET_INCLUDE_DIRECTORIES(test_io PRIVATE
         ${LIB_INCL_DIRS}
         ${PROJECT_SOURCE_DIR}/cbsdk)
     TARGET_LINK_LIBRARIES(test_io ${LIB_NAME} )
+    LIST(APPEND TEST_TARGET_LIST test_io)
 
     ADD_EXECUTABLE(test_comments ${PROJECT_SOURCE_DIR}/samples/TestComments/test_comments.cpp )
     TARGET_INCLUDE_DIRECTORIES(test_comments PRIVATE
         ${LIB_INCL_DIRS}
         ${PROJECT_SOURCE_DIR}/cbsdk)
     TARGET_LINK_LIBRARIES(test_comments ${LIB_NAME} )
+    LIST(APPEND TEST_TARGET_LIST test_comments)
 
     ADD_EXECUTABLE(test_analog_out ${PROJECT_SOURCE_DIR}/samples/TestAnalogOut/test_analog_out.cpp )
     TARGET_INCLUDE_DIRECTORIES(test_analog_out PRIVATE
         ${LIB_INCL_DIRS}
         ${PROJECT_SOURCE_DIR}/cbsdk)
     TARGET_LINK_LIBRARIES(test_analog_out ${LIB_NAME})
+    LIST(APPEND TEST_TARGET_LIST test_analog_out)
 
-    LIST(APPEND INSTALL_TARGET_LIST testcbsdk test_io test_comments test_analog_out)
+    LIST(APPEND INSTALL_TARGET_LIST ${TEST_TARGET_LIST})
 
     IF(WIN32)
         findQtInstallationTool("windeployqt")
@@ -428,6 +429,19 @@ IF(${BUILD_TEST})
         add_custom_command(TARGET test_analog_out POST_BUILD
             COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
     ENDIF(WIN32)
+
+    if(NOT CMAKE_INSTALL_RPATH)
+        set(LIBDIR "../lib64")
+        foreach(test_app ${TEST_TARGET_LIST})
+            if(APPLE)
+                set_property(TARGET ${test_app} APPEND
+                        PROPERTY INSTALL_RPATH "@executable_path/;@executable_path/${LIBDIR};@executable_path/../Frameworks")
+            elseif(UNIX)
+                set_property(TARGET ${test_app}
+                        PROPERTY INSTALL_RPATH "\$ORIGIN:\$ORIGIN/${LIBDIR}")
+            endif(APPLE)
+        endforeach()
+    endif(NOT CMAKE_INSTALL_RPATH)
 ENDIF(${BUILD_TEST})
 
 ##
@@ -478,4 +492,9 @@ ADD_CUSTOM_COMMAND(
     COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/cbhwlib/cbhwlib.h" "${CMAKE_CURRENT_SOURCE_DIR}/dist/include/cbhwlib.h"
 )
 
+# --------- #
+# Packaging #
+# --------- #
+# Child script handles most details.
+# Invoke with `cmake --build <cmake_build_dir> --target package`
 include(Packing)
