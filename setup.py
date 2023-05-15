@@ -92,24 +92,25 @@ def get_extras():
                     raise RuntimeError("Cannot find Qt in registry nor QTDIR is set")
 
             # Parse qt_path to see if it is qt5
-            _is_qt5 = False
-            tmp = (path, '')
-            while tmp[0] is not '':
+            qt_ver = ""
+            tmp = (path, "")
+            while tmp[0] != "":
                 tmp = os.path.split(tmp[0])
-                mysplit = tmp[1].split('.')
+                mysplit = tmp[1].split(".")
                 if len(mysplit) > 1:
-                    if mysplit[0][-1] == '5':
-                        _is_qt5 = True
-                        tmp = ('', '')
-            return path, _is_qt5
+                    ver_str = mysplit[0][-1]
+                    if ver_str in ["4", "5", "6"]:
+                        qt_ver = ver_str
+                        tmp = ("", "")
+            return path, qt_ver
 
-        qt_path, is_qt5 = _get_qt_path()
+        qt_path, qt_ver = _get_qt_path()
         x_link_args += ['/LIBPATH:{path}'.format(path=os.path.join(qt_path, 'lib'))]
         x_includes += [os.path.join(qt_path, 'include')]
-        if is_qt5:
-            x_libs += ["Qt5Core", "Qt5Xml", "Qt5Concurrent"]
-        else:
+        if qt_ver == "4":
             x_libs += ["QtCore4", "QtXml4"]
+        else:
+            x_libs += ["Qt" + qt_ver + _ for _ in ["Core", "Xml", "Concurrent"]]
     else:  # Linux
         x_link_args += ['-L{path}'.format(path=os.path.join(dist_path, 'lib{arch}'.format(arch=arch)))]
         # For Qt linking at run time, check `qtchooser -print-env`
@@ -123,10 +124,10 @@ def get_extras():
         p = subprocess.Popen('qmake -v', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         qt_ver = re.findall('Qt version .', p.stdout.read().decode())[0][-1]
         # TODO: qmake -v might give different version string text for Qt4 so we will need a smarter parser.
-        if qt_ver == '5':
-            x_libs += ["Qt5Core", "Qt5Xml", "Qt5Concurrent"]
-        elif qt_ver == '4':
+        if qt_ver == '4':
             x_libs += ["QtCore", "QtXml"]
+        else:
+            x_libs += ["Qt" + qt_ver + _ for _ in ["Core", "Xml", "Concurrent"]]
 
     return x_includes, x_libs, x_link_args
 
@@ -144,7 +145,7 @@ cbpy_module = Extension('cerebus.cbpy', **extension_kwargs)
 
 setup(
     name='cerebus',
-    version='0.0.4',
+    version='0.0.5',
     description='Cerebus Link',
     long_description='Cerebus Link Python Package',
     author='dashesy',

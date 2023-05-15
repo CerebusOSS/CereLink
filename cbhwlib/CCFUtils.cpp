@@ -2,7 +2,7 @@
 //////////////////////////////////////////////////////////////////////
 //
 // (c) Copyright 2003-2008 Cyberkinetics, Inc.
-// (c) Copyright 2008-2013 Blackrock Microsystems
+// (c) Copyright 2008-2021 Blackrock Microsystems
 //
 // $Workfile: CCFUtils.cpp $
 // $Archive: /Cerebus/Human/WindowsApps/cbhwlib/CCFUtils.cpp $
@@ -20,6 +20,7 @@
 #include "CCFUtilsXml.h"
 #include "CCFUtilsConcurrent.h"
 #include "cbhwlib.h"
+#include "cbHwlibHi.h"
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -93,82 +94,133 @@ ccfResult CCFUtils::SendCCF()
     {
         if (data.filtinfo[i].filt)
         {
-            data.filtinfo[i].type = cbPKTTYPE_FILTSET;
+            data.filtinfo[i].cbpkt_header.type = cbPKTTYPE_FILTSET;
             cbSendPacket(&data.filtinfo[i], m_nInstance);
         }
     }
     // Chaninfo
+    int nAinChan = 1;
+    int nAoutChan = 1;
+    int nDinChan = 1;
+    int nSerialChan = 1;
+    int nDoutChan = 1;
+    uint32_t nChannelNumber = 0;
     for (int i = 0; i < cbMAXCHANS; ++i)
     {
         if (data.isChan[i].chan)
         {
-            data.isChan[i].type = cbPKTTYPE_CHANSET;
-            cbSendPacket(&data.isChan[i], m_nInstance);
+            // this function is supposed to line up channels based on channel capabilities.  It doesn't
+            // work with the multiple NSP setup.  TODO look into this at a future time
+            nChannelNumber = 0;
+            switch (data.isChan[i].chancaps)
+            {
+            case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_ISOLATED | cbCHAN_AINP:  // FE channels
+                nChannelNumber = cbGetExpandedChannelNumber(data.isChan[i].cbpkt_header.instrument + 1, data.isChan[i].chan);
+                break;
+            case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_AINP:  // Analog input channels
+                nChannelNumber = GetAIAnalogInChanNumber(nAinChan++);
+                break;
+            case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_AOUT:  // Analog & Audio output channels
+                nChannelNumber = GetAnalogOrAudioOutChanNumber(nAoutChan++);
+                break;
+            case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_DINP:  // digital & serial input channels
+                if (data.isChan[i].dinpcaps & cbDINP_SERIALMASK)
+                {
+                    nChannelNumber = GetSerialChanNumber(nSerialChan++);
+                }
+                else
+                {
+                    nChannelNumber = GetDiginChanNumber(nDinChan++);
+                }
+                break;
+            case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_DOUT:  // digital output channels
+                nChannelNumber = GetDigoutChanNumber(nDoutChan++);
+                break;
+            default:
+                nChannelNumber = 0;
+            }
+            // send it if it's a valid channel number
+            if ((0 != nChannelNumber))  // && (data.isChan[i].chan))
+            {
+                data.isChan[i].chan = nChannelNumber;
+                data.isChan[i].cbpkt_header.type = cbPKTTYPE_CHANSET;
+                data.isChan[i].cbpkt_header.instrument = data.isChan[i].proc - 1;   // send to the correct instrument
+                cbSendPacket(&data.isChan[i], m_nInstance);
+            }
         }
     }
     // Sorting
     {
-        if (data.isSS_Statistics.type)
+        if (data.isSS_Statistics.cbpkt_header.type)
         {
-            data.isSS_Statistics.type = cbPKTTYPE_SS_STATISTICSSET;
+            data.isSS_Statistics.cbpkt_header.type = cbPKTTYPE_SS_STATISTICSSET;
             cbSendPacket(&data.isSS_Statistics, m_nInstance);
         }
-        for (int i = 0; i < cbNUM_ANALOG_CHANS; ++i)
+        for (uint32_t nChan = 0; nChan < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++nChan)
         {
-            if (data.isSS_NoiseBoundary[i].chan)
+            if (data.isSS_NoiseBoundary[nChan].chan)
             {
-                data.isSS_NoiseBoundary[i].type = cbPKTTYPE_SS_NOISE_BOUNDARYSET;
-                cbSendPacket(&data.isSS_NoiseBoundary[i], m_nInstance);
+                data.isSS_NoiseBoundary[nChan].cbpkt_header.type = cbPKTTYPE_SS_NOISE_BOUNDARYSET;
+                cbSendPacket(&data.isSS_NoiseBoundary[nChan], m_nInstance);
             }
         }
-        if (data.isSS_Detect.type)
+        if (data.isSS_Detect.cbpkt_header.type)
         {
-            data.isSS_Detect.type  = cbPKTTYPE_SS_DETECTSET;
+            data.isSS_Detect.cbpkt_header.type  = cbPKTTYPE_SS_DETECTSET;
             cbSendPacket(&data.isSS_Detect, m_nInstance);
         }
-        if (data.isSS_ArtifactReject.type)
+        if (data.isSS_ArtifactReject.cbpkt_header.type)
         {
-            data.isSS_ArtifactReject.type = cbPKTTYPE_SS_ARTIF_REJECTSET;
+            data.isSS_ArtifactReject.cbpkt_header.type = cbPKTTYPE_SS_ARTIF_REJECTSET;
             cbSendPacket(&data.isSS_ArtifactReject, m_nInstance);
         }
     }
     // Sysinfo
-    if (data.isSysInfo.type)
+    if (data.isSysInfo.cbpkt_header.type)
     {
-        data.isSysInfo.type = cbPKTTYPE_SYSSETSPKLEN;
+        data.isSysInfo.cbpkt_header.type = cbPKTTYPE_SYSSETSPKLEN;
         cbSendPacket(&data.isSysInfo, m_nInstance);
     }
     // LNC
-    if (data.isLnc.type)
+    if (data.isLnc.cbpkt_header.type)
     {
-        data.isLnc.type = cbPKTTYPE_LNCSET;
+        data.isLnc.cbpkt_header.type = cbPKTTYPE_LNCSET;
         cbSendPacket(&data.isLnc, m_nInstance);
     }
-    // Anlog output waveforms
-    for (int i = 0; i < AOUT_NUM_GAIN_CHANS; ++i)
+    // Analog output waveforms
+    for (uint32_t nChan = 0; nChan < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogoutChans(); ++nChan)
     {
-        for (int j = 0; j < cbMAX_AOUT_TRIGGER; ++j)
+        for (int nTrigger = 0; nTrigger < cbMAX_AOUT_TRIGGER; ++nTrigger)
         {
-            if (data.isWaveform[i][j].chan)
+            if (data.isWaveform[nChan][nTrigger].chan)
             {
-                data.isWaveform[i][j].type = cbPKTTYPE_WAVEFORMSET;
-                cbSendPacket(&data.isWaveform[i][j], m_nInstance);
+                data.isWaveform[nChan][nTrigger].chan = GetAnalogOutChanNumber(nChan + 1);
+                data.isWaveform[nChan][nTrigger].cbpkt_header.instrument = cbGetChanInstrument(data.isWaveform[nChan][nTrigger].chan);
+                data.isWaveform[nChan][nTrigger].cbpkt_header.type = cbPKTTYPE_WAVEFORMSET;
+                cbSendPacket(&data.isWaveform[nChan][nTrigger], m_nInstance);
             }
         }
     }
     // NTrode
-    for (int i = 0; i < cbMAXNTRODES; ++i)
+    for (int nNTrode = 0; nNTrode < cbMAXNTRODES; ++nNTrode)
     {
-        if (data.isNTrodeInfo[i].ntrode)
+        char szNTrodeLabel[cbLEN_STR_LABEL + 1];     // leave space for trailing null
+        memset(szNTrodeLabel, 0, sizeof(szNTrodeLabel));
+        cbGetNTrodeInfo(nNTrode + 1, szNTrodeLabel, NULL, NULL, NULL, NULL);
+
+        if ((0 != strlen(szNTrodeLabel)) && (cbGetNTrodeInstrument(nNTrode + 1) == data.isNTrodeInfo->cbpkt_header.instrument + 1))
         {
-            data.isNTrodeInfo[i].type = cbPKTTYPE_SETNTRODEINFO;
-            cbSendPacket(&data.isNTrodeInfo[i], m_nInstance);
+            if (data.isNTrodeInfo[nNTrode].ntrode)
+            {
+                data.isNTrodeInfo[nNTrode].cbpkt_header.type = cbPKTTYPE_SETNTRODEINFO;
+                cbSendPacket(&data.isNTrodeInfo[nNTrode], m_nInstance);
+            }
         }
     }
     // Adaptive filter
-    if (data.isAdaptInfo.type)
+    if (data.isAdaptInfo.cbpkt_header.type)
     {
-        data.isAdaptInfo.type = cbPKTTYPE_ADAPTFILTSET;
+        data.isAdaptInfo.cbpkt_header.type = cbPKTTYPE_ADAPTFILTSET;
         cbSendPacket(&data.isAdaptInfo, m_nInstance);
     }
     // if any spike sorting packets were read and the protocol is before the combined firmware,
@@ -185,9 +237,9 @@ ccfResult CCFUtils::SendCCF()
         cbSendPacket(&isSSStatistics, m_nInstance);
 
     }
-    if (data.isSS_Status.type)
+    if (data.isSS_Status.cbpkt_header.type)
     {
-        data.isSS_Status.type = cbPKTTYPE_SS_STATUSSET;
+        data.isSS_Status.cbpkt_header.type = cbPKTTYPE_SS_STATUSSET;
         data.isSS_Status.cntlNumUnits.nMode = ADAPT_NEVER; // Prevent rebuilding spike sorting when loading ccf.
         cbSendPacket(&data.isSS_Status, m_nInstance);
     }
@@ -283,7 +335,7 @@ ccfResult CCFUtils::ReadCCF(LPCSTR szFileName, bool bConvert)
     if (szFileName == NULL)
     {
         uint32_t nIdx = cb_library_index[m_nInstance];
-        if (!cb_library_initialized[nIdx] || cb_cfg_buffer_ptr[nIdx] == NULL || cb_cfg_buffer_ptr[nIdx]->sysinfo.chid == 0)
+        if (!cb_library_initialized[nIdx] || cb_cfg_buffer_ptr[nIdx] == NULL || cb_cfg_buffer_ptr[nIdx]->sysinfo.cbpkt_header.chid == 0)
             res = CCFRESULT_ERR_OFFLINE;
         else
             ReadCCFOfNSP(); // Read from NSP
@@ -369,10 +421,10 @@ void CCFUtils::ReadCCFOfNSP()
         data.filtinfo[i] = cb_cfg_buffer_ptr[nIdx]->filtinfo[0][cbFIRST_DIGITAL_FILTER + i - 1];    // First is 1 based, but index is 0 based
     for (int i = 0; i < cbMAXCHANS; ++i)
         data.isChan[i] = cb_cfg_buffer_ptr[nIdx]->chaninfo[i];
-    data.isAdaptInfo = cb_cfg_buffer_ptr[nIdx]->adaptinfo;
+    data.isAdaptInfo = cb_cfg_buffer_ptr[nIdx]->adaptinfo[cbNSP1];
     data.isSS_Detect = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktDetect;
     data.isSS_ArtifactReject = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktArtifReject;
-    for (int i = 0; i < cbNUM_ANALOG_CHANS; ++i)
+    for (uint32_t i = 0; i < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++i)
         data.isSS_NoiseBoundary[i] = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktNoiseBoundary[i];
     data.isSS_Statistics = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktStatistics;
     {
@@ -383,11 +435,11 @@ void CCFUtils::ReadCCFOfNSP()
     {
         data.isSysInfo = cb_cfg_buffer_ptr[nIdx]->sysinfo;
         // only set spike len and pre trigger len
-        data.isSysInfo.type = cbPKTTYPE_SYSSETSPKLEN;
+        data.isSysInfo.cbpkt_header.type = cbPKTTYPE_SYSSETSPKLEN;
     }
     for (int i = 0; i < cbMAXNTRODES; ++i)
         data.isNTrodeInfo[i] = cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[i];
-    data.isLnc = cb_cfg_buffer_ptr[nIdx]->isLnc;
+    data.isLnc = cb_cfg_buffer_ptr[nIdx]->isLnc[cbNSP1];
     for (int i = 0; i < AOUT_NUM_GAIN_CHANS; ++i)
     {
         for (int j = 0; j < cbMAX_AOUT_TRIGGER; ++j)
@@ -397,6 +449,9 @@ void CCFUtils::ReadCCFOfNSP()
             data.isWaveform[i][j].active = 0;
         }
     }
+    // Take a copy if needed
+    if (m_pCCF)
+        *m_pCCF = dynamic_cast<ccfXml*>(m_pImpl)->m_data;
 }
 
 // Author & Date:   Ehsan Azar   12 April 2012

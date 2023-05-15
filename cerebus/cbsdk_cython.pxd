@@ -10,6 +10,9 @@ Purpose: Cython interface for cbsdk_small
 from libc.stdint cimport uint32_t, int32_t, uint16_t, int16_t, uint8_t
 from libcpp cimport bool
 
+cdef extern from "stdint.h":
+    ctypedef unsigned long long uint64_t
+
 cdef extern from "cbhwlib.h":
 
     cdef char* cbNET_UDP_ADDR_INST  "cbNET_UDP_ADDR_INST"   # Cerebus default address
@@ -111,12 +114,17 @@ cdef extern from "cbhwlib.h":
         int16_t  time  # time offset into spike window
         int16_t  min   # minimum value for the hoop window
         int16_t  max   # maximum value for the hoop window
+
+    ctypedef struct cbPKT_HEADER:
+        uint64_t        time            # system clock timestamp
+        uint16_t        chid            # channel identifier
+        uint8_t         type            # packet type
+        uint16_t        dlen            # length of data field in 32-bit chunks
+        uint8_t         instrument      # instrument number to transmit this packets
+        uint8_t         reserved[2]     # reserved for future
         
     ctypedef struct cbPKT_CHANINFO:
-        uint32_t            time                    # system clock timestamp
-        uint16_t            chid                    # 0x8000
-        uint8_t             type                    # cbPKTTYPE_AINP*
-        uint8_t             dlen                    # cbPKT_DLENCHANINFO
+        cbPKT_HEADER        cbpkt_header
         uint32_t            chan                    # actual channel id of the channel being configured
         uint32_t            proc                    # the address of the processor on which the channel resides
         uint32_t            bank                    # the address of the bank on which the channel resides
@@ -177,10 +185,7 @@ cdef extern from "cbhwlib.h":
         uint32_t    lptype      # low-pass filter type
 
     ctypedef struct cbPKT_SPK:
-        uint32_t    time                # system clock timestamp
-        uint16_t    chid                # channel identifier
-        uint8_t     unit                # unit identification (0=unclassified, 1-5=classified, 255=artifact, 254=background)
-        uint8_t     dlen                # length of what follows ... always  cbPKTDLEN_SPK
+        cbPKT_HEADER        cbpkt_header
         float       fPattern[3]         # values of the pattern space (Normal uses only 2, PCA uses third)
         int16_t     nPeak
         int16_t     nValley
@@ -370,12 +375,15 @@ cdef extern from "cbsdk.h":
     cbSdkResult cbSdkOpen(uint32_t nInstance, cbSdkConnectionType conType, cbSdkConnection con) nogil
     cbSdkResult cbSdkGetType(uint32_t nInstance, cbSdkConnectionType * conType, cbSdkInstrumentType * instType)  # Get connection and instrument type
     cbSdkResult cbSdkClose(uint32_t nInstance)  # Close the library
-    cbSdkResult cbSdkGetTime(uint32_t nInstance, uint32_t * cbtime)  # Get the instrument sample clock time
+    cbSdkResult cbSdkGetTime(uint32_t nInstance, uint64_t * cbtime)  # Get the instrument sample clock time
     cbSdkResult cbSdkGetSpkCache(uint32_t nInstance, uint16_t channel, cbSPKCACHE **cache)
     cbSdkResult cbSdkUnsetTrialConfig(uint32_t nInstance, cbSdkTrialType type)
     cbSdkResult cbSdkGetChannelLabel(int nInstance, uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position)
     cbSdkResult cbSdkSetChannelLabel(uint32_t nInstance, uint16_t channel, const char * label, uint32_t userflags, int32_t * position)
-    cbSdkResult cbSdkGetChannelType(uint32_t nInstance, uint16_t channel, uint8_t* ch_type)
+    # cbSdkResult cbSdkGetChannelType(uint32_t nInstance, uint16_t channel, uint8_t* ch_type)
+    # TODO: wrap Get channel capabilities section from cbsdk.h
+    cbSdkResult cbSdkIsChanAnyDigIn(uint32_t nInstance, uint16_t channel, uint32_t * bResult)
+    cbSdkResult cbSdkIsChanSerial(uint32_t nInstance, uint16_t channel, uint32_t * bResult);
     # Retrieve data of a trial (NULL means ignore), user should allocate enough buffers beforehand, and trial should not be closed during this call
     cbSdkResult cbSdkGetTrialData(  uint32_t nInstance,
                                     uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,

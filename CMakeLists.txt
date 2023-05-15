@@ -30,12 +30,14 @@
 
 
 CMAKE_MINIMUM_REQUIRED( VERSION 3.16 )
+SET(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake" ${CMAKE_MODULE_PATH})
+include(AppleSilicon)
 # cmake_policy(SET CMP0091 NEW)
 
 project(CBSDK
         DESCRIPTION "Blackrock Neurotech CereBus Software Development Kit"
         LANGUAGES C CXX
-        VERSION 7.0.6
+        VERSION 7.5.1
         )
 
 # Common Configuration
@@ -70,9 +72,7 @@ ENDIF()
 # Misc Configuration
 # -Make sure debug builds are recognized
 SET(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
-# -Find additional cmake modules
-SET( CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR} )
-LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
+
 # -?
 ADD_DEFINITIONS( -DCBSDK_EXPORTS )
 IF( WIN32 )
@@ -130,7 +130,12 @@ IF(${BUILD_CBMEX})
         ELSE( CMAKE_SIZEOF_VOID_P EQUAL 4 )
             SET( PLATFORM_NAME ${PLATFORM_NAME}64 )
         ENDIF( CMAKE_SIZEOF_VOID_P EQUAL 4 )
-        
+        IF(MSVC)
+            SET( PLATFORM_NAME ${PLATFORM_NAME}/microsoft )
+        ELSEIF(WIN32)
+            SET( PLATFORM_NAME ${PLATFORM_NAME}/mingw64 )
+        ENDIF(MSVC)
+
         SET( MATLAB_ROOT "${PROJECT_SOURCE_DIR}/Matlab" )
         MESSAGE ( STATUS "Search mex libraries at " ${Matlab_INCLUDE_DIRS}/../lib/${PLATFORM_NAME} )
         FILE( GLOB_RECURSE Matlab_LIBRARIES ${Matlab_INCLUDE_DIRS}/../lib/${PLATFORM_NAME}/libm*.* )
@@ -188,25 +193,29 @@ SET( LIB_SOURCE
     ${PROJECT_SOURCE_DIR}/Central/UDPsocket.h
 )
 IF( WIN32 )
-    LIST ( APPEND LIB_SOURCE
-    ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc
-    ${PROJECT_SOURCE_DIR}/cbhwlib/DataVector.h
-    )  # ??
+    LIST (APPEND LIB_SOURCE ${PROJECT_SOURCE_DIR}/cbhwlib/DataVector.h)
+    IF(MSVC)
+        LIST (APPEND LIB_SOURCE ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc)
+    ENDIF(MSVC)
 ENDIF( WIN32 )
 
 # Qt-MOC headers that need it
 SET( LIB_HEADERS
     ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.h
 )
-qt_wrap_cpp( LIB_HEADERS_MOC ${LIB_HEADERS} )
+if (${QT_VERSION_MAJOR} EQUAL 5)
+    qt5_wrap_cpp( LIB_HEADERS_MOC ${LIB_HEADERS} )
+else()
+    qt_wrap_cpp( LIB_HEADERS_MOC ${LIB_HEADERS} )
+endif()
 
 # Source for both cbmex and octave targets
 SET( LIB_SOURCE_CBMEX
     ${PROJECT_SOURCE_DIR}/cbmex/cbmex.cpp
 )
-IF( WIN32 )
+IF( MSVC )
     LIST ( APPEND LIB_SOURCE_CBMEX ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc )
-ENDIF( WIN32 )
+ENDIF( MSVC )
 
 
 ##########################################################################################
@@ -267,13 +276,15 @@ IF(${BUILD_CBMEX} AND MATLAB_FOUND )
     
     # Want package name to be cbmex without prefix
     IF( WIN32 )
-        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES
-            # Do not output to Debug/Release directories on Windows
-            PREFIX "../" 
+        # Do not output to Debug/Release directories on Windows
+        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "../")
+        IF (MSVC)
             # Manually export mexFunction because __declspec(dllexport) conflicts with its definition in mex.h
-            LINK_FLAGS "/EXPORT:mexFunction"
-            # MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
-        )
+            SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES
+                LINK_FLAGS "/EXPORT:mexFunction"
+                # MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+            )
+        ENDIF(MSVC)
     ELSEIF( APPLE )
         SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "" )
         # This is for normal users of MATLAB on OSX without homebrew 
@@ -443,9 +454,9 @@ IF(${BUILD_HDF5} AND HDF5_FOUND )
         ${PROJECT_SOURCE_DIR}/n2h5/NevNsx.h
     )
     MESSAGE ( STATUS "Add n2h5 utility build target")
-    IF( WIN32 )
+    IF( MSVC )
         SET ( N2H5_SOURCE ${N2H5_SOURCE} ${PROJECT_SOURCE_DIR}/n2h5/res/n2h5_res.rc )
-    ENDIF( WIN32 )
+    ENDIF( MSVC )
     ADD_EXECUTABLE( ${N2H5_NAME} ${N2H5_SOURCE} )
     TARGET_INCLUDE_DIRECTORIES( ${N2H5_NAME} PRIVATE ${LIB_INCL_DIRS} ${HDF5_INCLUDE_DIRS})
     TARGET_LINK_LIBRARIES (${N2H5_NAME} ${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})
@@ -464,6 +475,13 @@ INSTALL( TARGETS ${INSTALL_TARGET_LIST}
     ARCHIVE DESTINATION lib${LIB_SUFFIX}
 )
 INSTALL( FILES ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.h ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h DESTINATION include )
+if(WIN32)
+    install(
+            FILES
+            $<TARGET_RUNTIME_DLLS:${LIB_NAME}>
+            TYPE BIN
+    )
+endif(WIN32)
 
 #########################################################################################
 # Shared & Static post-build copy the header files into the dist directory.

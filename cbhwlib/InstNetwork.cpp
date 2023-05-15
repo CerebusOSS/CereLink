@@ -1,7 +1,7 @@
 // =STS=> InstNetwork.cpp[2732].aa08   open     SMID:8 
 //////////////////////////////////////////////////////////////////////////////
 //
-// (c) Copyright 2010 - 2011 Blackrock Microsystems
+// (c) Copyright 2010 - 2020 Blackrock Microsystems
 //
 // $Workfile: InstNetwork.cpp $
 // $Archive: /common/InstNetwork.cpp $
@@ -39,6 +39,7 @@ InstNetwork::InstNetwork(STARTUP_OPTIONS startupOption) :
     m_dataCounter(0),
     m_nLastNumberOfPacketsReceived(0),
     m_runlevel(cbRUNLEVEL_SHUTDOWN),
+    m_bInitChanCount(false),
     m_bStandAlone(true),
     m_instInfo(0),
     m_nInstance(0),
@@ -50,7 +51,8 @@ InstNetwork::InstNetwork(STARTUP_OPTIONS startupOption) :
     m_bNonBlocking(true),
     m_nRecBufSize(NSP_REC_BUF_SIZE),
     m_strInIP(NSP_IN_ADDRESS),
-    m_strOutIP(NSP_OUT_ADDRESS)
+    m_strOutIP(NSP_OUT_ADDRESS),
+    m_nRange(0)
 {
 
     qRegisterMetaType<NetEventType>("NetEventType"); // For QT connect to recognize this type
@@ -76,7 +78,7 @@ void InstNetwork::ShutDown()
     if (m_bStandAlone)
         m_icInstrument.Shutdown();
     else
-        cbSetSystemRunLevel(cbRUNLEVEL_SHUTDOWN, 0, 0, m_nInstance);
+        cbSetSystemRunLevel(cbRUNLEVEL_SHUTDOWN, 0, 0, cbNSP1 - 1, m_nInstance);
 }
 
 // Author & Date: Ehsan Azar       23 Sept 2010
@@ -86,7 +88,7 @@ void InstNetwork::StandBy()
     if (m_bStandAlone)
         m_icInstrument.Standby();
     else
-        cbSetSystemRunLevel(cbRUNLEVEL_HARDRESET, 0, 0, m_nInstance);
+        cbSetSystemRunLevel(cbRUNLEVEL_HARDRESET, 0, 0, cbNSP1 - 1, m_nInstance);
 }
 
 // Author & Date: Ehsan Azar       15 March 2010
@@ -127,6 +129,67 @@ void InstNetwork::OnNetCommand(NetCommandType cmd, unsigned int /*code*/)
     }
 }
 
+
+void InstNetwork::SetNumChans()
+{
+    uint32_t nChan;
+    uint32_t nCaps;
+    uint32_t nAoutCaps;
+    uint32_t nDinpCaps;
+    uint32_t nNumFEChans = 0;
+    uint32_t nNumAnainChans = 0;
+    uint32_t nNumAoutChans = 0;
+    uint32_t nNumAudioChans = 0;
+    uint32_t nNumDiginChans = 0;
+    uint32_t nNumSerialChans = 0;
+    uint32_t nNumDigoutChans = 0;
+
+    if (!m_bInitChanCount)
+    {
+        cbPROCINFO isProcInfo;
+        memset(&isProcInfo, 0, sizeof(cbPROCINFO));
+        ::cbGetProcInfo(cbNSP1, &isProcInfo);
+        if (0 != isProcInfo.chancount)
+            m_bInitChanCount = true;
+        for (nChan = 1; nChan <= isProcInfo.chancount; ++nChan)
+        {
+            if (cbRESULT_OK == (::cbGetChanCaps(nChan, &nCaps) +
+                ::cbGetAoutCaps(nChan, &nAoutCaps, NULL, NULL) +
+                ::cbGetDinpCaps(nChan, &nDinpCaps)))
+            {
+                if ((cbCHAN_EXISTS | cbCHAN_CONNECTED) == (nCaps & (cbCHAN_EXISTS | cbCHAN_CONNECTED)))
+                {
+                    if ((cbCHAN_AINP | cbCHAN_ISOLATED) == (nCaps & (cbCHAN_AINP | cbCHAN_ISOLATED)))
+                        nNumFEChans++;
+                    if ((cbCHAN_AINP) == (nCaps & (cbCHAN_AINP | cbCHAN_ISOLATED)))
+                        nNumAnainChans++;
+                    if (cbCHAN_AOUT == (nCaps & cbCHAN_AOUT) && (cbAOUT_AUDIO != (nAoutCaps & cbAOUT_AUDIO)))
+                        nNumAoutChans++;
+                    if (cbCHAN_AOUT == (nCaps & cbCHAN_AOUT) && (cbAOUT_AUDIO == (nAoutCaps & cbAOUT_AUDIO)))
+                        nNumAudioChans++;
+                    if (cbCHAN_DINP == (nCaps & cbCHAN_DINP) && (nDinpCaps & cbDINP_MASK))
+                        nNumDiginChans++;
+                    if (cbCHAN_DINP == (nCaps & cbCHAN_DINP) && (nDinpCaps & cbDINP_SERIALMASK))
+                        nNumSerialChans++;
+                    else if (cbCHAN_DOUT == (nCaps & cbCHAN_DOUT))
+                        nNumDigoutChans++;
+                }
+            }
+        }
+        cb_pc_status_buffer_ptr[0]->cbSetNumFEChans(nNumFEChans);
+        cb_pc_status_buffer_ptr[0]->cbSetNumAnainChans(nNumAnainChans);
+        cb_pc_status_buffer_ptr[0]->cbSetNumAnalogChans(nNumFEChans + nNumAnainChans);
+        cb_pc_status_buffer_ptr[0]->cbSetNumAoutChans(nNumAoutChans);
+        cb_pc_status_buffer_ptr[0]->cbSetNumAudioChans(nNumAudioChans);
+        cb_pc_status_buffer_ptr[0]->cbSetNumAnalogoutChans(nNumAoutChans + nNumAudioChans);
+        cb_pc_status_buffer_ptr[0]->cbSetNumDiginChans(nNumDiginChans);
+        cb_pc_status_buffer_ptr[0]->cbSetNumSerialChans(nNumSerialChans);
+        cb_pc_status_buffer_ptr[0]->cbSetNumDigoutChans(nNumDigoutChans);
+        cb_pc_status_buffer_ptr[0]->cbSetNumTotalChans(nNumFEChans + nNumAnainChans + nNumAoutChans + nNumAudioChans + nNumDiginChans + nNumSerialChans + nNumDigoutChans);
+    }
+}
+
+
 // Author & Date: Ehsan Azar       24 June 2010
 // Purpose: Some packets coming from the stand-alone instrument network need
 //           to be processed for any listener application.
@@ -135,14 +198,16 @@ void InstNetwork::OnNetCommand(NetCommandType cmd, unsigned int /*code*/)
 //  pPkt      - pointer to the packet
 void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
 {
+//    if (!(pPkt->cbpkt_header.chid & cbPKTCHAN_CONFIGURATION) || (pPkt->cbpkt_header.type != cbPKTTYPE_SYSHEARTBEAT))
+//        TRACE("ProcessIncomingPacket of type 0x%2X\n", pPkt->cbpkt_header.type);
     // -------- Process some incoming packet here -----------
     // check for configuration class packets
-    if (pPkt->chid & 0x8000)
+    if (pPkt->cbpkt_header.chid & 0x8000)
     {
         // Check for configuration packets
-        if (pPkt->chid == 0x8000)
+        if (pPkt->cbpkt_header.chid == 0x8000)
         {
-            if ((pPkt->type & 0xF0) == cbPKTTYPE_CHANREP)
+            if ((pPkt->cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP)
             {
                 if (m_bStandAlone)
                 {
@@ -151,13 +216,16 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                     if (chan > 0 && chan <= cbMAXCHANS)
                     {
                         memcpy(&(cb_cfg_buffer_ptr[m_nIdx]->chaninfo[chan - 1]), pPkt, sizeof(cbPKT_CHANINFO));
-                        // Invalidate the cache
-                        if ((pPkt->type == cbPKTTYPE_CHANREP) && (m_ChannelType[chan - 1] == cbCHANTYPE_ANAIN))
-                            cb_spk_buffer_ptr[m_nIdx]->cache[chan - 1].valid = 0;
+                        if (pPkt->cbpkt_header.type == cbPKTTYPE_CHANREP)
+                        {
+                            // Invalidate the cache
+                            if (chan <= cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans())
+                                cb_spk_buffer_ptr[m_nIdx]->cache[chan - 1].valid = 0;
+                        }
                     }
                 }
             }
-            else if ((pPkt->type & 0xF0) == cbPKTTYPE_SYSREP)
+            else if ((pPkt->cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP)
             {
                 const cbPKT_SYSINFO * pNew = reinterpret_cast<const cbPKT_SYSINFO *>(pPkt);
                 if (m_bStandAlone)
@@ -165,9 +233,10 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                     cbPKT_SYSINFO & rOld = cb_cfg_buffer_ptr[m_nIdx]->sysinfo;
                     // replace our copy with this one
                     rOld = *pNew;
+                    SetNumChans();
                 }
                 // Rely on the fact that sysrep must be the last config packet sent via NSP6.04 and upwards
-                if (pPkt->type == cbPKTTYPE_SYSREP)
+                if (pPkt->cbpkt_header.type == cbPKTTYPE_SYSREP)
                 {
                     // Any change to the instrument will be reported here, including initial connection as stand-alone
                     uint32_t instInfo;
@@ -179,13 +248,13 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                         InstNetworkEvent(NET_EVENT_INSTINFO, instInfo);
                     }
                 }
-                else if (pPkt->type == cbPKTTYPE_SYSREPRUNLEV)
+                else if (pPkt->cbpkt_header.type == cbPKTTYPE_SYSREPRUNLEV)
                 {
                     if (pNew->runlevel == cbRUNLEVEL_HARDRESET)
                     {
                         // If any app did a hard reset which is not the initial reset
                         //  Application should decide what to do on reset
-                        if (!m_bStandAlone || (m_bStandAlone && pPkt->time > 500))
+                        if (!m_bStandAlone || (m_bStandAlone && pPkt->cbpkt_header.time > 500))
                             InstNetworkEvent(NET_EVENT_RESET);
                     }
                     else if (pNew->runlevel == cbRUNLEVEL_RUNNING)
@@ -197,37 +266,37 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                     }
                 }
             }
-            else if (pPkt->type == cbPKTTYPE_GROUPREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_GROUPREP)
             {
                 if (m_bStandAlone)
                     memcpy(&(cb_cfg_buffer_ptr[m_nIdx]->groupinfo[0][((cbPKT_GROUPINFO*)pPkt)->group-1]), pPkt, sizeof(cbPKT_GROUPINFO));
             }
-            else if (pPkt->type == cbPKTTYPE_FILTREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_FILTREP)
             {
                 if (m_bStandAlone)
                     memcpy(&(cb_cfg_buffer_ptr[m_nIdx]->filtinfo[0][((cbPKT_FILTINFO*)pPkt)->filt-1]), pPkt, sizeof(cbPKT_FILTINFO));
             }
-            else if (pPkt->type == cbPKTTYPE_PROCREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_PROCREP)
             {
                 if (m_bStandAlone)
                     memcpy(&(cb_cfg_buffer_ptr[m_nIdx]->procinfo[0]), pPkt, sizeof(cbPKT_PROCINFO));
             }
-            else if (pPkt->type == cbPKTTYPE_BANKREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_BANKREP)
             {
-                if (m_bStandAlone)
+                if (m_bStandAlone && (((cbPKT_BANKINFO*)pPkt)->bank < cbMAXBANKS))
                     memcpy(&(cb_cfg_buffer_ptr[m_nIdx]->bankinfo[0][((cbPKT_BANKINFO*)pPkt)->bank-1]), pPkt, sizeof(cbPKT_BANKINFO));
             }
-            else if (pPkt->type == cbPKTTYPE_ADAPTFILTREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_ADAPTFILTREP)
             {
                 if (m_bStandAlone)
-                    cb_cfg_buffer_ptr[m_nIdx]->adaptinfo = *reinterpret_cast<const cbPKT_ADAPTFILTINFO *>(pPkt);
+                    cb_cfg_buffer_ptr[m_nIdx]->adaptinfo[0] = *reinterpret_cast<const cbPKT_ADAPTFILTINFO*>(pPkt);
             }
-            else if (pPkt->type == cbPKTTYPE_REFELECFILTREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_REFELECFILTREP)
             {
                 if (m_bStandAlone)
-                    cb_cfg_buffer_ptr[m_nIdx]->refelecinfo = *reinterpret_cast<const cbPKT_REFELECFILTINFO *>(pPkt);
+                    cb_cfg_buffer_ptr[m_nIdx]->refelecinfo[0] = *reinterpret_cast<const cbPKT_REFELECFILTINFO*>(pPkt);
             }
-            else if (pPkt->type == cbPKTTYPE_SS_MODELREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_SS_MODELREP)
             {
                 if (m_bStandAlone)
                 {
@@ -235,7 +304,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                     UpdateSortModel(rNew);
                 }
             }
-            else if (pPkt->type == cbPKTTYPE_SS_STATUSREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_SS_STATUSREP)
             {
                 if (m_bStandAlone)
                 {
@@ -244,7 +313,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                     rOld = rNew;
                 }
             }
-            else if (pPkt->type == cbPKTTYPE_SS_DETECTREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_SS_DETECTREP)
             {
                 if (m_bStandAlone)
                 {
@@ -254,7 +323,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                     rOld = rNew;
                 }
             }
-            else if (pPkt->type == cbPKTTYPE_SS_ARTIF_REJECTREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_SS_ARTIF_REJECTREP)
             {
                 if (m_bStandAlone)
                 {
@@ -264,7 +333,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                     rOld = rNew;
                 }
             }
-            else if (pPkt->type == cbPKTTYPE_SS_NOISE_BOUNDARYREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_SS_NOISE_BOUNDARYREP)
             {
                 if (m_bStandAlone)
                 {
@@ -274,7 +343,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                     rOld = rNew;
                 }
             }
-            else if (pPkt->type == cbPKTTYPE_SS_STATISTICSREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_SS_STATISTICSREP)
             {
                 if (m_bStandAlone)
                 {
@@ -284,7 +353,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                     rOld = rNew;
                 }
             }
-            else if (pPkt->type == cbPKTTYPE_FS_BASISREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_FS_BASISREP)
             {
                 if (m_bStandAlone)
                 {
@@ -292,29 +361,29 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                     UpdateBasisModel(rPkt);
                 }
             }
-            else if (pPkt->type == cbPKTTYPE_LNCREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_LNCREP)
             {
                 if (m_bStandAlone)
                     memcpy(&(cb_cfg_buffer_ptr[m_nIdx]->isLnc), pPkt, sizeof(cbPKT_LNC));
                 // For 6.03 and before, use this packet instead of sysrep for instinfo event
             }
-            else if (pPkt->type == cbPKTTYPE_REPFILECFG)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_REPFILECFG)
             {
                 if (m_bStandAlone)
                 {
                     const cbPKT_FILECFG * pPktFileCfg = reinterpret_cast<const cbPKT_FILECFG*>(pPkt);
-                    if (pPktFileCfg->options == cbFILECFG_OPT_REC || pPktFileCfg->options == cbFILECFG_OPT_STOP)
+                    if (pPktFileCfg->options == cbFILECFG_OPT_REC || pPktFileCfg->options == cbFILECFG_OPT_STOP || (pPktFileCfg->options == cbFILECFG_OPT_TIMEOUT))
                     {
                         cb_cfg_buffer_ptr[m_nIdx]->fileinfo = * reinterpret_cast<const cbPKT_FILECFG *>(pPkt);
                     }
                 }
             }
-            else if (pPkt->type == cbPKTTYPE_REPNTRODEINFO)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_REPNTRODEINFO)
             {
                 if (m_bStandAlone)
                     memcpy(&(cb_cfg_buffer_ptr[m_nIdx]->isLnc), pPkt, sizeof(cbPKT_LNC));
             }
-            else if (pPkt->type == cbPKTTYPE_NMREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_NMREP)
             {
                 if (m_bStandAlone)
                 {
@@ -348,21 +417,26 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                     }
                 }
             }
-            else if (pPkt->type == cbPKTTYPE_WAVEFORMREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_WAVEFORMREP)
             {
                 if (m_bStandAlone)
                 {
+                    SetNumChans();
                     const cbPKT_AOUT_WAVEFORM * pPktAoutWave = reinterpret_cast<const cbPKT_AOUT_WAVEFORM *>(pPkt);
                     uint16_t nChan = pPktAoutWave->chan;
-                    if ((m_ChannelType[nChan-1] == cbCHANTYPE_ANAOUT) || (m_ChannelType[nChan - 1] == cbCHANTYPE_AUDOUT))
+                    if (IsChanAnalogOut(nChan))
                     {
-                        uint8_t trigNum = pPktAoutWave->trigNum;
-                        if (trigNum < cbMAX_AOUT_TRIGGER)
-                            cb_cfg_buffer_ptr[m_nIdx]->isWaveform[nChan][trigNum] = *pPktAoutWave;
+                        nChan -= (cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans() + 1);
+                        if (nChan < AOUT_NUM_GAIN_CHANS)
+                        {
+                            uint8_t trigNum = pPktAoutWave->trigNum;
+                            if (trigNum < cbMAX_AOUT_TRIGGER)
+                                cb_cfg_buffer_ptr[m_nIdx]->isWaveform[nChan][trigNum] = *pPktAoutWave;
+                        }
                     }
                 }
             }
-            else if (pPkt->type == cbPKTTYPE_NPLAYREP)
+            else if (pPkt->cbpkt_header.type == cbPKTTYPE_NPLAYREP)
             {
                 if (m_bStandAlone)
                 {
@@ -378,22 +452,22 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
             }
         } // end if (pPkt->chid==0x8000
     } // end if (pPkt->chid & 0x8000
-    else if ( (pPkt->chid > 0) && (pPkt->chid < cbPKT_SPKCACHELINECNT) )
+    else if ( (pPkt->cbpkt_header.chid > 0) && (pPkt->cbpkt_header.chid < cbPKT_SPKCACHELINECNT) )
     {
         if (m_bStandAlone)
         {
             // post the packet to the cache buffer
-            memcpy( &(cb_spk_buffer_ptr[m_nIdx]->cache[pPkt->chid - 1].spkpkt[cb_spk_buffer_ptr[m_nIdx]->cache[pPkt->chid - 1].head]),
-                pPkt, (pPkt->dlen + cbPKT_HEADER_32SIZE) * 4);
+            memcpy( &(cb_spk_buffer_ptr[m_nIdx]->cache[pPkt->cbpkt_header.chid - 1].spkpkt[cb_spk_buffer_ptr[m_nIdx]->cache[pPkt->cbpkt_header.chid - 1].head]),
+                pPkt, (pPkt->cbpkt_header.dlen + cbPKT_HEADER_32SIZE) * 4);
 
             // increment the valid pointer
-            cb_spk_buffer_ptr[m_nIdx]->cache[pPkt->chid - 1].valid++;
+            cb_spk_buffer_ptr[m_nIdx]->cache[pPkt->cbpkt_header.chid - 1].valid++;
 
             // increment the head pointer of the packet and check for wraparound
-            uint32_t head = cb_spk_buffer_ptr[m_nIdx]->cache[(pPkt->chid)-1].head + 1;
+            uint32_t head = cb_spk_buffer_ptr[m_nIdx]->cache[(pPkt->cbpkt_header.chid)-1].head + 1;
             if (head >= cbPKT_SPKCACHEPKTCNT)
                 head = 0;
-            cb_spk_buffer_ptr[m_nIdx]->cache[pPkt->chid - 1].head = head;
+            cb_spk_buffer_ptr[m_nIdx]->cache[pPkt->cbpkt_header.chid - 1].head = head;
         }
     }
 
@@ -465,6 +539,7 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
     m_timerTicks++; // number of intervals
     int burstcount = 0;
     int recv_returned = 0;
+//    TRACE("m_timerTicks: %d\n", m_timerTicks);
     if (m_bDone)
     {
         if (m_timerId)
@@ -483,9 +558,9 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
         if (m_timerTicks == 1)
         {
             InstNetworkEvent(NET_EVENT_INSTCONNECTING);
-            cbSetSystemRunLevel(cbRUNLEVEL_RUNNING, 0, 0, m_nInstance);
+            cbSetSystemRunLevel(cbRUNLEVEL_RUNNING, 0, 0, cbNSP1 - 1, m_nInstance);
         }
-        // at 0.5 seconds, reset the hardware
+        // at 0.5 seconds, if not already running, reset the hardware
         else if (m_timerTicks == 50)
         {
             // get runlevel
@@ -494,28 +569,29 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
             if (cbRUNLEVEL_RUNNING != m_runlevel)
             {
                 InstNetworkEvent(NET_EVENT_INSTHARDRESET);
-                cbSetSystemRunLevel(cbRUNLEVEL_HARDRESET, 0, 0, m_nInstance);
+                cbSetSystemRunLevel(cbRUNLEVEL_HARDRESET, 0, 0, cbNSP1 - 1, m_nInstance);
             }
         }
-        // at 1.0 seconds, retreive the hardware config
+        // at 1.0 seconds, retrieve the hardware config
         else if (m_timerTicks == 100)
         {
             InstNetworkEvent(NET_EVENT_INSTCONFIG);
             cbPKT_GENERIC pktgeneric;
-            pktgeneric.time = 1;
-            pktgeneric.chid = 0x8000;
-            pktgeneric.type = cbPKTTYPE_REQCONFIGALL;
-            pktgeneric.dlen = 0;
+            pktgeneric.cbpkt_header.time = 1;
+            pktgeneric.cbpkt_header.chid = 0x8000;
+            pktgeneric.cbpkt_header.type = cbPKTTYPE_REQCONFIGALL;
+            pktgeneric.cbpkt_header.dlen = 0;
+            pktgeneric.cbpkt_header.instrument = 0;
             cbSendPacket(&pktgeneric, m_nInstance);
         }
-        // at 2.0 seconds, start running
+        // at 2.0 seconds, if not already running, do soft reset, which will lead to running state.
         else if (m_timerTicks == 200)
         {
             InstNetworkEvent(NET_EVENT_INSTRUN); // going to soft reset and run
             // if already running do not reset, otherwise reset
             if (cbRUNLEVEL_RUNNING != m_runlevel)
             {
-                cbSetSystemRunLevel(cbRUNLEVEL_RESET, 0, 0, m_nInstance);
+                cbSetSystemRunLevel(cbRUNLEVEL_RESET, 0, 0, cbNSP1 - 1, m_nInstance);
             }
         }
     } // end if (m_timerTicks < 500
@@ -552,14 +628,14 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
             if (bLoopbackPacket)
             {
                 // Put fake packets in-order
-                pktptr->time = cb_rec_buffer_ptr[m_nIdx]->lasttime;
+                pktptr->cbpkt_header.time = cb_rec_buffer_ptr[m_nIdx]->lasttime;
             } else {
                 ++m_nRecentPacketCount; // only count the "real" packets, not loopback ones
                 m_icInstrument.TestForReply(pktptr); // loopbacks won't need a "reply"...they are never sent
             }
 
             // make sure that the next packet in the data block that we are processing fits.
-            uint32_t quadlettotal = (pktptr->dlen) + 2;
+            uint32_t quadlettotal = (pktptr->cbpkt_header.dlen) + cbPKT_HEADER_32SIZE;
             uint32_t packetsize = quadlettotal << 2;
             if (packetsize > bytes_to_process)
             {
@@ -567,7 +643,7 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
                 break;
             }
             // update time index
-            cb_rec_buffer_ptr[m_nIdx]->lasttime = pktptr->time;
+            cb_rec_buffer_ptr[m_nIdx]->lasttime = pktptr->cbpkt_header.time;
             // Do incoming packet process
             ProcessIncomingPacket(pktptr);
 
@@ -630,10 +706,10 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
                 *xmtpacket =
                         (cbPKT_GENERIC*) &(cb_xmt_global_buffer_ptr[m_nIdx]->buffer[cb_xmt_global_buffer_ptr[m_nIdx]->tailindex]);
 
-        while ((xmtpacket->time) && (nPacketsLeftInBurst--))
+        while ((xmtpacket->cbpkt_header.time) && (nPacketsLeftInBurst--))
         {
             // find the length of the packet
-            uint32_t quadlettotal = (xmtpacket->dlen) + 2;
+            uint32_t quadlettotal = (xmtpacket->cbpkt_header.dlen) + cbPKT_HEADER_32SIZE;
 
             if (m_icInstrument.OkToSend() == false)
                 continue;
@@ -725,7 +801,7 @@ void InstNetwork::run()
         // Set network connection details
         const QByteArray inIP = m_strInIP.toLatin1();
         const QByteArray outIP = m_strOutIP.toLatin1();
-        m_icInstrument.SetNetwork(m_nInPort, m_nOutPort, inIP, outIP);
+        m_icInstrument.SetNetwork(PROTOCOL_UDP, m_nInPort, m_nOutPort, inIP, outIP, m_nRange);
         // Open UDP
         cbRESULT cbres = m_icInstrument.Open(startupOption, m_bBroadcast, m_bDontRoute, m_bNonBlocking, m_nRecBufSize);
         if (cbres)
@@ -744,28 +820,6 @@ void InstNetwork::run()
     m_nLastNumberOfPacketsReceived = 0;
     m_runlevel = cbRUNLEVEL_SHUTDOWN;
     m_bDone = false;
-
-    // Determine the channel type for each channel.
-    for (uint32_t ch_ix = 0; ch_ix < cbMAXCHANS; ch_ix++)
-    {
-        uint32_t chancaps;
-        cbRESULT res = cbGetChanCaps(ch_ix + 1, &chancaps, m_nInstance);
-        if ((chancaps & cbCHAN_AINP) == cbCHAN_AINP)
-            m_ChannelType[ch_ix] = cbCHANTYPE_ANAIN;
-        else if ((chancaps & cbCHAN_AOUT) == cbCHAN_AOUT)
-            m_ChannelType[ch_ix] = cbCHANTYPE_ANAOUT;
-        else if ((chancaps & cbCHAN_DINP) == cbCHAN_DINP)
-        {
-            uint32_t diginCaps;
-            res = cbGetDinpCaps(ch_ix + 1, &diginCaps, m_nInstance);
-            if (diginCaps & cbDINP_SERIALMASK)
-                m_ChannelType[ch_ix] = cbCHANTYPE_SERIAL;
-            else
-                m_ChannelType[ch_ix] = cbCHANTYPE_DIGIN;
-        }
-        else if ((chancaps & cbCHAN_DOUT) == cbCHAN_DOUT)
-            m_ChannelType[ch_ix] = cbCHANTYPE_DIGOUT;
-    }
 
     // If stand-alone setup network packet handling timer
     if (m_bStandAlone)
@@ -834,7 +888,7 @@ void InstNetwork::OnWaitEvent()
     pktstogo = std::min(pktstogo, MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS);
 
     // process any available packets
-    for(UINT p = 0; p < pktstogo; ++p)
+    for(unsigned int p = 0; p < pktstogo; ++p)
     {
         cbPKT_GENERIC *pktptr = cbGetNextPacketPtr(m_nInstance);
         if (pktptr == NULL)

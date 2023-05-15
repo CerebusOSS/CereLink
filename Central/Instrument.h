@@ -1,7 +1,8 @@
 /* =STS=> Instrument.h[1729].aa09   open     SMID:10 */
 //////////////////////////////////////////////////////////////////////
 //
-// (c) Copyright 2003 Cyberkinetics, Inc.
+// (c) Copyright 2003 - 2008 Cyberkinetics, Inc.
+// (c) Copyright 2008 - 2021 Blackrock Microsystems, LLC
 //
 // $Workfile: Instrument.h $
 // $Archive: /Cerebus/WindowsApps/Central/Instrument.h $
@@ -40,7 +41,7 @@ public:
     cbRESULT OpenNSP(STARTUP_OPTIONS nStartupOptionsFlags, uint16_t nNSPnum);
     cbRESULT Open(STARTUP_OPTIONS nStartupOptionsFlags, bool bBroadcast = false, bool bDontRoute = true,
         bool bNonBlocking = true, int nRecBufSize = NSP_REC_BUF_SIZE);
-    void SetNetwork(int nInPort, int nOutPort, LPCSTR szInIP, LPCSTR szOutIP);
+    void SetNetwork(int nProtocol, int nInPort, int nOutPort, LPCSTR szInIP, LPCSTR szOutIP, int nRange);
 
     void Close();
     void Standby();
@@ -128,7 +129,7 @@ protected:
         // Called every 10 ms...use for "resending"
         // Outputs:
         //  TRUE if any instrument error has happened; FALSE otherwise
-        bool Tick(const UDPSocket & rcUDP);
+        bool Tick(const UDPSocket& rcUDP, int nProtocol);
 
     protected:
 
@@ -140,7 +141,7 @@ protected:
         int m_nMaxRetryCount;           // How many times to "resend" a packet before erroring out.
 
         // This array MUST be larger than the largest data packet
-        char m_abyPacket[2048];         // This is the packet that was sent out.
+        char m_abyPacket[cbPKT_MAX_SIZE * 2];  // This is the packet that was sent out.
         int m_cbPacketBytes;            // The size of the most recent packet addition
 
     };
@@ -150,10 +151,12 @@ protected:
     CachedPacket m_aicCache[NUM_OF_PACKETS_CACHED];
 
 private:
+    int m_nProtocol;
     int m_nInPort;
     int m_nOutPort;
     LPCSTR m_szInIP;
     LPCSTR m_szOutIP;
+    int m_nRange;
 };
 
 

@@ -254,10 +254,10 @@ int main(int argc, char *argv[])
     res = cbSdkSetTrialConfig(INST, cfg.bActive, cfg.begchan, cfg.begmask, cfg.begval, cfg.endchan, cfg.endmask, cfg.endval,
         cfg.bDouble, cfg.uWaveforms, cfg.uConts, cfg.uEvents, cfg.uComments, cfg.uTrackings, cfg.bAbsolute);
 
-    uint32_t start_time;
-    uint32_t elapsed_time = 0;
+    PROCTIME start_time;
+    PROCTIME elapsed_time = 0;
     res = cbSdkGetTime(INST, &start_time);
-    char kb_ch = '1';
+    char kb_ch = '1';  // Will monitor for Esc key.
     while ((kb_ch != 27) && ((runtime == 0) || (elapsed_time < runtime)))
     {
         res = cbSdkGetTime(INST, &elapsed_time);
@@ -302,9 +302,9 @@ int main(int argc, char *argv[])
                     }
                 }
 
-                uint8_t chanType;
-                cbSdkGetChannelType(INST, chan_id, &chanType);
-                if ((chanType == cbCHANTYPE_DIGIN) || (chanType == cbCHANTYPE_SERIAL))
+                uint32_t bIsDig = false;
+                cbSdkIsChanAnyDigIn(INST, chan_id, &bIsDig);
+                if (bIsDig)
                 {
                     // alloc waveform data
                     uint32_t n_samples = ptrialevent->num_samples[ev_ix][0];
@@ -338,9 +338,9 @@ int main(int argc, char *argv[])
                 // printf("\n");
                 
                 uint16_t chan_id = ptrialevent->chan[ev_ix];
-                uint8_t chanType;
-                cbSdkGetChannelType(INST, chan_id, &chanType);
-                if ((chanType == cbCHANTYPE_DIGIN) || (chanType == cbCHANTYPE_SERIAL))
+                uint32_t bIsDig = false;
+                cbSdkIsChanAnyDigIn(INST, chan_id, &bIsDig);
+                if (bIsDig)
                 {
                     uint32_t n_samples = ptrialevent->num_samples[ev_ix][0];
                     if (n_samples > 0)
@@ -380,9 +380,9 @@ int main(int argc, char *argv[])
                     }
 
                     uint16_t chan_id = ptrialevent->chan[ev_ix];
-                    uint8_t chanType;
-                    cbSdkGetChannelType(INST, chan_id + 1, &chanType);
-                    if ((chanType == cbCHANTYPE_DIGIN) || (chanType == cbCHANTYPE_SERIAL))
+                    uint32_t bIsDig = false;
+                    cbSdkIsChanAnyDigIn(INST, chan_id, &bIsDig);
+                    if (bIsDig)
                     {
                         free(ptrialevent->waveforms[ev_ix]);
                         ptrialevent->waveforms[ev_ix] = NULL;

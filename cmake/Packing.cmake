@@ -3,7 +3,7 @@ set(CPACK_PACKAGE_NAME ${PROJECT_NAME} CACHE STRING "The resulting package name"
 # which is useful in case of packing only selected components instead of the whole thing
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PROJECT_DESCRIPTION}"  CACHE STRING "Package description for the package metadata")
 set(CPACK_PACKAGE_VENDOR "Blackrock Neurotech")
-set(CPACK_PACKAGE_CONTACT "cboulay@blackrockneuro.com")
+set(CPACK_PACKAGE_CONTACT "chadwick.boulay@gmail.com")
 set(CPACK_VERBATIM_VARIABLES YES)
 set(CPACK_PACKAGE_INSTALL_DIRECTORY ${CPACK_PACKAGE_NAME})
 SET(CPACK_OUTPUT_FILE_PREFIX "${CMAKE_SOURCE_DIR}/dist")

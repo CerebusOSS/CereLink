@@ -1,7 +1,7 @@
 /* =STS=> SdkApp.h[5022].aa11   submit   SMID:12 */
 //////////////////////////////////////////////////////////////////////
 //
-// (c) Copyright 2012 - 2013 Blackrock Microsystems
+// (c) Copyright 2012 - 2017 Blackrock Microsystems
 //
 // $Workfile: SdkApp.h $
 // $Archive: /Cerebus/Human/WindowsApps/cbmex/SdkApp.h $
@@ -36,7 +36,7 @@ public:
     uint32_t GetInstInfo() {return m_instInfo;}
     cbRESULT GetLastCbErr() {return m_lastCbErr;}
     void Open(uint32_t id, int nInPort = cbNET_UDP_PORT_BCAST, int nOutPort = cbNET_UDP_PORT_CNT,
-        LPCSTR szInIP = cbNET_UDP_ADDR_INST, LPCSTR szOutIP = cbNET_UDP_ADDR_CNT, int nRecBufSize = NSP_REC_BUF_SIZE);
+        LPCSTR szInIP = cbNET_UDP_ADDR_INST, LPCSTR szOutIP = cbNET_UDP_ADDR_CNT, int nRecBufSize = NSP_REC_BUF_SIZE, int nRange = 0);
 private:
     void OnPktGroup(const cbPKT_GROUP * const pkt);
     void OnPktEvent(const cbPKT_GENERIC * const pPkt);
@@ -62,7 +62,7 @@ public:
     cbSdkResult SdkGetType(cbSdkConnectionType * conType, cbSdkInstrumentType * instType);
     cbSdkResult SdkUnsetTrialConfig(cbSdkTrialType type);
     cbSdkResult SdkClose();
-    cbSdkResult SdkGetTime(uint32_t * cbtime);
+    cbSdkResult SdkGetTime(PROCTIME * cbtime);
     cbSdkResult SdkGetSpkCache(uint16_t channel, cbSPKCACHE **cache);
     cbSdkResult SdkGetTrialConfig(uint32_t * pbActive, uint16_t * pBegchan, uint32_t * pBegmask, uint32_t * pBegval,
                                   uint16_t * pEndchan, uint32_t * pEndmask, uint32_t * pEndval, bool * pbDouble,
@@ -74,7 +74,6 @@ public:
                                   bool bAbsolute);
     cbSdkResult SdkGetChannelLabel(uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position);
     cbSdkResult SdkSetChannelLabel(uint16_t channel, const char * label, uint32_t userflags, int32_t * position);
-	cbSdkResult SdkGetChannelType(uint16_t channel, uint8_t * chtype);
     cbSdkResult SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                 cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
     cbSdkResult SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent* trialevent, cbSdkTrialCont * trialcont,
@@ -172,10 +171,10 @@ private:
 
     uint32_t m_bWithinTrial;        // True is we are within a trial, False if not within a trial
 
-    uint32_t m_uTrialStartTime;     // Holds the 32-bit Cerebus timestamp of the trial start time
-    uint32_t m_uPrevTrialStartTime;
+    PROCTIME m_uTrialStartTime;     // Holds theCerebus timestamp of the trial start time
+    PROCTIME m_uPrevTrialStartTime;
 
-    uint32_t m_uCbsdkTime;            // Holds the 32-bit Cerebus timestamp of the last packet received
+    PROCTIME m_uCbsdkTime;            // Holds the Cerebus timestamp of the last packet received
 
     /////////////////////////////////////////////////////////////////////////////
     // Declarations for the data caching structures and variables
@@ -188,12 +187,13 @@ private:
         int16_t * continuous_channel_data[cbNUM_ANALOG_CHANS];
         uint32_t write_index[cbNUM_ANALOG_CHANS];                 // next index location to write data
         uint32_t write_start_index[cbNUM_ANALOG_CHANS];           // index location that writing began
+        uint32_t read_end_index[cbNUM_ANALOG_CHANS];              // index location that reading will end. set in InitTrialData and used in GetTrialData
 
         void reset()
         {
             if (size)
             {
-                for (uint32_t i = 0; i < cbNUM_ANALOG_CHANS; ++i)
+                for (uint32_t i = 0; i < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++i)
                     memset(continuous_channel_data[i], 0, size * sizeof(int16_t));
             }
             memset(current_sample_rates, 0, sizeof(current_sample_rates));
@@ -224,7 +224,7 @@ private:
         {
             if (size)
             {
-                for (uint32_t i = 0; i < cbMAXCHANS; ++i)
+                for (uint32_t i = 0; i < (cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans() + 2); ++i)
                 {
                     memset(timestamps[i], 0, size * sizeof(uint32_t));
                     memset(units[i], 0, size * sizeof(uint16_t));

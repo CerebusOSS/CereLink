@@ -2,7 +2,7 @@
 //////////////////////////////////////////////////////////////////////
 //
 // (c) Copyright 2003-2008 Cyberkinetics, Inc.
-// (c) Copyright 2008-2011 Blackrock Microsystems
+// (c) Copyright 2008 - 2021 Blackrock Microsystems
 //
 // $Workfile: Instrument.cpp $
 // $Archive: /Cerebus/Human/WindowsApps/Central/Instrument.cpp $
@@ -37,7 +37,7 @@ const char g_NSP_IP[cbMAXOPEN][16] =
 
 Instrument::Instrument() :
     m_nInPort(NSP_IN_PORT), m_nOutPort(NSP_OUT_PORT),
-    m_szInIP(NSP_IN_ADDRESS), m_szOutIP(NSP_OUT_ADDRESS)
+    m_szInIP(NSP_IN_ADDRESS), m_szOutIP(NSP_OUT_ADDRESS), m_nRange(RANGESIZE)
 {
 }
 
@@ -50,16 +50,19 @@ Instrument::~Instrument()
 // Purpose: Set networking parameters to overwrite default addresses
 //           Note: must be called before Open for parameters to work
 // Inputs:
+// nProt - the networking protocol to use - 0 = UDP; 1 = TCP
 //  nInPort              - the input port through which instrument connects to me
 //  nOutPort             - the output port to connect to in order to connect to the instrument
 //  szInIP               - Cerebus IP address
 //  szOutIP              - Instrument IP address
-void Instrument::SetNetwork(int nInPort, int nOutPort, LPCSTR szInIP, LPCSTR szOutIP)
+void Instrument::SetNetwork(int nProtocol, int nInPort, int nOutPort, LPCSTR szInIP, LPCSTR szOutIP, int nRange)
 {
+    m_nProtocol = nProtocol;
     m_nInPort = nInPort;
     m_nOutPort = nOutPort;
     m_szInIP = szInIP;
     m_szOutIP = szOutIP;
+    m_nRange = nRange == 0 ? RANGESIZE : nRange;
 }
 
 // Author & Date:   Tom Richins     2 May 2011
@@ -90,7 +93,7 @@ cbRESULT Instrument::OpenNSP(STARTUP_OPTIONS nStartupOptionsFlags, uint16_t nNSP
 //  Returns the error code (0 means success)
 cbRESULT Instrument::Open(STARTUP_OPTIONS nStartupOptionsFlags, bool bBroadcast, bool bDontRoute, bool bNonBlocking, int nRecBufSize)
 {
-    int nRange= RANGESIZE;
+    int nRange= m_nRange;
     int nInPort = m_nInPort;
     int nOutPort = m_nOutPort;
     LPCSTR szInIP = m_szInIP;
@@ -107,7 +110,7 @@ cbRESULT Instrument::Open(STARTUP_OPTIONS nStartupOptionsFlags, bool bBroadcast,
         // Do nothing. _cprintf is defined as printf
 #endif
     }
-    else if (OPT_LOCAL == nStartupOptionsFlags)
+    if ((OPT_LOCAL == nStartupOptionsFlags) || (OPT_LOOPBACK == nStartupOptionsFlags))
     {
         // If local instrument then connect to it
         szInIP  = LOOPBACK_ADDRESS;
@@ -115,13 +118,22 @@ cbRESULT Instrument::Open(STARTUP_OPTIONS nStartupOptionsFlags, bool bBroadcast,
         nInPort = NSP_IN_PORT;
         nOutPort = NSP_OUT_PORT;
     }
-    return m_icUDP.Open(nStartupOptionsFlags, nRange, bVerbose, szInIP, szOutIP,
+
+    if (PROTOCOL_UDP == m_nProtocol)
+    {
+        return m_icUDP.OpenUDP(nStartupOptionsFlags, m_nRange, bVerbose, szInIP, szOutIP,
             bBroadcast, bDontRoute, bNonBlocking, nRecBufSize, nInPort, nOutPort, cbCER_UDP_SIZE_MAX);
+    }
+    else
+    {
+        return m_icUDP.OpenTCP(nStartupOptionsFlags, m_nRange, bVerbose, szInIP, szOutIP,
+            bBroadcast, bDontRoute, bNonBlocking, nRecBufSize, nInPort, nOutPort, cbCER_UDP_SIZE_MAX);
+    }
 }
 
 int Instrument::Send(void *ppkt)
 {
-    uint32_t quadlettotal = (((cbPKT_GENERIC*)ppkt)->dlen) + cbPKT_HEADER_32SIZE;
+    uint32_t quadlettotal = (((cbPKT_GENERIC*)ppkt)->cbpkt_header.dlen) + cbPKT_HEADER_32SIZE;
     uint32_t cbSize = quadlettotal << 2;      // number of bytes
 
 
@@ -136,12 +148,19 @@ int Instrument::Send(void *ppkt)
     if (pCache == pEnd)
         return -1;
     pCache->AddPacket(ppkt, cbSize);
-    return m_icUDP.Send(ppkt, cbSize);
+
+    if (PROTOCOL_UDP == m_nProtocol)
+        return m_icUDP.SendUDP(ppkt, cbSize);
+    else
+        return m_icUDP.SendTCP(ppkt, cbSize);
 }
 
 int Instrument::Recv(void * packet)
 {
-    return m_icUDP.Recv(packet);
+    if (PROTOCOL_UDP == m_nProtocol)
+        return m_icUDP.RecvUDP(packet);
+    else
+        return m_icUDP.RecvTCP(packet);
 }
 
 
@@ -177,10 +196,10 @@ void Instrument::Close()
 void Instrument::Standby()	
 {
     cbPKT_SYSINFO pktsysinfo;
-    pktsysinfo.time = 0;
-    pktsysinfo.chid = 0x8000;
-    pktsysinfo.type = cbPKTTYPE_SYSSETRUNLEV;
-    pktsysinfo.dlen = cbPKTDLEN_SYSINFO;
+    pktsysinfo.cbpkt_header.time = 0;
+    pktsysinfo.cbpkt_header.chid = 0x8000;
+    pktsysinfo.cbpkt_header.type = cbPKTTYPE_SYSSETRUNLEV;
+    pktsysinfo.cbpkt_header.dlen = cbPKTDLEN_SYSINFO;
     pktsysinfo.runlevel = cbRUNLEVEL_HARDRESET;
     Send(&pktsysinfo);
     return;
@@ -190,10 +209,10 @@ void Instrument::Standby()
 void Instrument::Shutdown()	
 {
     cbPKT_SYSINFO pktsysinfo;
-    pktsysinfo.time = 0;
-    pktsysinfo.chid = 0x8000;
-    pktsysinfo.type = cbPKTTYPE_SYSSETRUNLEV;
-    pktsysinfo.dlen = cbPKTDLEN_SYSINFO;
+    pktsysinfo.cbpkt_header.time = 0;
+    pktsysinfo.cbpkt_header.chid = 0x8000;
+    pktsysinfo.cbpkt_header.type = cbPKTTYPE_SYSSETRUNLEV;
+    pktsysinfo.cbpkt_header.dlen = cbPKTDLEN_SYSINFO;
     pktsysinfo.runlevel = cbRUNLEVEL_SHUTDOWN;
     Send(&pktsysinfo);
     return;
@@ -215,7 +234,7 @@ int Instrument::LoopbackRecvLow(void * pBuffer, void * pPacketData, uint32_t nIn
     cbPKT_GENERIC * pPacket = static_cast<cbPKT_GENERIC *>(pPacketData);
 
     // find the length of the packet
-    const uint32_t quadlettotal = (pPacket->dlen) + cbPKT_HEADER_32SIZE;
+    const uint32_t quadlettotal = (pPacket->cbpkt_header.dlen) + cbPKT_HEADER_32SIZE;
     const int cbSize = quadlettotal << 2;           // How many bytes are there
 
     // copy the packet
@@ -245,7 +264,7 @@ bool Instrument::Tick()
     // Find the first case where        {item}.Tick(m_icUDP) == true
     for (pFound = m_aicCache; pFound != pEnd; pFound++)
     {
-        if (pFound->Tick(m_icUDP))
+        if (pFound->Tick(m_icUDP, m_nProtocol))
             break;
     }
 
@@ -308,7 +327,7 @@ bool Instrument::CachedPacket::AddPacket(void * pPacket, int cbBytes)
     m_nTickCount = m_nMaxTickCount;              // How many ticks have passed since we sent?
     m_nRetryCount = m_nMaxRetryCount;           // How many times have we re-sent this packet?
 
-//    TRACE("Outgoing Pkt Type: 0x%2X\n", ((cbPKT_GENERIC*)pPacket)->type);
+//    TRACE("Outgoing Pkt Type: 0x%2X\n", ((cbPKT_GENERIC*)pPacket)->cbpkt_header.type);
     return true;
 }
 
@@ -320,34 +339,34 @@ void Instrument::CachedPacket::CheckForReply(void * pPacket)
         cbPKT_GENERIC * pIn = static_cast<cbPKT_GENERIC *>(pPacket);
         cbPKT_GENERIC * pOut = reinterpret_cast<cbPKT_GENERIC *>(m_abyPacket);
 
-/*
+        /*
         DEBUG_CODE
-            (
+        (
             // If it is a "hearbeat" packet, then just don't look at it
-            if (pIn->chid == 0x8000 && pIn->type == 0)
+            if (pIn->cbpkt_header.chid == 0x8000 && pIn->cbpkt_header.type == 0)
                 return;
 
-            TRACE("Incoming Pkt chid: 0x%04X type:  0x%02X,   SENT chid: 0x%04X, type: 0x%02X,  chan: %d\n",
-                     pIn->chid, pIn->type,
-                     pOut->chid, pOut->type,
+            TRACE("Incoming Pkt chid: 0x%04X type:  0x%02X,   SENT chid: 0x%04X, type: 0x%02X (type: 0x%02X),  chan: %d\n",
+                     pIn->cbpkt_header.chid, pIn->cbpkt_header.type,
+                     pOut->cbpkt_header.chid, pOut->cbpkt_header.type, pOut->cbpkt_header.type & ~0x80,
                      ((cbPKT_CHANINFO *)(pOut))->chan  );
 
-            );
-*/
+        );
+        */
 
-        if (pIn->type != (pOut->type & ~0x80))    // mask off the highest bit
+        if (pIn->cbpkt_header.type != (pOut->cbpkt_header.type & ~0x80))    // mask off the highest bit
             return;
 
-        if (pIn->chid != pOut->chid)
+        if (pIn->cbpkt_header.chid != pOut->cbpkt_header.chid)
             return;
 
         // If this is a "configuration type packet"
         // The logic works because Chanset is 0xC0 and all config packets are 0xC?
         // It will also work out because the 0xD0 family of packets will come in here
         // and their 1st value is channel.
-        if ((pOut->type & cbPKTTYPE_CHANSET) == cbPKTTYPE_CHANSET)
+        if ((pOut->cbpkt_header.type & cbPKTTYPE_CHANSET) == cbPKTTYPE_CHANSET)
         {
-            if (pOut->dlen)
+            if (pOut->cbpkt_header.dlen)
             {
                 cbPKT_CHANINFO * pChanIn = static_cast<cbPKT_CHANINFO *>(pPacket);
                 cbPKT_CHANINFO * pChanOut = reinterpret_cast<cbPKT_CHANINFO *>(m_abyPacket);
@@ -366,7 +385,7 @@ void Instrument::CachedPacket::CheckForReply(void * pPacket)
 // Called every 10 ms...use for "resending"
 // Outputs:
 //  TRUE if any instrument error has happened; FALSE otherwise
-bool Instrument::CachedPacket::Tick(const UDPSocket & rcUDP)
+bool Instrument::CachedPacket::Tick(const UDPSocket& rcUDP, int nProtocol)
 {
     if (m_enSendMode == MT_WAITING_FOR_REPLY)
     {
@@ -374,8 +393,11 @@ bool Instrument::CachedPacket::Tick(const UDPSocket & rcUDP)
         {
             if (--m_nRetryCount > 0)        // If not too many retries
             {
-                TRACE("********************Resending packet******************* type: 0x%02X\n", ((cbPKT_GENERIC *)m_abyPacket)->type );
-                rcUDP.Send(m_abyPacket, m_cbPacketBytes);
+                TRACE("********************Resending packet******************* type: 0x%02X\n", ((cbPKT_GENERIC*)m_abyPacket)->cbpkt_header.type);
+                if (PROTOCOL_UDP == nProtocol)
+                    rcUDP.SendUDP(m_abyPacket, m_cbPacketBytes);
+                else
+                    rcUDP.SendTCP(m_abyPacket, m_cbPacketBytes);
                 m_nTickCount = m_nMaxTickCount;
             }
             else

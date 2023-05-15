@@ -213,7 +213,7 @@ ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(LPCSTR szFileName)
 void CCFUtilsXml_v1::Convert(ccf::ccfBinaryData & data)
 {
     // TODO: This function (v1 data convert) is where should be changed to support binary CCF with 256 channel systems
-    for (int i = 0; i < cbMAXCHANS; ++i)
+    for (int i = 0; i < cbLEGACY_MAXCHANS; ++i)
         m_data.isChan[i] = *reinterpret_cast<cbPKT_CHANINFO *>(&data.isChan[i]);
     m_data.isAdaptInfo = *reinterpret_cast<cbPKT_ADAPTFILTINFO *>(&data.isAdaptInfo);
     m_data.isSS_Detect = *reinterpret_cast<cbPKT_SS_DETECT *>(&data.isSS_Detect);

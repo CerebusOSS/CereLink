@@ -2,7 +2,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // (c) Copyright 2003-2008 Cyberkinetics, Inc.
-// (c) Copyright 2008-2012 Blackrock Microsystems
+// (c) Copyright 2008-2021 Blackrock Microsystems
 //
 // $Workfile: cbHwlibHi.h $
 // $Archive: /Cerebus/WindowsApps/cbhwlib/cbHwlibHi.h $
@@ -62,6 +62,7 @@ enum { SMPGRP_NONE,             //  not sampled
        SMPGRP_2KS,              //  2  kS/s
        SMPGRP_10KS,             //  10 kS/s
        SMPGRP_30KS,             //  30 kS/s
+       SMPGRP_RAW,              //  Raw which is 30 kS/s
        SMP_GROUP_COUNT
 };
 
@@ -93,11 +94,28 @@ bool IsChanAnyDigIn(uint32_t dwChan, uint32_t nInstance = 0);  // TRUE means yes
 bool IsChanSerial(uint32_t dwChan, uint32_t nInstance = 0); // TRUE means yes; FALSE, no
 bool IsChanDigin(uint32_t dwChan, uint32_t nInstance = 0);  // TRUE means yes; FALSE, no
 bool IsChanDigout(uint32_t dwChan, uint32_t nInstance = 0);               // TRUE means yes; FALSE, no
+bool IsChanAnalogOut(uint32_t dwChan, uint32_t nInstance = 0);            // TRUE means yes; FALSE, no
+bool IsChanAudioOut(uint32_t dwChan, uint32_t nInstance = 0);             // TRUE means yes; FALSE, no
 bool IsChanCont(uint32_t dwChan, uint32_t nInstance = 0);                 // TRUE means yes; FALSE, no
 
 bool AreHoopsDefined(uint32_t nChannel, uint32_t nInstance = 0);
 bool AreHoopsDefined(uint32_t nChannel, uint32_t nUnit, uint32_t nInstance = 0);
 
+// Get channel number from ordinal
+uint32_t GetAIAnalogInChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
+uint32_t GetAnalogOutChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
+uint32_t GetAudioOutChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
+uint32_t GetAnalogOrAudioOutChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
+uint32_t GetDiginChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
+uint32_t GetSerialChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
+uint32_t GetDigoutChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
+
+uint32_t cbGetNumActiveInstruments();
+NSP_STATUS cbGetNspStatus(uint32_t nInstrument);
+void cbSetNspStatus(uint32_t nInstrument, NSP_STATUS nStatus);
+uint32_t cbGetExpandedChannelNumber(uint32_t nInstrument, uint32_t nChannel);
+uint32_t cbGetChanInstrument(uint32_t nChannel, uint32_t nInstance = 0);
+uint32_t cbGetInstrumentLocalChannelNumber(uint32_t nChan);
 
 // Author & Date:   Ehsan Azar   June 3, 2009
 // Purpose: determine if a channel has  valid sorting unit
@@ -247,6 +265,9 @@ cbRESULT cbSetNTrodeUnitMapping(uint32_t ntrode, uint16_t nSite, cbMANUALUNITMAP
 
 // Purpose: Set NTrode feature space, keeping the rest of NTrode information intact
 cbRESULT cbSetNTrodeFeatureSpace(uint32_t ntrode, uint16_t fs, uint32_t nInstance = 0);
+
+// Purpose: Get the instrument this NTrode belongs to
+uint32_t cbGetNTrodeInstrument(uint32_t nNTrode, uint32_t nInstance = 0);
 
 // Returns: returns if file is being recorded
 bool IsFileRecording(uint32_t nInstance = 0);

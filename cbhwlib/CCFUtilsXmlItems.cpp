@@ -73,9 +73,9 @@ CCFXmlItem::CCFXmlItem(cbPKT_CHANINFO & pkt, QString strName)
         return;
 
     QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.dlen, "dlen");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
     lst += ccf::GetCCFXmlItem(pkt.chan, "chan");
     lst += ccf::GetCCFXmlItem(pkt.proc, "proc");
     lst += ccf::GetCCFXmlItem(pkt.bank, "bank");
@@ -136,13 +136,13 @@ CCFXmlItem::CCFXmlItem(cbPKT_ADAPTFILTINFO & pkt, QString strName)
 {
     m_xmlTag = strName;
     m_xmlAttribs.insert("Type", "cbPKT_ADAPTFILTINFO");
-    if (pkt.type == 0)
+    if (pkt.cbpkt_header.type == 0)
         return;
 
     QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.dlen, "dlen");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
     lst += ccf::GetCCFXmlItem(pkt.chan, "chan");
     lst += ccf::GetCCFXmlItem(pkt.nMode, "mode");
     lst += ccf::GetCCFXmlItem(pkt.dLearningRate, "LearningRate");
@@ -159,13 +159,13 @@ CCFXmlItem::CCFXmlItem(cbPKT_SS_DETECT & pkt, QString strName)
 {
     m_xmlTag = strName;
     m_xmlAttribs.insert("Type", "cbPKT_SS_DETECT");
-    if (pkt.type == 0)
+    if (pkt.cbpkt_header.type == 0)
         return;
 
     QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.dlen, "dlen");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
     lst += ccf::GetCCFXmlItem(pkt.fThreshold, "Threshold");
     lst += ccf::GetCCFXmlItem(pkt.fMultiplier, "Multiplier");
 
@@ -179,13 +179,13 @@ CCFXmlItem::CCFXmlItem(cbPKT_SS_ARTIF_REJECT & pkt, QString strName)
 {
     m_xmlTag = strName;
     m_xmlAttribs.insert("Type", "cbPKT_SS_ARTIF_REJECT");
-    if (pkt.type == 0)
+    if (pkt.cbpkt_header.type == 0)
         return;
 
     QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.dlen, "dlen");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
     lst += ccf::GetCCFXmlItem(pkt.nMaxSimulChans, "MaxSimulChans");
     lst += ccf::GetCCFXmlItem(pkt.nRefractoryCount, "RefractoryCount");
 
@@ -203,9 +203,9 @@ CCFXmlItem::CCFXmlItem(cbPKT_SS_NOISE_BOUNDARY & pkt, QString strName)
         return;
 
     QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.dlen, "dlen");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
     lst += ccf::GetCCFXmlItem(pkt.chan, "chan");
     lst += ccf::GetCCFXmlItem(pkt.afc, 3, "center");
     lst += ccf::GetCCFXmlItem(pkt.afS, 3, 3, "axes", "axis");
@@ -220,13 +220,13 @@ CCFXmlItem::CCFXmlItem(cbPKT_SS_STATISTICS & pkt, QString strName)
 {
     m_xmlTag = strName;
     m_xmlAttribs.insert("Type", "cbPKT_SS_STATISTICS");
-    if (pkt.type == 0)
+    if (pkt.cbpkt_header.type == 0)
         return;
 
     QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.dlen, "dlen");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
     lst += ccf::GetCCFXmlItem(pkt.nUpdateSpikes, "UpdateSpikes");
     lst += ccf::GetCCFXmlItem(pkt.nAutoalg, "Autoalg");
     lst += ccf::GetCCFXmlItem(pkt.nMode, "mode");
@@ -250,13 +250,13 @@ CCFXmlItem::CCFXmlItem(cbPKT_SS_STATUS & pkt, QString strName)
 {
     m_xmlTag = strName;
     m_xmlAttribs.insert("Type", "cbPKT_SS_STATUS");
-    if (pkt.type == 0)
+    if (pkt.cbpkt_header.type == 0)
         return;
 
     QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.dlen, "dlen");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
     lst += ccf::GetCCFXmlItem(pkt.cntlUnitStats, "cntlUnitStats");
     lst += ccf::GetCCFXmlItem(pkt.cntlNumUnits, "cntlNumUnits");
 
@@ -270,13 +270,13 @@ CCFXmlItem::CCFXmlItem(cbPKT_SYSINFO & pkt, QString strName)
 {
     m_xmlTag = strName;
     m_xmlAttribs.insert("Type", "cbPKT_SYSINFO");
-    if (pkt.type == 0)
+    if (pkt.cbpkt_header.type == 0)
         return;
 
     QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.dlen, "dlen");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
     lst += ccf::GetCCFXmlItem(pkt.sysfreq, "sysfreq");
     lst += ccf::GetCCFXmlItem(pkt.spikelen, "spike/length");
     lst += ccf::GetCCFXmlItem(pkt.spikepre, "spike/pretrigger");
@@ -300,9 +300,9 @@ CCFXmlItem::CCFXmlItem(cbPKT_NTRODEINFO & pkt, QString strName)
         return;
 
     QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.dlen, "dlen");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
     lst += ccf::GetCCFXmlItem(pkt.ntrode, "ntrode");
     lst += ccf::GetCCFXmlItem(pkt.label, cbLEN_STR_LABEL, "label");
     lst += ccf::GetCCFXmlItem(pkt.ellipses, cbMAXSITEPLOTS, cbMAXUNITS, "ellipses", "ellipse");
@@ -324,9 +324,9 @@ CCFXmlItem::CCFXmlItem(cbPKT_LNC & pkt, QString strName)
         return;
 
     QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.dlen, "dlen");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
     lst += ccf::GetCCFXmlItem(pkt.lncFreq, "frequency");
     lst += ccf::GetCCFXmlItem(pkt.lncRefChan, "RefChan/RefChan_item");
     lst += ccf::GetCCFXmlItem(pkt.lncGlobalMode, "GlobalMode");
@@ -343,13 +343,13 @@ CCFXmlItem::CCFXmlItem(cbPKT_FILTINFO & pkt, QString strName)
     pkt.label[cbLEN_STR_LABEL - 1] = 0;
     m_xmlAttribs.insert("label", QString(pkt.label));
     m_xmlAttribs.insert("Type", "cbPKT_FILTINFO");
-    if (pkt.type == 0)
+    if (pkt.cbpkt_header.type == 0)
         return;
 
     QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.dlen, "dlen");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
     lst += ccf::GetCCFXmlItem(pkt.proc, "proc");
     lst += ccf::GetCCFXmlItem(pkt.filt, "filter");
     lst += ccf::GetCCFXmlItem(pkt.label, cbLEN_STR_LABEL, "label");
@@ -385,9 +385,9 @@ CCFXmlItem::CCFXmlItem(cbPKT_AOUT_WAVEFORM & pkt, QString strName)
         return;
 
     QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.dlen, "dlen");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
+    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
     lst += ccf::GetCCFXmlItem(pkt.chan, "chan");
     lst += ccf::GetCCFXmlItem(pkt.repeats, "repeats");
     lst += ccf::GetCCFXmlItem(pkt.trig, "trigger/type");
@@ -726,9 +726,9 @@ int ccf::ItemNumber(XmlFile * const xml, cbPKT_CHANINFO & item)
 template<>
 void ccf::ReadItem(XmlFile * const xml, cbPKT_CHANINFO & item)
 {
-    ccf::ReadItem(xml, item.chid, "chid");
-    ccf::ReadItem(xml, item.type, "type");
-    ccf::ReadItem(xml, item.dlen, "dlen");
+    ccf::ReadItem(xml, item.cbpkt_header.chid, "chid");
+    ccf::ReadItem(xml, item.cbpkt_header.type, "type");
+    ccf::ReadItem(xml, item.cbpkt_header.dlen, "dlen");
     ccf::ReadItem(xml, item.chan, "chan");
     ccf::ReadItem(xml, item.proc, "proc");
     ccf::ReadItem(xml, item.bank, "bank");
@@ -788,9 +788,9 @@ void ccf::ReadItem(XmlFile * const xml, cbPKT_CHANINFO & item)
 template<>
 void ccf::ReadItem(XmlFile * const xml, cbPKT_ADAPTFILTINFO & item)
 {
-    ccf::ReadItem(xml, item.chid, "chid");
-    ccf::ReadItem(xml, item.type, "type");
-    ccf::ReadItem(xml, item.dlen, "dlen");
+    ccf::ReadItem(xml, item.cbpkt_header.chid, "chid");
+    ccf::ReadItem(xml, item.cbpkt_header.type, "type");
+    ccf::ReadItem(xml, item.cbpkt_header.dlen, "dlen");
     ccf::ReadItem(xml, item.chan, "chan");
     ccf::ReadItem(xml, item.nMode, "mode");
     ccf::ReadItem(xml, item.dLearningRate, "LearningRate");
@@ -806,9 +806,9 @@ void ccf::ReadItem(XmlFile * const xml, cbPKT_ADAPTFILTINFO & item)
 template<>
 void ccf::ReadItem(XmlFile * const xml, cbPKT_SS_DETECT & item)
 {
-    ccf::ReadItem(xml, item.chid, "chid");
-    ccf::ReadItem(xml, item.type, "type");
-    ccf::ReadItem(xml, item.dlen, "dlen");
+    ccf::ReadItem(xml, item.cbpkt_header.chid, "chid");
+    ccf::ReadItem(xml, item.cbpkt_header.type, "type");
+    ccf::ReadItem(xml, item.cbpkt_header.dlen, "dlen");
     ccf::ReadItem(xml, item.fThreshold, "Threshold");
     ccf::ReadItem(xml, item.fMultiplier, "Multiplier");
 }
@@ -821,9 +821,9 @@ void ccf::ReadItem(XmlFile * const xml, cbPKT_SS_DETECT & item)
 template<>
 void ccf::ReadItem(XmlFile * const xml, cbPKT_SS_ARTIF_REJECT & item)
 {
-    ccf::ReadItem(xml, item.chid, "chid");
-    ccf::ReadItem(xml, item.type, "type");
-    ccf::ReadItem(xml, item.dlen, "dlen");
+    ccf::ReadItem(xml, item.cbpkt_header.chid, "chid");
+    ccf::ReadItem(xml, item.cbpkt_header.type, "type");
+    ccf::ReadItem(xml, item.cbpkt_header.dlen, "dlen");
     ccf::ReadItem(xml, item.nMaxSimulChans, "MaxSimulChans");
     ccf::ReadItem(xml, item.nRefractoryCount, "RefractoryCount");
 }
@@ -850,9 +850,9 @@ int ccf::ItemNumber(XmlFile * const xml, cbPKT_SS_NOISE_BOUNDARY & item)
 template<>
 void ccf::ReadItem(XmlFile * const xml, cbPKT_SS_NOISE_BOUNDARY & item)
 {
-    ccf::ReadItem(xml, item.chid, "chid");
-    ccf::ReadItem(xml, item.type, "type");
-    ccf::ReadItem(xml, item.dlen, "dlen");
+    ccf::ReadItem(xml, item.cbpkt_header.chid, "chid");
+    ccf::ReadItem(xml, item.cbpkt_header.type, "type");
+    ccf::ReadItem(xml, item.cbpkt_header.dlen, "dlen");
     ccf::ReadItem(xml, item.chan, "chan");
     ccf::ReadItem(xml, item.afc, 3, "center");
     ccf::ReadItem(xml, item.afS, 3, 3, "axes");
@@ -866,9 +866,9 @@ void ccf::ReadItem(XmlFile * const xml, cbPKT_SS_NOISE_BOUNDARY & item)
 template<>
 void ccf::ReadItem(XmlFile * const xml, cbPKT_SS_STATISTICS & item)
 {
-    ccf::ReadItem(xml, item.chid, "chid");
-    ccf::ReadItem(xml, item.type, "type");
-    ccf::ReadItem(xml, item.dlen, "dlen");
+    ccf::ReadItem(xml, item.cbpkt_header.chid, "chid");
+    ccf::ReadItem(xml, item.cbpkt_header.type, "type");
+    ccf::ReadItem(xml, item.cbpkt_header.dlen, "dlen");
     ccf::ReadItem(xml, item.nUpdateSpikes, "UpdateSpikes");
     ccf::ReadItem(xml, item.nAutoalg, "Autoalg");
     ccf::ReadItem(xml, item.nMode, "mode");
@@ -891,9 +891,9 @@ void ccf::ReadItem(XmlFile * const xml, cbPKT_SS_STATISTICS & item)
 template<>
 void ccf::ReadItem(XmlFile * const xml, cbPKT_SS_STATUS & item)
 {
-    ccf::ReadItem(xml, item.chid, "chid");
-    ccf::ReadItem(xml, item.type, "type");
-    ccf::ReadItem(xml, item.dlen, "dlen");
+    ccf::ReadItem(xml, item.cbpkt_header.chid, "chid");
+    ccf::ReadItem(xml, item.cbpkt_header.type, "type");
+    ccf::ReadItem(xml, item.cbpkt_header.dlen, "dlen");
     ccf::ReadItem(xml, item.cntlUnitStats, "cntlUnitStats");
     ccf::ReadItem(xml, item.cntlNumUnits, "cntlNumUnits");
 }
@@ -906,9 +906,9 @@ void ccf::ReadItem(XmlFile * const xml, cbPKT_SS_STATUS & item)
 template<>
 void ccf::ReadItem(XmlFile * const xml, cbPKT_SYSINFO & item)
 {
-    ccf::ReadItem(xml, item.chid, "chid");
-    ccf::ReadItem(xml, item.type, "type");
-    ccf::ReadItem(xml, item.dlen, "dlen");
+    ccf::ReadItem(xml, item.cbpkt_header.chid, "chid");
+    ccf::ReadItem(xml, item.cbpkt_header.type, "type");
+    ccf::ReadItem(xml, item.cbpkt_header.dlen, "dlen");
     ccf::ReadItem(xml, item.sysfreq, "sysfreq");
     ccf::ReadItem(xml, item.spikelen, "spike/length");
     ccf::ReadItem(xml, item.spikepre, "spike/pretrigger");
@@ -939,9 +939,9 @@ int ccf::ItemNumber(XmlFile * const xml, cbPKT_NTRODEINFO & item)
 template<>
 void ccf::ReadItem(XmlFile * const xml, cbPKT_NTRODEINFO & item)
 {
-    ccf::ReadItem(xml, item.chid, "chid");
-    ccf::ReadItem(xml, item.type, "type");
-    ccf::ReadItem(xml, item.dlen, "dlen");
+    ccf::ReadItem(xml, item.cbpkt_header.chid, "chid");
+    ccf::ReadItem(xml, item.cbpkt_header.type, "type");
+    ccf::ReadItem(xml, item.cbpkt_header.dlen, "dlen");
     ccf::ReadItem(xml, item.ntrode, "ntrode");
     ccf::ReadItem(xml, item.label, cbLEN_STR_LABEL, "label");
     ccf::ReadItem(xml, item.ellipses, cbMAXSITEPLOTS, cbMAXUNITS, "ellipses");
@@ -958,9 +958,9 @@ void ccf::ReadItem(XmlFile * const xml, cbPKT_NTRODEINFO & item)
 template<>
 void ccf::ReadItem(XmlFile * const xml, cbPKT_LNC & item)
 {
-    ccf::ReadItem(xml, item.chid, "chid");
-    ccf::ReadItem(xml, item.type, "type");
-    ccf::ReadItem(xml, item.dlen, "dlen");
+    ccf::ReadItem(xml, item.cbpkt_header.chid, "chid");
+    ccf::ReadItem(xml, item.cbpkt_header.type, "type");
+    ccf::ReadItem(xml, item.cbpkt_header.dlen, "dlen");
     ccf::ReadItem(xml, item.lncFreq, "frequency");
     ccf::ReadItem(xml, item.lncRefChan, "RefChan/RefChan_item");
     ccf::ReadItem(xml, item.lncGlobalMode, "GlobalMode");
@@ -974,9 +974,9 @@ void ccf::ReadItem(XmlFile * const xml, cbPKT_LNC & item)
 template<>
 void ccf::ReadItem(XmlFile * const xml, cbPKT_FILTINFO & item)
 {
-    ccf::ReadItem(xml, item.chid, "chid");
-    ccf::ReadItem(xml, item.type, "type");
-    ccf::ReadItem(xml, item.dlen, "dlen");
+    ccf::ReadItem(xml, item.cbpkt_header.chid, "chid");
+    ccf::ReadItem(xml, item.cbpkt_header.type, "type");
+    ccf::ReadItem(xml, item.cbpkt_header.dlen, "dlen");
     ccf::ReadItem(xml, item.proc, "proc");
     ccf::ReadItem(xml, item.filt, "filter");
     ccf::ReadItem(xml, item.label, cbLEN_STR_LABEL, "label");
@@ -1024,9 +1024,9 @@ int ccf::ItemNumber(XmlFile * const xml, cbPKT_AOUT_WAVEFORM & item)
 template<>
 void ccf::ReadItem(XmlFile * const xml, cbPKT_AOUT_WAVEFORM & item)
 {
-    ccf::ReadItem(xml, item.chid, "chid");
-    ccf::ReadItem(xml, item.type, "type");
-    ccf::ReadItem(xml, item.dlen, "dlen");
+    ccf::ReadItem(xml, item.cbpkt_header.chid, "chid");
+    ccf::ReadItem(xml, item.cbpkt_header.type, "type");
+    ccf::ReadItem(xml, item.cbpkt_header.dlen, "dlen");
     ccf::ReadItem(xml, item.chan, "chan");
     ccf::ReadItem(xml, item.mode, "wave/mode");
     ccf::ReadItem(xml, item.repeats, "repeats");
