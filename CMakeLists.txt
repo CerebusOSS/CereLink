@@ -1,7 +1,6 @@
 # CBSDK CMake Build System
 # Author: griffin.milsap@gmail.com
 #         chadwick.boulay@gmail.com
-# Version 1.1 Jan. 2017
 #   Build information for
 #       cbsdk Library
 #       -shared, -static (optional), -matlab (optional), -octave (optional)
@@ -94,9 +93,9 @@ cmake_policy(SET CMP0042 NEW) # ENABLE CMP0042: MACOSX_RPATH is enabled by defau
 # Third party libraries
 
 # -Qt
-FIND_PACKAGE(Qt6 REQUIRED COMPONENTS Core Xml Concurrent)
+FIND_PACKAGE(Qt6 REQUIRED COMPONENTS Core Concurrent)
 set(CMAKE_AUTOMOC ON)
-SET(QT_LIBRARIES Qt6::Core Qt6::Xml Qt6::Concurrent)
+SET(QT_LIBRARIES Qt6::Core Qt6::Concurrent)
 ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP)
 
 # -HDF5
