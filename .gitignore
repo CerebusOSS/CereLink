@@ -1,5 +1,7 @@
+install/
 dist/
 build*/
+package/
 cmake-build*/
 *.egg-info
 *.pyd
@@ -9,7 +11,7 @@ cerebus/cbpy.cp*
 out/
 CMakeSettings.json
 
-.*
+.gitattributes
 *.*~
 *.obj/
 *.dir/

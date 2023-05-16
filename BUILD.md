@@ -60,7 +60,7 @@ Note: This may generate an error related to the CLI builds. Please see further i
 # cerebus.cbpy (Python lib) Build Instructions
 
 * Open a Terminal or Anaconda prompt and activate your Python environment.
-* Your Python environment must already have Cython, numpy, and pip installed.
+* Your Python environment must already have Cython, numpy, pip, and wheel installed.
 * Change to the CereLink directory.
 * Set the QTDIR environment variable: `set QTDIR=C:\Qt\6.4.2\msvc2019_64`
 * Make sure the CereLink Visual Studio project is closed.

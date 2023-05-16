@@ -21,11 +21,10 @@
 #    Change the install target using CMAKE_INSTALL_PREFIX. See example CMAKE command below.
 #    - If you would like to build the C# libraries and examples then add -DBUILD_CLI=ON
 # QT:
-#     QT5 ships with its own cmake config files. We need to tell CMake where to find this.
 #     On Mac OS, assuming qt installed with homebrew,
-#     run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt5)
-#     On Windows, run CMake with -DQt5_DIR=path\to\qt\version\platform\lib\cmake\Qt5
-#     For example: cmake .. -G "Visual Studio 15 2017 Win64" -DQt5_DIR=C:\Qt\5.13.1\msvc2017_64\lib\cmake\Qt5 -DCMAKE_INSTALL_PREFIX=..\dist -DBUILD_CLI=ON
+#     run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt)
+#     On Windows, run CMake with -DQt6_DIR=path\to\qt\version\platform\lib\cmake\Qt6
+#     For example: cmake .. -G "Visual Studio 15 2017 Win64" -DQt6_DIR=C:\Qt\6.2.1\msvc2017_64\lib\cmake\Qt6 -DCMAKE_INSTALL_PREFIX=install -DBUILD_CLI=ON
 #
 
 
@@ -91,17 +90,9 @@ cmake_policy(SET CMP0042 NEW) # ENABLE CMP0042: MACOSX_RPATH is enabled by defau
 # Third party libraries
 
 # -Qt
-## For Qt
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
+FIND_PACKAGE(Qt6 REQUIRED COMPONENTS Core Xml Concurrent)
 set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTORCC ON)
-find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Xml Concurrent REQUIRED)
-find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Xml Concurrent REQUIRED)
-get_property(qtloc TARGET Qt${QT_VERSION_MAJOR}::Core PROPERTY IMPORTED_LOCATION_RELEASE)
-message(STATUS "Found Qt lib in ${qtloc} and version Qt${QT_VERSION_MAJOR}")
-SET(QT_LIBRARIES Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Xml Qt${QT_VERSION_MAJOR}::Concurrent)
-# qt_standard_project_setup()
+SET(QT_LIBRARIES Qt6::Core Qt6::Xml Qt6::Concurrent)
 ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP)
 
 # -HDF5
@@ -157,6 +148,7 @@ ENDIF()
 # Files/folders common to multiple targets
 
 SET( LIB_INCL_DIRS
+    ${PROJECT_SOURCE_DIR}/cbsdk
     ${PROJECT_SOURCE_DIR}/cbhwlib
     ${PROJECT_SOURCE_DIR}/Central
     ${PROJECT_SOURCE_DIR}/CentralCommon
@@ -167,47 +159,23 @@ ENDIF( WIN32 )
 
 SET( LIB_SOURCE
     ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.cpp
-    ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.h
-    ${PROJECT_SOURCE_DIR}/cbsdk/SdkApp.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/cbHwlibHi.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/cbHwlibHi.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtils.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtils.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsBinary.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsBinary.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsConcurrent.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsConcurrent.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXml.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXml.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXmlItems.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXmlItems.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/XmlFile.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/XmlFile.h
     ${PROJECT_SOURCE_DIR}/Central/Instrument.cpp
-    ${PROJECT_SOURCE_DIR}/Central/Instrument.h
     ${PROJECT_SOURCE_DIR}/Central/UDPsocket.cpp
-    ${PROJECT_SOURCE_DIR}/Central/UDPsocket.h
 )
 IF( WIN32 )
-    LIST (APPEND LIB_SOURCE ${PROJECT_SOURCE_DIR}/cbhwlib/DataVector.h)
     IF(MSVC)
         LIST (APPEND LIB_SOURCE ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc)
     ENDIF(MSVC)
 ENDIF( WIN32 )
-
-# Qt-MOC headers that need it
-SET( LIB_HEADERS
-    ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.h
-)
-if (${QT_VERSION_MAJOR} EQUAL 5)
-    qt5_wrap_cpp( LIB_HEADERS_MOC ${LIB_HEADERS} )
-else()
-    qt_wrap_cpp( LIB_HEADERS_MOC ${LIB_HEADERS} )
-endif()
 
 # Source for both cbmex and octave targets
 SET( LIB_SOURCE_CBMEX
@@ -224,15 +192,15 @@ ENDIF( MSVC )
 
 ##
 # cbsdk shared / dynamic
-ADD_LIBRARY( ${LIB_NAME} SHARED ${LIB_SOURCE} ${LIB_HEADERS_MOC} )
-TARGET_INCLUDE_DIRECTORIES( ${LIB_NAME} PRIVATE ${LIB_INCL_DIRS})
+ADD_LIBRARY( ${LIB_NAME} SHARED ${LIB_SOURCE} )
+TARGET_INCLUDE_DIRECTORIES( ${LIB_NAME} PRIVATE ${LIB_INCL_DIRS} )
 TARGET_LINK_LIBRARIES( ${LIB_NAME} PRIVATE ${QT_LIBRARIES} )
 IF( WIN32 )
     TARGET_LINK_LIBRARIES( ${LIB_NAME} PRIVATE wsock32 ws2_32 winmm )
 ELSE()
     IF(NOT APPLE)
-        # Hide unexported symbols
         TARGET_LINK_LIBRARIES(${LIB_NAME} PRIVATE rt)
+        # Hide unexported symbols
         SET_TARGET_PROPERTIES( ${LIB_NAME} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
     ENDIF(NOT APPLE)
 ENDIF( WIN32 )
@@ -256,6 +224,9 @@ IF(${BUILD_STATIC})
             # MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
         )
     ELSE( WIN32 )
+        IF(NOT APPLE)
+            TARGET_LINK_LIBRARIES(${LIB_NAME_STATIC} PRIVATE rt)
+        ENDIF(NOT APPLE)
         # Need relocatable static library
         SET_TARGET_PROPERTIES( ${LIB_NAME_STATIC} PROPERTIES
             LINK_FLAGS "-Wl,--exclude-libs,ALL"
@@ -374,9 +345,13 @@ endfunction()
 
 ##
 # test
+# These are not real tests. They are simply utilities to help debug CBSDK.
 IF(${BUILD_TEST})
     SET(TEST_TARGET_LIST)
 
+    # testcbsdk is a bit weird because it does not link the library, but adds the library sources.
+    #  This is convenient for development, but also annoying because we have to manually add transitive dependencies.
+    #  TODO: It would be better if we made a simple obj target then reused that.
     ADD_EXECUTABLE(testcbsdk
             ${PROJECT_SOURCE_DIR}/samples/TestCBSDK/testcbsdk.cpp
             ${LIB_SOURCE} ${LIB_HEADERS_MOC}
@@ -392,6 +367,10 @@ IF(${BUILD_TEST})
         TARGET_LINK_LIBRARIES(testcbsdk
                wsock32 ws2_32 winmm
         )
+    ELSEIF(NOT APPLE)
+        # Hide unexported symbols
+        TARGET_LINK_LIBRARIES(testcbsdk PRIVATE rt)
+        SET_TARGET_PROPERTIES(testcbsdk PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
     ENDIF(WIN32)
     LIST(APPEND TEST_TARGET_LIST testcbsdk)
 
@@ -483,14 +462,6 @@ if(WIN32)
     )
 endif(WIN32)
 
-#########################################################################################
-# Shared & Static post-build copy the header files into the dist directory.
-ADD_CUSTOM_COMMAND(
-    TARGET "${LIB_NAME}"
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/cbsdk/cbsdk.h" "${CMAKE_CURRENT_SOURCE_DIR}/dist/include/cbsdk.h"
-    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/cbhwlib/cbhwlib.h" "${CMAKE_CURRENT_SOURCE_DIR}/dist/include/cbhwlib.h"
-)
 
 # --------- #
 # Packaging #
