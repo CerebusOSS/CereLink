@@ -90,17 +90,9 @@ cmake_policy(SET CMP0042 NEW) # ENABLE CMP0042: MACOSX_RPATH is enabled by defau
 # Third party libraries
 
 # -Qt
-## For Qt
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
+FIND_PACKAGE(Qt6 REQUIRED COMPONENTS Core Xml Concurrent)
 set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTORCC ON)
-find_package(QT NAMES Qt6 COMPONENTS Core Xml Concurrent REQUIRED)
-find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Xml Concurrent REQUIRED)
-get_property(qtloc TARGET Qt${QT_VERSION_MAJOR}::Core PROPERTY IMPORTED_LOCATION_RELEASE)
-message(STATUS "Found Qt lib in ${qtloc} and version Qt${QT_VERSION_MAJOR}")
-SET(QT_LIBRARIES Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Xml Qt${QT_VERSION_MAJOR}::Concurrent)
-# qt_standard_project_setup()
+SET(QT_LIBRARIES Qt6::Core Qt6::Xml Qt6::Concurrent)
 ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP)
 
 # -HDF5
@@ -156,6 +148,7 @@ ENDIF()
 # Files/folders common to multiple targets
 
 SET( LIB_INCL_DIRS
+    ${PROJECT_SOURCE_DIR}/cbsdk
     ${PROJECT_SOURCE_DIR}/cbhwlib
     ${PROJECT_SOURCE_DIR}/Central
     ${PROJECT_SOURCE_DIR}/CentralCommon
@@ -166,47 +159,23 @@ ENDIF( WIN32 )
 
 SET( LIB_SOURCE
     ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.cpp
-    ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.h
-    ${PROJECT_SOURCE_DIR}/cbsdk/SdkApp.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/cbHwlibHi.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/cbHwlibHi.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtils.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtils.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsBinary.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsBinary.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsConcurrent.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsConcurrent.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXml.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXml.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXmlItems.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/CCFUtilsXmlItems.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.h
     ${PROJECT_SOURCE_DIR}/cbhwlib/XmlFile.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/XmlFile.h
     ${PROJECT_SOURCE_DIR}/Central/Instrument.cpp
-    ${PROJECT_SOURCE_DIR}/Central/Instrument.h
     ${PROJECT_SOURCE_DIR}/Central/UDPsocket.cpp
-    ${PROJECT_SOURCE_DIR}/Central/UDPsocket.h
 )
 IF( WIN32 )
-    LIST (APPEND LIB_SOURCE ${PROJECT_SOURCE_DIR}/cbhwlib/DataVector.h)
     IF(MSVC)
         LIST (APPEND LIB_SOURCE ${PROJECT_SOURCE_DIR}/cbmex/cbMex.rc)
     ENDIF(MSVC)
 ENDIF( WIN32 )
-
-# Qt-MOC headers that need it
-SET( LIB_HEADERS
-    ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.h
-)
-if (${QT_VERSION_MAJOR} EQUAL 5)
-    qt5_wrap_cpp( LIB_HEADERS_MOC ${LIB_HEADERS} )
-else()
-    qt_wrap_cpp( LIB_HEADERS_MOC ${LIB_HEADERS} )
-endif()
 
 # Source for both cbmex and octave targets
 SET( LIB_SOURCE_CBMEX
@@ -223,15 +192,15 @@ ENDIF( MSVC )
 
 ##
 # cbsdk shared / dynamic
-ADD_LIBRARY( ${LIB_NAME} SHARED ${LIB_SOURCE} ${LIB_HEADERS_MOC} )
-TARGET_INCLUDE_DIRECTORIES( ${LIB_NAME} PRIVATE ${LIB_INCL_DIRS})
+ADD_LIBRARY( ${LIB_NAME} SHARED ${LIB_SOURCE} )
+TARGET_INCLUDE_DIRECTORIES( ${LIB_NAME} PRIVATE ${LIB_INCL_DIRS} )
 TARGET_LINK_LIBRARIES( ${LIB_NAME} PRIVATE ${QT_LIBRARIES} )
 IF( WIN32 )
     TARGET_LINK_LIBRARIES( ${LIB_NAME} PRIVATE wsock32 ws2_32 winmm )
 ELSE()
     IF(NOT APPLE)
-        # Hide unexported symbols
         TARGET_LINK_LIBRARIES(${LIB_NAME} PRIVATE rt)
+        # Hide unexported symbols
         SET_TARGET_PROPERTIES( ${LIB_NAME} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
     ENDIF(NOT APPLE)
 ENDIF( WIN32 )
@@ -255,6 +224,9 @@ IF(${BUILD_STATIC})
             # MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
         )
     ELSE( WIN32 )
+        IF(NOT APPLE)
+            TARGET_LINK_LIBRARIES(${LIB_NAME_STATIC} PRIVATE rt)
+        ENDIF(NOT APPLE)
         # Need relocatable static library
         SET_TARGET_PROPERTIES( ${LIB_NAME_STATIC} PROPERTIES
             LINK_FLAGS "-Wl,--exclude-libs,ALL"
