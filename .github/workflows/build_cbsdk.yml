@@ -27,7 +27,7 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - { name: "windows-x64", os: "windows-latest", cmake_extra: "-T v142,host=x86", qt_arch: "win64_msvc2019_64", qt_ver: "6.4.0" }
+          - { name: "windows-x64", os: "windows-latest", cmake_extra: "-G 'MinGW Makefiles'", qt_arch: "win64_mingw", qt_ver: "6.4.3" }
           - { name: "macOS-latest", os: "macOS-latest"}
           - { name: "jammy", os: "ubuntu-22.04"}
           - { name: "focal", os: "ubuntu-20.04"}
