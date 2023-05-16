@@ -15,6 +15,10 @@ on:
 env:
   NSPVERSION: 7.5.1
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     name: ${{ matrix.config.name }}
