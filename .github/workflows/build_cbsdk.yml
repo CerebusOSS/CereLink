@@ -27,7 +27,7 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - { name: "windows-x64", os: "windows-latest", qt_arch: "win64_msvc2019_64", qt_ver: "6.4.3" }
+          - { name: "windows-x64", os: "windows-latest", qt_arch: "win64_msvc2019_64", qt_ver: "6.4.3", cmake_extra: "-T v142,host=x86 -DCMAKE_PREFIX_PATH=D:\a\CereLink\Qt\6.4.3\msvc2019_64" }
           - { name: "macOS-latest", os: "macOS-latest"}
           - { name: "jammy", os: "ubuntu-22.04"}
           - { name: "focal", os: "ubuntu-20.04"}
@@ -62,10 +62,8 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=${PWD}/install \
           -DCPACK_PACKAGE_DIRECTORY=${PWD}/dist \
-          if [[ "${{ matrix.config.name }}" = windows-x64 ]]; then
-            -DCMAKE_PREFIX_PATH=${Qt6_DIR} \
-          fi
-          -DCPACK_DEBIAN_PACKAGE_SHLIBDEPS=ON
+          -DCPACK_DEBIAN_PACKAGE_SHLIBDEPS=ON \
+          ${{ matrix.config.cmake_extra }}
 
       - name: Build and Package
         run: |
