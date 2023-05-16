@@ -48,15 +48,17 @@ def get_extras():
         def _get_qt_path():
             # Windows does not have a canonical install place, so try some known locations
             path = ''
-            try:
-                import _winreg
-            except ImportError:
-                import winreg as _winreg
-            try:
-                path = os.environ['QTDIR']  # e.g. `set QTDIR=C:\Qt\6.2.4\msvc2019_64`
-            except:
-                pass
+            if "QTDIR" in os.environ:
+                path = os.environ['QTDIR']  # e.g. `set QTDIR=C:\Qt\6.4.3\msvc2019_64`
+            elif "Qt6_DIR" in os.environ:
+                path = os.environ["Qt6_DIR"]  # C:\Qt\6.4.3\msvc2019_64\lib\cmake\Qt6
+                while os.path.split(path)[1] in ["Qt6", "cmake", "lib"]:
+                    path = os.path.split(path)[0]
             if not path:
+                try:
+                    import _winreg
+                except ImportError:
+                    import winreg as _winreg
                 try:
                     hk = _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE, r'SOFTWARE\Trolltech\Versions', 0)
                     ver = _winreg.EnumKey(hk, 0)
@@ -78,25 +80,13 @@ def get_extras():
                     if not path:
                         raise ValueError("InstallDir not found")
                 except:
-                    raise RuntimeError("Cannot find Qt in registry nor QTDIR is set")
+                    raise RuntimeError("Cannot find Qt in registry nor are QTDIR or Qt6_DIR set")
+            return path
 
-            # Parse qt_path to see if it is qt5
-            qt_ver = ""
-            tmp = (path, "")
-            while tmp[0] != "":
-                tmp = os.path.split(tmp[0])
-                mysplit = tmp[1].split(".")
-                if len(mysplit) > 1:
-                    ver_str = mysplit[0][-1]
-                    if ver_str in ["4", "5", "6"]:
-                        qt_ver = ver_str
-                        tmp = ("", "")
-            return path, qt_ver
-
-        qt_path, qt_ver = _get_qt_path()
+        qt_path = _get_qt_path()
         x_link_args += ['/LIBPATH:{path}'.format(path=os.path.join(qt_path, 'lib'))]
         x_includes += [os.path.join(qt_path, 'include')]
-        x_libs += ["Qt" + qt_ver + _ for _ in ["Core", "Xml", "Concurrent"]]
+        x_libs += ["Qt6" + _ for _ in ["Core", "Xml", "Concurrent"]]
     else:  # Linux
         x_link_args += ['-L{path}'.format(path=os.path.join(dist_path, 'lib{arch}'.format(arch=arch)))]
         # For Qt linking at run time, check `qtchooser -print-env`
