@@ -21,11 +21,10 @@
 #    Change the install target using CMAKE_INSTALL_PREFIX. See example CMAKE command below.
 #    - If you would like to build the C# libraries and examples then add -DBUILD_CLI=ON
 # QT:
-#     QT5 ships with its own cmake config files. We need to tell CMake where to find this.
 #     On Mac OS, assuming qt installed with homebrew,
-#     run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt5)
-#     On Windows, run CMake with -DQt5_DIR=path\to\qt\version\platform\lib\cmake\Qt5
-#     For example: cmake .. -G "Visual Studio 15 2017 Win64" -DQt5_DIR=C:\Qt\5.13.1\msvc2017_64\lib\cmake\Qt5 -DCMAKE_INSTALL_PREFIX=..\dist -DBUILD_CLI=ON
+#     run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt)
+#     On Windows, run CMake with -DQt6_DIR=path\to\qt\version\platform\lib\cmake\Qt6
+#     For example: cmake .. -G "Visual Studio 15 2017 Win64" -DQt6_DIR=C:\Qt\6.2.1\msvc2017_64\lib\cmake\Qt6 -DCMAKE_INSTALL_PREFIX=install -DBUILD_CLI=ON
 #
 
 
@@ -96,7 +95,7 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
-find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Xml Concurrent REQUIRED)
+find_package(QT NAMES Qt6 COMPONENTS Core Xml Concurrent REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Xml Concurrent REQUIRED)
 get_property(qtloc TARGET Qt${QT_VERSION_MAJOR}::Core PROPERTY IMPORTED_LOCATION_RELEASE)
 message(STATUS "Found Qt lib in ${qtloc} and version Qt${QT_VERSION_MAJOR}")
@@ -374,6 +373,7 @@ endfunction()
 
 ##
 # test
+# TODO: These should be converted to proper GoogleTest runs. Until then, exclude them from CI.
 IF(${BUILD_TEST})
     SET(TEST_TARGET_LIST)
 
@@ -483,14 +483,6 @@ if(WIN32)
     )
 endif(WIN32)
 
-#########################################################################################
-# Shared & Static post-build copy the header files into the dist directory.
-ADD_CUSTOM_COMMAND(
-    TARGET "${LIB_NAME}"
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/cbsdk/cbsdk.h" "${CMAKE_CURRENT_SOURCE_DIR}/dist/include/cbsdk.h"
-    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/cbhwlib/cbhwlib.h" "${CMAKE_CURRENT_SOURCE_DIR}/dist/include/cbhwlib.h"
-)
 
 # --------- #
 # Packaging #

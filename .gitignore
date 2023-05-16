@@ -1,5 +1,7 @@
+install/
 dist/
 build*/
+package/
 cmake-build*/
 *.egg-info
 *.pyd
