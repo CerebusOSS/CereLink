@@ -59,10 +59,12 @@ jobs:
       - name: Configure CBSDK
         run: |
           cmake -B build -S . \
-          -DBUILD_TEST=OFF \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=${PWD}/install \
           -DCPACK_PACKAGE_DIRECTORY=${PWD}/dist \
+          if [[ "${{ matrix.config.name }}" = windows-x64 ]]; then
+            -DCMAKE_PREFIX_PATH=${Qt6_DIR} \
+          fi
           -DCPACK_DEBIAN_PACKAGE_SHLIBDEPS=ON
 
       - name: Build and Package

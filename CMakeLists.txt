@@ -373,10 +373,13 @@ endfunction()
 
 ##
 # test
-# TODO: These should be converted to proper GoogleTest runs. Until then, exclude them from CI.
+# These are not real tests. They are simply utilities to help debug CBSDK.
 IF(${BUILD_TEST})
     SET(TEST_TARGET_LIST)
 
+    # testcbsdk is a bit weird because it does not link the library, but adds the library sources.
+    #  This is convenient for development, but also annoying because we have to manually add transitive dependencies.
+    #  TODO: It would be better if we made a simple obj target then reused that.
     ADD_EXECUTABLE(testcbsdk
             ${PROJECT_SOURCE_DIR}/samples/TestCBSDK/testcbsdk.cpp
             ${LIB_SOURCE} ${LIB_HEADERS_MOC}
@@ -392,6 +395,10 @@ IF(${BUILD_TEST})
         TARGET_LINK_LIBRARIES(testcbsdk
                wsock32 ws2_32 winmm
         )
+    ELSEIF(NOT APPLE)
+        # Hide unexported symbols
+        TARGET_LINK_LIBRARIES(testcbsdk PRIVATE rt)
+        SET_TARGET_PROPERTIES(testcbsdk PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
     ENDIF(WIN32)
     LIST(APPEND TEST_TARGET_LIST testcbsdk)
 
