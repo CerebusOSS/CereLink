@@ -1,7 +1,9 @@
 from __future__ import print_function
 import os
+from pathlib import Path
 import sys
 import platform
+
 import numpy
 from setuptools import find_packages
 from setuptools import setup, Extension
@@ -46,46 +48,31 @@ def get_extras():
 
         # Find Qt library
         def _get_qt_path():
-            # Windows does not have a canonical install place, so try some known locations
-            path = ''
+            # Windows does not have a canonical installation location, so we try some common locations.
+            path = None
             if "QTDIR" in os.environ:
-                path = os.environ['QTDIR']  # e.g. `set QTDIR=C:\Qt\6.4.3\msvc2019_64`
+                path = Path(os.environ['QTDIR'])  # e.g. `set QTDIR=C:\Qt\6.4.3\msvc2019_64`
             elif "Qt6_DIR" in os.environ:
-                path = os.environ["Qt6_DIR"]  # C:\Qt\6.4.3\msvc2019_64\lib\cmake\Qt6
-                while os.path.split(path)[1] in ["Qt6", "cmake", "lib"]:
-                    path = os.path.split(path)[0]
-            if not path:
-                try:
-                    import _winreg
-                except ImportError:
-                    import winreg as _winreg
-                try:
-                    hk = _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE, r'SOFTWARE\Trolltech\Versions', 0)
-                    ver = _winreg.EnumKey(hk, 0)
-                    _winreg.CloseKey(hk)
-                    print('Using installed Qt{ver}'.format(ver=ver))
-                    hk = _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE,
-                                         r'SOFTWARE\Trolltech\Versions\{ver}'.format(ver=ver),
-                                         0)
-                    ii = 0
-                    while True:
-                        try:
-                            install = _winreg.EnumValue(hk, ii)
-                            if install[0].lower() == 'installdir':
-                                path = install[1]
+                path = Path(os.environ["Qt6_DIR"])  # C:\Qt\6.4.3\msvc2019_64\lib\cmake\Qt6
+                while path.stem in ["Qt6", "cmake", "lib"]:
+                    path = path.parents[0]
+            else:
+                base_paths = [Path(_) for _ in ["C:\\Qt", "D:\\a\\CereLink\\Qt"]]  # Latter used by GitHub Actions
+                for bp in base_paths:
+                    if bp.exists():
+                        qt_install_paths = list(bp.glob("6*"))
+                        if len(qt_install_paths) > 0:
+                            qt_msvc_paths = list(qt_install_paths[-1].glob("msvc*64"))
+                            if len(qt_msvc_paths) > 0:
+                                path = qt_msvc_paths[-1]
                                 break
-                        except:
-                            break
-                    _winreg.CloseKey(hk)
-                    if not path:
-                        raise ValueError("InstallDir not found")
-                except:
-                    raise RuntimeError("Cannot find Qt in registry nor are QTDIR or Qt6_DIR set")
+            if not path:
+                raise RuntimeError("Cannot find Qt. Please set QTDIR or Qt6_DIR environment variable and try again.")
             return path
 
         qt_path = _get_qt_path()
-        x_link_args += ['/LIBPATH:{path}'.format(path=os.path.join(qt_path, 'lib'))]
-        x_includes += [os.path.join(qt_path, 'include')]
+        x_link_args += [f"/LIBPATH:{qt_path / 'lib'}"]
+        x_includes += [f"{qt_path / 'include'}"]
         x_libs += ["Qt6" + _ for _ in ["Core", "Xml", "Concurrent"]]
     else:  # Linux
         x_link_args += ['-L{path}'.format(path=os.path.join(dist_path, 'lib{arch}'.format(arch=arch)))]

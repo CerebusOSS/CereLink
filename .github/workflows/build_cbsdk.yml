@@ -79,12 +79,12 @@ jobs:
       - name: Build Wheel
         run: |
           python -m pip install --upgrade numpy Cython pip wheel setuptools
-#          tox
+#         python -m pip install tox
           pip wheel . -w dist/
 #          python -m tox -e clean,build
 #          python -m tox -e publish -- --verbose --repository pypi
 
-      - name: Ubuntu - Rename package
+      - name: Ubuntu - Prefix package with release name
         if: startswith(matrix.config.os, 'ubuntu-')
         run: |
           pushd dist
