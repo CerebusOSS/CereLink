@@ -1,0 +1,98 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'master'
+      - 'releases/**'
+    tags:
+      - v*.*
+  pull_request:
+    branches:
+      - master
+
+env:
+  NSPVERSION: 7.5.1
+
+jobs:
+  build:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - { name: "windows-x64", os: "windows-latest", cmake_extra: "-T v142,host=x86", qt_arch: "win64_msvc2019_64", qt_ver: "6.4.0" }
+          - { name: "macOS-latest", os: "macOS-latest"}
+          - { name: "jammy", os: "ubuntu-22.04"}
+          - { name: "focal", os: "ubuntu-20.04"}
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Dependencies (Ubuntu)
+        if: startsWith(matrix.config.os, 'ubuntu-')
+        run: |
+          if [[ "${{ matrix.config.name }}" = focal ]]; then
+            sudo add-apt-repository -y ppa:okirby/qt6-backports
+          fi
+          sudo apt-get install -y cmake qt6-base-dev
+
+      - name: Install Dependencies (Windows)
+        if: matrix.config.os == 'windows-latest'
+        uses: jurplel/install-qt-action@v3.2.1
+        with:
+          version: ${{ matrix.config.qt_ver }}
+          arch: ${{ matrix.config.qt_arch }}
+
+      - name: Install Dependencies (MacOS)
+        if: startsWith(matrix.config.os, 'macOS-')
+        run: brew install qt
+
+      - name: Configure CBSDK
+        run: |
+          cmake -B build -S . \
+          -DBUILD_TEST=OFF \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=${PWD}/install \
+          -DCPACK_PACKAGE_DIRECTORY=${PWD}/dist \
+          -DCPACK_DEBIAN_PACKAGE_SHLIBDEPS=ON \
+          ${{ matrix.config.cmake_extra }}
+
+      - name: Build and Package
+        run: |
+          cmake --build build --target install --config Release -j
+          cmake --build build --target package --config Release -j
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Build Wheel
+        run: |
+          python -m pip install --upgrade numpy Cython pip wheel setuptools tox
+          pip wheel . -w dist/
+#          python -m tox -e clean,build
+#          python -m tox -e publish -- --verbose --repository pypi
+
+      - name: Ubuntu - Rename package
+        if: startswith(matrix.config.os, 'ubuntu-')
+        run: |
+          pushd dist
+          temp="$(lsb_release -cs)"
+          for name in *
+          do
+            mv "$name" "$(echo $temp)-$name"
+          done
+          popd
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          files: |
+            dist/*

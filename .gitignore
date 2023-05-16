@@ -11,7 +11,7 @@ cerebus/cbpy.cp*
 out/
 CMakeSettings.json
 
-.*
+.gitattributes
 *.*~
 *.obj/
 *.dir/
