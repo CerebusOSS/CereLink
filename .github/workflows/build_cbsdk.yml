@@ -12,6 +12,9 @@ on:
     branches:
       - master
 
+permissions:
+  contents: write
+
 env:
   NSPVERSION: 7.5.1
 
@@ -102,3 +105,4 @@ jobs:
         with:
           files: |
             dist/*
+
