@@ -41,8 +41,8 @@ CCFUtils::CCFUtils(bool bSend, bool bThreaded, cbCCF * pCCF, cbCCFCallback pCall
     m_nInternalOriginalVersion(0),
     m_nInstance(nInstance),
     m_szFileName(NULL),
-    m_bAutoSort(FALSE),
-    m_bBinaryOriginal(FALSE)
+    m_bAutoSort(false),
+    m_bBinaryOriginal(false)
 {
     // Initial copy
     if (pCCF)
@@ -321,7 +321,7 @@ ccfResult CCFUtils::ReadVersion(LPCSTR szFileName)
         // read from NSP
         m_nInternalVersion = m_pImpl->GetInternalVersion();
         m_pImpl->m_nInternalOriginalVersion = m_nInternalOriginalVersion = m_nInternalVersion;
-        m_bBinaryOriginal = FALSE;
+        m_bBinaryOriginal = false;
     }
 
     return res;
@@ -486,7 +486,7 @@ int CCFUtils::GetInternalOriginalVersion()
 
 // Author & Date:   Ehsan Azar   30 Nov 2012
 // Purpose: If original file is binary file
-BOOL CCFUtils::IsBinaryOriginal()
+bool CCFUtils::IsBinaryOriginal()
 {
     return m_bBinaryOriginal;
 }

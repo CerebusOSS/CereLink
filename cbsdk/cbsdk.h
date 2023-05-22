@@ -379,8 +379,8 @@ typedef struct _cbSdkWaveformData
 typedef struct _cbSdkAoutMon
 {
     uint16_t  chan; ///< (1-based) channel to monitor
-    BOOL bTrack; ///< If should monitor last tracked channel
-    BOOL bSpike; ///< If spike or continuous should be monitored
+    bool bTrack; ///< If should monitor last tracked channel
+    bool bSpike; ///< If spike or continuous should be monitored
 } cbSdkAoutMon;
 
 /// CCF data

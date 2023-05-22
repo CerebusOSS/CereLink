@@ -28,12 +28,12 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Open multiple instances of library as stand-alone or under Central application
-cbRESULT cbOpen(BOOL bStandAlone = FALSE, uint32_t nInstance = 0);
+cbRESULT cbOpen(bool bStandAlone = false, uint32_t nInstance = 0);
 // Initializes the Neuromatic library (and establishes a link to the Central Control Application if bStandAlone is FALSE).
 // This function must be called before any other functions are called from this library.
 // Returns OK, NOCENTRALAPP, LIBINITERROR, MEMORYUNVAIL, HARDWAREOFFLINE, INSTOUTDATED or LIBOUTDATED
 
-cbRESULT cbClose(BOOL bStandAlone = FALSE, uint32_t nInstance = 0);
+cbRESULT cbClose(bool bStandAlone = false, uint32_t nInstance = 0);
 // Close the library (must match how library is openned)
 
 cbRESULT cbCheckApp(const char * lpName);

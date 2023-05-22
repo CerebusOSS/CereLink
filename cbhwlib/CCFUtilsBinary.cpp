@@ -93,7 +93,7 @@ ccfResult CCFUtilsBinary::ReadVersion(LPCSTR szFileName)
     if (m_nInternalOriginalVersion == 0)
         res = CCFRESULT_ERR_FORMAT;
     else
-        m_bBinaryOriginal = TRUE;
+        m_bBinaryOriginal = true;
     return res;
 }
 
@@ -1015,10 +1015,10 @@ uint32_t CCFUtilsBinary::TranslateAutoFilter(uint32_t nFilter)
 //  settings  - binary settings
 void CCFUtilsBinary::ReadAsPackets(FILE * hFile)
 {
-    BYTE abyData[4096]= {0};
+    uint8_t abyData[4096]= {0};
     cbPKT_GENERIC_CB2003_10 * pPkt = reinterpret_cast<cbPKT_GENERIC_CB2003_10 *>(&abyData[0]);
     const uint32_t cbHdrSize = (uint32_t)offsetof(cbPKT_GENERIC_CB2003_10, data[0]);
-    BYTE * pbyPayload = abyData + cbHdrSize;        // point to first byte of payload
+    uint8_t * pbyPayload = abyData + cbHdrSize;        // point to first byte of payload
     m_bAutoSort = false;
 
     // Read in the header
