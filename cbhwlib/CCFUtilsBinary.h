@@ -145,7 +145,8 @@ typedef struct {
     uint32_t     dinpopts;    // digital input options (composed of cbDINP_* flags)
     uint32_t     aoutopts;    // analog output options
     uint32_t     eopchar;     // digital input capablities (given by cbDINP_* flags)
-    uint32_t     monsource;   // address of channel to monitor
+    uint16_t     moninst;     // instrument of channel to monitor
+    uint16_t     monchan;     // channel to monitor
     int32_t      outvalue;    // output value
     uint32_t     lncmode;     // line noise cancellation filter mode
     uint32_t     lncrate;     // line noise cancellation filter adaptation rate
@@ -190,7 +191,8 @@ typedef struct {
     uint32_t     dinpopts;    // digital input options (composed of cbDINP_* flags)
     uint32_t     aoutopts;    // analog output options
     uint32_t     eopchar;     // digital input capablities (given by cbDINP_* flags)
-    uint32_t     monsource;   // address of channel to monitor
+    uint16_t     moninst;     // instrument of channel to monitor
+    uint16_t     monchan;     // channel to monitor
     int32_t      outvalue;    // output value
     uint32_t     lncmode;     // line noise cancellation filter mode
     uint32_t     lncrate;     // line noise cancellation filter adaptation rate
@@ -234,7 +236,8 @@ typedef struct {
     uint32_t          dinpopts;    // digital input options (composed of cbDINP_* flags)
     uint32_t          aoutopts;    // analog output options
     uint32_t          eopchar;     // digital input capablities (given by cbDINP_* flags)
-    uint32_t          monsource;   // address of channel to monitor
+    uint16_t          moninst;     // instrument of channel to monitor
+    uint16_t          monchan;     // channel to monitor
     int32_t           outvalue;    // output value
     uint32_t          lncmode;     // line noise cancellation filter mode
     uint32_t          lncrate;     // line noise cancellation filter adaptation rate
@@ -279,7 +282,8 @@ typedef struct {
     uint32_t              dinpopts;    // digital input options (composed of cbDINP_* flags)
     uint32_t              aoutopts;    // analog output options
     uint32_t              eopchar;     // digital input capablities (given by cbDINP_* flags)
-    uint32_t              monsource;   // address of channel to monitor
+    uint16_t              moninst;     // instrument of channel to monitor
+    uint16_t              monchan;     // channel to monitor
     int32_t               outvalue;    // output value
     uint32_t              lncmode;     // line noise cancellation filter mode
     uint32_t              lncrate;     // line noise cancellation filter adaptation rate
@@ -325,7 +329,8 @@ typedef struct {
     uint32_t              dinpopts;    // digital input options (composed of cbDINP_* flags)
     uint32_t              aoutopts;    // analog output options
     uint32_t              eopchar;     // digital input capablities (given by cbDINP_* flags)
-    uint32_t              monsource;   // address of channel to monitor
+    uint16_t              moninst;     // instrument of channel to monitor
+    uint16_t              monchan;     // channel to monitor
     int32_t               outvalue;    // output value
     uint32_t              lncmode;     // line noise cancellation filter mode
     uint32_t              lncrate;     // line noise cancellation filter adaptation rate
@@ -373,7 +378,8 @@ typedef struct {
     uint32_t              eopchar;        // digital input capablities (given by cbDINP_* flags)
     union {
         struct {
-            uint32_t              monsource;      // address of channel to monitor
+            uint16_t              moninst;     // instrument of channel to monitor
+            uint16_t              monchan;     // channel to monitor
             int32_t               outvalue;       // output value
         };
         struct {
@@ -430,7 +436,8 @@ typedef struct {
     uint32_t              eopchar;        // digital input capablities (given by cbDINP_* flags)
     union {
         struct {
-            uint32_t              monsource;      // address of channel to monitor
+            uint16_t              moninst;     // instrument of channel to monitor
+            uint16_t              monchan;     // channel to monitor
             int32_t               outvalue;       // output value
         };
         struct {
@@ -489,7 +496,8 @@ typedef struct {
     uint32_t              eopchar;        // digital input capablities (given by cbDINP_* flags)
     union {
         struct {
-            uint32_t              monsource;      // address of channel to monitor
+            uint16_t              moninst;     // instrument of channel to monitor
+            uint16_t              monchan;     // channel to monitor
             int32_t               outvalue;       // output value
         };
         struct {
