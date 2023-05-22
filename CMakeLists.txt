@@ -453,7 +453,14 @@ INSTALL( TARGETS ${INSTALL_TARGET_LIST}
     LIBRARY DESTINATION lib${LIB_SUFFIX}
     ARCHIVE DESTINATION lib${LIB_SUFFIX}
 )
-INSTALL( FILES ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.h ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h DESTINATION include )
+INSTALL(
+    FILES
+        ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.h
+        ${PROJECT_SOURCE_DIR}/cbhwlib/cbproto.h
+        ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h
+    DESTINATION
+        include
+)
 if(WIN32)
     install(
             FILES
