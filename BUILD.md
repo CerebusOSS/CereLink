@@ -21,15 +21,19 @@ If you want to build the Matlab wrappers then you will need to have Matlab devel
 Here are some cmake one-liners that work if your development environment happens to match perfectly. If not, then modify the cmake options according to the [CMake Options](#cmake-options) instructions below.
 
 * Windows:
-    * `cmake -B build -S . -G "Visual Studio 16 2019" -DCMAKE_PREFIX_PATH=C:\Qt\6.4.2\msvc2019_64\lib\cmake\Qt6 -DCMAKE_INSTALL_PREFIX=dist -DBUILD_STATIC=ON -DBUILD_CLI=ON`
+    * `cmake -B build -S . -G "Visual Studio 16 2019" -DCMAKE_PREFIX_PATH=C:\Qt\6.4.2\msvc2019_64\lib\cmake\Qt6 -DBUILD_STATIC=ON -DBUILD_CLI=ON -DCMAKE_INSTALL_PREFIX=install`
 * MacOS
-    * `cmake  -B build -S . -DQt6_DIR=$(brew --prefix qt6)/lib/cmake/Qt6`
+    * `cmake -B build -S . -DQt6_DIR=$(brew --prefix qt6)/lib/cmake/Qt6 -DCMAKE_INSTALL_PREFIX=install`
     * If you are going to use the Xcode generator then you also need to use the old build system: `-G Xcode -T buildsystem=1`
 * Linux
-    * `cmake -B build -S . -DCMAKE_INSTALL_PREFIX=dist`
+    * `cmake -B build -S . -DCMAKE_INSTALL_PREFIX=install`
 
 Then follow that up with:
-* `cmake --build build --config Release`
+* `cmake --build build --config Release -j`
+* `cmake --build build --target=install --config Release -j`
+
+And optionally:
+* `cmake --build build --target package --config Release -j`
 
 The build products should appear in the CereLink/dist directory.
 
@@ -67,4 +71,4 @@ Note: This may generate an error related to the CLI builds. Please see further i
 * `pip install .`
 * or, if you are making a wheel to bring to another machine,
   * activate an environment matching the target machine,
-  * `pip wheel . -w dist/bin`
+  * `pip wheel . -w dist/`
