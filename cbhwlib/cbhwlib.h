@@ -73,6 +73,9 @@
 #define cbVERSION_MINOR  0
 
 // Version history:
+// 4.1  - 14 Mar 2022 hls - Update CHANINFO to be a multiple of 32-bits.  Added triginst.
+//        25 May 2022 hls - change type in cbPKT_HEADER to 16-bit to allow for future expansion & add counter to
+//                          cbPKT_SYSPROTOCOLMONITOR in case some of those packets get missed.
 // 4.00 - 12 Jul 2017 ahr - changing time values form 32 uint to 64 uint. creating header typedef to be included in structs.
 // 3.11 - 17 Jan 2017 hls - Changed list in cbPKT_GROUPINFO from UINT32 to UINT16 to allow for 256-channels
 // 3.10 - 23 Oct 2014 hls - Added reboot capability for extension loader
@@ -444,12 +447,12 @@ cbRESULT cbGetSystemClockTime(PROCTIME *time, uint32_t nInstance = 0);
 ///
 /// Every packet defined in this document contains this header (must be a multiple of 32 bytes)
 typedef struct {
-    PROCTIME time;      //!< system clock timestamp
-    uint16_t chid;        //!< channel identifier
-    uint8_t type;         //!< packet type
-    uint16_t dlen;        //!< length of data field in 32-bit chunks
-    uint8_t instrument;   //!< instrument number to transmit this packets
-    uint8_t reserved[2];  //!< reserved for future
+    PROCTIME time;         //!< system clock timestamp
+    uint16_t chid;         //!< channel identifier
+    uint16_t type;         //!< packet type
+    uint16_t dlen;         //!< length of data field in 32-bit chunks
+    uint8_t instrument;    //!< instrument number to transmit this packets
+    uint8_t reserved;      //!< reserved for future
 } cbPKT_HEADER;
 
 /// @brief Old Cerebus packet header data structure
@@ -1462,10 +1465,10 @@ typedef struct {
 #define cbPKTDLEN_SYSPROTOCOLMONITOR    ((sizeof(cbPKT_SYSPROTOCOLMONITOR)/4) - cbPKT_HEADER_32SIZE)
 typedef struct {
     cbPKT_HEADER cbpkt_header; //!< packet header
-
-    uint32_t sentpkts;    // Packets sent since last cbPKT_SYSPROTOCOLMONITOR (or 0 if timestamp=0);
-                        //  the cbPKT_SYSPROTOCOLMONITOR packets are counted as well so this must
-                        //  be equal to at least 1
+    uint32_t sentpkts;    //!< Packets sent since last cbPKT_SYSPROTOCOLMONITOR (or 0 if timestamp=0);
+                          // the cbPKT_SYSPROTOCOLMONITOR packets are counted as well so this
+                          // must be equal to at least 1
+    uint32_t counter;     //!< Counter of number cbPKT_SYSPROTOCOLMONITOR packets sent since beginning of NSP time
 } cbPKT_SYSPROTOCOLMONITOR;
 
 
@@ -1974,19 +1977,22 @@ typedef struct {
     uint32_t     eopchar;        // digital input capablities (given by cbDINP_* flags)
     union {
         struct {
-            uint32_t              monsource;      // address of channel to monitor
-            int32_t               outvalue;       // output value
+            uint16_t  moninst;        //!< instrument of channel to monitor
+            uint16_t  monchan;        //!< channel to monitor
+            int32_t   outvalue;       // output value
         };
         struct {
-            uint16_t              lowsamples;     // address of channel to monitor
-            uint16_t              highsamples;    // address of channel to monitor
-            int32_t               offset;         // output value
+            uint16_t  lowsamples;     // address of channel to monitor
+            uint16_t  highsamples;    // address of channel to monitor
+            int32_t   offset;         // output value
         };
     };
-    uint8_t				trigtype;		// trigger type (see cbDOUT_TRIGGER_*)
-    uint16_t				trigchan;		// trigger channel
-    uint16_t				trigval;		// trigger value
-    uint32_t              ainpopts;       // analog input options (composed of cbAINP* flags)
+    uint8_t				  trigtype;		    // trigger type (see cbDOUT_TRIGGER_*)
+    uint8_t               reserved[2];      //!< 2 bytes reserved
+    uint8_t               triginst;         //!< instrument of the trigger channel
+    uint16_t			  trigchan;		    // trigger channel
+    uint16_t			  trigval;		    // trigger value
+    uint32_t              ainpopts;         // analog input options (composed of cbAINP* flags)
     uint32_t              lncrate;          // line noise cancellation filter adaptation rate
     uint32_t              smpfilter;        // continuous-time pathway filter id
     uint32_t              smpgroup;         // continuous-time pathway sample group
@@ -2723,7 +2729,8 @@ typedef struct cbPKT_AOUT_WAVEFORM_type {
     // Waveform parameter information
     uint16_t  mode;              // Can be any of cbWAVEFORM_MODE_*
     uint32_t  repeats;           // Number of repeats (0 means forever)
-    uint16_t  trig;              // Can be any of cbWAVEFORM_TRIGGER_*
+    uint8_t   trig;              //!< Can be any of cbWAVEFORM_TRIGGER_*
+    uint8_t   trigInst;          //!< Instrument the trigChan belongs
     uint16_t  trigChan;          // Depends on trig:
                                //  for cbWAVEFORM_TRIGGER_DINP* 1-based trigChan (1-16) is digin1, (17-32) is digin2, ...
                                //  for cbWAVEFORM_TRIGGER_SPIKEUNIT 1-based trigChan (1-156) is channel number
