@@ -2715,23 +2715,29 @@ cbRESULT cbGetFeatureSpaceDomain(uint32_t nInstance)
     return ret;
 }
 
-void cbPKT_SS_NOISE_BOUNDARY::GetAxisLengths(float afAxisLen[3]) const
+void GetAxisLengths(const cbPKT_SS_NOISE_BOUNDARY* pPkt, float afAxisLen[3])
 {
     // TODO: must be implemented for non MSC
 #ifndef QT_APP
-    afAxisLen[0] = sqrt(afS[0][0]*afS[0][0] + afS[0][1]*afS[0][1] + afS[0][2]*afS[0][2]);
-    afAxisLen[1] = sqrt(afS[1][0]*afS[1][0] + afS[1][1]*afS[1][1] + afS[1][2]*afS[1][2]);
-    afAxisLen[2] = sqrt(afS[2][0]*afS[2][0] + afS[2][1]*afS[2][1] + afS[2][2]*afS[2][2]);
+    afAxisLen[0] = sqrt(pPkt->afS[0][0] * pPkt->afS[0][0] +
+                        pPkt->afS[0][1] * pPkt->afS[0][1] +
+                        pPkt->afS[0][2] * pPkt->afS[0][2]);
+    afAxisLen[1] = sqrt(pPkt->afS[1][0] * pPkt->afS[1][0] +
+                        pPkt->afS[1][1] * pPkt->afS[1][1] +
+                        pPkt->afS[1][2] * pPkt->afS[1][2]);
+    afAxisLen[2] = sqrt(pPkt->afS[2][0] * pPkt->afS[2][0] +
+                        pPkt->afS[2][1] * pPkt->afS[2][1] +
+                        pPkt->afS[2][2] * pPkt->afS[2][2]);
 #endif
 }
 
-void cbPKT_SS_NOISE_BOUNDARY::GetRotationAngles(float afTheta[3]) const
+void GetRotationAngles(const cbPKT_SS_NOISE_BOUNDARY* pPkt, float afTheta[3])
 {
     // TODO: must be implemented for non MSC
 #ifndef QT_APP
-    Vector3f major(afS[0]);
-    Vector3f minor_1(afS[1]);
-    Vector3f minor_2(afS[2]);
+    Vector3f major(pPkt->afS[0]);
+    Vector3f minor_1(pPkt->afS[1]);
+    Vector3f minor_2(pPkt->afS[2]);
 
     ::GetRotationAngles(major, minor_1, minor_2, afTheta);
 #endif
@@ -2788,6 +2794,29 @@ cbRESULT cbSSGetNoiseBoundary(uint32_t chanIdx, float afCentroid[3], float afMaj
     return cbRESULT_OK;
 }
 
+// Author & Date:   Hyrum Sessions  17 January 2023
+// Purpose: Initialize SS Noise Boundary packet
+void InitPktSSNoiseBoundary(cbPKT_SS_NOISE_BOUNDARY* pPkt, uint32_t chan, float cen1, float cen2, float cen3, float maj1, float maj2, float maj3,
+                            float min11, float min12, float min13, float min21, float min22, float min23)
+{
+    pPkt->cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pPkt->cbpkt_header.type = cbPKTTYPE_SS_NOISE_BOUNDARYSET;
+    pPkt->cbpkt_header.dlen = cbPKTDLEN_SS_NOISE_BOUNDARY;
+    pPkt->chan = chan;
+    pPkt->afc[0] = cen1;
+    pPkt->afc[1] = cen2;
+    pPkt->afc[2] = cen3;
+    pPkt->afS[0][0] = maj1;
+    pPkt->afS[0][1] = maj2;
+    pPkt->afS[0][2] = maj3;
+    pPkt->afS[1][0] = min11;
+    pPkt->afS[1][1] = min12;
+    pPkt->afS[1][2] = min13;
+    pPkt->afS[2][0] = min21;
+    pPkt->afS[2][1] = min22;
+    pPkt->afS[2][2] = min23;
+}
+
 // Author & Date:   Jason Scott     23 Jan 2009
 // Purpose: Set the noise boundary parameters
 // Inputs:
@@ -2808,12 +2837,12 @@ cbRESULT cbSSSetNoiseBoundary(uint32_t chanIdx, float afCentroid[3], float afMaj
     if (!IsChanAnalogIn(chanIdx)) return cbRESULT_INVALIDCHANNEL;
 
     cbPKT_SS_NOISE_BOUNDARY icPkt;
-    icPkt.set(chanIdx, afCentroid[0], afCentroid[1], afCentroid[2],
-        afMajor[0], afMajor[1], afMajor[2],
-        afMinor_1[0], afMinor_1[1], afMinor_1[2],
-        afMinor_2[0], afMinor_2[1], afMinor_2[2]);
-    icPkt.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].cbpkt_header.instrument;
+    InitPktSSNoiseBoundary(&icPkt, chanIdx, afCentroid[0], afCentroid[1], afCentroid[2],
+                           afMajor[0], afMajor[1], afMajor[2],
+                           afMinor_1[0], afMinor_1[1], afMinor_1[2],
+                           afMinor_2[0], afMinor_2[1], afMinor_2[2]);
     icPkt.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chan;
+    icPkt.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].cbpkt_header.instrument;
 
     return cbSendPacket(&icPkt, nInstance);
 }
@@ -2838,7 +2867,7 @@ cbRESULT cbSSGetNoiseBoundaryByTheta(uint32_t chanIdx, float afCentroid[3], floa
     if (!IsChanAnalogIn(chanIdx)) return cbRESULT_INVALIDCHANNEL;
 
     // get noise boundary info
-    cbPKT_SS_NOISE_BOUNDARY const & rPkt = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktNoiseBoundary[chanIdx - 1];
+    cbPKT_SS_NOISE_BOUNDARY & rPkt = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktNoiseBoundary[chanIdx - 1];
 
     // move over the centroid info
     if (afCentroid)
@@ -2851,13 +2880,13 @@ cbRESULT cbSSGetNoiseBoundaryByTheta(uint32_t chanIdx, float afCentroid[3], floa
     // calculate the lengths
     if(afAxisLen)
     {
-        rPkt.GetAxisLengths(afAxisLen);
+        GetAxisLengths(&rPkt, afAxisLen);
     }
 
     // calculate the rotation angels
     if(afTheta)
     {
-        rPkt.GetRotationAngles(afTheta);
+        GetRotationAngles(&rPkt, afTheta);
     }
 
     return cbRESULT_OK;
@@ -3000,10 +3029,23 @@ cbRESULT cbSSSetStatistics(uint32_t nUpdateSpikes, uint32_t nAutoalg, uint32_t n
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
     cbPKT_SS_STATISTICS icPkt;
-    icPkt.set(nUpdateSpikes, nAutoalg, nMode, fMinClusterPairSpreadFactor, fMaxSubclusterSpreadFactor,
-              fMinClusterHistCorrMajMeasure, fMaxClusterMajHistCorrMajMeasure,
-              fClusterHistValleyPercentage, fClusterHistClosePeakPercentage,
-              fClusterHistMinPeakPercentage, nWaveBasisSize, nWaveSampleSize);
+
+    icPkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    icPkt.cbpkt_header.type = cbPKTTYPE_SS_STATISTICSSET;
+    icPkt.cbpkt_header.dlen = ((sizeof(cbPKT_SS_STATISTICS) / 4) - cbPKT_HEADER_32SIZE);
+
+    icPkt.nUpdateSpikes = nUpdateSpikes;
+    icPkt.nAutoalg = nAutoalg;
+    icPkt.nMode = nMode;
+    icPkt.fMinClusterPairSpreadFactor = fMinClusterPairSpreadFactor;
+    icPkt.fMaxSubclusterSpreadFactor = fMaxSubclusterSpreadFactor;
+    icPkt.fMinClusterHistCorrMajMeasure = fMinClusterHistCorrMajMeasure;
+    icPkt.fMaxClusterPairHistCorrMajMeasure = fMaxClusterMajHistCorrMajMeasure;
+    icPkt.fClusterHistValleyPercentage = fClusterHistValleyPercentage;
+    icPkt.fClusterHistClosePeakPercentage = fClusterHistClosePeakPercentage;
+    icPkt.fClusterHistMinPeakPercentage = fClusterHistMinPeakPercentage;
+    icPkt.nWaveBasisSize = nWaveBasisSize;
+    icPkt.nWaveSampleSize = nWaveSampleSize;
 
     // Send it to all NSPs
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
@@ -3052,8 +3094,15 @@ cbRESULT cbSSSetArtifactReject(uint32_t nMaxChans, uint32_t nRefractorySamples, 
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
     cbPKT_SS_ARTIF_REJECT isPkt;
-    isPkt.set(nMaxChans, nRefractorySamples);
-    
+    memset(&isPkt, 0, sizeof(isPkt));
+
+    isPkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    isPkt.cbpkt_header.type = cbPKTTYPE_SS_ARTIF_REJECTSET;
+    isPkt.cbpkt_header.dlen = cbPKTDLEN_SS_ARTIF_REJECT;
+
+    isPkt.nMaxSimulChans = nMaxChans;
+    isPkt.nRefractoryCount = nRefractorySamples;
+
     // Send it to all NSPs
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
     {
@@ -3103,8 +3152,15 @@ cbRESULT cbSSSetDetect(float fThreshold, float fScaling, uint32_t nInstance)
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
     cbPKT_SS_DETECT isPkt;
-    isPkt.set(fThreshold, fScaling);
-    
+    memset(&isPkt, 0, sizeof(isPkt));
+
+    isPkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    isPkt.cbpkt_header.type = cbPKTTYPE_SS_DETECTSET;
+    isPkt.cbpkt_header.dlen = ((sizeof(cbPKT_SS_DETECT) / 4) - cbPKT_HEADER_32SIZE);
+
+    isPkt.fThreshold = fThreshold;
+    isPkt.fMultiplier = fScaling;
+
     // Send it to all NSPs
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
     {
@@ -3155,7 +3211,14 @@ cbRESULT cbSSSetStatus(cbAdaptControl cntlUnitStats, cbAdaptControl cntlNumUnits
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
     cbPKT_SS_STATUS icPkt;
-    icPkt.set(cntlUnitStats, cntlNumUnits);
+    memset(&icPkt, 0, sizeof(icPkt));
+
+    icPkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    icPkt.cbpkt_header.type = cbPKTTYPE_SS_STATUSSET;
+    icPkt.cbpkt_header.dlen = cbPKTDLEN_SS_STATUS;
+
+    icPkt.cntlUnitStats = cntlUnitStats;
+    icPkt.cntlNumUnits = cntlNumUnits;
 
     // Send it to all NSPs
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
@@ -3467,7 +3530,15 @@ cbRESULT cbSetRefElecFilter(uint32_t  proc,             // which NSP processor?
     if (pnRefChan)      nRefChan =      *pnRefChan;
 
     cbPKT_REFELECFILTINFO icPkt;
-    icPkt.set(nMode, nRefChan);
+    memset(&icPkt, 0, sizeof(icPkt));
+
+    icPkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    icPkt.cbpkt_header.type = cbPKTTYPE_REFELECFILTSET;
+    icPkt.cbpkt_header.dlen = cbPKTDLEN_REFELECFILTINFO;
+
+    icPkt.nMode = nMode;
+    icPkt.nRefChan = nRefChan;
+
     return cbSendPacket(&icPkt, nInstance);
 }
 

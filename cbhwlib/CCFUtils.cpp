@@ -229,11 +229,23 @@ ccfResult CCFUtils::SendCCF()
     {
         cbPKT_SS_STATISTICS isSSStatistics;
 
-        isSSStatistics.set(300, cbAUTOALG_HOOPS, cbAUTOALG_MODE_APPLY,
-                 9, 125,
-                 0.80f, 0.94f,
-                 0.50f, 0.50f, 0.016f,
-                 250, 0);
+        isSSStatistics.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        isSSStatistics.cbpkt_header.type = cbPKTTYPE_SS_STATISTICSSET;
+        isSSStatistics.cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+
+        isSSStatistics.nUpdateSpikes = 300;
+        isSSStatistics.nAutoalg = cbAUTOALG_HOOPS;
+        isSSStatistics.nMode = cbAUTOALG_MODE_APPLY;
+        isSSStatistics.fMinClusterPairSpreadFactor = 9;
+        isSSStatistics.fMaxSubclusterSpreadFactor = 125;
+        isSSStatistics.fMinClusterHistCorrMajMeasure = 0.80f;
+        isSSStatistics.fMaxClusterPairHistCorrMajMeasure = 0.94f;
+        isSSStatistics.fClusterHistValleyPercentage = 0.50f;
+        isSSStatistics.fClusterHistClosePeakPercentage = 0.50f;
+        isSSStatistics.fClusterHistMinPeakPercentage = 0.016f;
+        isSSStatistics.nWaveBasisSize = 250;
+        isSSStatistics.nWaveSampleSize = 0;
+
         cbSendPacket(&isSSStatistics, m_nInstance);
 
     }

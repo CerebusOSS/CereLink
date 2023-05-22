@@ -3200,24 +3200,43 @@ cbSdkResult SdkApp::SdkSetAnalogOutput(uint16_t channel, cbSdkWaveformData * wf,
     {
         cbPKT_AOUT_WAVEFORM wfPkt;
         memset(&wfPkt, 0, sizeof(wfPkt));
+        wfPkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        wfPkt.cbpkt_header.type = cbPKTTYPE_WAVEFORMSET;
+        wfPkt.cbpkt_header.dlen = cbPKTDLEN_WAVEFORM;
         wfPkt.cbpkt_header.instrument = cbGetChanInstrument(channel) - 1;
+        // Set common fields
         wfPkt.mode = wf->type;
+        wfPkt.chan = cb_cfg_buffer_ptr[0]->chaninfo[channel - 1].chan;
+        wfPkt.repeats       = wf->repeats;
+        wfPkt.trig          = wf->trig;
+        wfPkt.trigChan      = wf->trigChan;
+        wfPkt.trigValue     = wf->trigValue;
+        wfPkt.trigNum       = wf->trigNum;
+        // Mode-specific fields
         if (wfPkt.mode == cbWAVEFORM_MODE_PARAMETERS)
         {
             if (wf->phases > cbMAX_WAVEFORM_PHASES)
                 return CBSDKRESULT_INVALIDPARAM;
-            wfPkt.set(channel, wf->phases, wf->duration, wf->amplitude, wf->trigChan, wf->trig,
-                wf->repeats, 1, 0, wf->offset, wf->trigValue, wf->trigNum);
+
+            memcpy(wfPkt.wave.duration, wf->duration, sizeof(uint16_t) * wf->phases);
+            memcpy(wfPkt.wave.amplitude, wf->amplitude, sizeof(int16_t) * wf->phases);
+            wfPkt.wave.seq      = 0;
+            wfPkt.wave.seqTotal = 1;
+            wfPkt.wave.phases   = wf->phases;
+            wfPkt.wave.offset   = wf->offset;
+            wfPkt.mode          = cbWAVEFORM_MODE_PARAMETERS;
         }
         else if (wfPkt.mode == cbWAVEFORM_MODE_SINE)
         {
-            wfPkt.set(channel, wf->offset, wf->sineFrequency, wf->sineAmplitude, wf->trigChan, wf->trig,
-                wf->repeats, wf->trigValue, wf->trigNum);
+            wfPkt.wave.offset        = wf->offset;
+            wfPkt.wave.sineFrequency = wf->sineFrequency;
+            wfPkt.wave.sineAmplitude = wf->sineAmplitude;
+            wfPkt.mode          = cbWAVEFORM_MODE_SINE;
         }
         // Sending a none-trigger we turn it into instant activation
         if (wfPkt.trig == cbWAVEFORM_TRIGGER_NONE)
             wfPkt.active = 1;
-        wfPkt.chan = cb_cfg_buffer_ptr[0]->chaninfo[channel - 1].chan;
+
         // send the waveform packet
         cbSendPacket(&wfPkt, m_nInstance);
         // Also make sure channel is to output waveform
