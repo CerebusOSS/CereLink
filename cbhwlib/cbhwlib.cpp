@@ -866,7 +866,7 @@ cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance)
     if (pPkt->cbpkt_header.time == 0)
         pPkt->cbpkt_header.time = 1;
 
-    ASSERT( *(static_cast<DWORD const *>(pPacket)) != 0);
+    ASSERT( *(static_cast<unsigned int const *>(pPacket)) != 0);
 
     uint32_t quadletcount = pPkt->cbpkt_header.dlen + cbPKT_HEADER_32SIZE;
     uint32_t orig_headindex;
