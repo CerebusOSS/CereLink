@@ -94,6 +94,7 @@ def get_extras():
 
     return x_includes, x_libs, x_link_args
 
+
 extra_includes, extra_libs, extra_link_args = get_extras()
 
 extension_kwargs = {
@@ -108,7 +109,7 @@ cbpy_module = Extension('cerebus.cbpy', **extension_kwargs)
 
 setup(
     name='cerebus',
-    version='0.1',
+    version='0.2',
     description='Cerebus Link',
     long_description='Cerebus Link Python Package',
     author='Chadwick Boulay',
