@@ -13,7 +13,7 @@ from libcpp cimport bool
 cdef extern from "stdint.h":
     ctypedef unsigned long long uint64_t
 
-cdef extern from "cbhwlib.h":
+cdef extern from "cbproto.h":
 
     cdef char* cbNET_UDP_ADDR_INST  "cbNET_UDP_ADDR_INST"   # Cerebus default address
     cdef char* cbNET_UDP_ADDR_CNT   "cbNET_UDP_ADDR_CNT"    # NSP default control address
@@ -148,7 +148,8 @@ cdef extern from "cbhwlib.h":
         uint32_t            dinpopts                # digital input options (composed of cbDINP_* flags)
         uint32_t            aoutopts                # analog output options
         uint32_t            eopchar                 # digital input capablities (given by cbDINP_* flags)
-        uint32_t              monsource
+        uint16_t              moninst
+        uint16_t              monchan
         int32_t               outvalue       # output value
         uint16_t              lowsamples     # address of channel to monitor
         uint16_t              highsamples    # address of channel to monitor
