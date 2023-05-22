@@ -1967,7 +1967,16 @@ cbRESULT cbGetDoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, u
 
     // Return the requested data from the rec buffer
     if (options)		*options		= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].doutopts;
-    if (monchan)		*monchan		= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].monsource;
+    if (monchan)
+    {
+        if ((cbDOUT_FREQUENCY & cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].doutopts) ||
+            (cbDOUT_TRIGGERED & cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].doutopts))
+        {
+            *monchan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].moninst | (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].monchan << 16);
+        }
+        else
+            *monchan        = cbGetExpandedChannelNumber(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].moninst + 1, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].monchan);
+    }
     if (value)			*value			= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].outvalue;
     if (triggertype)    *triggertype	= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].trigtype;
     if (trigchan)		*trigchan		= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].trigchan;
@@ -2003,10 +2012,19 @@ cbRESULT cbSetDoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uin
     chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.doutopts  = options;
-    if (cbDOUT_FREQUENCY & options)
-        chaninfo.monsource = nMonChan | nMonSamples;
+    if ((cbDOUT_FREQUENCY & options) || (cbDOUT_TRIGGERED & options))
+    {
+        chaninfo.moninst = monchan & 0xFFFF;
+        chaninfo.monchan = monchan >> 16;
+    }
     else
-        chaninfo.monsource = (0 == nMonChan) ? 0 : cb_cfg_buffer_ptr[nIdx]->chaninfo[nMonChan - 1].chan | nMonSamples;
+    {
+        if (0 != monchan)
+        {
+            chaninfo.moninst = cbGetChanInstrument(monchan) - 1;
+            chaninfo.monchan = cbGetInstrumentLocalChannelNumber(monchan);
+        }
+    }
     chaninfo.outvalue  = value;
     chaninfo.trigtype  = triggertype;
     chaninfo.trigchan  = trigchan;
@@ -2577,7 +2595,7 @@ cbRESULT cbGetAoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, u
 
     // Return the requested data from the rec buffer
     if (options) *options = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].aoutopts;
-    if (monchan) *monchan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].monsource;
+    if (monchan) *monchan = cbGetExpandedChannelNumber(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].moninst + 1, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].monchan);
     if (value)   *value   = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].outvalue;
 
     return cbRESULT_OK;
@@ -2611,7 +2629,8 @@ cbRESULT cbSetAoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uin
     chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
     chaninfo.chan       = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.aoutopts   = options;
-    chaninfo.monsource  = chaninfo.monsource = (0 == monchan) ? 0 : cb_cfg_buffer_ptr[nIdx]->chaninfo[monchan - 1].chan;
+    chaninfo.moninst = (0 == monchan) ? 0 : cbGetChanInstrument(monchan) - 1;
+    chaninfo.monchan = (0 == monchan) ? 0 : cbGetInstrumentLocalChannelNumber(monchan);
     chaninfo.outvalue   = value;
 
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
