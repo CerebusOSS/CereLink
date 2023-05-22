@@ -808,7 +808,7 @@ cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance)
             int32_t  dwExch = (int32_t) mod_headindex;
             int32_t  dwComp = (int32_t) orig_headindex;
 #ifdef WIN32
-            if (InterlockedCompareExchange(pDest, dwExch, dwComp) == dwComp)
+            if ((int32_t)InterlockedCompareExchange((volatile unsigned long *)pDest, (unsigned long)dwExch, (unsigned long)dwComp) == dwComp)
                 break;
 #else
             if (__sync_bool_compare_and_swap(pDest, dwComp, dwExch))
@@ -920,7 +920,7 @@ cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance)
             int32_t dwExch = (int32_t) mod_headindex;
             int32_t dwComp = (int32_t) orig_headindex;
 #ifdef WIN32
-            if (InterlockedCompareExchange( pDest, dwExch, dwComp ) == dwComp)
+            if ((int32_t)InterlockedCompareExchange((volatile unsigned long *)pDest, (unsigned long)dwExch, (unsigned long)dwComp) == dwComp)
                 break;
 #else
             if (__sync_bool_compare_and_swap(pDest, dwComp, dwExch))
