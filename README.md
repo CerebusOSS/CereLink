@@ -17,7 +17,7 @@ Downloads are on the [releases page](https://github.com/CerebusOSS/CereLink/rele
 
 # Project wiki
 
-https://github.com/dashesy/CereLink/wiki
+https://github.com/CerebusOSS/CereLink/wiki
 
 # Build
 
