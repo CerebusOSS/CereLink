@@ -372,7 +372,7 @@ bool cbHasValidUnit(uint32_t dwChan, uint32_t dwUnit, uint32_t nInstance)
     cbSPIKE_SORTING *pSortingOptions = &cb_cfg_buffer_ptr[nIdx]->isSortingOptions;
     if (dwUnit > cbMAXUNITS)
         return false;
-    return (pSortingOptions->asSortModel[dwChan - 1][dwUnit].valid == true);
+    return (pSortingOptions->asSortModel[dwChan - 1][dwUnit].valid != 0);
 }
 
 // Author & Date:   Ehsan Azar   June 2, 2009
