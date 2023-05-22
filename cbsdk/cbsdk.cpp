@@ -202,7 +202,7 @@ void SdkApp::OnPktEvent(const cbPKT_GENERIC * const pPkt)
                 cbGetSystemClockTime(&m_uTrialStartTime, m_nInstance);
             }
 
-            m_bWithinTrial = TRUE;
+            m_bWithinTrial = true;
         }
     }
 
@@ -238,7 +238,7 @@ void SdkApp::OnPktEvent(const cbPKT_GENERIC * const pPkt)
                     m_lockGetPacketsEvent.lock();
                         if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
-                            m_bPacketsEvent = FALSE;
+                            m_bPacketsEvent = false;
                             m_waitPacketsEvent.wakeAll();
                         }
                     m_lockGetPacketsEvent.unlock();
@@ -259,7 +259,7 @@ void SdkApp::OnPktEvent(const cbPKT_GENERIC * const pPkt)
     if (pPkt->cbpkt_header.chid == m_uTrialEndChannel)
     {
         if ( (m_uTrialEndMask & pPkt->data[0]) == m_uTrialEndValue )
-            m_bWithinTrial = FALSE;
+            m_bWithinTrial = false;
     }
 }
 
@@ -298,7 +298,7 @@ void SdkApp::OnPktComment(const cbPKT_COMMENT * const pPkt)
                     m_lockGetPacketsCmt.lock();
                         if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
-                            m_bPacketsCmt = FALSE;
+                            m_bPacketsCmt = false;
                             m_waitPacketsCmt.wakeAll();
                         }
                     m_lockGetPacketsCmt.unlock();
@@ -344,7 +344,7 @@ void SdkApp::OnPktLog(const cbPKT_LOG * const pPkt)
                     m_lockGetPacketsCmt.lock();
                         if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
-                            m_bPacketsCmt = FALSE;
+                            m_bPacketsCmt = false;
                             m_waitPacketsCmt.wakeAll();
                         }
                     m_lockGetPacketsCmt.unlock();
@@ -440,7 +440,7 @@ void SdkApp::OnPktTrack(const cbPKT_VIDEOTRACK * const pPkt)
                     m_lockGetPacketsTrack.lock();
                         if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
-                            m_bPacketsTrack = FALSE;
+                            m_bPacketsTrack = false;
                             m_waitPacketsTrack.wakeAll();
                         }
                     m_lockGetPacketsTrack.unlock();
@@ -824,7 +824,7 @@ cbSdkResult SdkApp::SdkOpen(uint32_t nInstance, cbSdkConnectionType conType, cbS
 
     // make sure that cache data storage is switched off so that the monitoring thread will
     // not be saving data and then set up the cache control variables
-    m_bWithinTrial = FALSE;
+    m_bWithinTrial = false;
     m_uTrialStartTime = 0;
 
     // If this is not part of another Qt application, and the-only Qt app intance is not present
@@ -943,7 +943,7 @@ cbSdkResult SdkApp::SdkClose()
 
     // clear the data cache if it exists
     // first disable writing to the cache
-    m_bWithinTrial = FALSE;
+    m_bWithinTrial = false;
 
     if (m_CD != NULL)
         SdkUnsetTrialConfig(CBSDKTRIAL_CONTINUOUS);
@@ -1618,9 +1618,9 @@ cbSdkResult SdkApp::SdkSetTrialConfig(uint32_t bActive, uint16_t begchan, uint32
         return CBSDKRESULT_INVALIDPARAM; // Cannot cache waveforms if no cache is available
 
     // get the trial status, if zero, set the WithinTrial flag to off
-    if (bActive == FALSE)
+    if (bActive == false)
     {
-        m_bWithinTrial = FALSE;
+        m_bWithinTrial = false;
     }
     else
     { // otherwise set the status to true
@@ -1665,7 +1665,7 @@ cbSdkResult SdkApp::SdkSetTrialConfig(uint32_t bActive, uint16_t begchan, uint32
                 m_lockTrialTracking.unlock();
             }
         }
-        m_bWithinTrial = TRUE;
+        m_bWithinTrial = true;
     }
 
     return CBSDKRESULT_SUCCESS;
@@ -2254,7 +2254,7 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
                 return CBSDKRESULT_ERRCONFIG;
             // Wait for packets to come in
             m_lockGetPacketsEvent.lock();
-            m_bPacketsEvent = TRUE;
+            m_bPacketsEvent = true;
             m_lockGetPacketsEvent.unlock();
 
             // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
@@ -2340,7 +2340,7 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
 
             // Wait for packets to come in
             m_lockGetPacketsCmt.lock();
-            m_bPacketsCmt = TRUE;
+            m_bPacketsCmt = true;
             m_waitPacketsCmt.wait(&m_lockGetPacketsCmt, wait_for_comment_msec);
             m_lockGetPacketsCmt.unlock();
 
@@ -2378,7 +2378,7 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
 
             // Wait for packets to come in
             m_lockGetPacketsTrack.lock();
-            m_bPacketsTrack = TRUE;
+            m_bPacketsTrack = true;
             m_waitPacketsTrack.wait(&m_lockGetPacketsTrack, 250);
             m_lockGetPacketsTrack.unlock();
 
@@ -2963,9 +2963,9 @@ cbSdkResult cbSdkUpload(const char * szSrc, const char * szDstDir, uint32_t nIns
         return CBSDKRESULT_ERRFORMATFILE;
     }
     fseek(pFile, 0, SEEK_SET);
-    BYTE * pFileData = NULL;
+    uint8_t * pFileData = NULL;
     try {
-        pFileData = new BYTE[cbFile];
+        pFileData = new uint8_t[cbFile];
     } catch (...) {
         pFileData = NULL;
     }
@@ -2975,7 +2975,7 @@ cbSdkResult cbSdkUpload(const char * szSrc, const char * szDstDir, uint32_t nIns
         return CBSDKRESULT_ERRMEMORY;
     }
     // Read entire file into memory
-    cbRead = (uint32_t)fread(pFileData, sizeof(BYTE), cbFile, pFile);
+    cbRead = (uint32_t)fread(pFileData, sizeof(uint8_t), cbFile, pFile);
     fclose(pFile);
     if (cbFile != cbRead)
     {
@@ -3017,10 +3017,10 @@ cbSdkResult cbSdkUpload(const char * szSrc, const char * szDstDir, uint32_t nIns
 
     cbPKT_UPDATE upkt;
     memset(&upkt, 0, sizeof(upkt));
-    upkt.time = 0;
-    upkt.chan = 0x8000;
-    upkt.type = cbPKTTYPE_UPDATESET;
-    upkt.dlen = cbPKTDLEN_UPDATE;
+    upkt.cbpkt_header.time = 0;
+    upkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    upkt.cbpkt_header.type = cbPKTTYPE_UPDATESET;
+    upkt.cbpkt_header.dlen = cbPKTDLEN_UPDATE;
     sprintf(upkt.filename, "%s/%s", szDstDir, szBaseName);
 
     uint32_t b, blocks = (cbFile / 512) + 1;
@@ -3986,7 +3986,7 @@ SdkApp::SdkApp()
     , m_uTrialEndChannel(0), m_uTrialEndMask(0), m_uTrialEndValue(0)
     , m_bTrialDouble(false), m_bTrialAbsolute(false), m_uTrialWaveforms(0)
     , m_uTrialConts(0), m_uTrialEvents(0), m_uTrialComments(0)
-    , m_uTrialTrackings(0), m_bWithinTrial(FALSE), m_uTrialStartTime(0)
+    , m_uTrialTrackings(0), m_bWithinTrial(false), m_uTrialStartTime(0)
     , m_uCbsdkTime(0), m_CD(NULL), m_ED(NULL), m_CMT(NULL), m_TR(NULL)
 {
     memset(&m_lastPktVideoSynch, 0, sizeof(m_lastPktVideoSynch));

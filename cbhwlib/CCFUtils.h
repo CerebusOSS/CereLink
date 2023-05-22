@@ -58,7 +58,7 @@ public:
     virtual ccf::ccfResult ReadVersion(LPCSTR szFileName);
     int GetInternalVersion();
     int GetInternalOriginalVersion();
-    BOOL IsBinaryOriginal();
+    bool IsBinaryOriginal();
     ccf::ccfResult SendCCF();
 
 private:
@@ -81,8 +81,8 @@ protected:
     int m_nInternalOriginalVersion;  // internal version of original data
     int m_nInstance; // Library instance for CCF operations
     LPCSTR m_szFileName; // filename
-    BOOL m_bAutoSort; // Compatibility flag for auto sort
-    BOOL m_bBinaryOriginal; // if original file is binary
+    bool m_bAutoSort; // Compatibility flag for auto sort
+    bool m_bBinaryOriginal; // if original file is binary
 };
 
 #endif // include guard

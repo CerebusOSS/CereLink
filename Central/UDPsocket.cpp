@@ -92,8 +92,8 @@ cbRESULT UDPSocket::OpenUDP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
         return cbRESULT_SOCKERR;
     }
 
-    BOOL opt_val = TRUE;
-    socklen_t  opt_len = sizeof(BOOL);
+    bool opt_val = true;
+    socklen_t  opt_len = sizeof(bool);
 
     if (bBroadcast)
     {
@@ -173,7 +173,7 @@ cbRESULT UDPSocket::OpenUDP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
     }
 
     // Attempt to bind Data Stream Socket to lowest address in range 192.168.137.1 to XXX.16
-    BOOL socketbound = FALSE;
+    bool socketbound = false;
     SOCKADDR_IN inst_sockaddr;
     memset(&inst_sockaddr, 0, sizeof(inst_sockaddr));
 
@@ -191,7 +191,7 @@ cbRESULT UDPSocket::OpenUDP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
     do
     {
         if (bind(inst_sock, (struct sockaddr FAR *)&inst_sockaddr, sizeof(inst_sockaddr)) == 0)
-            socketbound = TRUE;
+            socketbound = true;
         else
         {
             // increment the last ip number
@@ -222,7 +222,7 @@ cbRESULT UDPSocket::OpenUDP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
             if (m_bVerbose)
                 _cprintf("Warning: could not bind to socket on the subnet...\n");
 
-            opt_len = sizeof(BOOL);
+            opt_len = sizeof(bool);
             if (setsockopt(inst_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&opt_val, opt_len) != 0)
             {
                 if(m_bVerbose)
@@ -305,8 +305,8 @@ cbRESULT UDPSocket::OpenTCP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
         return cbRESULT_SOCKERR;
     }
 
-    BOOL opt_val = TRUE;
-    socklen_t  opt_len = sizeof(BOOL);
+    bool opt_val = true;
+    socklen_t  opt_len = sizeof(bool);
 
     if (nRecBufSize > 0)
     {
@@ -379,7 +379,7 @@ cbRESULT UDPSocket::OpenTCP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
     //    }
 
         // Attempt to connect to an existing Gemini server
-    BOOL socketbound = FALSE;
+    bool socketbound = false;
 
     SOCKADDR_IN inst_sockaddr;
     memset(&inst_sockaddr, 0, sizeof(inst_sockaddr));

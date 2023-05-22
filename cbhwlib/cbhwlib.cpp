@@ -86,7 +86,7 @@ HANDLE      cb_sig_event_hnd[cbMAXOPEN] = {NULL};
 
 //
 uint32_t      cb_library_index[cbMAXOPEN] = {0};
-uint32_t      cb_library_initialized[cbMAXOPEN] = {FALSE};
+uint32_t      cb_library_initialized[cbMAXOPEN] = {false};
 uint32_t      cb_recbuff_tailwrap[cbMAXOPEN]  = {0};
 uint32_t      cb_recbuff_tailindex[cbMAXOPEN] = {0};
 uint32_t      cb_recbuff_processed[cbMAXOPEN] = {0};
@@ -150,7 +150,7 @@ void DestroySharedObject(HANDLE & hMem, void ** ppMem, uint32_t size)
 // Purpose: Release and clear the shared memory objects
 // Inputs:
 //   nInstance - nsp number to close library for
-void DestroySharedObjects(BOOL bStandAlone, uint32_t nInstance)
+void DestroySharedObjects(bool bStandAlone, uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
 
@@ -298,7 +298,7 @@ void * GetSharedBuffer(HANDLE hnd, bool bReadOnly)
 // Inputs:
 //   bStandAlone - if should open library as stand-alone
 //   nInstance     - integer index identifier of library instance (0-based up to cbMAXOPEN-1)
-cbRESULT cbOpen(BOOL bStandAlone, uint32_t nInstance)
+cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
 {
     char buf[64] = {0};
     cbRESULT cbRet;
@@ -338,7 +338,7 @@ cbRESULT cbOpen(BOOL bStandAlone, uint32_t nInstance)
         // Library initialized if the objects are created
         if (cbRet == cbRESULT_OK)
         {
-            cb_library_initialized[nIdx] = TRUE;      // We are in the library, so it is initialized
+            cb_library_initialized[nIdx] = true;      // We are in the library, so it is initialized
         } else {
             cbReleaseSystemLock(szLockName, cb_sys_lock_hnd[nInstance]);
             cbClose(bStandAlone, nInstance);
@@ -433,7 +433,7 @@ cbRESULT cbOpen(BOOL bStandAlone, uint32_t nInstance)
 #endif
 
     cb_library_index[nInstance] = nIdx;
-    cb_library_initialized[nIdx] = TRUE;
+    cb_library_initialized[nIdx] = true;
 
     // Initialize read indices to the current head position
     cbMakePacketReadingBeginNow(nInstance);
@@ -630,14 +630,14 @@ cbRESULT cbMakePacketReadingBeginNow(uint32_t nInstance)
     return cbRESULT_OK;
 }
 
-cbRESULT cbClose(BOOL bStandAlone, uint32_t nInstance)
+cbRESULT cbClose(bool bStandAlone, uint32_t nInstance)
 {
     if (nInstance >= cbMAXOPEN)
         return cbRESULT_INSTINVALID;
     uint32_t nIdx = cb_library_index[nInstance];
 
     // clear lib init flag variable
-    cb_library_initialized[nIdx] = FALSE;
+    cb_library_initialized[nIdx] = false;
 
     // destroy the shared neuromatic memory and synchronization objects
     DestroySharedObjects(bStandAlone, nInstance);
@@ -762,7 +762,7 @@ cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance)
     // give 3 attempts to claim a spot in the circular xmt buffer for the packet
     int insertionattempts = 0;
     static const int NUM_INSERTION_ATTEMPTS = 3;
-    while (TRUE)
+    while (true)
     {
         bool bTryToFill = false;        // Should I try to stuff data into the queue, or is it filled
                                         // TRUE = go ahead a try; FALSE = wait a bit
@@ -804,9 +804,9 @@ cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance)
         {
             // attempt to atomically update the head pointer and verify that the head pointer
             // was not changed since orig_head_index was loaded and calculated upon
-            LONG * pDest = (LONG *) &cb_xmt_global_buffer_ptr[nIdx]->headindex;
-            LONG  dwExch = (LONG) mod_headindex;
-            LONG  dwComp = (LONG) orig_headindex;
+            int32_t * pDest = (int32_t *) &cb_xmt_global_buffer_ptr[nIdx]->headindex;
+            int32_t  dwExch = (int32_t) mod_headindex;
+            int32_t  dwComp = (int32_t) orig_headindex;
 #ifdef WIN32
             if (InterlockedCompareExchange(pDest, dwExch, dwComp) == dwComp)
                 break;
@@ -836,7 +836,7 @@ cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance)
 #ifdef WIN32
     InterlockedExchange((LPLONG)&(cb_xmt_global_buffer_ptr[nIdx]->buffer[orig_headindex]),*((LONG*)pPacket));
 #else
-    __sync_lock_test_and_set((LPLONG)&(cb_xmt_global_buffer_ptr[nIdx]->buffer[orig_headindex]),*((LONG*)pPacket));
+    __sync_lock_test_and_set((int32_t*)&(cb_xmt_global_buffer_ptr[nIdx]->buffer[orig_headindex]),*((int32_t*)pPacket));
 #endif
     return cbRESULT_OK;
 }
@@ -916,9 +916,9 @@ cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance)
         {
             // attempt to atomically update the head pointer and verify that the head pointer
             // was not changed since orig_head_index was loaded and calculated upon
-            LONG * pDest = (LONG*) &cb_xmt_local_buffer_ptr[nIdx]->headindex;
-            LONG dwExch = (LONG) mod_headindex;
-            LONG dwComp = (LONG) orig_headindex;
+            int32_t * pDest = (int32_t*) &cb_xmt_local_buffer_ptr[nIdx]->headindex;
+            int32_t dwExch = (int32_t) mod_headindex;
+            int32_t dwComp = (int32_t) orig_headindex;
 #ifdef WIN32
             if (InterlockedCompareExchange( pDest, dwExch, dwComp ) == dwComp)
                 break;
@@ -945,7 +945,7 @@ cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance)
 #ifdef WIN32
     InterlockedExchange((LPLONG)&(cb_xmt_local_buffer_ptr[nIdx]->buffer[orig_headindex]),*((LONG*)pPacket));
 #else
-    __sync_lock_test_and_set((LPLONG)&(cb_xmt_local_buffer_ptr[nIdx]->buffer[orig_headindex]),*((LONG*)pPacket));
+    __sync_lock_test_and_set((int32_t*)&(cb_xmt_local_buffer_ptr[nIdx]->buffer[orig_headindex]),*((int32_t*)pPacket));
 #endif
 
     return cbRESULT_OK;
@@ -3393,7 +3393,7 @@ cbRESULT cbGetSpkCache(uint32_t chid, cbSPKCACHE **cache, uint32_t nInstance)
 
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
-    *cache = (cbSPKCACHE*)( ((BYTE*)&(cb_spk_buffer_ptr[nIdx]->cache)) + ((chid - 1)*(cb_spk_buffer_ptr[nIdx]->linesize)) );
+    *cache = (cbSPKCACHE*)( ((uint8_t*)&(cb_spk_buffer_ptr[nIdx]->cache)) + ((chid - 1)*(cb_spk_buffer_ptr[nIdx]->linesize)) );
     return cbRESULT_OK;
 }
 

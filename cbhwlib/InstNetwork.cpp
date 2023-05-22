@@ -648,7 +648,7 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
             ProcessIncomingPacket(pktptr);
 
             // increment packet pointer and subract out the packetsize from the processing counter
-            pktptr = (cbPKT_GENERIC*) (((BYTE*) pktptr) + packetsize);
+            pktptr = (cbPKT_GENERIC*) (((uint8_t*) pktptr) + packetsize);
             bytes_to_process -= packetsize;
 
             // Increment head index and check for buffer wraparound.
@@ -760,7 +760,7 @@ void InstNetwork::run()
     m_nIdx = cb_library_index[m_nInstance];
     
     // Open the cbhwlib library and create the shared objects
-    cbRESULT cbRet = cbOpen(FALSE, m_nInstance);
+    cbRESULT cbRet = cbOpen(false, m_nInstance);
     if (cbRet == cbRESULT_OK)
     {
         m_nIdx = cb_library_index[m_nInstance];
@@ -769,7 +769,7 @@ void InstNetwork::run()
     } else if (cbRet == cbRESULT_NOCENTRALAPP) { // If Central is not running run as stand alone
         m_bStandAlone = true; // Run stand alone without Central
         // Run as stand-alone application
-        cbRet = cbOpen(TRUE, m_nInstance);
+        cbRet = cbOpen(true, m_nInstance);
         if (cbRet)
         {
             InstNetworkEvent(NET_EVENT_CBERR, cbRet); // report cbRESULT
