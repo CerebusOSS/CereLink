@@ -870,7 +870,8 @@ def get_channel_config(int channel, int instance=0, encoding='utf-8'):
         'userflags': cb_chaninfo.userflags,
         'doutopts': cb_chaninfo.doutopts,
         'dinpopts': cb_chaninfo.dinpopts,
-        'monsource': cb_chaninfo.monsource,
+        'moninst': cb_chaninfo.moninst,
+        'monchan': cb_chaninfo.monchan,
         'outvalue': cb_chaninfo.outvalue,
         'aoutopts': cb_chaninfo.aoutopts,
         'eopchar': cb_chaninfo.eopchar,
@@ -902,7 +903,8 @@ def get_channel_config(int channel, int instance=0, encoding='utf-8'):
         #int32_t             position[4]             # reserved for future position information
         #cbSCALING           scalin                  # user-defined scaling information for AINP
         #cbSCALING           scalout                 # user-defined scaling information for AOUT
-        #uint32_t              monsource
+        #uint16_t              moninst
+        #uint16_t              monchan
         #int32_t               outvalue       # output value
         #uint16_t              lowsamples     # address of channel to monitor
         #uint16_t              highsamples    # address of channel to monitor
