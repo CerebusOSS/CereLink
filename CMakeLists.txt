@@ -247,8 +247,9 @@ IF(${BUILD_CBMEX} AND MATLAB_FOUND )
     
     # Want package name to be cbmex without prefix
     IF( WIN32 )
-        # Do not output to Debug/Release directories on Windows
-        SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "../")
+        # Do not output to Debug/Release directories on Windows.
+        # Commented out because it causes 'multiple rules generate cbmex.mexw64' error
+        # SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES PREFIX "../")
         IF (MSVC)
             # Manually export mexFunction because __declspec(dllexport) conflicts with its definition in mex.h
             SET_TARGET_PROPERTIES( ${LIB_NAME_CBMEX} PROPERTIES
