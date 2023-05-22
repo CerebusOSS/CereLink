@@ -2090,7 +2090,8 @@ void OnDigitalOut(
                     if (i != 2)
                         mexErrMsgTxt("Cannot specify any other parameters with 'disable' command");
                     chaninfo.doutopts &= ~(cbDOUT_FREQUENCY | cbDOUT_TRIGGERED | cbDOUT_TRACK);
-                    chaninfo.monsource = 0;
+                    chaninfo.moninst = 0;
+                    chaninfo.monchan = 0;
                     bHasNewParams = true;
                 }
                 else if (_strcmpi(cmdstr, "timed") == 0)
@@ -2322,7 +2323,8 @@ void OnDigitalOut(
         {
             char cmdstr[128];
             // check for proper data structure
-            chaninfo.monsource = nTrigChan;
+            chaninfo.moninst = cbGetChanInstrument(nTrigChan) - 1;
+            chaninfo.monchan = cbGetInstrumentLocalChannelNumber(nTrigChan);
             chaninfo.doutopts &= ~cbDOUT_MONITOR_UNIT_ALL;
             if (mxGetClassID(prhs[nIdxMonitor]) != mxCHAR_CLASS || mxGetString(prhs[nIdxMonitor], cmdstr, sizeof(cmdstr)))
                 PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid monitor");
@@ -2358,7 +2360,8 @@ void OnDigitalOut(
             {
                 PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid monitor unit");
             }
-            if (chaninfo.monsource == 0 || chaninfo.monsource > cbNUM_ANALOG_CHANS)
+            uint32_t nExpChan = cbGetExpandedChannelNumber(chaninfo.moninst, chaninfo.monchan);
+            if ((nExpChan == 0) || (nExpChan > cbNUM_ANALOG_CHANS))
                 PrintHelp(CBMEX_FUNCTION_DIGITALOUT, true, "Invalid input channel number");
         }
     }
@@ -2374,9 +2377,10 @@ void OnDigitalOut(
 
         // describe the monitoring mode and parameters
         mxSetCell(pca, 0, mxCreateString("monitor"));
-        if ((0 == (cbDOUT_FREQUENCY & chaninfo.doutopts)) && (0 == (cbDOUT_TRIGGERED & chaninfo.doutopts)) && (0 != chaninfo.monsource))
+        uint32_t nExpChan = cbGetExpandedChannelNumber(chaninfo.moninst, chaninfo.monchan);
+        if ((0 == (cbDOUT_FREQUENCY & chaninfo.doutopts)) && (0 == (cbDOUT_TRIGGERED & chaninfo.doutopts)) && (0 != nExpChan))
         {
-            sprintf(string, "monitor chan %d", chaninfo.monsource);
+            sprintf(string, "monitor chan %d", nExpChan);
             if (cbDOUT_MONITOR_UNIT_ALL == (chaninfo.doutopts & cbDOUT_MONITOR_UNIT_ALL))
                 strncat(string, " all units", sizeof(string) - strlen(string) - 1);
             else
@@ -2593,7 +2597,7 @@ void OnAnalogOut(
             }
             else if (_strcmpi(cmdstr, "track") == 0)
             {
-                mon.bTrack = TRUE;
+                mon.bTrack = true;
                 if (nIdxMonitor == 0)
                     mexErrMsgTxt("Cannot track with no monitor channel specified");
             }
@@ -2899,11 +2903,11 @@ void OnAnalogOut(
             PrintHelp(CBMEX_FUNCTION_ANALOGOUT, true, "Invalid monitor");
         if (_strcmpi(cmdstr, "spike") == 0)
         {
-            mon.bSpike = TRUE;
+            mon.bSpike = true;
         }
         else if (_strcmpi(cmdstr, "continuous") == 0)
         {
-            mon.bSpike = FALSE;
+            mon.bSpike = false;
         }
         else
         {
