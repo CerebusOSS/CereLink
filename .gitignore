@@ -1,6 +1,7 @@
 install/
 dist/
 build*/
+.vs/
 package/
 cmake-build*/
 *.egg-info
