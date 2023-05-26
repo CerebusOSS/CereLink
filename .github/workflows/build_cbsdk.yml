@@ -86,14 +86,14 @@ jobs:
         run: |
           conda create -n py39 python=3.9 numpy Cython pip wheel setuptools
           conda activate py39
-          pip wheel . -w wheelhouse/
+          pip wheel . -w dist/
           conda create -n py310 python=3.10 numpy Cython pip wheel setuptools
           conda activate py310
-          pip wheel . -w wheelhouse/
+          pip wheel . -w dist/
           conda create -n py311 python=3.11 numpy Cython pip wheel setuptools
           conda activate py311
-          pip wheel . -w wheelhouse/
-          rm -f wheelhouse/numpy*.whl wheelhouse/Cython*.whl
+          pip wheel . -w dist/
+          rm -f dist/numpy*.whl dist/Cython*.whl
 # While it would be great if we could use cibuildhweels, this is not realistic because of the Qt6 dependency.
 # We could delocate-wheel (Mac) or auditwheel (linux) but these produce huge binaries and it's fairly easy to
 # install Qt6 (the only truly missing dependency) on these platforms.
@@ -117,4 +117,3 @@ jobs:
         with:
           files: |
             dist/*
-            wheelhouse/*.whl
