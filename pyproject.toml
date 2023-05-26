@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools", "wheel", "cython", "numpy"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cerebus"  # as it would appear on PyPI
+dynamic = ["version", "readme"]
+authors = [
+    {name = "Chadwick Boulay", email = "chadwick.boulay@gmail.com"},
+    {name = "Ehsan Azar"}
+]
+requires-python = ">=3.9"
+urls = {homepage = "https://github.com/CerebusOSS/CereLink"}
+
+[tool.setuptools.packages.find]
+include = ["cerebus*"]  # package names should match these glob patterns (["*"] by default)
+
+[tool.setuptools.dynamic]
+version = {attr = "cerebus.__version__"}
+readme = {file = ["README.md"]}

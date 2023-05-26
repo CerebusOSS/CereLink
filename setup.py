@@ -1,11 +1,9 @@
-from __future__ import print_function
 import os
 from pathlib import Path
 import sys
 import platform
 
 import numpy
-from setuptools import find_packages
 from setuptools import setup, Extension
 from Cython.Build import build_ext
 
@@ -15,10 +13,15 @@ def get_extras():
     arch = '64' if '64bit' in platform.architecture() else ''
     # Find all the extra include files, libraries, and link arguments we need to install.
     dist_path = os.path.join(cur, 'install')
+    print(dist_path, os.path.exists(dist_path))
     if "win32" in sys.platform:
         vs_out = os.path.join(cur, 'out', 'install', 'x64-Release')
         if os.path.exists(vs_out):
             dist_path = vs_out
+    elif not os.path.exists(dist_path):
+        clion_out = os.path.join(cur, "cmake-build-release", "install")
+        if os.path.exists(clion_out):
+            dist_path = clion_out
 
     x_includes = [os.path.join(dist_path, 'include')]  # Must include cbsdk headers
     x_libs = []
@@ -76,52 +79,26 @@ def get_extras():
         x_libs += ["Qt6" + _ for _ in ["Core", "Xml", "Concurrent"]]
     else:  # Linux
         x_link_args += ['-L{path}'.format(path=os.path.join(dist_path, 'lib{arch}'.format(arch=arch)))]
-        # For Qt linking at run time, check `qtchooser -print-env`
-        # If it is not pointing to correct QtDir, then edit /usr/lib/x86_64-linux-gnu/qt-default/qtchooser/default.conf
-        # /opt/Qt/5.9/gcc_64/bin
-        # /opt/Qt/5.9/gcc_64/lib
-        # This should also take care of finding the link dir at compile time, (i.e. -L/path/to/qt not necessary)
-        # but we need to specify lib names, and these are version dependent.
-        import subprocess
-        import re
-        p = subprocess.Popen('qmake -v', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        res = p.stdout.read().decode()
-        if not res.startswith("Qt version"):
-            p = subprocess.Popen('qmake6 -v', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            res = p.stdout.read().decode()
-        qt_ver = re.findall('Qt version .', res)[0][-1]
-        x_libs += ["Qt" + qt_ver + _ for _ in ["Core", "Xml", "Concurrent"]]
+        x_libs += ["Qt6" + _ for _ in ["Core", "Xml", "Concurrent"]]
 
     return x_includes, x_libs, x_link_args
 
 
 extra_includes, extra_libs, extra_link_args = get_extras()
 
-extension_kwargs = {
-    'sources': ['cerebus/cbpy.pyx', 'cerebus/cbsdk_helper.cpp'],
-    'libraries': ["cbsdk_static"] + extra_libs,
-    'extra_link_args': extra_link_args,
-    'include_dirs': [numpy.get_include()] + extra_includes,
-    'language': 'c++'
-}
-
-cbpy_module = Extension('cerebus.cbpy', **extension_kwargs)
 
 setup(
-    name='cerebus',
-    version='0.2',
-    description='Cerebus Link',
-    long_description='Cerebus Link Python Package',
-    author='Chadwick Boulay',
-    author_email='chadwick.boulay@gmail.com',
-    setup_requires=['Cython', 'numpy', 'wheel'],
-    install_requires=['Cython', 'numpy'],
-    url='https://github.com/CerebusOSS/CereLink',
-    packages=find_packages(),
-    cmdclass={
-        'build_ext': build_ext,
-    },
     ext_modules=[
-        cbpy_module,
+        Extension("cerebus.cbpy",
+                  sources=["cerebus/cbpy.pyx", "cerebus/cbsdk_helper.cpp"],
+                  libraries=["cbsdk_static"] + extra_libs,
+                  extra_link_args=extra_link_args,
+                  include_dirs=[numpy.get_include()] + extra_includes,
+                  language="c++"
+                  )
     ],
+    cmdclass={
+        "build_ext": build_ext
+    }
+    # See pyproject.toml for rest of configuration.
 )
