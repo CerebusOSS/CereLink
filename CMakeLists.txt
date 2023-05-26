@@ -361,11 +361,10 @@ IF(${BUILD_TEST})
         ${LIB_INCL_DIRS}
         ${PROJECT_SOURCE_DIR}/cbsdk
     )
-    TARGET_LINK_LIBRARIES(testcbsdk
-            ${QT_LIBRARIES}
-    )
+    TARGET_LINK_LIBRARIES(testcbsdk PRIVATE ${QT_LIBRARIES})
     IF(WIN32)
         TARGET_LINK_LIBRARIES(testcbsdk
+            PRIVATE
                wsock32 ws2_32 winmm
         )
     ELSEIF(NOT APPLE)
