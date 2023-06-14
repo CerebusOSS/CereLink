@@ -844,8 +844,12 @@ cbSdkResult SdkApp::SdkOpen(uint32_t nInstance, cbSdkConnectionType conType, cbS
     else
         return CBSDKRESULT_NOTIMPLEMENTED;
 
-    // Wait for (dis)connection to happen
+    // Wait for (dis)connection to happen (wait forever if debug)
+#ifndef NDEBUG
+    bool bWait = m_connectWait.wait(&m_connectLock);
+#else
     bool bWait = m_connectWait.wait(&m_connectLock, 15000);
+#endif
     m_connectLock.unlock();
 
     if (!bWait)
