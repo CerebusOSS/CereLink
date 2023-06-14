@@ -467,6 +467,10 @@ if(WIN32)
             $<TARGET_RUNTIME_DLLS:${LIB_NAME}>
             TYPE BIN
     )
+elseif(APPLE)
+    install(CODE "
+        execute_process(COMMAND codesign --force --deep --sign - ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/lib${LIB_NAME}.dylib)
+    ")
 endif(WIN32)
 
 

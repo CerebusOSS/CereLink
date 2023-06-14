@@ -15,9 +15,6 @@ on:
 permissions:
   contents: write
 
-env:
-  NSPVERSION: 7.5.1
-
 defaults:
   run:
     shell: bash
@@ -33,7 +30,7 @@ jobs:
           - {name: "windows-x64", os: "windows-latest",
             qt_arch: "win64_msvc2019_64", qt_ver: "6.4.3",
             cmake_extra: "-DCMAKE_PREFIX_PATH='D:\\a\\CereLink\\Qt\\6.4.3\\msvc2019_64' -T v142,host=x86"}
-          - { name: "macOS-latest", os: "macOS-latest", cibw_build: "cp3*-macosx_x86_64"}
+          - { name: "macOS-latest", os: "macOS-latest"}
           - { name: "jammy", os: "ubuntu-22.04"}
           - { name: "focal", os: "ubuntu-20.04"}
 
@@ -66,7 +63,10 @@ jobs:
         run: |
           cmake --version
           cmake -B build -S . \
+          -DBUILD_CBMEX=OFF \
+          -DBUILD_CBOCT=OFF \
           -DBUILD_TEST=OFF \
+          -DBUILD_HDF5=OFF \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=${PWD}/install \
           -DCPACK_PACKAGE_DIRECTORY=${PWD}/dist \

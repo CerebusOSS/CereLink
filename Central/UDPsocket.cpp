@@ -23,6 +23,7 @@ typedef int socklen_t;
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <string.h>
 #include <unistd.h>
 typedef struct sockaddr SOCKADDR;
 #define INVALID_SOCKET -1
@@ -92,12 +93,11 @@ cbRESULT UDPSocket::OpenUDP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
         return cbRESULT_SOCKERR;
     }
 
-    bool opt_val = true;
-    socklen_t  opt_len = sizeof(bool);
+    int opt_one = 1;
 
     if (bBroadcast)
     {
-        if (setsockopt(inst_sock, SOL_SOCKET, SO_BROADCAST, (char*)&opt_val, opt_len) != 0)
+        if (setsockopt(inst_sock, SOL_SOCKET, SO_BROADCAST, (char*)&opt_one, sizeof(opt_one)) != 0)
         {
             Close();
             return cbRESULT_SOCKOPTERR;
@@ -106,7 +106,7 @@ cbRESULT UDPSocket::OpenUDP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
 
     if (bDontRoute)
     {
-        if (setsockopt(inst_sock, SOL_SOCKET, SO_DONTROUTE, (char*)&opt_val, opt_len) != 0)
+        if (setsockopt(inst_sock, SOL_SOCKET, SO_DONTROUTE, (char*)&opt_one, sizeof(opt_one)) != 0)
         {
             Close();
             return cbRESULT_SOCKOPTERR;
@@ -115,7 +115,7 @@ cbRESULT UDPSocket::OpenUDP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
 
     if (OPT_REUSE == nStartupOptionsFlags)
     {
-        if (setsockopt(inst_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&opt_val, opt_len) != 0)
+        if (setsockopt(inst_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&opt_one, sizeof(opt_one)) != 0)
         {
             Close();
             return cbRESULT_SOCKOPTERR;
@@ -125,9 +125,8 @@ cbRESULT UDPSocket::OpenUDP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
     if (nRecBufSize > 0)
     {
         // Set the data stream input buffer size
-        opt_len = sizeof(int);
         int data_buff_size = nRecBufSize;
-        if (setsockopt(inst_sock, SOL_SOCKET, SO_RCVBUF, (char*)&data_buff_size, opt_len) != 0)
+        if (setsockopt(inst_sock, SOL_SOCKET, SO_RCVBUF, (char*)&data_buff_size, sizeof(data_buff_size)) != 0)
         {
             Close();
 #ifdef __APPLE__
@@ -136,6 +135,7 @@ cbRESULT UDPSocket::OpenUDP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
             return cbRESULT_SOCKOPTERR;
 #endif
         }
+        socklen_t  opt_len = sizeof(int);
         if (getsockopt(inst_sock, SOL_SOCKET, SO_RCVBUF, (char *)&data_buff_size, &opt_len) != 0)
         {
             Close();
@@ -222,8 +222,7 @@ cbRESULT UDPSocket::OpenUDP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
             if (m_bVerbose)
                 _cprintf("Warning: could not bind to socket on the subnet...\n");
 
-            opt_len = sizeof(bool);
-            if (setsockopt(inst_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&opt_val, opt_len) != 0)
+            if (setsockopt(inst_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&opt_one, sizeof(opt_one)) != 0)
             {
                 if(m_bVerbose)
                     _cprintf("Error enabling address re-used\n");
@@ -305,15 +304,12 @@ cbRESULT UDPSocket::OpenTCP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
         return cbRESULT_SOCKERR;
     }
 
-    bool opt_val = true;
-    socklen_t  opt_len = sizeof(bool);
-
     if (nRecBufSize > 0)
     {
         // Set the data stream input buffer size
-        opt_len = sizeof(int);
+
         int data_buff_size = nRecBufSize;
-        if (setsockopt(inst_sock, SOL_SOCKET, SO_RCVBUF, (char*)&data_buff_size, opt_len) != 0)
+        if (setsockopt(inst_sock, SOL_SOCKET, SO_RCVBUF, (char*)&data_buff_size, sizeof(data_buff_size)) != 0)
         {
             Close();
 #ifdef __APPLE__
@@ -322,6 +318,8 @@ cbRESULT UDPSocket::OpenTCP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
             return cbRESULT_SOCKOPTERR;
 #endif
         }
+
+        socklen_t opt_len = sizeof(int);
         if (getsockopt(inst_sock, SOL_SOCKET, SO_RCVBUF, (char*)&data_buff_size, &opt_len) != 0)
         {
             Close();
@@ -348,7 +346,7 @@ cbRESULT UDPSocket::OpenTCP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
     }
 
     int opt_sndbuf = nRecBufSize;
-    if (setsockopt(inst_sock, SOL_SOCKET, SO_SNDBUF, (char*)&opt_sndbuf, sizeof(int)) != 0)
+    if (setsockopt(inst_sock, SOL_SOCKET, SO_SNDBUF, (char*)&opt_sndbuf, sizeof(opt_sndbuf)) != 0)
     {
         Close();
         return cbRESULT_SOCKOPTERR;
@@ -356,7 +354,8 @@ cbRESULT UDPSocket::OpenTCP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
 
     //    if (bDontRoute)
     {
-        if (setsockopt(inst_sock, SOL_SOCKET, SO_DONTROUTE, (char*)&opt_val, opt_len) != 0)
+        int opt_one = 1;
+        if (setsockopt(inst_sock, SOL_SOCKET, SO_DONTROUTE, (char*)&opt_one, sizeof(opt_one)) != 0)
         {
             Close();
             return cbRESULT_SOCKOPTERR;
@@ -415,6 +414,20 @@ cbRESULT UDPSocket::OpenTCP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
 
 void UDPSocket::Close()
 {
+    int err = 0;
+#ifdef WIN32
+    err = ::WSAGetLastError();
+    // TODO: Get string representation of error.
+    // char errbuf[300];  // TODO: Needs to be LPWSTR
+    // FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, err, 0, errbuf, sizeof(errbuf), NULL);
+    // fprintf(stderr, "UDPSocket error: %s\n", errbuf);
+#else
+    err = errno;
+    const char* errbuf = strerror(err);
+    fprintf(stderr, "UDPSocket error: %s\n", errbuf);
+#endif
+    TRACE("UDPSocket error number was %i\n", err);
+
     m_TCPconnected = false;
     shutdown(inst_sock, SD_BOTH); // shutdown communication
 #ifdef WIN32

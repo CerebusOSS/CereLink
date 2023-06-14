@@ -3,7 +3,7 @@
 // (c) Copyright 2010 - 2023 Blackrock Microsystems
 //
 // $Workfile: BmiVersion.h $
-// $Archive: /common/BmiVersion.h $
+// $Archive: /CentralCommon/BmiVersion.h $
 // $Revision: 1 $
 // $Date: 7/19/10 9:52a $
 // $Author: Ehsan $
@@ -24,9 +24,9 @@
 #define STRINGIFY(s) STR(s)
 
 #define BMI_VERSION_MAJOR    7
-#define BMI_VERSION_MINOR    5
+#define BMI_VERSION_MINOR    6
 #define BMI_VERSION_RELEASE  1
-#define BMI_VERSION_BETA     3
+#define BMI_VERSION_BETA     0
 
 // Take care of the leading zero
 #if BMI_VERSION_MINOR < 10
