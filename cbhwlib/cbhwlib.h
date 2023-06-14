@@ -17,6 +17,7 @@
 #include "pstdint.h"
 #else
 #include "stdint.h"
+#include <stddef.h>  // For NULL on some compilers
 #endif
 
 #pragma pack(push, 1)
