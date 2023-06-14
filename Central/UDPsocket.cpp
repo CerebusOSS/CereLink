@@ -23,6 +23,7 @@ typedef int socklen_t;
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <string.h>
 #include <unistd.h>
 typedef struct sockaddr SOCKADDR;
 #define INVALID_SOCKET -1
@@ -415,6 +416,15 @@ cbRESULT UDPSocket::OpenTCP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
 
 void UDPSocket::Close()
 {
+#ifdef WIN32
+    char errbuf[300];
+    FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, WSAGetLastError(),
+                  0, errbuf, sizeof(errbuf), NULL);
+#else
+    int sv_err = errno;
+    const char* errbuf = strerror(sv_err);
+#endif
+    fprintf(stderr, "UDP socket error: %s\n", errbuf);
     m_TCPconnected = false;
     shutdown(inst_sock, SD_BOTH); // shutdown communication
 #ifdef WIN32
