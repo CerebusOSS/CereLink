@@ -414,15 +414,20 @@ cbRESULT UDPSocket::OpenTCP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
 
 void UDPSocket::Close()
 {
+    int err = 0;
 #ifdef WIN32
-    char errbuf[300];
-    FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, WSAGetLastError(),
-                  0, errbuf, sizeof(errbuf), NULL);
+    err = ::WSAGetLastError();
+    // TODO: Get string representation of error.
+    // char errbuf[300];  // TODO: Needs to be LPWSTR
+    // FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, err, 0, errbuf, sizeof(errbuf), NULL);
+    // fprintf(stderr, "UDPSocket error: %s\n", errbuf);
 #else
-    int sv_err = errno;
-    const char* errbuf = strerror(sv_err);
+    err = errno;
+    const char* errbuf = strerror(err);
+    fprintf(stderr, "UDPSocket error: %s\n", errbuf);
 #endif
-    fprintf(stderr, "UDP socket error: %s\n", errbuf);
+    TRACE("UDPSocket error number was %i\n", err);
+
     m_TCPconnected = false;
     shutdown(inst_sock, SD_BOTH); // shutdown communication
 #ifdef WIN32
