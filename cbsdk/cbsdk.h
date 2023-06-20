@@ -32,6 +32,7 @@
 #define CBSDK_H_INCLUDED
 
 #include "cbhwlib.h"
+#include "CCFUtils.h"
 
 #ifdef STATIC_CBSDK_LINK
 #undef CBSDK_EXPORTS
