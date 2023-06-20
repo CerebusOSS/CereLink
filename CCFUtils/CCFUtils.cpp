@@ -19,8 +19,6 @@
 #include "CCFUtilsBinary.h"
 #include "CCFUtilsXml.h"
 #include "CCFUtilsConcurrent.h"
-#include "cbhwlib.h"
-#include "cbHwlibHi.h"
 
 #ifdef _DEBUG
 #undef THIS_FILE
