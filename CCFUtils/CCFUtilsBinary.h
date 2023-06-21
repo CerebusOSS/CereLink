@@ -872,6 +872,7 @@ public:
     // Purpose: load the channel configuration from the file
     ccf::ccfResult ReadCCF(LPCSTR szFileName, bool bConvert);
     ccf::ccfResult ReadVersion(LPCSTR szFileName); // Read the version alone
+    ccf::ccfResult SetProcInfo(const cbPROCINFO& isInfo);
 
 public:
     // We give it public access to make it easy

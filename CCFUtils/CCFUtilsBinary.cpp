@@ -187,6 +187,11 @@ ccfResult CCFUtilsBinary::ReadCCF(LPCSTR szFileName, bool bConvert)
 }
 
 
+ccfResult CCFUtilsBinary::SetProcInfo(const cbPROCINFO& isInfo) {
+    return ccf::CCFRESULT_ERR_FORMAT;
+}
+
+
 // Author & Date: Ehsan Azar       12 April 2012
 // Purpose: Convert from older version
 CCFUtils * CCFUtilsBinary::Convert(CCFUtils * pOldConfig)
