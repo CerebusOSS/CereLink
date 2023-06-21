@@ -56,8 +56,10 @@ public:
 
     void SdkAsynchCCF(const ccf::ccfResult res, LPCSTR szFileName, const cbStateCCF state, const uint32_t nProgress);
     cbSdkResult SdkGetVersion(cbSdkVersion *version);
-    cbSdkResult SdkReadCCF(cbSdkCCF * pData, const char * szFileName, bool bConvert, bool bSend, bool bThreaded);
-    cbSdkResult SdkWriteCCF(cbSdkCCF * pData, const char * szFileName, bool bThreaded);
+    cbSdkResult SdkReadCCF(cbSdkCCF * pData, const char * szFileName, bool bConvert, bool bSend, bool bThreaded);  // From file or device if szFileName is null
+    cbSdkResult SdkFetchCCF(cbSdkCCF * pData);  // from device only
+    cbSdkResult SdkWriteCCF(cbSdkCCF * pData, const char * szFileName, bool bThreaded);  // to file or device if szFileName is null
+    cbSdkResult SdkSendCCF(cbSdkCCF * pData, bool bAutosort = false);  // to device only
     cbSdkResult SdkOpen(uint32_t nInstance, cbSdkConnectionType conType, cbSdkConnection con);
     cbSdkResult SdkGetType(cbSdkConnectionType * conType, cbSdkInstrumentType * instType);
     cbSdkResult SdkUnsetTrialConfig(cbSdkTrialType type);
