@@ -89,6 +89,7 @@ public:
     int GetInternalOriginalVersion();
     bool IsBinaryOriginal();
     bool IsAutosort();
+    virtual ccf::ccfResult SetProcInfo(const cbPROCINFO& isInfo);
 
 private:
     // Hide actual implementation in this private variable

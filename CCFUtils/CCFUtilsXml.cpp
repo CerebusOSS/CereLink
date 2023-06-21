@@ -36,9 +36,17 @@ using namespace ccf;
 CCFUtilsXml_v1::CCFUtilsXml_v1()
 {
     memset(&m_data, 0, sizeof(m_data));
+    memset(&m_procInfo, 0, sizeof(m_procInfo));
     // Same internal version because m_data has not changed from binary
     m_nInternalVersion = CCFUTILSBINARY_LASTVERSION + 1;
 }
+
+
+ccfResult CCFUtilsXml_v1::SetProcInfo(const cbPROCINFO& isInfo) {
+    m_procInfo = isInfo;
+    return ccf::CCFRESULT_SUCCESS;
+}
+
 
 // Author & Date:   Ehsan Azar   12 April 2012
 // Purpose: Read in an XML CCF file of this version.
@@ -193,24 +201,21 @@ ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(LPCSTR szFileName)
             {
                 xml.addGroup("Protocol", "", 0, QString("%1.%2").arg(cbVERSION_MAJOR).arg(cbVERSION_MINOR));
                 xml.addGroup("Cerebus", "", 0, QString(BMI_VERSION_STR));
-                cbPROCINFO isInfo;
-                cbRESULT cbRet = cbGetProcInfo(cbNSP1, &isInfo, m_nInstance);
-                if (cbRet == cbRESULT_OK)
-                {
-                    int nspmajor   = (isInfo.idcode & 0x000000ff);
-                    int nspminor   = (isInfo.idcode & 0x0000ff00) >> 8;
-                    int nsprelease = (isInfo.idcode & 0x00ff0000) >> 16;
-                    int nspbeta    = (isInfo.idcode & 0xff000000) >> 24;
-                    QString strBeta = ".";
-                    if (nspbeta)
-                        strBeta = " Beta ";
-                    xml.addGroup("NSP", "", 0, QString("%1.%2.%3" + strBeta + "%4")
-                        .arg(nspmajor)
-                        .arg(nspminor, 2, 10, QLatin1Char('0'))
-                        .arg(nsprelease, 2, 10, QLatin1Char('0'))
-                        .arg(nspbeta, 2, 10, QLatin1Char('0')));
-                    xml.addGroup("ID", "", 0, QString(isInfo.ident));
-                }
+
+                int nspmajor   = (m_procInfo.idcode & 0x000000ff);
+                int nspminor   = (m_procInfo.idcode & 0x0000ff00) >> 8;
+                int nsprelease = (m_procInfo.idcode & 0x00ff0000) >> 16;
+                int nspbeta    = (m_procInfo.idcode & 0xff000000) >> 24;
+                QString strBeta = ".";
+                if (nspbeta)
+                    strBeta = " Beta ";
+                xml.addGroup("NSP", "", 0, QString("%1.%2.%3" + strBeta + "%4")
+                    .arg(nspmajor)
+                    .arg(nspminor, 2, 10, QLatin1Char('0'))
+                    .arg(nsprelease, 2, 10, QLatin1Char('0'))
+                    .arg(nspbeta, 2, 10, QLatin1Char('0')));
+                xml.addGroup("ID", "", 0, QString(m_procInfo.ident));
+
                 xml.addGroup("Original", "", 0, m_nInternalOriginalVersion);
             }
             xml.endGroup(); // Version
