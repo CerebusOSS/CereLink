@@ -3287,7 +3287,7 @@ cbSdkResult cbSdkUpload(const char * szSrc, const char * szDstDir, uint32_t nIns
     upkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     upkt.cbpkt_header.type = cbPKTTYPE_UPDATESET;
     upkt.cbpkt_header.dlen = cbPKTDLEN_UPDATE;
-    sprintf(upkt.filename, "%s/%s", szDstDir, szBaseName);
+    _snprintf(upkt.filename, sizeof(upkt.filename), "%s/%s", szDstDir, szBaseName);
 
     uint32_t b, blocks = (cbFile / 512) + 1;
     for (b = 0; b < blocks; ++b)

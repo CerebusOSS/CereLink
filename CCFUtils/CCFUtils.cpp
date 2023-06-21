@@ -14,7 +14,6 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#include "StdAfx.h"
 #include "CCFUtils.h"
 #include "CCFUtilsBinary.h"
 #include "CCFUtilsXml.h"
@@ -88,16 +87,9 @@ ccfResult CCFUtils::WriteCCFNoPrompt(LPCSTR szFileName)
         // Perform a threaded write operation
         ccf::ConWriteCCF(szFileName, m_pCCF, m_pCallbackFn, m_nInstance);
     } else {
-        // If not read, use live NSP
         if (!m_pImpl)
-        {
-            // This should create m_pImpl on success
-            res = ReadCCF(); // Read from NSP
-            if (res)
-                return res;
-        }
-        if (!m_pImpl)
-            return CCFRESULT_ERR_UNKNOWN;
+            return CCFRESULT_ERR_NULL;
+
         if (m_pCallbackFn)
             m_pCallbackFn(m_nInstance, res, szFileName, CCFSTATE_WRITE, 0);
         // Ask the actual implementation to write file
