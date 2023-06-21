@@ -668,18 +668,70 @@ cbSdkResult SdkApp::SdkReadCCF(cbSdkCCF * pData, const char * szFileName, bool b
         if (m_instInfo == 0)
             return CBSDKRESULT_CLOSED;
     }
-    CCFUtils config(bSend, bThreaded, &pData->data, m_pCallback[CBSDKCALLBACK_CCF] ? &cbSdkAsynchCCF : NULL, m_nInstance);
-    ccf::ccfResult res = config.ReadCCF(szFileName, bConvert);
+    CCFUtils config(bThreaded, &pData->data, m_pCallback[CBSDKCALLBACK_CCF] ? &cbSdkAsynchCCF : NULL, m_nInstance);
+    cbSdkResult res = CBSDKRESULT_SUCCESS;
+    if (szFileName == NULL)
+        res = SdkFetchCCF(pData);
+    else
+    {
+        ccf::ccfResult ccfres = config.ReadCCF(szFileName, bConvert);  // Updates pData->data via config.m_pImpl->m_data;
+        if (bSend)
+            SdkSendCCF(pData, config.IsAutosort());
+        res = cbSdkErrorFromCCFError(ccfres);
+    }
     if (res)
-        return cbSdkErrorFromCCFError(res);
+        return res;
     pData->ccfver = config.GetInternalOriginalVersion();
     if (m_instInfo == 0)
         return CBSDKRESULT_WARNCLOSED;
     return CBSDKRESULT_SUCCESS;
 }
 
+cbSdkResult SdkApp::SdkFetchCCF(cbSdkCCF * pData) {
+    ccf::ccfResult res = ccf::CCFRESULT_SUCCESS;
+    uint32_t nIdx = cb_library_index[m_nInstance];
+    if (!cb_library_initialized[nIdx] || cb_cfg_buffer_ptr[nIdx] == NULL || cb_cfg_buffer_ptr[nIdx]->sysinfo.cbpkt_header.chid == 0)
+        res = ccf::CCFRESULT_ERR_OFFLINE;
+    else {
+        cbCCF & data = pData->data;
+        for (int i = 0; i < cbNUM_DIGITAL_FILTERS; ++i)
+            data.filtinfo[i] = cb_cfg_buffer_ptr[nIdx]->filtinfo[0][cbFIRST_DIGITAL_FILTER + i - 1];    // First is 1 based, but index is 0 based
+        for (int i = 0; i < cbMAXCHANS; ++i)
+            data.isChan[i] = cb_cfg_buffer_ptr[nIdx]->chaninfo[i];
+        data.isAdaptInfo = cb_cfg_buffer_ptr[nIdx]->adaptinfo[cbNSP1];
+        data.isSS_Detect = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktDetect;
+        data.isSS_ArtifactReject = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktArtifReject;
+        for (uint32_t i = 0; i < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++i)
+            data.isSS_NoiseBoundary[i] = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktNoiseBoundary[i];
+        data.isSS_Statistics = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktStatistics;
+        {
+            data.isSS_Status = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktStatus;
+            data.isSS_Status.cntlNumUnits.fElapsedMinutes = 99;
+            data.isSS_Status.cntlUnitStats.fElapsedMinutes = 99;
+        }
+        {
+            data.isSysInfo = cb_cfg_buffer_ptr[nIdx]->sysinfo;
+            // only set spike len and pre trigger len
+            data.isSysInfo.cbpkt_header.type = cbPKTTYPE_SYSSETSPKLEN;
+        }
+        for (int i = 0; i < cbMAXNTRODES; ++i)
+            data.isNTrodeInfo[i] = cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[i];
+        data.isLnc = cb_cfg_buffer_ptr[nIdx]->isLnc[cbNSP1];
+        for (int i = 0; i < AOUT_NUM_GAIN_CHANS; ++i)
+        {
+            for (int j = 0; j < cbMAX_AOUT_TRIGGER; ++j)
+            {
+                data.isWaveform[i][j] = cb_cfg_buffer_ptr[nIdx]->isWaveform[i][j];
+                // Unset triggered state, so that when loading it does not start generating waveform
+                data.isWaveform[i][j].active = 0;
+            }
+        }
+    }
+    return cbSdkErrorFromCCFError(res);
+}
+
 /// sdk stub for SdkApp::SdkGetVersion
-CBSDKAPI    cbSdkResult cbSdkReadCCF(uint32_t nInstance, cbSdkCCF * pData, const char * szFileName, bool bConvert, bool bSend, bool bThreaded)
+CBSDKAPI cbSdkResult cbSdkReadCCF(uint32_t nInstance, cbSdkCCF * pData, const char * szFileName, bool bConvert, bool bSend, bool bThreaded)
 {
     if (pData == NULL)
         return CBSDKRESULT_NULLPTR;
@@ -716,11 +768,19 @@ cbSdkResult SdkApp::SdkWriteCCF(cbSdkCCF * pData, const char * szFileName, bool 
         if (m_instInfo == 0)
             return CBSDKRESULT_CLOSED;
     }
-    bool bSend = (szFileName == NULL);
+    cbCCFCallback callbackFn = m_pCallback[CBSDKCALLBACK_CCF] ? &cbSdkAsynchCCF : NULL;
+    CCFUtils config(bThreaded, &pData->data, callbackFn, m_nInstance);
+
     ccf::ccfResult res;
-    CCFUtils config(bSend, bThreaded, &pData->data, m_pCallback[CBSDKCALLBACK_CCF] ? &cbSdkAsynchCCF : NULL, m_nInstance);
-    if (bSend)
-        res = config.SendCCF();
+    if (szFileName == NULL)
+    {
+        // No filename, attempt to send CCF to NSP
+        if (callbackFn)
+            callbackFn(m_nInstance, res, NULL, CCFSTATE_SEND, 0);
+        SdkSendCCF(pData, false);
+        if (callbackFn)
+            callbackFn(m_nInstance, res, NULL, CCFSTATE_SEND, 100);
+    }
     else
         res = config.WriteCCFNoPrompt(szFileName);
     if (res)
@@ -729,6 +789,199 @@ cbSdkResult SdkApp::SdkWriteCCF(cbSdkCCF * pData, const char * szFileName, bool 
     if (m_instInfo == 0)
         return CBSDKRESULT_WARNCLOSED;
     return CBSDKRESULT_SUCCESS;
+}
+
+cbSdkResult SdkApp::SdkSendCCF(cbSdkCCF * pData, bool bAutosort)
+{
+    if (pData == NULL)
+        return CBSDKRESULT_NULLPTR;
+
+    cbSdkResult res = CBSDKRESULT_SUCCESS;
+    cbCCF data = pData->data;
+
+    // Custom digital filters
+    for (int i = 0; i < cbNUM_DIGITAL_FILTERS; ++i)
+    {
+        if (data.filtinfo[i].filt)
+        {
+            data.filtinfo[i].cbpkt_header.type = cbPKTTYPE_FILTSET;
+            cbSendPacket(&data.filtinfo[i], m_nInstance);
+        }
+    }
+    // Chaninfo
+    int nAinChan = 1;
+    int nAoutChan = 1;
+    int nDinChan = 1;
+    int nSerialChan = 1;
+    int nDoutChan = 1;
+    uint32_t nChannelNumber = 0;
+    for (int i = 0; i < cbMAXCHANS; ++i)
+    {
+        if (data.isChan[i].chan)
+        {
+            // this function is supposed to line up channels based on channel capabilities.  It doesn't
+            // work with the multiple NSP setup.  TODO look into this at a future time
+            nChannelNumber = 0;
+            switch (data.isChan[i].chancaps)
+            {
+                case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_ISOLATED | cbCHAN_AINP:  // FE channels
+#ifdef CBPROTO_311
+                    nChannelNumber = cbGetExpandedChannelNumber(1, data.isChan[i].chan);
+#else
+                    nChannelNumber = cbGetExpandedChannelNumber(data.isChan[i].cbpkt_header.instrument + 1, data.isChan[i].chan);
+#endif
+                    break;
+                case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_AINP:  // Analog input channels
+                    nChannelNumber = GetAIAnalogInChanNumber(nAinChan++);
+                    break;
+                case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_AOUT:  // Analog & Audio output channels
+                    nChannelNumber = GetAnalogOrAudioOutChanNumber(nAoutChan++);
+                    break;
+                case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_DINP:  // digital & serial input channels
+                    if (data.isChan[i].dinpcaps & cbDINP_SERIALMASK)
+                    {
+                        nChannelNumber = GetSerialChanNumber(nSerialChan++);
+                    }
+                    else
+                    {
+                        nChannelNumber = GetDiginChanNumber(nDinChan++);
+                    }
+                    break;
+                case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_DOUT:  // digital output channels
+                    nChannelNumber = GetDigoutChanNumber(nDoutChan++);
+                    break;
+                default:
+                    nChannelNumber = 0;
+            }
+            // send it if it's a valid channel number
+            if ((0 != nChannelNumber))  // && (data.isChan[i].chan))
+            {
+                data.isChan[i].chan = nChannelNumber;
+                data.isChan[i].cbpkt_header.type = cbPKTTYPE_CHANSET;
+#ifndef CBPROTO_311
+                data.isChan[i].cbpkt_header.instrument = data.isChan[i].proc - 1;   // send to the correct instrument
+#endif
+                cbSendPacket(&data.isChan[i], m_nInstance);
+            }
+        }
+    }
+    // Sorting
+    {
+        if (data.isSS_Statistics.cbpkt_header.type)
+        {
+            data.isSS_Statistics.cbpkt_header.type = cbPKTTYPE_SS_STATISTICSSET;
+            cbSendPacket(&data.isSS_Statistics, m_nInstance);
+        }
+        for (uint32_t nChan = 0; nChan < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++nChan)
+        {
+            if (data.isSS_NoiseBoundary[nChan].chan)
+            {
+                data.isSS_NoiseBoundary[nChan].cbpkt_header.type = cbPKTTYPE_SS_NOISE_BOUNDARYSET;
+                cbSendPacket(&data.isSS_NoiseBoundary[nChan], m_nInstance);
+            }
+        }
+        if (data.isSS_Detect.cbpkt_header.type)
+        {
+            data.isSS_Detect.cbpkt_header.type  = cbPKTTYPE_SS_DETECTSET;
+            cbSendPacket(&data.isSS_Detect, m_nInstance);
+        }
+        if (data.isSS_ArtifactReject.cbpkt_header.type)
+        {
+            data.isSS_ArtifactReject.cbpkt_header.type = cbPKTTYPE_SS_ARTIF_REJECTSET;
+            cbSendPacket(&data.isSS_ArtifactReject, m_nInstance);
+        }
+    }
+    // Sysinfo
+    if (data.isSysInfo.cbpkt_header.type)
+    {
+        data.isSysInfo.cbpkt_header.type = cbPKTTYPE_SYSSETSPKLEN;
+        cbSendPacket(&data.isSysInfo, m_nInstance);
+    }
+    // LNC
+    if (data.isLnc.cbpkt_header.type)
+    {
+        data.isLnc.cbpkt_header.type = cbPKTTYPE_LNCSET;
+        cbSendPacket(&data.isLnc, m_nInstance);
+    }
+    // Analog output waveforms
+    for (uint32_t nChan = 0; nChan < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogoutChans(); ++nChan)
+    {
+        for (int nTrigger = 0; nTrigger < cbMAX_AOUT_TRIGGER; ++nTrigger)
+        {
+            if (data.isWaveform[nChan][nTrigger].chan)
+            {
+                data.isWaveform[nChan][nTrigger].chan = GetAnalogOutChanNumber(nChan + 1);
+#ifndef CBPROTO_311
+                data.isWaveform[nChan][nTrigger].cbpkt_header.instrument = cbGetChanInstrument(data.isWaveform[nChan][nTrigger].chan);
+#endif
+                data.isWaveform[nChan][nTrigger].cbpkt_header.type = cbPKTTYPE_WAVEFORMSET;
+                cbSendPacket(&data.isWaveform[nChan][nTrigger], m_nInstance);
+            }
+        }
+    }
+    // NTrode
+    for (int nNTrode = 0; nNTrode < cbMAXNTRODES; ++nNTrode)
+    {
+        char szNTrodeLabel[cbLEN_STR_LABEL + 1];     // leave space for trailing null
+        memset(szNTrodeLabel, 0, sizeof(szNTrodeLabel));
+        cbGetNTrodeInfo(nNTrode + 1, szNTrodeLabel, NULL, NULL, NULL, NULL);
+
+        if (
+                (0 != strlen(szNTrodeLabel))
+#ifndef CBPROTO_311
+                && (cbGetNTrodeInstrument(nNTrode + 1) == data.isNTrodeInfo->cbpkt_header.instrument + 1)
+#endif
+                )
+        {
+            if (data.isNTrodeInfo[nNTrode].ntrode)
+            {
+                data.isNTrodeInfo[nNTrode].cbpkt_header.type = cbPKTTYPE_SETNTRODEINFO;
+                cbSendPacket(&data.isNTrodeInfo[nNTrode], m_nInstance);
+            }
+        }
+    }
+    // Adaptive filter
+    if (data.isAdaptInfo.cbpkt_header.type)
+    {
+        data.isAdaptInfo.cbpkt_header.type = cbPKTTYPE_ADAPTFILTSET;
+        cbSendPacket(&data.isAdaptInfo, m_nInstance);
+    }
+    // if any spike sorting packets were read and the protocol is before the combined firmware,
+    // set all the channels to autosorting
+    CCFUtils config(false, &pData->data, NULL, m_nInstance);
+    if ((config.GetInternalVersion() < 8) && !bAutosort)
+    {
+        cbPKT_SS_STATISTICS isSSStatistics;
+
+        isSSStatistics.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        isSSStatistics.cbpkt_header.type = cbPKTTYPE_SS_STATISTICSSET;
+        isSSStatistics.cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+
+        isSSStatistics.nUpdateSpikes = 300;
+        isSSStatistics.nAutoalg = cbAUTOALG_HOOPS;
+        isSSStatistics.nMode = cbAUTOALG_MODE_APPLY;
+        isSSStatistics.fMinClusterPairSpreadFactor = 9;
+        isSSStatistics.fMaxSubclusterSpreadFactor = 125;
+        isSSStatistics.fMinClusterHistCorrMajMeasure = 0.80f;
+        isSSStatistics.fMaxClusterPairHistCorrMajMeasure = 0.94f;
+        isSSStatistics.fClusterHistValleyPercentage = 0.50f;
+        isSSStatistics.fClusterHistClosePeakPercentage = 0.50f;
+        isSSStatistics.fClusterHistMinPeakPercentage = 0.016f;
+        isSSStatistics.nWaveBasisSize = 250;
+        isSSStatistics.nWaveSampleSize = 0;
+
+        cbSendPacket(&isSSStatistics, m_nInstance);
+
+    }
+    if (data.isSS_Status.cbpkt_header.type)
+    {
+        data.isSS_Status.cbpkt_header.type = cbPKTTYPE_SS_STATUSSET;
+        data.isSS_Status.cntlNumUnits.nMode = ADAPT_NEVER; // Prevent rebuilding spike sorting when loading ccf.
+        cbSendPacket(&data.isSS_Status, m_nInstance);
+    }
+
+
+    return res;
 }
 
 /// sdk stub for SdkApp::SdkWriteCCF

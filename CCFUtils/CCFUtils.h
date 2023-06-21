@@ -78,7 +78,7 @@ typedef void (* cbCCFCallback)(uint32_t nInstance, const ccf::ccfResult res, LPC
 class CCFUtils
 {
 public:
-    CCFUtils(bool bSend = false, bool bThreaded = false, cbCCF * pCCF = NULL, cbCCFCallback pCallbackFn = NULL, uint32_t nInstance = 0);
+    CCFUtils(bool bThreaded = false, cbCCF * pCCF = NULL, cbCCFCallback pCallbackFn = NULL, uint32_t nInstance = 0);
     virtual ~CCFUtils();
 
 public:
@@ -88,18 +88,14 @@ public:
     int GetInternalVersion();
     int GetInternalOriginalVersion();
     bool IsBinaryOriginal();
-    ccf::ccfResult SendCCF();
+    bool IsAutosort();
 
 private:
     // Hide actual implementation in this private variable
     CCFUtils * m_pImpl;
-    bool m_bSend; // If should send after successful read
     cbCCFCallback m_pCallbackFn; // CCF progress callback
     bool m_bThreaded; // If operation should be threaded with given callback
     cbCCF * m_pCCF; // Extra copy of CCF
-
-private:
-    void ReadCCFOfNSP(); // Read CCF from NSP
 
 protected:
     // Convert from old config
