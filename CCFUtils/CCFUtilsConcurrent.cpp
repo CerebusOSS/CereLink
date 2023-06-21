@@ -12,10 +12,8 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#include "StdAfx.h"
 #include <QtConcurrentRun>
 #include "CCFUtilsConcurrent.h"
-#include "debugmacs.h"
 
 #ifdef _DEBUG
 #undef THIS_FILE
