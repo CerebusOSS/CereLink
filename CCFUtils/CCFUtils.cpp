@@ -64,6 +64,14 @@ CCFUtils::~CCFUtils()
     m_nInternalOriginalVersion = 0;
 }
 
+
+ccfResult CCFUtils::SetProcInfo(const cbPROCINFO& isInfo) {
+    if (m_pImpl)
+        return m_pImpl->SetProcInfo(isInfo);
+    return ccf::CCFRESULT_ERR_FORMAT;
+}
+
+
 // Author & Date: Ehsan Azar       12 April 2012
 // Purpose: Convert from older version
 CCFUtils * CCFUtils::Convert(CCFUtils * pOldConfig)

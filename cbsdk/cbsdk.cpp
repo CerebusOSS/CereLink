@@ -770,6 +770,10 @@ cbSdkResult SdkApp::SdkWriteCCF(cbSdkCCF * pData, const char * szFileName, bool 
     }
     cbCCFCallback callbackFn = m_pCallback[CBSDKCALLBACK_CCF] ? &cbSdkAsynchCCF : NULL;
     CCFUtils config(bThreaded, &pData->data, callbackFn, m_nInstance);
+    // Set proc info on config object. This might be used by Write* operations (if XML).
+    cbPROCINFO isInfo;
+    cbRESULT cbRet = cbGetProcInfo(cbNSP1, &isInfo, m_nInstance);
+    config.SetProcInfo(isInfo);  // Ignore return. It works if XML, and fails otherwise.
 
     ccf::ccfResult res;
     if (szFileName == NULL)
