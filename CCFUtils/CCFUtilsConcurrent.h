@@ -23,7 +23,7 @@
 // Namespace for Cerebus Config Files
 namespace ccf
 {
-    void ConReadCCF(LPCSTR szFileName, bool bSend, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance);
+    void ConReadCCF(LPCSTR szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance);
     void ConWriteCCF(LPCSTR szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance);
 };
 
