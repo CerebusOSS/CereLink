@@ -180,7 +180,7 @@ set( CCF_SOURCE
     ${PROJECT_SOURCE_DIR}/CCFUtils/XmlItem.h
 )
 add_library( CCFUtils OBJECT ${CCF_SOURCE} )
-target_link_libraries( CCFUtils PRIVATE pugixml)
+target_link_libraries( CCFUtils PRIVATE pugixml::static)
 target_include_directories(CCFUtils
         PRIVATE
             ${PROJECT_SOURCE_DIR}/cbproto
