@@ -34,43 +34,39 @@ class CCFXmlItem : public XmlItem
 {
 public:
     CCFXmlItem() {;}
-    CCFXmlItem(cbPKT_CHANINFO & pkt, QString strName = "");
-    CCFXmlItem(cbPKT_ADAPTFILTINFO & pkt, QString strName = "");
-    CCFXmlItem(cbPKT_SS_DETECT & pkt, QString strName = "");
-    CCFXmlItem(cbPKT_SS_ARTIF_REJECT & pkt, QString strName = "");
-    CCFXmlItem(cbPKT_SS_NOISE_BOUNDARY & pkt, QString strName = "");
-    CCFXmlItem(cbPKT_SS_STATISTICS & pkt, QString strName = "");
-    CCFXmlItem(cbPKT_SS_STATUS & pkt, QString strName = "");
-    CCFXmlItem(cbPKT_SYSINFO & pkt, QString strName = "");
-    CCFXmlItem(cbPKT_NTRODEINFO & pkt, QString strName = "");
-    CCFXmlItem(cbPKT_LNC & pkt, QString strName = "");
-    CCFXmlItem(cbPKT_FILTINFO & pkt, QString strName = "");
-    CCFXmlItem(cbPKT_AOUT_WAVEFORM & pkt, QString strName = "");
-    CCFXmlItem(cbSCALING & pkt, QString strName = "");
-    CCFXmlItem(cbFILTDESC & pkt, QString strName = "");
-    CCFXmlItem(cbMANUALUNITMAPPING & pkt, QString strName = "");
-    CCFXmlItem(cbHOOP & pkt, QString strName = "");
-    CCFXmlItem(cbAdaptControl & pkt, QString strName = "");
-    CCFXmlItem(cbWaveformData & pkt, uint16_t  mode, QString strName = "");
+    CCFXmlItem(cbPKT_CHANINFO & pkt, std::string strName = "");
+    CCFXmlItem(cbPKT_ADAPTFILTINFO & pkt, std::string strName = "");
+    CCFXmlItem(cbPKT_SS_DETECT & pkt, std::string strName = "");
+    CCFXmlItem(cbPKT_SS_ARTIF_REJECT & pkt, std::string strName = "");
+    CCFXmlItem(cbPKT_SS_NOISE_BOUNDARY & pkt, std::string strName = "");
+    CCFXmlItem(cbPKT_SS_STATISTICS & pkt, std::string strName = "");
+    CCFXmlItem(cbPKT_SS_STATUS & pkt, std::string strName = "");
+    CCFXmlItem(cbPKT_SYSINFO & pkt, std::string strName = "");
+    CCFXmlItem(cbPKT_NTRODEINFO & pkt, std::string strName = "");
+    CCFXmlItem(cbPKT_LNC & pkt, std::string strName = "");
+    CCFXmlItem(cbPKT_FILTINFO & pkt, std::string strName = "");
+    CCFXmlItem(cbPKT_AOUT_WAVEFORM & pkt, std::string strName = "");
+    CCFXmlItem(cbSCALING & pkt, std::string strName = "");
+    CCFXmlItem(cbFILTDESC & pkt, std::string strName = "");
+    CCFXmlItem(cbMANUALUNITMAPPING & pkt, std::string strName = "");
+    CCFXmlItem(cbHOOP & pkt, std::string strName = "");
+    CCFXmlItem(cbAdaptControl & pkt, std::string strName = "");
+    CCFXmlItem(cbWaveformData & pkt, uint16_t  mode, std::string strName = "");
 
-    CCFXmlItem(uint32_t & number, QString strName = "");
-    CCFXmlItem(int32_t & number, QString strName = "");
-    CCFXmlItem(uint16_t & number, QString strName = "");
-    CCFXmlItem(int16_t & number, QString strName = "");
-    CCFXmlItem(uint8_t & number, QString strName = "");
-    CCFXmlItem(int8_t & number, QString strName = "");
-    CCFXmlItem(float & number, QString strName = "");
-    CCFXmlItem(double & number, QString strName = "");
+    CCFXmlItem(uint32_t & number, std::string strName = "");
+    CCFXmlItem(int32_t & number, std::string strName = "");
+    CCFXmlItem(uint16_t & number, std::string strName = "");
+    CCFXmlItem(int16_t & number, std::string strName = "");
+    CCFXmlItem(uint8_t & number, std::string strName = "");
+    CCFXmlItem(int8_t & number, std::string strName = "");
+    CCFXmlItem(float & number, std::string strName = "");
+    CCFXmlItem(double & number, std::string strName = "");
 
     // Array constructor
-    CCFXmlItem(QVariantList lst, QString strName);
+    CCFXmlItem(std::vector<std::any> lst, std::string strName);
     // We treat character array as string
-    CCFXmlItem(char cstr[], int count, QString strName);
-
-public:
-    operator const QVariant() const;
+    CCFXmlItem(char cstr[], int count, std::string strName);
 };
-Q_DECLARE_METATYPE(CCFXmlItem)
 
 
 #endif // include guard

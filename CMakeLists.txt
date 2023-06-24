@@ -92,12 +92,25 @@ cmake_policy(SET CMP0042 NEW) # ENABLE CMP0042: MACOSX_RPATH is enabled by defau
 
 ##########################################################################################
 # Third party libraries
+include(FetchContent)
 
 # -Qt
 FIND_PACKAGE(Qt6 REQUIRED COMPONENTS Core Xml Concurrent)
 set(CMAKE_AUTOMOC ON)
 SET(QT_LIBRARIES Qt6::Core Qt6::Concurrent)
 ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP)
+
+# -PugiXML
+find_package(pugixml QUIET)  # NO_SYSTEM_ENVIRONMENT_PATH)
+if(NOT pugixml_FOUND)
+    message(STATUS "Did not find pugixml, will use FetchContent instead.")
+    FetchContent_Declare(
+            pugixml
+            GIT_REPOSITORY https://github.com/zeux/pugixml.git
+            GIT_TAG v1.13
+    )
+    FetchContent_MakeAvailable(pugixml)
+endif()
 
 # -HDF5
 IF(${BUILD_HDF5})
@@ -167,7 +180,7 @@ set( CCF_SOURCE
     ${PROJECT_SOURCE_DIR}/CCFUtils/XmlItem.h
 )
 add_library( CCFUtils OBJECT ${CCF_SOURCE} )
-target_link_libraries( CCFUtils PRIVATE Qt6::Core Qt6::Xml Qt6::Concurrent )
+target_link_libraries( CCFUtils PRIVATE pugixml)
 target_include_directories(CCFUtils
         PRIVATE
             ${PROJECT_SOURCE_DIR}/cbproto
