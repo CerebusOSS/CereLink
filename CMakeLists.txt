@@ -95,9 +95,9 @@ cmake_policy(SET CMP0042 NEW) # ENABLE CMP0042: MACOSX_RPATH is enabled by defau
 include(FetchContent)
 
 # -Qt
-FIND_PACKAGE(Qt6 REQUIRED COMPONENTS Core Xml Concurrent)
+FIND_PACKAGE(Qt6 REQUIRED COMPONENTS Core)
 set(CMAKE_AUTOMOC ON)
-SET(QT_LIBRARIES Qt6::Core Qt6::Concurrent)
+SET(QT_LIBRARIES Qt6::Core)
 ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP)
 
 # -PugiXML
@@ -244,7 +244,9 @@ target_include_directories( ${LIB_NAME}
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Central>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CentralCommon>
 )
-TARGET_LINK_LIBRARIES( ${LIB_NAME} PRIVATE ${QT_LIBRARIES} CCFUtils)
+TARGET_LINK_LIBRARIES( ${LIB_NAME}
+        PRIVATE ${QT_LIBRARIES}
+        PUBLIC CCFUtils)
 IF( WIN32 )
     TARGET_LINK_LIBRARIES( ${LIB_NAME} PRIVATE wsock32 ws2_32 winmm )
     target_include_directories(${LIB_NAME} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/compat>)
@@ -275,7 +277,9 @@ IF(${BUILD_STATIC})
                 $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Central>
                 $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CentralCommon>
     )
-    TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} PRIVATE ${QT_LIBRARIES} CCFUtils)
+    TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC}
+            PRIVATE ${QT_LIBRARIES}
+            PUBLIC CCFUtils)
     IF( WIN32 )
         target_include_directories(${LIB_NAME_STATIC} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/compat>)
         TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} PRIVATE ws2_32 winmm )
@@ -540,8 +544,9 @@ INSTALL( TARGETS ${INSTALL_TARGET_LIST}
 INSTALL(
     FILES
         ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.h
-        ${PROJECT_SOURCE_DIR}/cbhwlib/cbproto.h
+        ${PROJECT_SOURCE_DIR}/cbproto/cbproto.h
         ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h
+        ${PROJECT_SOURCE_DIR}/CCFUtils/CCFUtils.h
     DESTINATION
         include
 )
