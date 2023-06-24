@@ -19,7 +19,7 @@
 #ifndef CCFUTILSXMLITEMSGENERATE_H_INCLUDED
 #define CCFUTILSXMLITEMSGENERATE_H_INCLUDED
 
-#include <QVariant>
+#include <any>
 
 // Namespace for Cerebus Config Files
 namespace ccf
@@ -28,13 +28,13 @@ namespace ccf
     // Abstract interface for generating CCFUtilsXmlItems
     //----------------------------------------------------
     template <typename T>
-    QVariant GetCCFXmlItem(T & pkt, QString strName);
+    std::any GetCCFXmlItem(T & pkt, std::string strName);
     template <typename T>
-    QVariant GetCCFXmlItem(T pkt[], int count, QString strName);
+    std::any GetCCFXmlItem(T pkt[], int count, std::string strName);
     template <typename T>
-    QVariant GetCCFXmlItem(T ppkt[], int count1, int count2, QString strName1, QString strName2);
+    std::any GetCCFXmlItem(T ppkt[], int count1, int count2, std::string strName1, std::string strName2);
     template <>
-    QVariant GetCCFXmlItem<char>(char pkt[], int count, QString strName);
+    std::any GetCCFXmlItem<char>(char pkt[], int count, std::string strName);
 };      // namespace ccf
 
 #endif // include guard

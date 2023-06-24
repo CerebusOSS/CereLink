@@ -33,14 +33,14 @@ namespace ccf
     template<>
     void ReadItem(XmlFile * const xml, char item[], int count);
     template <typename T>
-    void ReadItem(XmlFile * const xml, T item[], int count, QString strName);
+    void ReadItem(XmlFile * const xml, T item[], int count, std::string strName);
     template <typename T>
-    void ReadItem(XmlFile * const xml, T item[], int count1, int count2, QString strName);
+    void ReadItem(XmlFile * const xml, T item[], int count1, int count2, std::string strName);
     template <typename T>
-    void ReadItem(XmlFile * const xml, T & item, QString strName);
+    void ReadItem(XmlFile * const xml, T & item, std::string strName);
     // Enumerate items that can be counted
     template <typename T>
-    int ItemNumber(XmlFile * const xml, T & item, QString strName);
+    int ItemNumber(XmlFile * const xml, T & item, std::string strName);
     template <typename T>
     int ItemNumber(XmlFile * const xml, T & item);
     template<>

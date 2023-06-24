@@ -15,9 +15,54 @@
 
 #include "XmlFile.h"
 #include "XmlItem.h"
+#include <string>
+#include <sstream>
+#include <vector>
+#include <ranges>
+#include <algorithm>
+#include <string_view>
 
 // Uncomment to debug
 //#define DEBUG_XMLFILE
+
+std::vector<std::string> split(const std::string& str, char delimiter) {
+    std::vector<std::string> tokens;
+    std::string token;
+    std::istringstream tokenStream(str);
+    while (std::getline(tokenStream, token, delimiter)) {
+        tokens.push_back(token);
+    }
+    return tokens;
+}
+
+
+bool iequals(const std::string& a, const std::string& b)
+{
+    return std::equal(a.begin(), a.end(),
+                      b.begin(), b.end(),
+                      [](char a, char b) {
+                          return tolower(a) == tolower(b);
+                      });
+}
+
+pugi::xml_node find_or_create(pugi::xml_node& parent, const std::string& name) {
+    pugi::xml_node node = parent.child(name.c_str());
+
+    // If the node doesn't exist, create a new one
+    if (!node) {
+        node = parent.append_child(name.c_str());
+    }
+
+    return node;
+}
+
+pugi::xml_attribute find_or_create_attribute(pugi::xml_node& node, const std::string& name) {
+    pugi::xml_attribute attr = node.attribute(name.c_str());
+    // If the attribute doesn't exist, add a new one
+    if (!attr)
+        attr = node.append_attribute(name.c_str());
+    return attr;
+}
 
 // Author & Date: Ehsan Azar       16 April 2012
 // Purpose: Copy Constructor for Xml item
@@ -33,38 +78,32 @@ XmlItem::XmlItem(const XmlItem & other)
 // Inputs:
 //   fname - the xml file name
 //   bRead - if file should be read
-XmlFile::XmlFile(const QString fname, bool bRead) :
+XmlFile::XmlFile(std::string fname, bool bRead) :
     m_fname(fname), m_bError(false)
 {
-    if (fname.isEmpty())
+    if (m_fname.empty())
     {
-        m_doc.setContent(QString("")); // Start with empty xml
+        m_doc.reset();  // Start with empty xml
     } else { 
         if (!bRead || setContent())
         {
-            m_doc.setContent(QString("")); // Start with empty xml
+            m_doc.reset();  // Start with empty xml
             // Add XML version
-            QDomProcessingInstruction instr = m_doc.createProcessingInstruction("xml", "version='1.0' encoding='UTF-8'");
-            m_doc.appendChild(instr);
+            auto decl = m_doc.prepend_child(pugi::node_declaration);
+            decl.append_attribute("version")    = "1.0";
+            decl.append_attribute("encoding")   = "UTF-8";
+            // decl.append_attribute("standalone") = "yes";
         }
     }
 }
 
-// Author & Date: Ehsan Azar       18 April 2012
 // Purpose: Set XML content from XML filename for parsing
 // Outputs:
 //  Returns false if successful, otherwise returns true
 bool XmlFile::setContent()
 {
-    QString errMsg;
-    QFile file(m_fname);
-    m_bError = !file.open(QIODevice::ReadOnly);
-    if (m_bError)
-        return true;
-    // read previous content to xml
-    m_bError = !m_doc.setContent(&file, &errMsg);
-    file.close();
-    return m_bError;
+    pugi::xml_parse_result res = m_doc.load_file(m_fname.c_str());
+    return res.status != pugi::xml_parse_status::status_ok;
 }
 
 // Author & Date: Ehsan Azar       4 April 2012
@@ -73,11 +112,10 @@ bool XmlFile::setContent()
 //   content - valid XML content
 // Outputs:
 //  Returns false if successful, otherwise returns true
-bool XmlFile::setContent(const QString & content)
+bool XmlFile::setContent(const std::string & content)
 {
-    QString errMsg;
-    m_bError = !m_doc.setContent(content, &errMsg);
-    return m_bError;
+    pugi::xml_parse_result result = m_doc.load_string(content.c_str());
+    return result != pugi::xml_parse_status::status_ok;
 }
 
 // Author & Date: Ehsan Azar       19 April 2012
@@ -87,33 +125,35 @@ bool XmlFile::setContent(const QString & content)
 //   nodeName - last node name
 // Outputs:
 //   Returns true if this is an array added
-bool XmlFile::AddList(QVariantList & list, QString nodeName)
+bool XmlFile::AddList(std::vector<std::any> & list, std::string nodeName)
 {
-    if (list.isEmpty())
+    if (list.empty())
         return false;
-    QMap<QString, int> mapItemCount;
-    int count = 0, subcount = 1;
+    std::map<std::string, int> mapItemCount;
+    int count = 0;
+    int subcount = 1;
     // itemize the list
-    for (int j = 0; j < list.size(); ++j)
+    for (auto subval : list)
     {
-        QVariant subval = list[j];
-        if (!subval.isValid())
+        if (!subval.has_value())
             continue;
         count++; // count all valid items
-        QString strSubKey;
-        QMap<QString, QVariant> attribs;
-        if (subval.typeId() == QMetaType::User)
+        std::string strSubKey;
+        std::map<std::string, std::any> attribs;
+        if (subval.type() == typeid(const XmlItem *))
         {
-            const auto * item = static_cast<const XmlItem *>(subval.data());
+            const auto * item = std::any_cast<const XmlItem *>(subval);
+            // const auto * item = std::get<XmlItem *>(subval);
             strSubKey = item->XmlName();
             attribs = item->XmlAttribs();
         }
-        if (strSubKey.isEmpty())
+        if (strSubKey.empty())
             strSubKey = nodeName + "_item";
         subcount = mapItemCount[strSubKey];
         mapItemCount[strSubKey] = subcount + 1;
         if (subcount)
-            strSubKey = strSubKey + QString("<%1>").arg(subcount);
+            strSubKey = strSubKey + "<" + std::to_string(subcount) + ">";
+
         // Recursively add this item
         beginGroup(strSubKey, attribs, subval);
         endGroup();
@@ -130,53 +170,57 @@ bool XmlFile::AddList(QVariantList & list, QString nodeName)
 //   nodeName  - the node tag (it can be in the form of relative/path/to/node)
 //                node index (0-based) is enclosed (relative/path/to/node<2>/subnode)
 //             Note: nodeName tags are always created if they do not exist
-//   attribs   - attribute name, attribute value pairs
+//   attribs   - attribute <name, value> pairs
 //   value     - new node value, if non-empty
 // Outputs:
 //  Returns true if nodeName is created
-bool XmlFile::beginGroup(QString nodeName, const QMap<QString, QVariant> attribs, const QVariant & value)
+bool XmlFile::beginGroup(std::string nodeName, const std::map<std::string, std::any> attribs, const std::any & value)
 {
     bool bRet = false;
-    QDomElement set;
 
-    if (nodeName.isEmpty())
+    if (nodeName.empty())
         nodeName = firstChildKey();
-    if (nodeName.isEmpty())
+    if (nodeName.empty())
         nodeName = "XmlItem";
+
     // Get the node path
-    QStringList nodepath = nodeName.split("/");
-    int level = nodepath.count();
-    m_levels.append(level);
+    std::vector<std::string> nodepath = split(nodeName, '/');
+
+    int level = nodepath.size();
+    m_levels.push_back(level);
+
+    pugi::xml_node parent;
+    pugi::xml_node set;
+
     for (int i = 0; i < level; ++i)
     {
-        QString strTagName = nodepath[i];
+        std::string strTagName = nodepath[i];
         // Extract index
         int index = 0;
         {
-            int idx = strTagName.indexOf("<");
+            int idx = strTagName.find('<');
             if (idx >= 0)
             {
-                index = strTagName.mid(idx + 1, strTagName.length() - idx - 2).toInt();
-                strTagName = strTagName.left(idx);
+                index = std::stoi(strTagName.substr(idx + 1, strTagName.length() - idx - 2));
+                strTagName = strTagName.substr(0, idx);
                 nodepath[i] = strTagName;
             }
         }
         // Look if the element (with given index) exists then get it
-        QDomNode parent;
-        if (!m_nodes.isEmpty())
+        if (!m_nodes.empty())
         {
             // Get the current node
-            parent = m_nodes.last();
+            parent = m_nodes.back();
         } else {
             parent = m_doc;
         }
         int count = 0;
-        for(QDomElement elem = parent.firstChildElement(strTagName); !elem.isNull(); elem = elem.nextSiblingElement(strTagName))
+        for(pugi::xml_node node = parent.child(strTagName.c_str()); node; node = node.next_sibling(strTagName.c_str()))
         {
             count++;
             if (count == index + 1)
             {
-                set = elem;
+                set = node;
                 break;
             }
         }
@@ -184,106 +228,94 @@ bool XmlFile::beginGroup(QString nodeName, const QMap<QString, QVariant> attribs
         for (int j = 0; j < (index + 1 - count); ++j)
         {
             bRet = true;
-            set = m_doc.createElement(strTagName);
-            parent.appendChild(set);
+            set = m_doc.append_child(strTagName.c_str());
         }
         // Add all the parent nodes without attribute or value
         if (i < level - 1)
-            m_nodes.append(set);
+            m_nodes.push_back(set);
     }
     
     // Now add the node to the end of the list
-    m_nodes.append(set);
+    m_nodes.push_back(set);
 
     // if there is some text/value to set
-    if (value.isValid())
+    if (value.has_value())
     {
         bool bTextLeaf = false;
-        QVariantList varlst;
-        switch (value.typeId())
+        std::vector<std::any> vec;
+        if ((value.type() == typeid(std::vector<std::string>)) || (value.type() == typeid(std::vector<std::any>))) {
+            vec = std::any_cast<std::vector<std::any>>(value);
+            if (AddList(vec, nodepath.back()))
+                set.append_attribute("Type") = "Array";
+        }
+        else
         {
-        case QMetaType::QStringList:
-        case QMetaType::QVariantList:
-            varlst = value.toList();
-            if (AddList(varlst, nodepath.last()))
-                set.setAttribute("Type", "Array");
-            break;
-        default:
-            QString text;
-            if (value.typeId() == QMetaType::User)
+            std::string text;
+            if (value.type() == typeid(const XmlItem *))
             {
-                const auto * item = static_cast<const XmlItem *>(value.data());
-                QVariant subval = item->XmlValue();
+                const auto * item = std::any_cast<const XmlItem *>(value);
+                std::any subval = item->XmlValue();
                 
-                if (subval.typeId() == QMetaType::User)
+                if (subval.type() == typeid(const XmlItem *))
                 {
-                    const auto * subitem = static_cast<const XmlItem *>(subval.data());
-                    QString strSubKey = subitem->XmlName();
-                    QMap<QString, QVariant> _attribs = subitem->XmlAttribs();
+                    const auto * subitem = std::any_cast<const XmlItem *>(subval);
+                    std::string strSubKey = subitem->XmlName();
+                    std::map<std::string, std::any> _attribs = subitem->XmlAttribs();
                     // Recursively add this item
                     beginGroup(strSubKey, _attribs, subval);
                     endGroup();
                 } 
-                else if (subval.typeId() == QMetaType::QVariantList || subval.typeId() == QMetaType::QStringList)
+                else if ((subval.type() == typeid(std::vector<std::string>)) || (subval.type() == typeid(std::vector<std::any>)))
                 {
-                    varlst = subval.toList();
-                    if (AddList(varlst, nodepath.last()))
-                        set.setAttribute("Type", "Array");
+                    vec = std::any_cast<std::vector<std::any>>(subval);
+                    if (AddList(vec, nodepath.back()))
+                        set.append_attribute("Type") = "Array";
                 } else {
-                    text = subval.toString();
+                    text = std::any_cast<std::string>(subval);
                     bTextLeaf = true;
                 }
             } else {
-                text = value.toString();
+                text = std::any_cast<std::string>(value);
                 bTextLeaf = true;
             }
             if (bTextLeaf)
             {
                 // Remove all the children
-                while (set.hasChildNodes())
-                    set.removeChild(set.lastChild());
+                while (set.first_child())
+                    set.remove_child(set.last_child());
                 // See if this is Xml fragment string
                 XmlFile xml;
                 if (!xml.setContent(text))
                 {
-                    QDomNode frag = m_doc.importNode(xml.getFragment(), true);
-                    set.appendChild(frag);
+                    pugi::xml_document doc;
+                    pugi::xml_parse_result result = doc.load_string(text.c_str());
+                    if (result)
+                        set.append_copy(doc.document_element());
                 } else {
-                    QDomText domText = m_doc.createTextNode(text);
-                    set.appendChild(domText);
+                    set.text().set(text.c_str());
                 }
             }
         }
     }
 
     // Add all the additional attributes
-    QMap<QString, QVariant>::const_iterator iterator;
+    std::map<std::string, std::any>::const_iterator iterator;
     for (iterator = attribs.begin(); iterator != attribs.end(); ++iterator)
     {
-        const QString& attrName = iterator.key();
-        const QVariant& attrValue = iterator.value();
-        switch (attrValue.typeId())
-        {
-        case QMetaType::QString:
-            set.setAttribute(attrName, attrValue.toString());
-            break;
-        case QMetaType::Int:
-            set.setAttribute(attrName, attrValue.toInt());
-            break;
-        case QMetaType::UInt:
-            set.setAttribute(attrName, attrValue.toUInt());
-            break;
-        case QMetaType::LongLong:
-            set.setAttribute(attrName, attrValue.toLongLong());
-            break;
-        case QMetaType::ULongLong:
-            set.setAttribute(attrName, attrValue.toULongLong());
-            break;
-        default:
-            // everything else is treated as double floating point
-            set.setAttribute(attrName, attrValue.toDouble());
-            break;
-        }
+        const std::string& attrName = iterator->first;
+        const std::any& attrValue = iterator->second;
+        if (attrValue.type() == typeid(std::string))
+            find_or_create_attribute(set, attrName) = std::any_cast<std::string>(attrValue).c_str();
+        else if (attrValue.type() == typeid(int))
+            find_or_create_attribute(set, attrName) = std::any_cast<int>(attrValue);
+        else if (attrValue.type() == typeid(unsigned int))
+            find_or_create_attribute(set, attrName) = std::any_cast<unsigned int>(attrValue);
+        else if (attrValue.type() == typeid(long long))
+            find_or_create_attribute(set, attrName) = std::any_cast<long long>(attrValue);
+        else if (attrValue.type() == typeid(unsigned long long))
+            find_or_create_attribute(set, attrName) = std::any_cast<unsigned long long>(attrValue);
+        else
+            find_or_create_attribute(set, attrName) = std::any_cast<double>(attrValue);
     }
     return bRet;
 }
@@ -300,12 +332,12 @@ bool XmlFile::beginGroup(QString nodeName, const QMap<QString, QVariant> attribs
 //   value     - new node value, if non-empty
 // Outputs:
 //  Returns true if nodeName is created
-bool XmlFile::beginGroup(const QString & nodeName, const QString & attrName,
-                         const QVariant & attrValue, const QVariant & value)
+bool XmlFile::beginGroup(const std::string & nodeName, const std::string & attrName,
+                         const std::any & attrValue, const std::any & value)
 {
-    QMap<QString, QVariant> attribs;
-    if (!attrName.isEmpty())
-        attribs.insert(attrName, attrValue);
+    std::map<std::string, std::any> attribs;
+    if (!attrName.empty())
+        attribs.insert({attrName, attrValue});
     return beginGroup(nodeName, attribs, value);
 }
 
@@ -322,8 +354,8 @@ bool XmlFile::beginGroup(const QString & nodeName, const QString & attrName,
 //   value     - new node value, if non-empty
 // Outputs:
 //  Returns true if nodeName is created
-bool XmlFile::addGroup(const QString & nodeName, const QString & attrName,
-                         const QVariant & attrValue, const QVariant & value)
+bool XmlFile::addGroup(const std::string & nodeName, const std::string & attrName,
+                         const std::any & attrValue, const std::any & value)
 {
     bool bRes = beginGroup(nodeName, attrName, attrValue, value);
     endGroup();
@@ -340,30 +372,25 @@ bool XmlFile::endGroup(bool bSave /* = true */)
 {
     // fetch and pop the last level
     int level = 1;
-    if (!m_levels.isEmpty())
+    if (!m_levels.empty())
     {
-        level = m_levels.last();
-        m_levels.removeLast();
+        level = m_levels.back();
+        m_levels.pop_back();
     }
     // pop all the last tags
     for (int i = 0; i < level; ++i)
-        if (!m_nodes.isEmpty())
-            m_nodes.removeLast();
+        if (!m_nodes.empty())
+            m_nodes.pop_back();
 
     // if there is no more node
-    if (m_nodes.isEmpty())
+    if (m_nodes.empty())
     {
         // If we should save to disk
         if (bSave)
         {
-            QFile file(m_fname);
-            // Overwrite xml
-            if (!file.open(QIODevice::WriteOnly))
+            bool saveSucceeded = m_doc.save_file(m_fname.c_str(), PUGIXML_TEXT("  "));
+            if (!saveSucceeded)
                 return true;
-            // write to disk
-            QTextStream ts(&file);
-            ts << m_doc.toString();
-            file.close();
         }
 #ifdef DEBUG_XMLFILE
         if (bSave)
@@ -382,14 +409,14 @@ bool XmlFile::endGroup(bool bSave /* = true */)
 //   attrName  - node attribute name
 // Outputs:
 //   Returns node attribute value
-QString XmlFile::attribute(const QString & attrName)
+std::string XmlFile::attribute(const std::string & attrName)
 {
-    QString res;
-    if (!m_nodes.isEmpty())
+    std::string res;
+    if (!m_nodes.empty())
     {
         // Get the current node
-        QDomElement node = m_nodes.last();
-        res = node.attribute(attrName);
+        pugi::xml_node node = m_nodes.back();
+        res = node.attribute(attrName.c_str()).value();
     }
     return res;
 }
@@ -398,45 +425,45 @@ QString XmlFile::attribute(const QString & attrName)
 // Purpose: Get current node value
 // Inputs:
 //   val - the default value
-QVariant XmlFile::value(const QVariant & val)
+std::any XmlFile::value(const std::any & val)
 {
-    QVariant res = val;
+    std::any res = val;  // TODO: Can be std::any
 
-    if (!m_nodes.isEmpty())
+    if (!m_nodes.empty())
     {
         // Get the current node
-        QDomElement node = m_nodes.last();
-        if (!node.isNull())
+        pugi::xml_node node = m_nodes.back();
+        if (node)
         {
             // Array Type is how we distinguish lists
-            if (node.attribute("Type").compare("Array", Qt::CaseInsensitive) == 0)
+            if (iequals(node.attribute("Type").value(), "Array"))
             {
-                QVariantList varlist;
-                QStringList keys = childKeys();
-                for (int i = 0; i < keys.count(); ++i)
+                std::vector<std::any> varlist;
+                std::vector<std::string> keys = childKeys();
+                for (int i = 0; i < keys.size(); ++i)
                 {
-                    QString key = keys[i];
+                    std::string key = keys[i];
                     if (i > 0 && key == keys[i - 1])
-                        key = QString(key + "<%1>").arg(i);
+                        key = key + "<" + std::to_string(i) + ">";
                     // Recursively return the list
                     beginGroup(key);
-                    QVariant nodevalue = value(QString());
+                    std::any nodevalue = value("");
                     endGroup();
                     // Make sure value is meaningful
-                    if (nodevalue.isValid())
-                        varlist += nodevalue; // add new value
+                    if (nodevalue.has_value())
+                        varlist.push_back(nodevalue); // add new value
                 }
-                if (!keys.isEmpty())
+                if (!keys.empty())
                     res = varlist;
             } else {
-                QDomNode child = node.firstChild();
-                if (!child.isNull())
+                pugi::xml_node child = node.first_child();
+                if (child)
                 {
-                    QDomText domText = child.toText();
-                    if (!domText.isNull())
-                        res = domText.data();
+                    std::string childValue = child.text().as_string();
+                    if (!childValue.empty())
+                        res = childValue;
                     else
-                        return toString();
+                        res = toString();
                 }
             }
         }
@@ -450,33 +477,33 @@ QVariant XmlFile::value(const QVariant & val)
 //   nodeName  - the node tag (it can be in the form of relative/path/to/node)
 // Outputs:
 //   Returns true if the current node contains the given node
-bool XmlFile::contains(const QString & nodeName)
+bool XmlFile::contains(const std::string & nodeName)
 {
-    QDomElement parent; // parent element
-    QDomElement set;
+    pugi::xml_node parent; // parent element
+    pugi::xml_node set;
 
-    QStringList nodepath = nodeName.split("/");
-    int level = nodepath.count();
+    std::vector<std::string> nodepath = split(nodeName, '/');
+    int level = nodepath.size();
 
     // If it is the first node
-    if (m_nodes.isEmpty())
+    if (m_nodes.empty())
     {
-        set = m_doc.namedItem(nodepath[0]).toElement();
+        set = m_doc.child(nodepath[0].c_str());
     } else {
         // Get the parent node
-        parent = m_nodes.last();
+        parent = m_nodes.back();
         // Look if the node exists then get it
-        set = parent.namedItem(nodepath[0]).toElement();
+        set = parent.child(nodepath[0].c_str());
     }
-    if (set.isNull())
+    if (!set)
         return false; // not found
 
     // Look for higher levels
     for (int i = 1; i < level; ++i)
     {
         parent = set;
-        set = parent.namedItem(nodepath[i]).toElement();
-        if (set.isNull())
+        set = parent.child(nodepath[i].c_str());
+        if (!set)
             return false; // not found
     }
     return true;
@@ -488,23 +515,23 @@ bool XmlFile::contains(const QString & nodeName)
 //   count - maximum number of children to retrieve (-1 means all)
 // Outputs:
 //   Returns a list of element childern of the current element node
-QStringList XmlFile::childKeys(int count) const
+std::vector<std::string> XmlFile::childKeys(int count) const
 {
-    QStringList res;
+    std::vector<std::string> res;
 
-    QDomNode parent;
-    if (!m_nodes.isEmpty())
+    pugi::xml_node parent;
+    if (!m_nodes.empty())
     {
         // Get the current node
-        parent = m_nodes.last();
+        parent = m_nodes.back();
     } else {
         parent = m_doc;
     }
-    if (!parent.isNull())
+    if (parent)
     {
-        for(QDomElement elem = parent.firstChildElement(); !elem.isNull(); elem = elem.nextSiblingElement())
+        for(pugi::xml_node elem = parent.first_child(); elem; elem = elem.next_sibling())
         {
-            res += elem.nodeName();
+            res.push_back(elem.name());
             if (count > 0)
             {
                 count--;
@@ -520,33 +547,35 @@ QStringList XmlFile::childKeys(int count) const
 // Purpose: Get the first child element
 // Outputs:
 //   Returns the name of the first child element
-QString XmlFile::firstChildKey() const
+std::string XmlFile::firstChildKey() const
 {
-    QStringList list = childKeys(1);
-    return list.last();
+    std::vector<std::string> list = childKeys(1);
+    return list.back();
 }
 
 // Author & Date: Ehsan Azar       3 April 2012
 // Purpose: Get the string equivalent of the current node or document
 // Outputs:
 //   Returns a string of the current node (and its children) as separate XML document string
-QString XmlFile::toString()
+std::string XmlFile::toString()
 {
-    QDomElement node;
+    pugi::xml_node node;
     // If it is the first node
-    if (m_nodes.isEmpty())
+    if (m_nodes.empty())
     {
-        return m_doc.toString();
+        std::ostringstream ss;
+        m_doc.save(ss);
+        return ss.str();
     }
     // Create a document with new root 
-    QDomDocument doc;
-    node = m_nodes.last().cloneNode().toElement();
-    if (!node.isNull())
+    pugi::xml_document doc;
+    if (m_nodes.back())
     {
-        doc.importNode(node, true);
-        doc.appendChild(node);
+        doc.append_copy(m_nodes.back());
     }
-    return doc.toString();
+    std::ostringstream ss;
+    m_doc.save(ss);
+    return ss.str();
 }
 
 // Author & Date: Ehsan Azar       5 April 2012
@@ -554,19 +583,18 @@ QString XmlFile::toString()
 //           this fragment can be imported in other documents
 // Outputs:
 //   Returns a document fragment
-QDomDocumentFragment XmlFile::getFragment()
+pugi::xml_document XmlFile::getFragment()
 {
-    QDomElement node;
-    if (m_nodes.isEmpty())
-        node = m_doc.firstChildElement();
+    pugi::xml_node node;
+    if (m_nodes.empty())
+        node = m_doc.first_child();
     else
-        node = m_nodes.last();
-    QDomDocumentFragment frag = m_doc.createDocumentFragment();
-    QDomNodeList list = node.childNodes();
-    for (int i = 0; i < list.length(); ++i)
+        node = m_nodes.back();
+
+    pugi::xml_document frag; // the "fragment"
+    for (pugi::xml_node child = node.first_child(); child; child = child.next_sibling())
     {
-        QDomNode node = list.item(i).cloneNode();
-        frag.appendChild(node);
+        pugi::xml_node cloned_node = frag.append_copy(child);
     }
     return frag;
 }

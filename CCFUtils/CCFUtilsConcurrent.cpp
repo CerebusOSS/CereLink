@@ -12,8 +12,8 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#include <QtConcurrentRun>
 #include "CCFUtilsConcurrent.h"
+#include <future>
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -32,11 +32,9 @@ using namespace ccf;
 //   pCallbackFn - the progress reporting function
 // Outputs:
 //   pCCF        - where to take an extra copy of the CCF upon successful reading
-void ReadCCFHelper(QString strFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance)
+void ReadCCFHelper(std::string strFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance)
 {
-    // make sure byte array is constructed, thus we can use the internal pointer to character data
-    const QByteArray tmp = strFileName.toLatin1();
-    LPCSTR szFileName = tmp;
+    LPCSTR szFileName = strFileName.c_str();
     if (pCallbackFn)
         pCallbackFn(nInstance, CCFRESULT_SUCCESS, szFileName, CCFSTATE_THREADREAD, 0);
     CCFUtils config(false, pCCF, pCallbackFn, nInstance);
@@ -51,9 +49,9 @@ void ReadCCFHelper(QString strFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn,
 // Purpose: Wrapper to run ReadCCFHelper in a thread
 void ccf::ConReadCCF(LPCSTR szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance)
 {
-    QString strFileName = szFileName == NULL ? "" : szFileName;
+    std::string strFileName = szFileName == NULL ? "" : std::string(szFileName);
     // Parameters are copied before thread starts, originals will go out of scope
-    QtConcurrent::run(ReadCCFHelper, strFileName, pCCF, pCallbackFn, nInstance);
+    auto future = std::async(std::launch::async, ReadCCFHelper, strFileName, pCCF, pCallbackFn, nInstance);
 }
 
 // Author & Date: Ehsan Azar       10 June 2012
@@ -63,12 +61,9 @@ void ccf::ConReadCCF(LPCSTR szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn,
 //   szFileName  - the name of the file to write to (if NULL sends to NSP)
 //   ccf         - initial CCF content
 //   pCallbackFn - the progress reporting function
-void WriteCCFHelper(QString strFileName, cbCCF ccf, cbCCFCallback pCallbackFn, uint32_t nInstance)
+void WriteCCFHelper(std::string strFileName, cbCCF ccf, cbCCFCallback pCallbackFn, uint32_t nInstance)
 {
-    // make sure byte array is constructed, thus we can use the internal pointer to character data
-    const QByteArray tmp = strFileName.toLatin1();
-    LPCSTR szFileName = tmp;
-    QThread::currentThread()->setPriority(QThread::LowestPriority);
+    LPCSTR szFileName = strFileName.c_str();
     if (pCallbackFn)
         pCallbackFn(nInstance, CCFRESULT_SUCCESS, szFileName, CCFSTATE_THREADWRITE, 0);
     // If valid ccf is passed, use it as initial data, otherwise use NULL to have it read from NSP
@@ -82,12 +77,13 @@ void WriteCCFHelper(QString strFileName, cbCCF ccf, cbCCFCallback pCallbackFn, u
 // Purpose: Wrapper to run WriteCCFHelper in a thread
 void ccf::ConWriteCCF(LPCSTR szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance)
 {
-    QString strFileName = szFileName == NULL ? "" : szFileName;
+    std::string strFileName = szFileName == NULL ? "" : std::string(szFileName);
     cbCCF ccf;
     memset(&ccf, 0, sizeof(cbCCF)); // Invalidate ccf
     if (pCCF != NULL)
         ccf = *pCCF;
     // Parameters are copied before thread starts, originals will go out of scope
-    QtConcurrent::run(WriteCCFHelper, strFileName, ccf, pCallbackFn, nInstance);
+    auto future = std::async(std::launch::async, WriteCCFHelper, strFileName, ccf, pCallbackFn, nInstance);
+    // TODO: Instead of std::async, use threading and set to lowest priority.
 }
 

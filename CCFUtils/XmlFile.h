@@ -22,41 +22,43 @@
 #ifndef XMLFILE_H_INCLUDED
 #define XMLFILE_H_INCLUDED
 
-#include <QString>
-#include <QtXml>
-#include <QList>
+#include <map>
+#include <vector>
+#include <any>
+#include "pugixml.hpp"
+
 
 // Author & Date: Ehsan Azar       15 June 2010
 // Purpose: XML handling
 class XmlFile
 {
 public:
-    XmlFile(const QString fname = "", bool bRead = true);
+    XmlFile(std::string fname = "", bool bRead = true);
     bool setContent(); // set content from XML file
-    bool setContent(const QString & content);
+    bool setContent(const std::string & content);
 
 public:
-    bool beginGroup(const QString & nodeName = "", const QString & attrName = "",
-            const QVariant & attrValue = 0, const QVariant & value = QVariant()); // Begin a node
-    bool beginGroup(QString nodeName, const QMap<QString, QVariant> attribs, const QVariant & value = QVariant()); // Begin a node
+    bool beginGroup(const std::string & nodeName = "", const std::string & attrName = "",
+            const std::any & attrValue = 0, const std::any & value = std::any()); // Begin a node
+    bool beginGroup(std::string nodeName, const std::map<std::string, std::any> attribs, const std::any & value = std::any()); // Begin a node
     bool endGroup(bool bSave = true); // End last node
-    bool addGroup(const QString & nodeName = "", const QString & attrName = "",
-            const QVariant & attrValue = 0, const QVariant & value = QVariant()); // Begin and end a node
-    QString attribute(const QString & attrName); // Get attribute value
-    QVariant value(const QVariant & val = QVariant()); // value of the current element
-    bool contains (const QString & nodeName); // If current element contains the given element
-    QStringList childKeys(int count = -1) const;  // Return all the child elements
-    QString firstChildKey() const; // Returns the first child element
-    QString toString(); // String equivalent of the node or document
-    QDomDocumentFragment getFragment(); // Get document fragment
+    bool addGroup(const std::string & nodeName = "", const std::string & attrName = "",
+            const std::any & attrValue = 0, const std::any & value = std::any()); // Begin and end a node
+    std::string attribute(const std::string & attrName); // Get attribute value
+    std::any value(const std::any & val = std::any()); // value of the current element
+    bool contains (const std::string & nodeName); // If current element contains the given element
+    [[nodiscard]] std::vector<std::string> childKeys(int count = -1) const;  // Return all the child elements
+    [[nodiscard]] std::string firstChildKey() const; // Returns the first child element
+    std::string toString(); // String equivalent of the node or document
+    pugi::xml_document getFragment(); // Get document fragment
     bool HasError() {return m_bError;} // If XML parsing did not succeed (possibly non-XML)
 private:
-    bool AddList(QVariantList & list, QString nodeName); // Add list iteratively
+    bool AddList(std::vector<std::any> & list, std::string nodeName); // Add list iteratively
 private:
-    QList<QDomElement> m_nodes; // a list of the elements currently traversed in the tree
-    QList<int> m_levels;        // a list of the levels currently traversed in the tree
-    QDomDocument m_doc; // xml document
-    QString m_fname; // XML filename 
+    std::vector<pugi::xml_node> m_nodes; // a list of the elements currently traversed in the tree
+    std::vector<int> m_levels;        // a list of the levels currently traversed in the tree
+    pugi::xml_document m_doc;  // xml document
+    std::string m_fname; // XML filename
     bool m_bError; // If File is empty
 };
 

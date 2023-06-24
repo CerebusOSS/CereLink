@@ -20,10 +20,10 @@
 #ifndef XMLITEM_H_INCLUDED
 #define XMLITEM_H_INCLUDED
 
-#include <QMetaType>
-#include <QString>
-#include <QMap>
-#include <QVariant>
+#include <string>
+#include <any>
+#include <map>
+
 
 // Author & Date: Ehsan Azar       4 April 2012
 // Purpose: Any user data that can be stored in XML
@@ -35,16 +35,16 @@ public:
     XmlItem(const XmlItem & other);
 
 public:
-    virtual QVariant XmlValue() const {return m_xmlValue;}
-    virtual QString XmlName() const {return m_xmlTag;}
-    virtual QMap<QString, QVariant>  XmlAttribs() const {return m_xmlAttribs;}
-    bool IsValid() const {return m_xmlValue.isValid();}
-    QString Attribute(QString strKey) { return m_xmlAttribs.value(strKey).toString(); }
+    virtual std::any XmlValue() const {return m_xmlValue;}
+    virtual std::string XmlName() const {return m_xmlTag;}
+    virtual std::map<std::string, std::any>  XmlAttribs() const {return m_xmlAttribs;}
+    bool IsValid() const {return m_xmlValue.has_value();}
+    std::string Attribute(std::string strKey) { return std::any_cast<std::string>(m_xmlAttribs[strKey]); }
 
 protected:
-    QVariant m_xmlValue;
-    QString m_xmlTag;
-    QMap<QString, QVariant> m_xmlAttribs;
+    std::any m_xmlValue;
+    std::string m_xmlTag;
+    std::map<std::string, std::any> m_xmlAttribs;
 };
 
 #endif // include guard
