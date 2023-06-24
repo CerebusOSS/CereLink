@@ -18,9 +18,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
-#include <ranges>
 #include <algorithm>
-#include <string_view>
 
 // Uncomment to debug
 //#define DEBUG_XMLFILE
