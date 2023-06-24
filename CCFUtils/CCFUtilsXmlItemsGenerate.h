@@ -20,6 +20,7 @@
 #define CCFUTILSXMLITEMSGENERATE_H_INCLUDED
 
 #include <any>
+#include <string>
 
 // Namespace for Cerebus Config Files
 namespace ccf

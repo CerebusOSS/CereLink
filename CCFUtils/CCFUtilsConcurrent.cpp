@@ -14,6 +14,7 @@
 
 #include "CCFUtilsConcurrent.h"
 #include <future>
+#include <cstring>
 
 #ifdef _DEBUG
 #undef THIS_FILE

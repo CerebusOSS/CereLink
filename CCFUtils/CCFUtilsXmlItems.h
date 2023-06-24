@@ -25,9 +25,8 @@
 
 #include "cbproto.h"
 
-// Currently in Cerebus we use Qt only for XML handling.
-//  inclusion of these header files should not spread throughout the project or the solution
 #include "XmlItem.h"
+#include <vector>
 
 //---------------------------------
 class CCFXmlItem : public XmlItem
