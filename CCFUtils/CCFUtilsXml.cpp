@@ -21,6 +21,7 @@
 #include "../CentralCommon/BmiVersion.h"
 #include <iostream>
 #include <algorithm>
+#include <chrono>
 #include "pugixml.hpp"
 
 #ifdef _DEBUG
