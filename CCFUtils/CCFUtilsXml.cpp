@@ -20,6 +20,8 @@
 #include "debugmacs.h"
 #include "../CentralCommon/BmiVersion.h"
 #include <iostream>
+#include <algorithm>
+#include "pugixml.hpp"
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -54,25 +56,25 @@ ccfResult CCFUtilsXml_v1::ReadCCF(LPCSTR szFileName, bool bConvert)
 {
     ccfResult res = CCFRESULT_SUCCESS;
     m_szFileName = szFileName;
-    QString strFilename = QString(szFileName);
-    XmlFile xml(strFilename, true);
+    XmlFile xml(m_szFileName, true);
     xml.beginGroup("CCF");
     {
         if (!bConvert)
         {
             // Make sure right version is parsed
-            QString strVersion = xml.attribute("Version");
-            if (strVersion.toInt() != m_nInternalVersion)
+            std::string strVersion = xml.attribute("Version");
+            if (std::stoi(strVersion) != m_nInternalVersion)
                 res = CCFRESULT_WARN_CONVERT;
             if (!res)
             {
                 // Also check for protocol version
                 xml.beginGroup("Session/Version/Protocol");
-                QString strProtocolVersion = xml.value().toString().trimmed();
+                std::string strProtocolVersion = std::any_cast<std::string>(xml.value());  // .trimmed();
                 xml.endGroup();
                 // Although internal versioning has not changed,
                 //  any protocol difference also requires customer permission to proceed
-                if (strProtocolVersion != QString("%1.%2").arg(cbVERSION_MAJOR).arg(cbVERSION_MINOR))
+                std::string key = std::to_string(cbVERSION_MAJOR) + "." + std::to_string(cbVERSION_MINOR);
+                if (strProtocolVersion != key)
                     res = CCFRESULT_WARN_VERSION;
             }
         }
@@ -140,31 +142,31 @@ CCFUtils * CCFUtilsXml_v1::Convert(CCFUtils * pOldConfig)
 ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(LPCSTR szFileName)
 {
     ccfResult res = CCFRESULT_SUCCESS;
-    QString strFilename = QString(szFileName);
-    QVariantList lst;
+    std::string strFilename = std::string(szFileName);
+    std::vector<std::any> lst;
     m_szFileName = szFileName;
     // Digital filters
-    lst += GetCCFXmlItem(m_data.filtinfo, cbNUM_DIGITAL_FILTERS, "FilterInfo");
+    lst.push_back(GetCCFXmlItem(m_data.filtinfo, cbNUM_DIGITAL_FILTERS, "FilterInfo"));
     // Chaninfo
-    lst += GetCCFXmlItem(m_data.isChan, cbMAXCHANS, "ChanInfo");
+    lst.push_back(GetCCFXmlItem(m_data.isChan, cbMAXCHANS, "ChanInfo"));
     // Sorting
     {
-        lst += GetCCFXmlItem(m_data.isSS_Statistics, "Sorting/Statistics");
-        lst += GetCCFXmlItem(m_data.isSS_NoiseBoundary, cbNUM_ANALOG_CHANS, "Sorting/NoiseBoundary");
-        lst += GetCCFXmlItem(m_data.isSS_Detect, "Sorting/Detect");
-        lst += GetCCFXmlItem(m_data.isSS_ArtifactReject, "Sorting/ArtifactReject");
-        lst += GetCCFXmlItem(m_data.isSS_Status, "Sorting/Status");
+        lst.push_back(GetCCFXmlItem(m_data.isSS_Statistics, "Sorting/Statistics"));
+        lst.push_back(GetCCFXmlItem(m_data.isSS_NoiseBoundary, cbNUM_ANALOG_CHANS, "Sorting/NoiseBoundary"));
+        lst.push_back(GetCCFXmlItem(m_data.isSS_Detect, "Sorting/Detect"));
+        lst.push_back(GetCCFXmlItem(m_data.isSS_ArtifactReject, "Sorting/ArtifactReject"));
+        lst.push_back(GetCCFXmlItem(m_data.isSS_Status, "Sorting/Status"));
     }
     // SysInfo
-    lst += GetCCFXmlItem(m_data.isSysInfo, "SysInfo");
+    lst.push_back(GetCCFXmlItem(m_data.isSysInfo, "SysInfo"));
     // Line Noise Cancellation
-    lst += GetCCFXmlItem(m_data.isLnc, "LNC");
+    lst.push_back(GetCCFXmlItem(m_data.isLnc, "LNC"));
     // Analog output waveforms
-    lst += GetCCFXmlItem(m_data.isWaveform, AOUT_NUM_GAIN_CHANS, cbMAX_AOUT_TRIGGER, "AnalogOutput/Waveforms", "Waveform");
+    lst.push_back(GetCCFXmlItem(m_data.isWaveform, AOUT_NUM_GAIN_CHANS, cbMAX_AOUT_TRIGGER, "AnalogOutput/Waveforms", "Waveform"));
     // NTrode
-    lst += GetCCFXmlItem(m_data.isNTrodeInfo, cbMAXNTRODES, "NTrodeInfo");
+    lst.push_back(GetCCFXmlItem(m_data.isNTrodeInfo, cbMAXNTRODES, "NTrodeInfo"));
     // Adaptive filter
-    lst += GetCCFXmlItem(m_data.isAdaptInfo, "AdaptInfo");
+    lst.push_back(GetCCFXmlItem(m_data.isAdaptInfo, "AdaptInfo"));
 
     // get computer name
     char szUsername[256];
@@ -183,28 +185,35 @@ ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(LPCSTR szFileName)
         {
             xml.beginGroup("Version");
             {
-                xml.addGroup("Protocol", "", 0, QString("%1.%2").arg(cbVERSION_MAJOR).arg(cbVERSION_MINOR));
-                xml.addGroup("Cerebus", "", 0, QString(BMI_VERSION_STR));
+                xml.addGroup("Protocol", "", 0, std::to_string(cbVERSION_MAJOR) + "." + std::to_string(cbVERSION_MINOR));
+                xml.addGroup("Cerebus", "", 0, std::string(BMI_VERSION_STR));
 
                 int nspmajor   = (m_procInfo.idcode & 0x000000ff);
                 int nspminor   = (m_procInfo.idcode & 0x0000ff00) >> 8;
                 int nsprelease = (m_procInfo.idcode & 0x00ff0000) >> 16;
                 int nspbeta    = (m_procInfo.idcode & 0xff000000) >> 24;
-                QString strBeta = ".";
+                std::string strBeta = ".";
                 if (nspbeta)
                     strBeta = " Beta ";
-                xml.addGroup("NSP", "", 0, QString("%1.%2.%3" + strBeta + "%4")
-                    .arg(nspmajor)
-                    .arg(nspminor, 2, 10, QLatin1Char('0'))
-                    .arg(nsprelease, 2, 10, QLatin1Char('0'))
-                    .arg(nspbeta, 2, 10, QLatin1Char('0')));
-                xml.addGroup("ID", "", 0, QString(m_procInfo.ident));
+                std::string minor_str = std::to_string(nspminor);
+                minor_str.insert(0, std::max(0, 2 - (int)minor_str.size()), '0');
+                std::string release_str = std::to_string(nsprelease);
+                release_str.insert(0, std::max(0, 2 - (int)release_str.size()), '0');
+                std::string beta_str = std::to_string(nspbeta);
+                beta_str.insert(0, std::max(0, 2 - (int)beta_str.size()), '0');
+                std::string ver_str = std::to_string(nspmajor) + "." + minor_str + "." + release_str + strBeta + beta_str;
+                xml.addGroup("NSP", "", 0, ver_str);
+                xml.addGroup("ID", "", 0, std::string(m_procInfo.ident));
 
                 xml.addGroup("Original", "", 0, m_nInternalOriginalVersion);
             }
             xml.endGroup(); // Version
-            xml.addGroup("Author", "", 0, QString(szUsername));
-            xml.addGroup("Date", "", 0, QDateTime::currentDateTime());
+            xml.addGroup("Author", "", 0, std::string(szUsername));
+
+            auto now = std::chrono::system_clock::now();
+            std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
+            std::tm* dateTime = std::localtime(&currentTime);
+            xml.addGroup("Date", "", 0, std::asctime(dateTime));
         }
         xml.endGroup(); // Session
     }
@@ -245,33 +254,26 @@ void CCFUtilsXml_v1::Convert(ccf::ccfBinaryData & data)
 ccfResult CCFUtilsXml_v1::ReadVersion(LPCSTR szFileName)
 {
     ccfResult res = CCFRESULT_SUCCESS;
-    QString fname = szFileName;
-    QFile file(fname);
-    if (!file.open(QIODevice::ReadOnly))
+    std::string fname = szFileName;
+    pugi::xml_document doc;
+
+    if (!doc.load_file(fname.c_str())) {
         return CCFRESULT_ERR_OPENFAILEDREAD;
+    }
 
     m_nInternalOriginalVersion = 0;
-    QXmlStreamReader xml(&file);
-    while (!xml.atEnd())
-    {
-        xml.readNext();
-        // The very first element must be CCF
-        if (xml.isStartElement())
-        {
-            QXmlStreamAttributes attrs = xml.attributes();
-            for (auto attr : attrs) {
-                QString attr_name = attr.name().toString();
-                QString attr_value = attr.value().toString();
-                if (attr_name == "Version")
-                    m_nInternalOriginalVersion = attr.value().toString().toInt();
-            }
-            break;
+    auto root = doc.child("CCF");
+    if (root) {
+        auto version = root.attribute("Version");
+        if (version) {
+            m_nInternalOriginalVersion = std::stoi(version.value());
+        } else {
+            res = CCFRESULT_ERR_FORMAT;
         }
-    }
-    // invalid XML
-    if (xml.hasError())
+    } else {
         res = CCFRESULT_ERR_FORMAT;
-    file.close();
+    }
+
     // If not a valid XML ask parent to read version
     if (res)
         res = CCFUtilsBinary::ReadVersion(szFileName);

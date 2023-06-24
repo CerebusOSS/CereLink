@@ -52,77 +52,70 @@ static char THIS_FILE[]=__FILE__;
 #endif
 
 
-// Author & Date: Ehsan Azar       17 April 2012
-// Purpose: CCF XML item copy constructor
-CCFXmlItem::operator const QVariant() const
-{
-    return QVariant::fromValue(*this);
-}
-
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbPKT_CHANINFO & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbPKT_CHANINFO & pkt, std::string strName)
 {
     m_xmlTag = strName;
     pkt.label[cbLEN_STR_LABEL - 1] = 0;
-    m_xmlAttribs.insert("label", QString(pkt.label));
-    m_xmlAttribs.insert("Type", "cbPKT_CHANINFO");
+    m_xmlAttribs.insert({"label", std::string(pkt.label)});
+    m_xmlAttribs.insert({"Type", "cbPKT_CHANINFO"});
     if (pkt.chan == 0)
         return;
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
-    lst += ccf::GetCCFXmlItem(pkt.chan, "chan");
-    lst += ccf::GetCCFXmlItem(pkt.proc, "proc");
-    lst += ccf::GetCCFXmlItem(pkt.bank, "bank");
-    lst += ccf::GetCCFXmlItem(pkt.term, "term");
-    lst += ccf::GetCCFXmlItem(pkt.chancaps, "caps/chancaps");
-    lst += ccf::GetCCFXmlItem(pkt.doutcaps, "caps/doutcaps");
-    lst += ccf::GetCCFXmlItem(pkt.dinpcaps, "caps/dinpcaps");
-    lst += ccf::GetCCFXmlItem(pkt.aoutcaps, "caps/aoutcaps");
-    lst += ccf::GetCCFXmlItem(pkt.ainpcaps, "caps/ainpcaps");
-    lst += ccf::GetCCFXmlItem(pkt.spkcaps, "caps/spkcaps");
-    lst += ccf::GetCCFXmlItem(pkt.physcalin, "scale/physcalin");
-    lst += ccf::GetCCFXmlItem(pkt.phyfiltin, "filterdesc/phyfiltin");
-    lst += ccf::GetCCFXmlItem(pkt.physcalout, "scale/physcalout");
-    lst += ccf::GetCCFXmlItem(pkt.phyfiltout, "filterdesc/phyfiltout");
-    lst += ccf::GetCCFXmlItem(pkt.label, cbLEN_STR_LABEL, "label");
-    lst += ccf::GetCCFXmlItem(pkt.userflags, "userflags");
-    lst += ccf::GetCCFXmlItem(pkt.position, 4, "position");
-    lst += ccf::GetCCFXmlItem(pkt.scalin, "scale/scalin");
-    lst += ccf::GetCCFXmlItem(pkt.scalout, "scale/scalout");
-    lst += ccf::GetCCFXmlItem(pkt.doutopts, "options/doutopts");
-    lst += ccf::GetCCFXmlItem(pkt.dinpopts, "options/dinpopts");
-    lst += ccf::GetCCFXmlItem(pkt.aoutopts, "options/aoutopts");
-    lst += ccf::GetCCFXmlItem(pkt.eopchar, "eopchar");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.chan, "chan"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.proc, "proc"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.bank, "bank"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.term, "term"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.chancaps, "caps/chancaps"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.doutcaps, "caps/doutcaps"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.dinpcaps, "caps/dinpcaps"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.aoutcaps, "caps/aoutcaps"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.ainpcaps, "caps/ainpcaps"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.spkcaps, "caps/spkcaps"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.physcalin, "scale/physcalin"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.phyfiltin, "filterdesc/phyfiltin"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.physcalout, "scale/physcalout"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.phyfiltout, "filterdesc/phyfiltout"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.label, cbLEN_STR_LABEL, "label"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.userflags, "userflags"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.position, 4, "position"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.scalin, "scale/scalin"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.scalout, "scale/scalout"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.doutopts, "options/doutopts"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.dinpopts, "options/dinpopts"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.aoutopts, "options/aoutopts"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.eopchar, "eopchar"));
     { // For union we recoord the most informative one
-        lst += ccf::GetCCFXmlItem(pkt.lowsamples, "monitor/lowsamples");
-        lst += ccf::GetCCFXmlItem(pkt.highsamples, "monitor/highsamples");
-        lst += ccf::GetCCFXmlItem(pkt.offset, "monitor/offset");
+        lst.push_back(ccf::GetCCFXmlItem(pkt.lowsamples, "monitor/lowsamples"));
+        lst.push_back(ccf::GetCCFXmlItem(pkt.highsamples, "monitor/highsamples"));
+        lst.push_back(ccf::GetCCFXmlItem(pkt.offset, "monitor/offset"));
     }
-    lst += ccf::GetCCFXmlItem(pkt.ainpopts, "options/ainpopts");
-    lst += ccf::GetCCFXmlItem(pkt.lncrate, "lnc/rate");
-    lst += ccf::GetCCFXmlItem(pkt.smpfilter, "sample/filter");
-    lst += ccf::GetCCFXmlItem(pkt.smpgroup, "sample/group");
-    lst += ccf::GetCCFXmlItem(pkt.smpdispmin, "sample/dispmin");
-    lst += ccf::GetCCFXmlItem(pkt.smpdispmax, "sample/dispmax");
-    lst += ccf::GetCCFXmlItem(pkt.spkfilter, "spike/filter");
-    lst += ccf::GetCCFXmlItem(pkt.spkdispmax, "spike/dispmax");
-    lst += ccf::GetCCFXmlItem(pkt.lncdispmax, "lnc/dispmax");
-    lst += ccf::GetCCFXmlItem(pkt.spkopts, "options/spkopts");
-    lst += ccf::GetCCFXmlItem(pkt.spkthrlevel, "spike/threshold/level");
-    lst += ccf::GetCCFXmlItem(pkt.spkthrlimit, "spike/threshold/limit");
-    lst += ccf::GetCCFXmlItem(pkt.spkgroup, "spike/group");
-    lst += ccf::GetCCFXmlItem(pkt.amplrejpos, "spike/amplituderejecet/positive");
-    lst += ccf::GetCCFXmlItem(pkt.amplrejneg, "spike/amplituderejecet/negative");
-    lst += ccf::GetCCFXmlItem(pkt.refelecchan, "refelecchan");
-    lst += ccf::GetCCFXmlItem(pkt.unitmapping, cbMAXUNITS, "unitmapping");
-    lst += ccf::GetCCFXmlItem(pkt.spkhoops, cbMAXUNITS, cbMAXHOOPS, "spike/hoops", "hoop");
-	lst += ccf::GetCCFXmlItem(pkt.trigtype, "douttrig/type");
-    lst += ccf::GetCCFXmlItem(pkt.trigchan, "douttrig/chan");
-    lst += ccf::GetCCFXmlItem(pkt.trigval, "douttrig/val");
+    lst.push_back(ccf::GetCCFXmlItem(pkt.ainpopts, "options/ainpopts"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.lncrate, "lnc/rate"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.smpfilter, "sample/filter"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.smpgroup, "sample/group"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.smpdispmin, "sample/dispmin"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.smpdispmax, "sample/dispmax"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.spkfilter, "spike/filter"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.spkdispmax, "spike/dispmax"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.lncdispmax, "lnc/dispmax"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.spkopts, "options/spkopts"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.spkthrlevel, "spike/threshold/level"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.spkthrlimit, "spike/threshold/limit"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.spkgroup, "spike/group"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.amplrejpos, "spike/amplituderejecet/positive"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.amplrejneg, "spike/amplituderejecet/negative"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.refelecchan, "refelecchan"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.unitmapping, cbMAXUNITS, "unitmapping"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.spkhoops, cbMAXUNITS, cbMAXHOOPS, "spike/hoops", "hoop"));
+	lst.push_back(ccf::GetCCFXmlItem(pkt.trigtype, "douttrig/type"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.trigchan, "douttrig/chan"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.trigval, "douttrig/val"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -130,22 +123,22 @@ CCFXmlItem::CCFXmlItem(cbPKT_CHANINFO & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbPKT_ADAPTFILTINFO & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbPKT_ADAPTFILTINFO & pkt, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbPKT_ADAPTFILTINFO");
+    m_xmlAttribs.insert({"Type", "cbPKT_ADAPTFILTINFO"});
     if (pkt.cbpkt_header.type == 0)
         return;
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
-    lst += ccf::GetCCFXmlItem(pkt.chan, "chan");
-    lst += ccf::GetCCFXmlItem(pkt.nMode, "mode");
-    lst += ccf::GetCCFXmlItem(pkt.dLearningRate, "LearningRate");
-    lst += ccf::GetCCFXmlItem(pkt.nRefChan1, "RefChan/RefChan_item");
-    lst += ccf::GetCCFXmlItem(pkt.nRefChan2, "RefChan/RefChan_item<1>");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.chan, "chan"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.nMode, "mode"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.dLearningRate, "LearningRate"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.nRefChan1, "RefChan/RefChan_item"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.nRefChan2, "RefChan/RefChan_item<1>"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -153,19 +146,19 @@ CCFXmlItem::CCFXmlItem(cbPKT_ADAPTFILTINFO & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbPKT_SS_DETECT & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbPKT_SS_DETECT & pkt, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbPKT_SS_DETECT");
+    m_xmlAttribs.insert({"Type", "cbPKT_SS_DETECT"});
     if (pkt.cbpkt_header.type == 0)
         return;
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
-    lst += ccf::GetCCFXmlItem(pkt.fThreshold, "Threshold");
-    lst += ccf::GetCCFXmlItem(pkt.fMultiplier, "Multiplier");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.fThreshold, "Threshold"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.fMultiplier, "Multiplier"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -173,19 +166,19 @@ CCFXmlItem::CCFXmlItem(cbPKT_SS_DETECT & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbPKT_SS_ARTIF_REJECT & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbPKT_SS_ARTIF_REJECT & pkt, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbPKT_SS_ARTIF_REJECT");
+    m_xmlAttribs.insert({"Type", "cbPKT_SS_ARTIF_REJECT"});
     if (pkt.cbpkt_header.type == 0)
         return;
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
-    lst += ccf::GetCCFXmlItem(pkt.nMaxSimulChans, "MaxSimulChans");
-    lst += ccf::GetCCFXmlItem(pkt.nRefractoryCount, "RefractoryCount");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.nMaxSimulChans, "MaxSimulChans"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.nRefractoryCount, "RefractoryCount"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -193,20 +186,20 @@ CCFXmlItem::CCFXmlItem(cbPKT_SS_ARTIF_REJECT & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbPKT_SS_NOISE_BOUNDARY & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbPKT_SS_NOISE_BOUNDARY & pkt, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbPKT_SS_NOISE_BOUNDARY");
+    m_xmlAttribs.insert({"Type", "cbPKT_SS_NOISE_BOUNDARY"});
     if (pkt.chan == 0)
         return;
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
-    lst += ccf::GetCCFXmlItem(pkt.chan, "chan");
-    lst += ccf::GetCCFXmlItem(pkt.afc, 3, "center");
-    lst += ccf::GetCCFXmlItem(pkt.afS, 3, 3, "axes", "axis");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.chan, "chan"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.afc, 3, "center"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.afS, 3, 3, "axes", "axis"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -214,29 +207,29 @@ CCFXmlItem::CCFXmlItem(cbPKT_SS_NOISE_BOUNDARY & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbPKT_SS_STATISTICS & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbPKT_SS_STATISTICS & pkt, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbPKT_SS_STATISTICS");
+    m_xmlAttribs.insert({"Type", "cbPKT_SS_STATISTICS"});
     if (pkt.cbpkt_header.type == 0)
         return;
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
-    lst += ccf::GetCCFXmlItem(pkt.nUpdateSpikes, "UpdateSpikes");
-    lst += ccf::GetCCFXmlItem(pkt.nAutoalg, "Autoalg");
-    lst += ccf::GetCCFXmlItem(pkt.nMode, "mode");
-    lst += ccf::GetCCFXmlItem(pkt.fMinClusterPairSpreadFactor, "Cluster/MinClusterPairSpreadFactor");
-    lst += ccf::GetCCFXmlItem(pkt.fMaxSubclusterSpreadFactor, "Cluster/MaxSubclusterSpreadFactor");
-    lst += ccf::GetCCFXmlItem(pkt.fMinClusterHistCorrMajMeasure, "Cluster/MinClusterHistCorrMajMeasure");
-    lst += ccf::GetCCFXmlItem(pkt.fMaxClusterPairHistCorrMajMeasure, "Cluster/MaxClusterPairHistCorrMajMeasure");
-    lst += ccf::GetCCFXmlItem(pkt.fClusterHistValleyPercentage, "Cluster/ClusterHistValleyPercentage");
-    lst += ccf::GetCCFXmlItem(pkt.fClusterHistClosePeakPercentage, "Cluster/ClusterHistClosePeakPercentage");
-    lst += ccf::GetCCFXmlItem(pkt.fClusterHistMinPeakPercentage, "Cluster/ClusterHistMinPeakPercentage");
-    lst += ccf::GetCCFXmlItem(pkt.nWaveBasisSize, "WaveBasisSize");
-    lst += ccf::GetCCFXmlItem(pkt.nWaveSampleSize, "WaveSampleSize");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.nUpdateSpikes, "UpdateSpikes"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.nAutoalg, "Autoalg"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.nMode, "mode"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.fMinClusterPairSpreadFactor, "Cluster/MinClusterPairSpreadFactor"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.fMaxSubclusterSpreadFactor, "Cluster/MaxSubclusterSpreadFactor"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.fMinClusterHistCorrMajMeasure, "Cluster/MinClusterHistCorrMajMeasure"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.fMaxClusterPairHistCorrMajMeasure, "Cluster/MaxClusterPairHistCorrMajMeasure"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.fClusterHistValleyPercentage, "Cluster/ClusterHistValleyPercentage"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.fClusterHistClosePeakPercentage, "Cluster/ClusterHistClosePeakPercentage"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.fClusterHistMinPeakPercentage, "Cluster/ClusterHistMinPeakPercentage"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.nWaveBasisSize, "WaveBasisSize"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.nWaveSampleSize, "WaveSampleSize"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -244,19 +237,19 @@ CCFXmlItem::CCFXmlItem(cbPKT_SS_STATISTICS & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbPKT_SS_STATUS & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbPKT_SS_STATUS & pkt, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbPKT_SS_STATUS");
+    m_xmlAttribs.insert({"Type", "cbPKT_SS_STATUS"});
     if (pkt.cbpkt_header.type == 0)
         return;
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
-    lst += ccf::GetCCFXmlItem(pkt.cntlUnitStats, "cntlUnitStats");
-    lst += ccf::GetCCFXmlItem(pkt.cntlNumUnits, "cntlNumUnits");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cntlUnitStats, "cntlUnitStats"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cntlNumUnits, "cntlNumUnits"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -264,23 +257,23 @@ CCFXmlItem::CCFXmlItem(cbPKT_SS_STATUS & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbPKT_SYSINFO & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbPKT_SYSINFO & pkt, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbPKT_SYSINFO");
+    m_xmlAttribs.insert({"Type", "cbPKT_SYSINFO"});
     if (pkt.cbpkt_header.type == 0)
         return;
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
-    lst += ccf::GetCCFXmlItem(pkt.sysfreq, "sysfreq");
-    lst += ccf::GetCCFXmlItem(pkt.spikelen, "spike/length");
-    lst += ccf::GetCCFXmlItem(pkt.spikepre, "spike/pretrigger");
-    lst += ccf::GetCCFXmlItem(pkt.resetque, "resetque");
-    lst += ccf::GetCCFXmlItem(pkt.runlevel, "runlevel");
-    lst += ccf::GetCCFXmlItem(pkt.runflags, "runflags");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.sysfreq, "sysfreq"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.spikelen, "spike/length"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.spikepre, "spike/pretrigger"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.resetque, "resetque"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.runlevel, "runlevel"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.runflags, "runflags"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -288,25 +281,25 @@ CCFXmlItem::CCFXmlItem(cbPKT_SYSINFO & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbPKT_NTRODEINFO & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbPKT_NTRODEINFO & pkt, std::string strName)
 {
     m_xmlTag = strName;
     pkt.label[cbLEN_STR_LABEL - 1] = 0;
-    m_xmlAttribs.insert("label", QString(pkt.label));
-    m_xmlAttribs.insert("Type", "cbPKT_NTRODEINFO");
+    m_xmlAttribs.insert({"label", std::string(pkt.label)});
+    m_xmlAttribs.insert({"Type", "cbPKT_NTRODEINFO"});
     if (pkt.ntrode == 0)
         return;
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
-    lst += ccf::GetCCFXmlItem(pkt.ntrode, "ntrode");
-    lst += ccf::GetCCFXmlItem(pkt.label, cbLEN_STR_LABEL, "label");
-    lst += ccf::GetCCFXmlItem(pkt.ellipses, cbMAXSITEPLOTS, cbMAXUNITS, "ellipses", "ellipse");
-    lst += ccf::GetCCFXmlItem(pkt.nSite, "site");
-    lst += ccf::GetCCFXmlItem(pkt.fs, "featurespace");
-    lst += ccf::GetCCFXmlItem(pkt.nChan, cbMAXSITES, "chan");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.ntrode, "ntrode"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.label, cbLEN_STR_LABEL, "label"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.ellipses, cbMAXSITEPLOTS, cbMAXUNITS, "ellipses", "ellipse"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.nSite, "site"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.fs, "featurespace"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.nChan, cbMAXSITES, "chan"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -314,20 +307,20 @@ CCFXmlItem::CCFXmlItem(cbPKT_NTRODEINFO & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 Sept 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbPKT_LNC & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbPKT_LNC & pkt, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbPKT_LNC");
+    m_xmlAttribs.insert({"Type", "cbPKT_LNC"});
     if (pkt.lncFreq == 0)
         return;
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
-    lst += ccf::GetCCFXmlItem(pkt.lncFreq, "frequency");
-    lst += ccf::GetCCFXmlItem(pkt.lncRefChan, "RefChan/RefChan_item");
-    lst += ccf::GetCCFXmlItem(pkt.lncGlobalMode, "GlobalMode");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.lncFreq, "frequency"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.lncRefChan, "RefChan/RefChan_item"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.lncGlobalMode, "GlobalMode"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -335,39 +328,39 @@ CCFXmlItem::CCFXmlItem(cbPKT_LNC & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 Sept 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbPKT_FILTINFO & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbPKT_FILTINFO & pkt, std::string strName)
 {
     m_xmlTag = strName;
     pkt.label[cbLEN_STR_LABEL - 1] = 0;
-    m_xmlAttribs.insert("label", QString(pkt.label));
-    m_xmlAttribs.insert("Type", "cbPKT_FILTINFO");
+    m_xmlAttribs.insert({"label", std::string(pkt.label)});
+    m_xmlAttribs.insert({"Type", "cbPKT_FILTINFO"});
     if (pkt.cbpkt_header.type == 0)
         return;
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
-    lst += ccf::GetCCFXmlItem(pkt.proc, "proc");
-    lst += ccf::GetCCFXmlItem(pkt.filt, "filter");
-    lst += ccf::GetCCFXmlItem(pkt.label, cbLEN_STR_LABEL, "label");
-    lst += ccf::GetCCFXmlItem(pkt.hpfreq, "filterdesc/digfilt/hpfreq");
-    lst += ccf::GetCCFXmlItem(pkt.hporder, "filterdesc/digfilt/hporder");
-    lst += ccf::GetCCFXmlItem(pkt.hptype, "filterdesc/digfilt/hptype");
-    lst += ccf::GetCCFXmlItem(pkt.lpfreq, "filterdesc/digfilt/lpfreq");
-    lst += ccf::GetCCFXmlItem(pkt.lporder, "filterdesc/digfilt/lporder");
-    lst += ccf::GetCCFXmlItem(pkt.lptype, "filterdesc/digfilt/lptype");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.proc, "proc"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.filt, "filter"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.label, cbLEN_STR_LABEL, "label"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.hpfreq, "filterdesc/digfilt/hpfreq"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.hporder, "filterdesc/digfilt/hporder"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.hptype, "filterdesc/digfilt/hptype"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.lpfreq, "filterdesc/digfilt/lpfreq"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.lporder, "filterdesc/digfilt/lporder"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.lptype, "filterdesc/digfilt/lptype"));
     // Although we can save as an array such as sos[2][2], I do not think that is good idea
     //  because we never plan to go higher than second-order (already IIR is problematic)
-    lst += ccf::GetCCFXmlItem(pkt.sos1a1, "filterdesc/digfilt/sos1/a1");
-    lst += ccf::GetCCFXmlItem(pkt.sos1a2, "filterdesc/digfilt/sos1/a2");
-    lst += ccf::GetCCFXmlItem(pkt.sos1b1, "filterdesc/digfilt/sos1/b1");
-    lst += ccf::GetCCFXmlItem(pkt.sos1b2, "filterdesc/digfilt/sos1/b2");
-    lst += ccf::GetCCFXmlItem(pkt.sos2a1, "filterdesc/digfilt/sos2/a1");
-    lst += ccf::GetCCFXmlItem(pkt.sos2a2, "filterdesc/digfilt/sos2/a2");
-    lst += ccf::GetCCFXmlItem(pkt.sos2b1, "filterdesc/digfilt/sos2/b1");
-    lst += ccf::GetCCFXmlItem(pkt.sos2b2, "filterdesc/digfilt/sos2/b2");
-    lst += ccf::GetCCFXmlItem(pkt.gain, "filterdesc/digfilt/gain");
+    lst.push_back(ccf::GetCCFXmlItem(pkt.sos1a1, "filterdesc/digfilt/sos1/a1"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.sos1a2, "filterdesc/digfilt/sos1/a2"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.sos1b1, "filterdesc/digfilt/sos1/b1"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.sos1b2, "filterdesc/digfilt/sos1/b2"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.sos2a1, "filterdesc/digfilt/sos2/a1"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.sos2a2, "filterdesc/digfilt/sos2/a2"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.sos2b1, "filterdesc/digfilt/sos2/b1"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.sos2b2, "filterdesc/digfilt/sos2/b2"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.gain, "filterdesc/digfilt/gain"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -375,27 +368,27 @@ CCFXmlItem::CCFXmlItem(cbPKT_FILTINFO & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 Sept 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbPKT_AOUT_WAVEFORM & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbPKT_AOUT_WAVEFORM & pkt, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbPKT_AOUT_WAVEFORM");
+    m_xmlAttribs.insert({"Type", "cbPKT_AOUT_WAVEFORM"});
     if (pkt.chan == 0)
         return;
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type");
-    lst += ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen");
-    lst += ccf::GetCCFXmlItem(pkt.chan, "chan");
-    lst += ccf::GetCCFXmlItem(pkt.repeats, "repeats");
-    lst += ccf::GetCCFXmlItem(pkt.trig, "trigger/type");
-    lst += ccf::GetCCFXmlItem(pkt.trigChan, "trigger/channel");
-    lst += ccf::GetCCFXmlItem(pkt.trigValue, "trigger/value");
-    lst += ccf::GetCCFXmlItem(pkt.trigNum, "number");
-    lst += ccf::GetCCFXmlItem(pkt.active, "active");
-    lst += ccf::GetCCFXmlItem(pkt.mode, "wave/mode");
-    QVariant var = CCFXmlItem(pkt.wave, pkt.mode, "wave");
-    lst += var;
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.chid, "chid"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.type, "type"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.cbpkt_header.dlen, "dlen"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.chan, "chan"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.repeats, "repeats"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.trig, "trigger/type"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.trigChan, "trigger/channel"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.trigValue, "trigger/value"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.trigNum, "number"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.active, "active"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.mode, "wave/mode"));
+    std::any var = CCFXmlItem(pkt.wave, pkt.mode, "wave");
+    lst.push_back(var);
 
     // Now use the list
     m_xmlValue = lst;
@@ -403,18 +396,18 @@ CCFXmlItem::CCFXmlItem(cbPKT_AOUT_WAVEFORM & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbSCALING & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbSCALING & pkt, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbSCALING");
+    m_xmlAttribs.insert({"Type", "cbSCALING"});
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.digmin, "digmin");
-    lst += ccf::GetCCFXmlItem(pkt.digmax, "digmax");
-    lst += ccf::GetCCFXmlItem(pkt.anamin, "anamin");
-    lst += ccf::GetCCFXmlItem(pkt.anamax, "anamax");
-    lst += ccf::GetCCFXmlItem(pkt.anagain, "anagain");
-    lst += ccf::GetCCFXmlItem(pkt.anaunit, cbLEN_STR_UNIT, "anaunit");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.digmin, "digmin"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.digmax, "digmax"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.anamin, "anamin"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.anamax, "anamax"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.anagain, "anagain"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.anaunit, cbLEN_STR_UNIT, "anaunit"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -422,19 +415,19 @@ CCFXmlItem::CCFXmlItem(cbSCALING & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbFILTDESC & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbFILTDESC & pkt, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbFILTDESC");
+    m_xmlAttribs.insert({"Type", "cbFILTDESC"});
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.label, cbLEN_STR_FILT_LABEL, "label");
-    lst += ccf::GetCCFXmlItem(pkt.hpfreq, "hpfreq");
-    lst += ccf::GetCCFXmlItem(pkt.hporder, "hporder");
-    lst += ccf::GetCCFXmlItem(pkt.hptype, "hptype");
-    lst += ccf::GetCCFXmlItem(pkt.lpfreq, "lpfreq");
-    lst += ccf::GetCCFXmlItem(pkt.lporder, "lporder");
-    lst += ccf::GetCCFXmlItem(pkt.lptype, "lptype");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.label, cbLEN_STR_FILT_LABEL, "label"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.hpfreq, "hpfreq"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.hporder, "hporder"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.hptype, "hptype"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.lpfreq, "lpfreq"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.lporder, "lporder"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.lptype, "lptype"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -442,17 +435,17 @@ CCFXmlItem::CCFXmlItem(cbFILTDESC & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbMANUALUNITMAPPING & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbMANUALUNITMAPPING & pkt, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbMANUALUNITMAPPING");
+    m_xmlAttribs.insert({"Type", "cbMANUALUNITMAPPING"});
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.nOverride, "Override");
-    lst += ccf::GetCCFXmlItem(pkt.afOrigin, 3, "center");
-    lst += ccf::GetCCFXmlItem(pkt.afShape, 3, 3, "axes", "axis");
-    lst += ccf::GetCCFXmlItem(pkt.aPhi, "Phi");
-    lst += ccf::GetCCFXmlItem(pkt.bValid, "Valid");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.nOverride, "Override"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.afOrigin, 3, "center"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.afShape, 3, 3, "axes", "axis"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.aPhi, "Phi"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.bValid, "Valid"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -460,16 +453,16 @@ CCFXmlItem::CCFXmlItem(cbMANUALUNITMAPPING & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbHOOP & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbHOOP & pkt, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbHOOP");
+    m_xmlAttribs.insert({"Type", "cbHOOP"});
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.valid, "valid");
-    lst += ccf::GetCCFXmlItem(pkt.time, "time");
-    lst += ccf::GetCCFXmlItem(pkt.min, "min");
-    lst += ccf::GetCCFXmlItem(pkt.max, "max");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.valid, "valid"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.time, "time"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.min, "min"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.max, "max"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -477,15 +470,15 @@ CCFXmlItem::CCFXmlItem(cbHOOP & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       17 April 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbAdaptControl & pkt, QString strName)
+CCFXmlItem::CCFXmlItem(cbAdaptControl & pkt, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbAdaptControl");
+    m_xmlAttribs.insert({"Type", "cbAdaptControl"});
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.nMode, "mode");
-    lst += ccf::GetCCFXmlItem(pkt.fTimeOutMinutes, "TimeOutMinutes");
-    lst += ccf::GetCCFXmlItem(pkt.fElapsedMinutes, "ElapsedMinutes");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.nMode, "mode"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.fTimeOutMinutes, "TimeOutMinutes"));
+    lst.push_back(ccf::GetCCFXmlItem(pkt.fElapsedMinutes, "ElapsedMinutes"));
 
     // Now use the list
     m_xmlValue = lst;
@@ -493,31 +486,31 @@ CCFXmlItem::CCFXmlItem(cbAdaptControl & pkt, QString strName)
 
 // Author & Date: Ehsan Azar       11 Sept 2012
 // Purpose: CCF XML item constructor
-CCFXmlItem::CCFXmlItem(cbWaveformData & pkt, uint16_t mode, QString strName)
+CCFXmlItem::CCFXmlItem(cbWaveformData & pkt, uint16_t mode, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cbWaveformData");
+    m_xmlAttribs.insert({"Type", "cbWaveformData"});
     if (mode == 0)
         return;
 
-    QVariantList lst;
-    lst += ccf::GetCCFXmlItem(pkt.offset, "offset");
+    std::vector<std::any> lst;
+    lst.push_back(ccf::GetCCFXmlItem(pkt.offset, "offset"));
     if (mode == cbWAVEFORM_MODE_SINE)
     {
-        lst += ccf::GetCCFXmlItem(pkt.sineFrequency, "sine/frequency");
-        lst += ccf::GetCCFXmlItem(pkt.sineAmplitude, "sine/amplitude");
+        lst.push_back(ccf::GetCCFXmlItem(pkt.sineFrequency, "sine/frequency"));
+        lst.push_back(ccf::GetCCFXmlItem(pkt.sineAmplitude, "sine/amplitude"));
     }
     else if (mode == cbWAVEFORM_MODE_PARAMETERS)
     {
-        lst += ccf::GetCCFXmlItem(pkt.seqTotal, "parameters/total");
-        lst += ccf::GetCCFXmlItem(pkt.seq, "parameters/seq");
-        lst += ccf::GetCCFXmlItem(pkt.phases, "parameters/phases");
+        lst.push_back(ccf::GetCCFXmlItem(pkt.seqTotal, "parameters/total"));
+        lst.push_back(ccf::GetCCFXmlItem(pkt.seq, "parameters/seq"));
+        lst.push_back(ccf::GetCCFXmlItem(pkt.phases, "parameters/phases"));
         // Partially save these parameters
         uint16_t phases = pkt.phases;
         if (phases > cbMAX_WAVEFORM_PHASES)
             phases = cbMAX_WAVEFORM_PHASES;
-        lst += ccf::GetCCFXmlItem(pkt.duration, phases, "parameters/duration");
-        lst += ccf::GetCCFXmlItem(pkt.amplitude, phases, "parameters/amplitude");
+        lst.push_back(ccf::GetCCFXmlItem(pkt.duration, phases, "parameters/duration"));
+        lst.push_back(ccf::GetCCFXmlItem(pkt.amplitude, phases, "parameters/amplitude"));
         // future sequences will go to the parameters<n>
     }
 
@@ -527,98 +520,98 @@ CCFXmlItem::CCFXmlItem(cbWaveformData & pkt, uint16_t mode, QString strName)
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(uint32_t & number, QString strName)
+CCFXmlItem::CCFXmlItem(uint32_t & number, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", QString("uint32_t"));
+    m_xmlAttribs.insert({"Type", std::string("uint32_t")});
 
-    m_xmlValue = (uint) number;
+    m_xmlValue = (unsigned int) number;
 }
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(int32_t & number, QString strName)
+CCFXmlItem::CCFXmlItem(int32_t & number, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "int32_t");
+    m_xmlAttribs.insert({"Type", "int32_t"});
 
     m_xmlValue = number;
 }
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(uint16_t & number, QString strName)
+CCFXmlItem::CCFXmlItem(uint16_t & number, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "uint16_t");
+    m_xmlAttribs.insert({"Type", "uint16_t"});
 
     m_xmlValue = number;
 }
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(int16_t & number, QString strName)
+CCFXmlItem::CCFXmlItem(int16_t & number, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "int16_t");
+    m_xmlAttribs.insert({"Type", "int16_t"});
 
     m_xmlValue = number;
 }
 
     // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(uint8_t & number, QString strName)
+CCFXmlItem::CCFXmlItem(uint8_t & number, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "uint8_t");
+    m_xmlAttribs.insert({"Type", "uint8_t"});
 
     m_xmlValue = number;
 }
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(int8_t & number, QString strName)
+CCFXmlItem::CCFXmlItem(int8_t & number, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "int8_t");
+    m_xmlAttribs.insert({"Type", "int8_t"});
 
     m_xmlValue = number;
 }
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(float & number, QString strName)
+CCFXmlItem::CCFXmlItem(float & number, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "single");
+    m_xmlAttribs.insert({"Type", "single"});
 
     m_xmlValue = number;
 }
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(double & number, QString strName)
+CCFXmlItem::CCFXmlItem(double & number, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "double");
+    m_xmlAttribs.insert({"Type", "double"});
 
     m_xmlValue = number;
 }
 
 // Author & Date: Ehsan Azar       16 April 2012
 // Purpose: CCF XML basic array constructor
-CCFXmlItem::CCFXmlItem(char cstr[], int count, QString strName)
+CCFXmlItem::CCFXmlItem(char cstr[], int count, std::string strName)
 {
     m_xmlTag = strName;
-    m_xmlAttribs.insert("Type", "cstring");
+    m_xmlAttribs.insert({"Type", "cstring"});
 
     cstr[count - 1] = 0;
-    m_xmlValue = QString(cstr);
+    m_xmlValue = cstr;
 }
 
 // Author & Date: Ehsan Azar       11 April 2012
 // Purpose: CCF XML basic number constructor
-CCFXmlItem::CCFXmlItem(QVariantList lst, QString strName)
+CCFXmlItem::CCFXmlItem(std::vector<std::any> lst, std::string strName)
 {
     m_xmlTag = strName;
     m_xmlValue = lst;
@@ -631,9 +624,9 @@ CCFXmlItem::CCFXmlItem(QVariantList lst, QString strName)
 // Author & Date: Ehsan Azar       16 April 2012
 // Purpose: Construct basic Xml item aray
 template <typename T>
-QVariant ccf::GetCCFXmlItem(T & pkt, QString strName)
+std::any ccf::GetCCFXmlItem(T & pkt, std::string strName)
 {
-    QVariant var = CCFXmlItem(pkt, strName);
+    std::any var = CCFXmlItem(pkt, strName);
     return var;
 }
 
@@ -644,16 +637,16 @@ QVariant ccf::GetCCFXmlItem(T & pkt, QString strName)
 //   count   - number of elements
 //   strName - array name
 template <typename T>
-QVariant ccf::GetCCFXmlItem(T pkt[], int count, QString strName)
+std::any ccf::GetCCFXmlItem(T pkt[], int count, std::string strName)
 {
-    QVariantList lst;
+    std::vector<std::any> lst;
     for (int i = 0; i < count; ++i)
     {
         CCFXmlItem item(pkt[i]);
         if (item.IsValid())
-            lst += item.XmlValue();
+            lst.push_back(item.XmlValue());
     }
-    QVariant var = CCFXmlItem(lst, strName);
+    std::any var = CCFXmlItem(lst, strName);
     return var;
 }
 
@@ -666,21 +659,21 @@ QVariant ccf::GetCCFXmlItem(T pkt[], int count, QString strName)
 //   strName1 - first level name
 //   strName2 - second level name
 template <typename T>
-QVariant ccf::GetCCFXmlItem(T ppkt[], int count1, int count2, QString strName1, QString strName2)
+std::any ccf::GetCCFXmlItem(T ppkt[], int count1, int count2, std::string strName1, std::string strName2)
 {
-    QVariantList sublst;
+    std::vector<std::any> sublst;
     for (int i = 0; i < count1; ++i)
-        sublst += ccf::GetCCFXmlItem(ppkt[i], count2, strName2);
-    QVariant var = CCFXmlItem(sublst, strName1);
+        sublst.push_back(ccf::GetCCFXmlItem(ppkt[i], count2, strName2));
+    std::any var = CCFXmlItem(sublst, strName1);
     return var;
 }
 
 // Author & Date: Ehsan Azar       16 April 2012
 // Purpose: Construct Xml item character string (specialize array for char type)
 template <>
-QVariant ccf::GetCCFXmlItem<char>(char pkt[], int count, QString strName)
+std::any ccf::GetCCFXmlItem<char>(char pkt[], int count, std::string strName)
 {
-    QVariant var = CCFXmlItem(pkt, count, strName);
+    std::any var = CCFXmlItem(pkt, count, strName);
     return var;
 }
 
@@ -698,8 +691,8 @@ QVariant ccf::GetCCFXmlItem<char>(char pkt[], int count, QString strName)
 template <typename T>
 void ccf::ReadItem(XmlFile * const xml, T & item)
 {
-    QVariant var = xml->value();
-    item = var.value<T>();
+    std::any var = xml->value();
+    item = std::any_cast<T>(var);
 }
 
 // Author & Date: Ehsan Azar       16 April 2012
@@ -1146,16 +1139,16 @@ void ccf::ReadItem(XmlFile * const xml, cbWaveformData & item)
 template <typename T>
 void ccf::ReadItem(XmlFile * const xml, T item[], int count)
 {
-    QMap<QString, int> mapItemCount;
+    std::map<std::string, int> mapItemCount;
     int subcount = 0;
-    QStringList lst = xml->childKeys();
-    for (int i = 0; i < lst.count(); ++i)
+    std::vector<std::string> lst = xml->childKeys();
+    for (int i = 0; i < lst.size(); ++i)
     {
-        QString strSubKey = lst.at(i);
+        std::string strSubKey = lst.at(i);
         subcount = mapItemCount[strSubKey];
         mapItemCount[strSubKey] = subcount + 1;
         if (subcount)
-            strSubKey = strSubKey + QString("<%1>").arg(subcount);
+            strSubKey += std::to_string(subcount);
         T tmp;
         // Initialize with possible item
         int num = ItemNumber(xml, tmp, strSubKey);
@@ -1181,9 +1174,9 @@ void ccf::ReadItem(XmlFile * const xml, T item[], int count)
 template<>
 void ccf::ReadItem(XmlFile * const xml, char item[], int count)
 {
-    QString var = xml->value().toString();
-    strncpy(item, var.toLatin1().constData(), count);
-    item[count - 1] = 0;
+    std::string var = std::any_cast<std::string>(xml->value());
+    strncpy(item, var.c_str(), count);
+    item[count - 1] = 0;  // '\0'
 }
 
 // Author & Date: Ehsan Azar       16 April 2012
@@ -1192,7 +1185,7 @@ void ccf::ReadItem(XmlFile * const xml, char item[], int count)
 //   xml      - the xml file in the item group
 //   item     - array of items
 template <typename T>
-void ccf::ReadItem(XmlFile * const xml, T item[], int count, QString strName)
+void ccf::ReadItem(XmlFile * const xml, T item[], int count, std::string strName)
 {
     if (!xml->beginGroup(strName))
         ReadItem(xml, item, count);
@@ -1205,21 +1198,21 @@ void ccf::ReadItem(XmlFile * const xml, T item[], int count, QString strName)
 //   xml      - the xml file in the item group
 //   pItem    - array of items
 template <typename T>
-void ccf::ReadItem(XmlFile * const xml, T pItem[], int count1, int count2, QString strName)
+void ccf::ReadItem(XmlFile * const xml, T pItem[], int count1, int count2, std::string strName)
 {
     if (!xml->beginGroup(strName))
     {
-        QMap<QString, int> mapItemCount;
+        std::map<std::string, int> mapItemCount;
         int subcount = 0;
-        QStringList lst = xml->childKeys();
-        count1 = std::min((int)lst.count(), count1);
+        std::vector<std::string> lst = xml->childKeys();
+        count1 = std::min((int)lst.size(), count1);
         for (int i = 0; i < count1; ++i)
         {
-            QString strSubKey = lst.at(i);
+            std::string strSubKey = lst.at(i);
             subcount = mapItemCount[strSubKey];
             mapItemCount[strSubKey] = subcount + 1;
             if (subcount)
-                strSubKey = strSubKey + QString("<%1>").arg(subcount);
+                strSubKey += std::to_string(subcount);
             ReadItem(xml, pItem[i], count2, strSubKey);
         }
     }
@@ -1233,7 +1226,7 @@ void ccf::ReadItem(XmlFile * const xml, T pItem[], int count1, int count2, QStri
 //   item     - item to read
 //   strName  - item name
 template <typename T>
-void ccf::ReadItem(XmlFile * const xml, T & item, QString strName)
+void ccf::ReadItem(XmlFile * const xml, T & item, std::string strName)
 {
     if (!xml->beginGroup(strName))
         ReadItem(xml, item);
@@ -1249,7 +1242,7 @@ void ccf::ReadItem(XmlFile * const xml, T & item, QString strName)
 // Outputs:
 //  Returns the item number (1-based)
 template<typename T>
-int ccf::ItemNumber(XmlFile * const xml, T & item, QString strName)
+int ccf::ItemNumber(XmlFile * const xml, T & item, std::string strName)
 {
     int res = 0;
     if (!xml->beginGroup(strName))
@@ -1273,35 +1266,35 @@ int ccf::ItemNumber(XmlFile * const xml, T & item)
 }
 
 // For link to proceed here we have to mention possible template types if not used in this unit
-template QVariant ccf::GetCCFXmlItem<cbPKT_ADAPTFILTINFO>(cbPKT_ADAPTFILTINFO&, QString);
-template QVariant ccf::GetCCFXmlItem<cbPKT_SYSINFO>(cbPKT_SYSINFO&, QString);
-template QVariant ccf::GetCCFXmlItem<cbPKT_SS_STATUS>(cbPKT_SS_STATUS&, QString);
-template QVariant ccf::GetCCFXmlItem<cbPKT_SS_ARTIF_REJECT>(cbPKT_SS_ARTIF_REJECT&, QString);
-template QVariant ccf::GetCCFXmlItem<cbPKT_SS_DETECT>(cbPKT_SS_DETECT&, QString);
-template QVariant ccf::GetCCFXmlItem<cbPKT_SS_STATISTICS>(cbPKT_SS_STATISTICS&, QString);
-template QVariant ccf::GetCCFXmlItem<cbPKT_LNC>(cbPKT_LNC&, QString);
-template QVariant ccf::GetCCFXmlItem<cbPKT_FILTINFO>(cbPKT_FILTINFO&, QString);
-template QVariant ccf::GetCCFXmlItem<cbPKT_AOUT_WAVEFORM>(cbPKT_AOUT_WAVEFORM&, QString);
+template std::any ccf::GetCCFXmlItem<cbPKT_ADAPTFILTINFO>(cbPKT_ADAPTFILTINFO&, std::string);
+template std::any ccf::GetCCFXmlItem<cbPKT_SYSINFO>(cbPKT_SYSINFO&, std::string);
+template std::any ccf::GetCCFXmlItem<cbPKT_SS_STATUS>(cbPKT_SS_STATUS&, std::string);
+template std::any ccf::GetCCFXmlItem<cbPKT_SS_ARTIF_REJECT>(cbPKT_SS_ARTIF_REJECT&, std::string);
+template std::any ccf::GetCCFXmlItem<cbPKT_SS_DETECT>(cbPKT_SS_DETECT&, std::string);
+template std::any ccf::GetCCFXmlItem<cbPKT_SS_STATISTICS>(cbPKT_SS_STATISTICS&, std::string);
+template std::any ccf::GetCCFXmlItem<cbPKT_LNC>(cbPKT_LNC&, std::string);
+template std::any ccf::GetCCFXmlItem<cbPKT_FILTINFO>(cbPKT_FILTINFO&, std::string);
+template std::any ccf::GetCCFXmlItem<cbPKT_AOUT_WAVEFORM>(cbPKT_AOUT_WAVEFORM&, std::string);
 
-template QVariant ccf::GetCCFXmlItem<cbPKT_CHANINFO>(cbPKT_CHANINFO * const, int, QString);
-template QVariant ccf::GetCCFXmlItem<cbPKT_NTRODEINFO>(cbPKT_NTRODEINFO * const, int, QString);
-template QVariant ccf::GetCCFXmlItem<cbPKT_SS_NOISE_BOUNDARY>(cbPKT_SS_NOISE_BOUNDARY * const, int, QString);
-template QVariant ccf::GetCCFXmlItem<cbPKT_FILTINFO>(cbPKT_FILTINFO * const, int, QString);
-template QVariant ccf::GetCCFXmlItem<cbPKT_AOUT_WAVEFORM[cbMAX_AOUT_TRIGGER]>(cbPKT_AOUT_WAVEFORM (* const)[cbMAX_AOUT_TRIGGER], int, int, QString, QString);
+template std::any ccf::GetCCFXmlItem<cbPKT_CHANINFO>(cbPKT_CHANINFO * const, int, std::string);
+template std::any ccf::GetCCFXmlItem<cbPKT_NTRODEINFO>(cbPKT_NTRODEINFO * const, int, std::string);
+template std::any ccf::GetCCFXmlItem<cbPKT_SS_NOISE_BOUNDARY>(cbPKT_SS_NOISE_BOUNDARY * const, int, std::string);
+template std::any ccf::GetCCFXmlItem<cbPKT_FILTINFO>(cbPKT_FILTINFO * const, int, std::string);
+template std::any ccf::GetCCFXmlItem<cbPKT_AOUT_WAVEFORM[cbMAX_AOUT_TRIGGER]>(cbPKT_AOUT_WAVEFORM (* const)[cbMAX_AOUT_TRIGGER], int, int, std::string, std::string);
 
 // For link to proceed here we have to mention possible template types if not used in this unit
-template void ccf::ReadItem<cbPKT_ADAPTFILTINFO>(XmlFile * const, cbPKT_ADAPTFILTINFO &, QString);
-template void ccf::ReadItem<cbPKT_SYSINFO>(XmlFile * const, cbPKT_SYSINFO &, QString);
-template void ccf::ReadItem<cbPKT_SS_STATUS>(XmlFile * const, cbPKT_SS_STATUS &, QString);
-template void ccf::ReadItem<cbPKT_SS_ARTIF_REJECT>(XmlFile * const, cbPKT_SS_ARTIF_REJECT &, QString);
-template void ccf::ReadItem<cbPKT_SS_DETECT>(XmlFile * const, cbPKT_SS_DETECT &, QString);
-template void ccf::ReadItem<cbPKT_SS_STATISTICS>(XmlFile * const, cbPKT_SS_STATISTICS &, QString);
-template void ccf::ReadItem<cbPKT_LNC>(XmlFile * const, cbPKT_LNC &, QString);
-template void ccf::ReadItem<cbPKT_FILTINFO>(XmlFile * const, cbPKT_FILTINFO &, QString);
-template void ccf::ReadItem<cbPKT_AOUT_WAVEFORM>(XmlFile * const, cbPKT_AOUT_WAVEFORM &, QString);
+template void ccf::ReadItem<cbPKT_ADAPTFILTINFO>(XmlFile * const, cbPKT_ADAPTFILTINFO &, std::string);
+template void ccf::ReadItem<cbPKT_SYSINFO>(XmlFile * const, cbPKT_SYSINFO &, std::string);
+template void ccf::ReadItem<cbPKT_SS_STATUS>(XmlFile * const, cbPKT_SS_STATUS &, std::string);
+template void ccf::ReadItem<cbPKT_SS_ARTIF_REJECT>(XmlFile * const, cbPKT_SS_ARTIF_REJECT &, std::string);
+template void ccf::ReadItem<cbPKT_SS_DETECT>(XmlFile * const, cbPKT_SS_DETECT &, std::string);
+template void ccf::ReadItem<cbPKT_SS_STATISTICS>(XmlFile * const, cbPKT_SS_STATISTICS &, std::string);
+template void ccf::ReadItem<cbPKT_LNC>(XmlFile * const, cbPKT_LNC &, std::string);
+template void ccf::ReadItem<cbPKT_FILTINFO>(XmlFile * const, cbPKT_FILTINFO &, std::string);
+template void ccf::ReadItem<cbPKT_AOUT_WAVEFORM>(XmlFile * const, cbPKT_AOUT_WAVEFORM &, std::string);
 
-template void ccf::ReadItem<cbPKT_CHANINFO>(XmlFile * const, cbPKT_CHANINFO * const, int, QString);
-template void ccf::ReadItem<cbPKT_NTRODEINFO>(XmlFile * const, cbPKT_NTRODEINFO * const, int, QString);
-template void ccf::ReadItem<cbPKT_SS_NOISE_BOUNDARY>(XmlFile * const, cbPKT_SS_NOISE_BOUNDARY * const, int, QString);
-template void ccf::ReadItem<cbPKT_FILTINFO>(XmlFile * const, cbPKT_FILTINFO * const, int, QString);
-template void ccf::ReadItem<cbPKT_AOUT_WAVEFORM[cbMAX_AOUT_TRIGGER]>(XmlFile * const, cbPKT_AOUT_WAVEFORM (* const)[cbMAX_AOUT_TRIGGER], int, int, QString);
+template void ccf::ReadItem<cbPKT_CHANINFO>(XmlFile * const, cbPKT_CHANINFO * const, int, std::string);
+template void ccf::ReadItem<cbPKT_NTRODEINFO>(XmlFile * const, cbPKT_NTRODEINFO * const, int, std::string);
+template void ccf::ReadItem<cbPKT_SS_NOISE_BOUNDARY>(XmlFile * const, cbPKT_SS_NOISE_BOUNDARY * const, int, std::string);
+template void ccf::ReadItem<cbPKT_FILTINFO>(XmlFile * const, cbPKT_FILTINFO * const, int, std::string);
+template void ccf::ReadItem<cbPKT_AOUT_WAVEFORM[cbMAX_AOUT_TRIGGER]>(XmlFile * const, cbPKT_AOUT_WAVEFORM (* const)[cbMAX_AOUT_TRIGGER], int, int, std::string);
