@@ -190,6 +190,7 @@ target_include_directories(CCFUtils
         INTERFACE # for unit tests
             $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/CCFUtils>
 )
+set_property(TARGET CCFUtils PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 ##########################################################################################
 # Files/folders common to multiple targets
