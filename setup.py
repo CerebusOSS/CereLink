@@ -35,9 +35,7 @@ def get_extras():
         qtfwdir = str(p.stdout.read().decode("utf-8")[:-1]) + "/Frameworks"
 
         x_link_args += ['-F', qtfwdir,
-                        '-framework', 'QtCore',
-                        '-framework', 'QtXml',
-                        '-framework', 'QtConcurrent']
+                        '-framework', 'QtCore']
 
     elif "win32" in sys.platform:
         # Must include stdint (V2008 does not have it!)
@@ -76,11 +74,13 @@ def get_extras():
         qt_path = _get_qt_path()
         x_link_args += [f"/LIBPATH:{qt_path / 'lib'}"]
         x_includes += [f"{qt_path / 'include'}"]
-        x_libs += ["Qt6" + _ for _ in ["Core", "Xml", "Concurrent"]]
+        x_libs += ["Qt6Core"]
+        x_link_args += [f"/LIBPATH:{Path(cur) / 'build' / '_deps' / 'pugixml-build'}"]
+        x_libs += ["pugixml"]
     else:  # Linux
         x_link_args += ['-L{path}'.format(path=os.path.join(dist_path, 'lib{arch}'.format(arch=arch)))]
         x_libs += ["rt"]
-        x_libs += ["Qt6" + _ for _ in ["Core", "Xml", "Concurrent"]]
+        x_libs += ["Qt6Core"]
 
     return x_includes, x_libs, x_link_args
 
