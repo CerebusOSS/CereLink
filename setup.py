@@ -75,6 +75,7 @@ def get_extras():
         x_link_args += [f"/LIBPATH:{qt_path / 'lib'}"]
         x_includes += [f"{qt_path / 'include'}"]
         x_libs += ["Qt6Core"]
+        x_link_args += [f"/LIBPATH:{Path(cur) / 'build' / '_deps' / 'pugixml-build'}"]
         x_libs += ["pugixml"]
     else:  # Linux
         x_link_args += ['-L{path}'.format(path=os.path.join(dist_path, 'lib{arch}'.format(arch=arch)))]
