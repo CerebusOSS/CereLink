@@ -109,7 +109,11 @@ if(NOT pugixml_FOUND)
             GIT_REPOSITORY https://github.com/zeux/pugixml.git
             GIT_TAG v1.13
     )
-    FetchContent_MakeAvailable(pugixml)
+    FetchContent_GetProperties(pugixml)
+    if(NOT pugixml_POPULATED)
+        FetchContent_Populate(pugixml)
+        add_subdirectory(${pugixml_SOURCE_DIR} ${pugixml_BINARY_DIR} EXCLUDE_FROM_ALL)
+    endif()
 endif()
 
 # -HDF5
