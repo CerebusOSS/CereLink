@@ -557,7 +557,7 @@ if(WIN32)
             $<TARGET_RUNTIME_DLLS:${LIB_NAME}>
             TYPE BIN
     )
-    install(FILES ${pugixml_BINARY_DIR}/pugixml.lib
+    install(FILES $<TARGET_FILE:pugixml::static>
             DESTINATION lib${LIB_SUFFIX}
     )
 elseif(APPLE)
