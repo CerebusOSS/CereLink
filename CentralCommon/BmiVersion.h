@@ -25,7 +25,7 @@
 
 #define BMI_VERSION_MAJOR    7
 #define BMI_VERSION_MINOR    6
-#define BMI_VERSION_RELEASE  1
+#define BMI_VERSION_RELEASE  2
 #define BMI_VERSION_BETA     0
 
 // Take care of the leading zero
