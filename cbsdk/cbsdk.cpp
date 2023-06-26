@@ -775,7 +775,7 @@ cbSdkResult SdkApp::SdkWriteCCF(cbSdkCCF * pData, const char * szFileName, bool 
     cbRESULT cbRet = cbGetProcInfo(cbNSP1, &isInfo, m_nInstance);
     config.SetProcInfo(isInfo);  // Ignore return. It works if XML, and fails otherwise.
 
-    ccf::ccfResult res;
+    ccf::ccfResult res = ccf::CCFRESULT_SUCCESS;
     if (szFileName == NULL)
     {
         // No filename, attempt to send CCF to NSP
