@@ -36,7 +36,7 @@ include(AppleSilicon)
 project(CBSDK
         DESCRIPTION "Blackrock Neurotech CereBus Software Development Kit"
         LANGUAGES C CXX
-        VERSION 7.6.1
+        VERSION 7.6.2
         )
 
 # Common Configuration
