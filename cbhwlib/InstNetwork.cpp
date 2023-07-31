@@ -547,7 +547,7 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
             killTimer(m_timerId);
             m_timerId = 0;
         }
-        quit();
+        quit();  // Stop the thread's event loop with code 0 (success).
         return;
     }
     /////////////////////////////////////////
@@ -765,7 +765,7 @@ void InstNetwork::run()
         m_nIdx = cb_library_index[m_nInstance];
         m_bStandAlone = false;
         InstNetworkEvent(NET_EVENT_NETCLIENT); // Client to the Central application
-    } else if (cbRet == cbRESULT_NOCENTRALAPP) { // If Central is not running run as stand alone
+    } else if (cbRet == cbRESULT_NOCENTRALAPP) { // If Central is not running then run as stand alone
         m_bStandAlone = true; // Run stand alone without Central
         // Run as stand-alone application
         cbRet = cbOpen(true, m_nInstance);
@@ -827,12 +827,12 @@ void InstNetwork::run()
 #ifdef WIN32
         timeBeginPeriod(1);
 #endif
-        m_timerId = startTimer(10);
+        m_timerId = startTimer(10);  // Milliseconds
         // Start the message loop
         exec();
     } else { // else wait for central application data
         // Instrument info for non-stand-alone
-        InstNetworkEvent(NET_EVENT_INSTINFO, m_instInfo);
+        InstNetworkEvent(NET_EVENT_INSTINFO, m_instInfo);  // Wake's main thread's wait
         bool bMonitorThreadMessageWaiting = false; // If message is waiting in non stand-alone mode
         UINT missed_messages = 0;
         // Start the network loop
