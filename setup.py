@@ -79,6 +79,7 @@ def get_extras():
         x_libs += ["Qt6" + _ for _ in ["Core", "Xml", "Concurrent"]]
     else:  # Linux
         x_link_args += ['-L{path}'.format(path=os.path.join(dist_path, 'lib{arch}'.format(arch=arch)))]
+        x_libs += ["rt"]
         x_libs += ["Qt6" + _ for _ in ["Core", "Xml", "Concurrent"]]
 
     return x_includes, x_libs, x_link_args
