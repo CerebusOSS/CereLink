@@ -148,11 +148,10 @@ ENDIF()
 # Files/folders common to multiple targets
 
 SET( LIB_INCL_DIRS
-        ${PROJECT_SOURCE_DIR}/cbproto
-        ${PROJECT_SOURCE_DIR}/cbsdk
-        ${PROJECT_SOURCE_DIR}/cbhwlib
-        ${PROJECT_SOURCE_DIR}/Central
-        ${PROJECT_SOURCE_DIR}/CentralCommon
+    ${PROJECT_SOURCE_DIR}/cbsdk
+    ${PROJECT_SOURCE_DIR}/cbhwlib
+    ${PROJECT_SOURCE_DIR}/Central
+    ${PROJECT_SOURCE_DIR}/CentralCommon
 )
 IF( WIN32 )
     LIST(APPEND LIB_INCL_DIRS "${PROJECT_SOURCE_DIR}/compat/")
@@ -457,7 +456,7 @@ INSTALL( TARGETS ${INSTALL_TARGET_LIST}
 INSTALL(
     FILES
         ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.h
-        ${PROJECT_SOURCE_DIR}/cbproto/cbproto.h
+        ${PROJECT_SOURCE_DIR}/cbhwlib/cbproto.h
         ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h
     DESTINATION
         include
