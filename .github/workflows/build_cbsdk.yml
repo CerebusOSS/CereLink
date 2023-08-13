@@ -84,6 +84,9 @@ jobs:
       - name: Build Wheels
         shell: bash -el {0}
         run: |
+          if [[ "${{ matrix.config.name }}" = windows-x64 ]]; then
+            cp install/bin/Qt*.dll cerebus/
+          fi
           conda create -n py39 python=3.9 numpy Cython pip wheel setuptools
           conda activate py39
           pip wheel . -w dist/

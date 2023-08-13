@@ -15,6 +15,9 @@ urls = {homepage = "https://github.com/CerebusOSS/CereLink"}
 [tool.setuptools.packages.find]
 include = ["cerebus*"]  # package names should match these glob patterns (["*"] by default)
 
+[tool.setuptools.package-data]
+cerebus = ["*.dll"]
+
 [tool.setuptools.dynamic]
 version = {attr = "cerebus.__version__"}
 readme = {file = ["README.md"]}

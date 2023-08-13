@@ -43,5 +43,6 @@ Release/
 cerebus/cbpy.so
 cerebus/cbpy.cpp
 cerebus/cbpyw.cpp
+cerebus/*.dll
 
 cmake-build*/
