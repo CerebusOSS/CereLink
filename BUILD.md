@@ -89,6 +89,8 @@ Note: This may generate an error related to the CLI builds. Please see further i
   * Windows: `set QTDIR=C:\Qt\6.5.2\msvc2019_64`
   * Mac: `set QTDIR==$(brew --prefix qt6)`
 * Windows: Close Visual Studio.
+* Windows: Copy required Qt dlls into the cerebus tree so they get bundled in the wheel:
+  * `copy install\bin\Qt*.dll cerebus\`
 * Install locally: `pip install .`
 * or, if you are making a wheel to bring to another machine,
   * activate an environment matching the target machine,
