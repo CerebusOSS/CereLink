@@ -4,6 +4,8 @@ from cerebus import cbpy
 
 
 res, con_info = cbpy.open(parameter=cbpy.defaultConParams())
+res, group_info = cbpy.get_sample_group(5)
+
 res, reset = cbpy.trial_config(
     reset=True,
     buffer_parameter={'absolute': True},

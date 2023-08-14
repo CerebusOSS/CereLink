@@ -151,10 +151,12 @@ cdef extern from "cbproto.h":
         uint16_t              moninst
         uint16_t              monchan
         int32_t               outvalue       # output value
-        uint16_t              lowsamples     # address of channel to monitor
-        uint16_t              highsamples    # address of channel to monitor
-        int32_t               offset
+        # uint16_t              lowsamples     # address of channel to monitor
+        # uint16_t              highsamples    # address of channel to monitor
+        # int32_t               offset
         uint8_t             trigtype        # trigger type (see cbDOUT_TRIGGER_*)
+        uint8_t             reserved[2]     # 2 bytes reserved
+        uint8_t             triginst        # instrument of the trigger channel
         uint16_t            trigchan        # trigger channel
         uint16_t            trigval         # trigger value
         uint32_t            ainpopts        # analog input options (composed of cbAINP* flags)

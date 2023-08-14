@@ -965,7 +965,7 @@ def get_sample_group(int group_ix, int instance=0, encoding='utf-8'):
         handle_result(<cbSdkResult>res)
         anaRange = chanInfo.physcalin.anamax - chanInfo.physcalin.anamin
         digRange = chanInfo.physcalin.digmax - chanInfo.physcalin.digmin
-        chan_info['chid'] = chanInfo.chid
+        chan_info['chid'] = chanInfo.cbpkt_header.chid
         chan_info['chan'] = chanInfo.chan
         chan_info['proc'] = chanInfo.proc
         chan_info['bank'] = chanInfo.bank
