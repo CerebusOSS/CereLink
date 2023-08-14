@@ -14,9 +14,18 @@ res, reset = cbpy.trial_config(
 )
 
 try:
+    spk_cache = {}
     while True:
         result, data = cbpy.trial_event(reset=True)
         if len(data) > 0:
-            print(data)
+            for ev in data:
+                chid = ev[0]
+                ev_dict = ev[1]
+                timestamps = ev_dict["timestamps"]
+                print(f"Ch {chid} unit 0 has {len(timestamps[0])} events.")
+                if chid not in spk_cache:
+                    spk_cache[chid] = cbpy.SpikeCache(channel=chid)
+                temp_wfs, unit_ids = spk_cache[chid].get_new_waveforms()
+                print(f"Waveform shape: {temp_wfs.shape} on unit_ids {unit_ids}")
 except KeyboardInterrupt:
     cbpy.close()

@@ -118,10 +118,10 @@ cdef extern from "cbproto.h":
     ctypedef struct cbPKT_HEADER:
         uint64_t        time            # system clock timestamp
         uint16_t        chid            # channel identifier
-        uint8_t         type            # packet type
+        uint16_t        type            # packet type
         uint16_t        dlen            # length of data field in 32-bit chunks
         uint8_t         instrument      # instrument number to transmit this packets
-        uint8_t         reserved[2]     # reserved for future
+        uint8_t         reserved        # reserved for future
         
     ctypedef struct cbPKT_CHANINFO:
         cbPKT_HEADER        cbpkt_header
