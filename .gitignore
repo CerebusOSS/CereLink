@@ -2,6 +2,7 @@ install/
 dist/
 build*/
 .vs/
+.vscode/
 package/
 cmake-build*/
 *.egg-info
