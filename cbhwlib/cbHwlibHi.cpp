@@ -955,9 +955,10 @@ uint32_t cbGetNTrodeInstrument(uint32_t nNTrode, uint32_t nInstance)
 {
     uint32_t nInstrument = cbNSP1;    // add to chan for instruments > 0
     uint32_t nIdx = cb_library_index[nInstance];
-
+#ifndef CBPROTO_311
     if (cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[nNTrode - 1].cbpkt_header.instrument < cbMAXPROCS)
         nInstrument = cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[nNTrode - 1].cbpkt_header.instrument + 1;
+#endif
     ASSERT(nInstrument - 1 < cbMAXPROCS);
 
     return nInstrument;
@@ -1226,8 +1227,10 @@ uint32_t cbGetChanInstrument(uint32_t nChannel, uint32_t nInstance)
     if ((nChannel - 1) >= cbMAXCHANS)
         return 0;
 
+#ifndef CBPROTO_311
     if (cb_cfg_buffer_ptr[nIdx]->chaninfo[nChannel - 1].cbpkt_header.instrument < cbMAXPROCS)
         nInstrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[nChannel - 1].cbpkt_header.instrument + 1;
+#endif
     ASSERT(nInstrument - 1 < cbMAXPROCS);
 
     return nInstrument;

@@ -69,8 +69,13 @@
 
 #pragma pack(push, 1)
 
+#ifdef CBPROTO_311
+#define cbVERSION_MAJOR  3
+#define cbVERSION_MINOR  11
+#else
 #define cbVERSION_MAJOR  4
 #define cbVERSION_MINOR  1
+#endif
 
 // Version history:
 //      - 03 Feb 2023 hls - Separate protocol structures into new file cbProto.h
@@ -172,7 +177,11 @@ typedef unsigned int UINT;
 #define MAX_PATH 1024
 #endif
 
+#ifdef CBPROTO_311
+typedef uint32_t          PROCTIME;
+#else
 typedef uint64_t          PROCTIME;
+#endif
 typedef int16_t           A2D_DATA;
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -377,10 +386,15 @@ uint32_t cbVersion(void);
 typedef struct {
     PROCTIME time;      //!< system clock timestamp
     uint16_t chid;        //!< channel identifier
+#ifdef CBPROTO_311
+    uint8_t type;
+    uint8_t dlen;         //!< length of data field in 32-bit chunks
+#else
     uint16_t type;        //!< packet type
     uint16_t dlen;        //!< length of data field in 32-bit chunks
     uint8_t instrument;   //!< instrument number to transmit this packets
     uint8_t reserved;     //!< reserved for future
+#endif
 } cbPKT_HEADER;
 
 /// @brief Old Cerebus packet header data structure
@@ -856,10 +870,13 @@ typedef struct {
 /// This packet is sent when a digital input value has met the criteria set in Hardware Configuration.
 typedef struct {
     cbPKT_HEADER cbpkt_header;  //!< packet header
-
+#ifdef CBPROTO_311
+    uint32_t data[254];       //!< data buffer (up to 1016 bytes)
+#else
     uint32_t valueRead;       //!< data read from the digital input port
     uint32_t bitsChanged;     //!< bits that have changed from the last packet sent
     uint32_t eventType;       //!< type of event, eg DINP_EVENT_ANYBIT, DINP_EVENT_STROBE
+#endif
 } cbPKT_DINP;
 
 
@@ -1050,7 +1067,9 @@ typedef struct {
     uint32_t sentpkts;    //!< Packets sent since last cbPKT_SYSPROTOCOLMONITOR (or 0 if timestamp=0);
     //!<  the cbPKT_SYSPROTOCOLMONITOR packets are counted as well so this must
     //!<  be equal to at least 1
+#ifndef CBPROTO_311
     uint32_t counter;     //!< Counter of number cbPKT_SYSPROTOCOLMONITOR packets sent since beginning of NSP time
+#endif
 } cbPKT_SYSPROTOCOLMONITOR;
 
 
@@ -1138,13 +1157,21 @@ typedef struct {
 /// This packet injects a comment into the data stream which gets recorded in the file and displayed on Raster.
 typedef struct {
     cbPKT_HEADER cbpkt_header;  //!< packet header
-
+#ifdef CBPROTO_311
+    struct {
+        uint8_t   charset;        //!< Character set (0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI)
+        uint8_t   flags;          //!< Can be any of cbCOMMENT_FLAG_*
+        uint8_t   reserved[2];    //!< Reserved (must be 0)
+    } info;
+    uint32_t data;                //!< Depends on .info.flags
+#else
     struct {
         uint8_t   charset;        //!< Character set (0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI)
         uint8_t   reserved[3];    //!< Reserved (must be 0)
     } info;
     PROCTIME timeStarted;       //!< Start time of when the user started typing the comment
     uint32_t  rgba;               //!< rgba to color the comment
+#endif
     char   comment[cbMAX_COMMENT]; //!< Comment
 } cbPKT_COMMENT;
 
@@ -1460,8 +1487,12 @@ typedef struct {
     uint32_t     eopchar;        //!< digital input capablities (given by cbDINP_* flags)
     union {
         struct {    // separate system channel to instrument specific channel number
-            uint16_t  moninst;        //!< instrument of channel to monitor
-            uint16_t  monchan;        //!< channel to monitor
+#ifdef CBPROTO_311
+            uint32_t  monsource;      // address of channel to monitor. Backport: (.monchan << 16) + .moninst
+#else
+            uint16_t  moninst;        //!< instrument of channel to monitor. Not part of monsource in proto 3.11.
+            uint16_t  monchan;        //!< channel to monitor. Can be retrieved from (monsource >> 16) & 0xFFFF
+#endif
             int32_t   outvalue;       //!< output value
         };
         struct {    // used for digout timed output
@@ -1471,8 +1502,10 @@ typedef struct {
         };
     };
     uint8_t               trigtype;       //!< trigger type (see cbDOUT_TRIGGER_*)
+#ifndef CBPROTO_311
     uint8_t               reserved[2];    //!< 2 bytes reserved
     uint8_t               triginst;       //!< instrument of the trigger channel
+#endif
     uint16_t              trigchan;       //!< trigger channel
     uint16_t              trigval;        //!< trigger value
     uint32_t              ainpopts;       //!< analog input options (composed of cbAINP* flags)
@@ -1993,8 +2026,12 @@ typedef struct {
     /// Waveform parameter information
     uint16_t  mode;              //!< Can be any of cbWAVEFORM_MODE_*
     uint32_t  repeats;           //!< Number of repeats (0 means forever)
+#ifdef CBPROTO_311
+    uint16_t   trig;              //!< Can be any of cbWAVEFORM_TRIGGER_*
+#else
     uint8_t   trig;              //!< Can be any of cbWAVEFORM_TRIGGER_*
     uint8_t   trigInst;          //!< Instrument the trigChan belongs
+#endif
     uint16_t  trigChan;          //!< Depends on trig:
     ///  for cbWAVEFORM_TRIGGER_DINP* 1-based trigChan (1-16) is digin1, (17-32) is digin2, ...
     ///  for cbWAVEFORM_TRIGGER_SPIKEUNIT 1-based trigChan (1-156) is channel number

@@ -289,8 +289,12 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2003_10_a(FILE * hFile)
             isChan.dinpopts    = isChanFile.dinpopts;
             isChan.aoutopts    = isChanFile.aoutopts;
             isChan.eopchar     = isChanFile.eopchar;
-            isChan.moninst     = isChanFile.moninst;
-            isChan.monchan     = isChanFile.monchan;
+#ifdef CBPROTO_311
+            isChan.monsource   = isChanFile.monsource;
+#else
+            isChan.moninst     = (uint16_t)(isChanFile.monsource&0xffff);
+            isChan.monchan     = (uint16_t)((isChanFile.monsource>>16)&0xffff);
+#endif
             isChan.outvalue    = isChanFile.outvalue;
             isChan.ainpopts    = isChanFile.lncmode;
             isChan.lncrate     = isChanFile.lncrate;
@@ -381,8 +385,12 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_25(FILE * hFile)
             isChan.dinpopts    = isChanFile.dinpopts;
             isChan.aoutopts    = isChanFile.aoutopts;
             isChan.eopchar     = isChanFile.eopchar;
-            isChan.moninst     = isChanFile.moninst;
-            isChan.monchan     = isChanFile.monchan;
+#ifdef CBPROTO_311
+            isChan.monsource   = isChanFile.monsource;
+#else
+            isChan.moninst     = (uint16_t)(isChanFile.monsource&0xffff);
+            isChan.monchan     = (uint16_t)((isChanFile.monsource>>16)&0xffff);
+#endif
             isChan.outvalue    = isChanFile.outvalue;
             isChan.ainpopts    = isChanFile.lncmode;
             isChan.lncrate     = isChanFile.lncrate;
@@ -461,8 +469,12 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_30(FILE * hFile)
             isChan.dinpopts    = isChanFile.dinpopts;
             isChan.aoutopts    = isChanFile.aoutopts;
             isChan.eopchar     = isChanFile.eopchar;
-            isChan.moninst     = isChanFile.moninst;
-            isChan.monchan     = isChanFile.monchan;
+#ifdef CBPROTO_311
+            isChan.monsource   = isChanFile.monsource;
+#else
+            isChan.moninst     = (uint16_t)(isChanFile.monsource&0xffff);
+            isChan.monchan     = (uint16_t)((isChanFile.monsource>>16)&0xffff);
+#endif
             isChan.outvalue    = isChanFile.outvalue;
             isChan.ainpopts    = isChanFile.lncmode;
             isChan.lncrate     = isChanFile.lncrate;
@@ -541,8 +553,12 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_31(FILE * hFile)
             isChan.dinpopts    = isChanFile.dinpopts;
             isChan.aoutopts    = isChanFile.aoutopts;
             isChan.eopchar     = isChanFile.eopchar;
-            isChan.moninst     = isChanFile.moninst;
-            isChan.monchan     = isChanFile.monchan;
+#ifdef CBPROTO_311
+            isChan.monsource   = isChanFile.monsource;
+#else
+            isChan.moninst     = (uint16_t)(isChanFile.monsource&0xffff);
+            isChan.monchan     = (uint16_t)((isChanFile.monsource>>16)&0xffff);
+#endif
             isChan.outvalue    = isChanFile.outvalue;
             isChan.ainpopts    = isChanFile.lncmode;
             isChan.lncrate     = isChanFile.lncrate;
@@ -638,8 +654,12 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_34(FILE * hFile)
             isChan.dinpopts    = isChanFile.dinpopts;
             isChan.aoutopts    = isChanFile.aoutopts;
             isChan.eopchar     = isChanFile.eopchar;
-            isChan.moninst     = isChanFile.moninst;
-            isChan.monchan     = isChanFile.monchan;
+#ifdef CBPROTO_311
+            isChan.monsource   = isChanFile.monsource;
+#else
+            isChan.moninst     = (uint16_t)(isChanFile.monsource&0xffff);
+            isChan.monchan     = (uint16_t)((isChanFile.monsource>>16)&0xffff);
+#endif
             isChan.outvalue    = isChanFile.outvalue;
             isChan.ainpopts    = isChanFile.lncmode;
             isChan.lncrate     = isChanFile.lncrate;
@@ -734,8 +754,12 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_35(FILE * hFile)
             isChan.dinpopts    = isChanFile.dinpopts;
             isChan.aoutopts    = isChanFile.aoutopts;
             isChan.eopchar     = isChanFile.eopchar;
-            isChan.moninst     = isChanFile.moninst;
-            isChan.monchan     = isChanFile.monchan;
+#ifdef CBPROTO_311
+            isChan.monsource   = isChanFile.monsource;
+#else
+            isChan.moninst     = (uint16_t)(isChanFile.monsource&0xffff);
+            isChan.monchan     = (uint16_t)((isChanFile.monsource>>16)&0xffff);
+#endif
             isChan.outvalue    = isChanFile.outvalue;
             isChan.ainpopts    = isChanFile.lncmode;
             isChan.lncrate     = isChanFile.lncrate;
@@ -830,8 +854,12 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_36(FILE * hFile)
             isChan.dinpopts    = isChanFile.dinpopts;
             isChan.aoutopts    = isChanFile.aoutopts;
             isChan.eopchar     = isChanFile.eopchar;
-            isChan.moninst     = isChanFile.moninst;
-            isChan.monchan     = isChanFile.monchan;
+#ifdef CBPROTO_311
+            isChan.monsource   = isChanFile.monsource;
+#else
+            isChan.moninst     = (uint16_t)(isChanFile.monsource&0xffff);
+            isChan.monchan     = (uint16_t)((isChanFile.monsource>>16)&0xffff);
+#endif
             isChan.outvalue    = isChanFile.outvalue;
             isChan.ainpopts    = isChanFile.ainpopts;
             isChan.lncrate     = isChanFile.lncrate;
@@ -917,8 +945,12 @@ ccfResult CCFUtilsBinary::ReadCCFData_cb2005_37(FILE * hFile)
             isChan.dinpopts    = isChanFile.dinpopts;
             isChan.aoutopts    = isChanFile.aoutopts;
             isChan.eopchar     = isChanFile.eopchar;
-            isChan.moninst     = isChanFile.moninst;
-            isChan.monchan     = isChanFile.monchan;
+#ifdef CBPROTO_311
+            isChan.monsource   = isChanFile.monsource;
+#else
+            isChan.moninst     = (uint16_t)(isChanFile.monsource&0xffff);
+            isChan.monchan     = (uint16_t)((isChanFile.monsource>>16)&0xffff);
+#endif
             isChan.outvalue    = isChanFile.outvalue;
             isChan.ainpopts    = isChanFile.ainpopts;
             isChan.lncrate     = isChanFile.lncrate;

@@ -50,6 +50,7 @@ option(BUILD_CBMEX "Build Matlab wrapper" ON)
 option(BUILD_CBOCT "Build Octave wrapper" ON)
 option(BUILD_TEST "Build tests" ON)
 option(BUILD_HDF5 "Build HDF5" ON)
+option(CBPROTO_311 "Build for protocol 3.11" OFF)
 
 ##########################################################################################
 # Define target names
@@ -73,6 +74,9 @@ ENDIF()
 SET(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
 
 # -?
+if(${CBPROTO_311})
+    add_compile_definitions(CBPROTO_311)
+endif()
 ADD_DEFINITIONS( -DCBSDK_EXPORTS )
 IF( WIN32 )
     # From cbhwlib/cbmex.vcproj: PreprocessorDefinitions="WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS;QT_APP"

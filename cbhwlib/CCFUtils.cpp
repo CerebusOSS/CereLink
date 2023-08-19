@@ -115,7 +115,11 @@ ccfResult CCFUtils::SendCCF()
             switch (data.isChan[i].chancaps)
             {
             case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_ISOLATED | cbCHAN_AINP:  // FE channels
-                nChannelNumber = cbGetExpandedChannelNumber(data.isChan[i].cbpkt_header.instrument + 1, data.isChan[i].chan);
+#ifdef CBPROTO_311
+                    nChannelNumber = cbGetExpandedChannelNumber(1, data.isChan[i].chan);
+#else
+                    nChannelNumber = cbGetExpandedChannelNumber(data.isChan[i].cbpkt_header.instrument + 1, data.isChan[i].chan);
+#endif
                 break;
             case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_AINP:  // Analog input channels
                 nChannelNumber = GetAIAnalogInChanNumber(nAinChan++);
@@ -144,7 +148,9 @@ ccfResult CCFUtils::SendCCF()
             {
                 data.isChan[i].chan = nChannelNumber;
                 data.isChan[i].cbpkt_header.type = cbPKTTYPE_CHANSET;
+#ifndef CBPROTO_311
                 data.isChan[i].cbpkt_header.instrument = data.isChan[i].proc - 1;   // send to the correct instrument
+#endif
                 cbSendPacket(&data.isChan[i], m_nInstance);
             }
         }
@@ -195,7 +201,9 @@ ccfResult CCFUtils::SendCCF()
             if (data.isWaveform[nChan][nTrigger].chan)
             {
                 data.isWaveform[nChan][nTrigger].chan = GetAnalogOutChanNumber(nChan + 1);
+#ifndef CBPROTO_311
                 data.isWaveform[nChan][nTrigger].cbpkt_header.instrument = cbGetChanInstrument(data.isWaveform[nChan][nTrigger].chan);
+#endif
                 data.isWaveform[nChan][nTrigger].cbpkt_header.type = cbPKTTYPE_WAVEFORMSET;
                 cbSendPacket(&data.isWaveform[nChan][nTrigger], m_nInstance);
             }
@@ -208,7 +216,12 @@ ccfResult CCFUtils::SendCCF()
         memset(szNTrodeLabel, 0, sizeof(szNTrodeLabel));
         cbGetNTrodeInfo(nNTrode + 1, szNTrodeLabel, NULL, NULL, NULL, NULL);
 
-        if ((0 != strlen(szNTrodeLabel)) && (cbGetNTrodeInstrument(nNTrode + 1) == data.isNTrodeInfo->cbpkt_header.instrument + 1))
+        if (
+                (0 != strlen(szNTrodeLabel))
+#ifndef CBPROTO_311
+            && (cbGetNTrodeInstrument(nNTrode + 1) == data.isNTrodeInfo->cbpkt_header.instrument + 1)
+#endif
+        )
         {
             if (data.isNTrodeInfo[nNTrode].ntrode)
             {

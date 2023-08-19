@@ -581,7 +581,9 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
             pktgeneric.cbpkt_header.chid = 0x8000;
             pktgeneric.cbpkt_header.type = cbPKTTYPE_REQCONFIGALL;
             pktgeneric.cbpkt_header.dlen = 0;
+#ifndef CBPROTO_311
             pktgeneric.cbpkt_header.instrument = 0;
+#endif
             cbSendPacket(&pktgeneric, m_nInstance);
         }
         // at 2.0 seconds, if not already running, do soft reset, which will lead to running state.

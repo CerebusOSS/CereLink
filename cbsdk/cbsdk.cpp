@@ -93,7 +93,10 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
     uint32_t nChanProcStart = 0;
     uint32_t nChanProcMax = 0;
     cbPROCINFO isProcInfo;
-    uint32_t nInstrument = pkt->cbpkt_header.instrument;
+    uint32_t nInstrument = 0;
+#ifndef CBPROTO_311
+    nInstrument = pkt->cbpkt_header.instrument;
+#endif
     if (IsStandAlone())
         nInstrument = 0;
 
@@ -105,8 +108,10 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
     if (group >= SMPGRP_RAW)
         return;
 
+#ifndef CBPROTO_311
     if (pkt->cbpkt_header.instrument >= cbMAXPROCS)
         nInstrument = 0;
+#endif
 
     for (uint32_t nProc = 0; nProc < cbMAXPROCS; ++nProc)
     {
@@ -114,8 +119,10 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
         {
             if (cbRESULT_OK == ::cbGetProcInfo(nProc + 1, &isProcInfo))
                 nChanProcMax += isProcInfo.chancount;
+#ifndef CBPROTO_311
             if (pkt->cbpkt_header.instrument == nProc)
                 break;
+#endif
             nChanProcStart = nChanProcMax;
         }
     }
@@ -287,8 +294,10 @@ void SdkApp::OnPktComment(const cbPKT_COMMENT * const pPkt)
                 uint32_t write_index = m_CMT->write_index;
                 // Store more data
                 m_CMT->charset[write_index]  = pPkt->info.charset;
+#ifndef CBPROTO_311
                 m_CMT->timestamps[write_index] = pPkt->timeStarted;
                 m_CMT->rgba[write_index] = pPkt->rgba;
+#endif
 
                 strncpy((char *)m_CMT->comments[write_index], (const char *)(&pPkt->comment[0]), cbMAX_COMMENT);
                 m_CMT->write_index = new_write_index;
@@ -2836,8 +2845,9 @@ cbSdkResult SdkApp::SdkSetDigitalOutput(uint16_t channel, uint16_t value)
     dopkt.cbpkt_header.chid = 0x8000;
     dopkt.cbpkt_header.type = cbPKTTYPE_SET_DOUTSET;
     dopkt.cbpkt_header.dlen = cbPKTDLEN_SET_DOUT;
+#ifndef CBPROTO_311
     dopkt.cbpkt_header.instrument = cbGetChanInstrument(channel) - 1;
-
+#endif
     // get the channel number
     dopkt.chan = cb_cfg_buffer_ptr[0]->chaninfo[channel - 1].chan;
 
@@ -3207,7 +3217,9 @@ cbSdkResult SdkApp::SdkSetAnalogOutput(uint16_t channel, cbSdkWaveformData * wf,
         wfPkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
         wfPkt.cbpkt_header.type = cbPKTTYPE_WAVEFORMSET;
         wfPkt.cbpkt_header.dlen = cbPKTDLEN_WAVEFORM;
+#ifndef CBPROTO_311
         wfPkt.cbpkt_header.instrument = cbGetChanInstrument(channel) - 1;
+#endif
         // Set common fields
         wfPkt.mode = wf->type;
         wfPkt.chan = cb_cfg_buffer_ptr[0]->chaninfo[channel - 1].chan;
@@ -3741,7 +3753,9 @@ cbSdkResult SdkApp::SdkSystem(cbSdkSystemType cmd)
     pktsysinfo.cbpkt_header.chid = 0x8000;
     pktsysinfo.cbpkt_header.type = cbPKTTYPE_SYSSETRUNLEV;
     pktsysinfo.cbpkt_header.dlen = cbPKTDLEN_SYSINFO;
+#ifndef CBPROTO_311
     pktsysinfo.cbpkt_header.instrument = 0;
+#endif
     switch (cmd)
     {
     case cbSdkSystem_RESET:
