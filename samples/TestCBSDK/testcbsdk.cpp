@@ -106,7 +106,8 @@ cbSdkVersion testGetVersion(void)
 		printf("Unable to determine instrument version\n");
 	}
 	else {
-		printf("Initializing Cerebus real-time interface %d.%02d.%02d.%02d (protocol cb%d.%02d)...\n", ver.major, ver.minor, ver.release, ver.beta, ver.majorp, ver.minorp);
+		printf("Initializing Cerebus real-time interface %d.%02d.%02d.%02d (protocol cb%d.%02d)...\n",
+               ver.major, ver.minor, ver.release, ver.beta, ver.majorp, ver.minorp);
 	}
 	handleResult(res);
 	return ver;
@@ -154,7 +155,10 @@ cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
 		ver = testGetVersion();
 
 		// Summary results.
-        printf("%s real-time interface to %s (%d.%02d.%02d.%02d) successfully initialized\n", strConnection[conType], strInstrument[instType], ver.nspmajor, ver.nspminor, ver.nsprelease, ver.nspbeta);
+        printf("%s real-time interface to %s (%d.%02d.%02d.%02d; proto %d.%02d) successfully initialized\n",
+               strConnection[conType], strInstrument[instType],
+               ver.nspmajor, ver.nspminor, ver.nsprelease, ver.nspbeta,
+               ver.nspmajorp, ver.nspminorp);
     }
 
     return res;
