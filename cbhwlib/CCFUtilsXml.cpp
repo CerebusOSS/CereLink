@@ -19,6 +19,7 @@
 #include "CCFUtilsXmlItemsParse.h"
 #include "debugmacs.h"
 #include "../CentralCommon/BmiVersion.h"
+#include <iostream>
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -252,11 +253,14 @@ ccfResult CCFUtilsXml_v1::ReadVersion(LPCSTR szFileName)
         // The very first element must be CCF
         if (xml.isStartElement())
         {
-            if (xml.name().compare(QString("CCF")))
-            {
-                m_nInternalOriginalVersion = xml.attributes().value("Version").toString().toInt();
-                break;
+            QXmlStreamAttributes attrs = xml.attributes();
+            for (auto attr : attrs) {
+                QString attr_name = attr.name().toString();
+                QString attr_value = attr.value().toString();
+                if (attr_name == "Version")
+                    m_nInternalOriginalVersion = attr.value().toString().toInt();
             }
+            break;
         }
     }
     // invalid XML

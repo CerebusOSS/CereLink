@@ -113,7 +113,7 @@ cbSdkVersion testGetVersion(void)
 }
 
 // Author & Date:   Ehsan Azar    24 Oct 2012
-// Purpose: Test openning the library
+// Purpose: Test opening the library
 cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
 {
     // Try to get the version. Should be a warning because we are not yet open.

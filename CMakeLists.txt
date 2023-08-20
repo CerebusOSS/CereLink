@@ -374,6 +374,15 @@ IF(${BUILD_TEST})
     ENDIF(WIN32)
     LIST(APPEND TEST_TARGET_LIST testcbsdk)
 
+    ADD_EXECUTABLE(testccf
+            ${PROJECT_SOURCE_DIR}/samples/TestCCF/test_ccf.cpp
+    )
+    TARGET_INCLUDE_DIRECTORIES(testccf PRIVATE
+            ${LIB_INCL_DIRS}
+            ${PROJECT_SOURCE_DIR}/cbsdk)
+    TARGET_LINK_LIBRARIES(testccf ${LIB_NAME} )
+    LIST(APPEND TEST_TARGET_LIST testccf)
+
     ADD_EXECUTABLE(test_io ${PROJECT_SOURCE_DIR}/samples/TestIO/test_io.cpp )
     TARGET_INCLUDE_DIRECTORIES(test_io PRIVATE
         ${LIB_INCL_DIRS}
