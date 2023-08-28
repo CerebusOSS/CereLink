@@ -814,6 +814,10 @@ typedef struct {
     uint32_t buffer[0];       // big buffer of data...there are actually "bufferlen"--+ indices
 } cbXMTBUFF;
 
+#define cbXMT_GLOBAL_BUFFLEN    (cbCER_UDP_SIZE_MAX / 4) * 5000 + 2     // room for 500 packets
+#define cbXMT_LOCAL_BUFFLEN     (cbCER_UDP_SIZE_MAX / 4) * 2000 + 2     // room for 200 packets
+
+
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif

@@ -191,10 +191,12 @@ void DestroySharedObjects(bool bStandAlone, uint32_t nInstance)
     DestroySharedObject(cb_cfg_buffer_hnd[nIdx], (void **)&cb_cfg_buffer_ptr[nIdx], sizeof(cbCFGBUFF));
 
     // release the shared global transmit memory space
-    DestroySharedObject(cb_xmt_global_buffer_hnd[nIdx], (void **)&cb_xmt_global_buffer_ptr[nIdx], sizeof(cbXMTBUFF));
+    const uint32_t cbXMT_GLOBAL_BUFFSTRUCTSIZE = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_GLOBAL_BUFFLEN);
+    DestroySharedObject(cb_xmt_global_buffer_hnd[nIdx], (void **)&cb_xmt_global_buffer_ptr[nIdx], cbXMT_GLOBAL_BUFFSTRUCTSIZE);
 
     // release the shared local transmit memory space
-    DestroySharedObject(cb_xmt_local_buffer_hnd[nIdx], (void **)&cb_xmt_local_buffer_ptr[nIdx], sizeof(cbXMTBUFF));
+    const uint32_t cbXMT_LOCAL_BUFFSTRUCTSIZE  = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_LOCAL_BUFFLEN);
+    DestroySharedObject(cb_xmt_local_buffer_hnd[nIdx], (void **)&cb_xmt_local_buffer_ptr[nIdx], cbXMT_LOCAL_BUFFSTRUCTSIZE);
 
     // release the shared receive memory space
     DestroySharedObject(cb_rec_buffer_hnd[nIdx], (void **)&cb_rec_buffer_ptr[nIdx], sizeof(cbRECBUFF));
@@ -3684,20 +3686,13 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
 
     // Create the shared transmit buffer; if unsuccessful, release rec buffer and associated error code
     {
-        // declare the length of the buffer in uint32_t units
-        const uint32_t cbXMT_GLOBAL_BUFFLEN = (cbCER_UDP_SIZE_MAX / 4) * 5000 + 2;    // room for 500 packets
-        const uint32_t cbXMT_LOCAL_BUFFLEN = (cbCER_UDP_SIZE_MAX / 4) * 2000 + 2;    // room for 200 packets
-
-        // determine the XMT buffer structure size (header + data field)
-        const uint32_t cbXMT_GLOBAL_BUFFSTRUCTSIZE = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_GLOBAL_BUFFLEN);
-        const uint32_t cbXMT_LOCAL_BUFFSTRUCTSIZE  = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_LOCAL_BUFFLEN);
-
         // create the global transmit buffer space
         memset(buf, 0, sizeof(buf));  // Clear buffer name
         if (nInstance == 0)
             _snprintf(buf, sizeof(buf), "%s", GLOBAL_XMT_NAME);
         else
             _snprintf(buf, sizeof(buf), "%s%d", GLOBAL_XMT_NAME, nInstance);
+        const uint32_t cbXMT_GLOBAL_BUFFSTRUCTSIZE = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_GLOBAL_BUFFLEN);
         cb_xmt_global_buffer_hnd[nIdx] = CreateSharedBuffer(buf, cbXMT_GLOBAL_BUFFSTRUCTSIZE);
         // map the global memory into local ram space and get pointer
         cb_xmt_global_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_global_buffer_hnd[nIdx], false);
@@ -3712,6 +3707,7 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
             _snprintf(buf, sizeof(buf), "%s", LOCAL_XMT_NAME);
         else
             _snprintf(buf, sizeof(buf), "%s%d", LOCAL_XMT_NAME, nInstance);
+        const uint32_t cbXMT_LOCAL_BUFFSTRUCTSIZE  = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_LOCAL_BUFFLEN);
         cb_xmt_local_buffer_hnd[nIdx] = CreateSharedBuffer(buf, cbXMT_LOCAL_BUFFSTRUCTSIZE);
         // map the global memory into local ram space and get pointer
         cb_xmt_local_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_local_buffer_hnd[nIdx], false);
@@ -3726,12 +3722,10 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
         cb_xmt_global_buffer_ptr[nIdx]->last_valid_index =
             cbXMT_GLOBAL_BUFFLEN - (cbCER_UDP_SIZE_MAX / 4) - 1; // assuming largest packet   array is 0 based
 
-
         memset(cb_xmt_local_buffer_ptr[nIdx], 0, cbXMT_LOCAL_BUFFSTRUCTSIZE);
         cb_xmt_local_buffer_ptr[nIdx]->bufferlen = cbXMT_LOCAL_BUFFLEN;
         cb_xmt_local_buffer_ptr[nIdx]->last_valid_index =
             cbXMT_LOCAL_BUFFLEN - (cbCER_UDP_SIZE_MAX / 4) - 1; // assuming largest packet   array is 0 based
-
     }
 
     // Create the shared configuration buffer; if unsuccessful, release rec buffer and return FALSE
