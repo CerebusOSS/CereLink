@@ -3693,6 +3693,7 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
         const uint32_t cbXMT_LOCAL_BUFFSTRUCTSIZE  = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_LOCAL_BUFFLEN);
 
         // create the global transmit buffer space
+        memset(buf, 0, sizeof(buf));  // Clear buffer name
         if (nInstance == 0)
             _snprintf(buf, sizeof(buf), "%s", GLOBAL_XMT_NAME);
         else
@@ -3706,6 +3707,7 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
             return cbRESULT_BUFGXMTALLOCERR;
 
         // create the local transmit buffer space
+        memset(buf, 0, sizeof(buf));  // Clear buffer name
         if (nInstance == 0)
             _snprintf(buf, sizeof(buf), "%s", LOCAL_XMT_NAME);
         else
@@ -3733,6 +3735,7 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
     }
 
     // Create the shared configuration buffer; if unsuccessful, release rec buffer and return FALSE
+    memset(buf, 0, sizeof(buf));  // Clear buffer name
     if (nInstance == 0)
         _snprintf(buf, sizeof(buf), "%s", CFG_BUF_NAME);
     else
@@ -3745,6 +3748,7 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
     memset(cb_cfg_buffer_ptr[nIdx], 0, sizeof(cbCFGBUFF));
 
     // Create the shared pc status buffer; if unsuccessful, release rec buffer and return FALSE
+    memset(buf, 0, sizeof(buf));  // Clear buffer name
     if (nInstance == 0)
         _snprintf(buf, sizeof(buf), "%s", STATUS_BUF_NAME);
     else
@@ -3757,6 +3761,7 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
     memset(cb_pc_status_buffer_ptr[nIdx], 0, sizeof(cbPcStatus));
 
     // Create the shared spike cache buffer; if unsuccessful, release rec buffer and return FALSE
+    memset(buf, 0, sizeof(buf));  // Clear buffer name
     if (nInstance == 0)
         _snprintf(buf, sizeof(buf), "%s", SPK_BUF_NAME);
     else
