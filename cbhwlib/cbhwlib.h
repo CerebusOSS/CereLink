@@ -974,19 +974,26 @@ typedef enum _cbStateCCF
 
 // External Global Variables
 
-extern HANDLE      cb_xmt_global_buffer_hnd[cbMAXOPEN];       // Transmit queues to send out of this PC
+typedef struct _cbSharedMemHandle {
+    HANDLE hnd = nullptr;
+    char name[64] = {0};
+    int fd = -1;
+    uint32_t size = 0;
+} cbSharedMemHandle;
+
+extern cbSharedMemHandle  cb_xmt_global_buffer_hnd[cbMAXOPEN];       // Transmit queues to send out of this PC
 extern cbXMTBUFF*  cb_xmt_global_buffer_ptr[cbMAXOPEN];
 
-extern HANDLE      cb_xmt_local_buffer_hnd[cbMAXOPEN];        // Transmit queues only for local (this PC) use
+extern cbSharedMemHandle  cb_xmt_local_buffer_hnd[cbMAXOPEN];        // Transmit queues only for local (this PC) use
 extern cbXMTBUFF*  cb_xmt_local_buffer_ptr[cbMAXOPEN];
 
-extern HANDLE       cb_rec_buffer_hnd[cbMAXOPEN];
+extern cbSharedMemHandle  cb_rec_buffer_hnd[cbMAXOPEN];
 extern cbRECBUFF*   cb_rec_buffer_ptr[cbMAXOPEN];
-extern HANDLE       cb_cfg_buffer_hnd[cbMAXOPEN];
+extern cbSharedMemHandle  cb_cfg_buffer_hnd[cbMAXOPEN];
 extern cbCFGBUFF*   cb_cfg_buffer_ptr[cbMAXOPEN];
-extern HANDLE       cb_pc_status_buffer_hnd[cbMAXOPEN];
+extern cbSharedMemHandle  cb_pc_status_buffer_hnd[cbMAXOPEN];
 extern cbPcStatus*  cb_pc_status_buffer_ptr[cbMAXOPEN];        // parameters dealing with local pc status
-extern HANDLE       cb_spk_buffer_hnd[cbMAXOPEN];
+extern cbSharedMemHandle  cb_spk_buffer_hnd[cbMAXOPEN];
 extern cbSPKBUFF*   cb_spk_buffer_ptr[cbMAXOPEN];
 extern HANDLE       cb_sig_event_hnd[cbMAXOPEN];
 

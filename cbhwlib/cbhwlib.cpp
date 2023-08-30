@@ -53,7 +53,6 @@
 cbRESULT CreateSharedObjects(uint32_t nInstance);
 
 
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Internal Library variables
@@ -62,24 +61,24 @@ cbRESULT CreateSharedObjects(uint32_t nInstance);
 
 
 // buffer handles
-HANDLE      cb_xmt_global_buffer_hnd[cbMAXOPEN] = {NULL};       // Transmit queues to send out of this PC
+cbSharedMemHandle  cb_xmt_global_buffer_hnd[cbMAXOPEN] = {NULL};       // Transmit queues to send out of this PC
 cbXMTBUFF*  cb_xmt_global_buffer_ptr[cbMAXOPEN] = {NULL};
 LPCSTR GLOBAL_XMT_NAME = "XmtGlobal";
-HANDLE      cb_xmt_local_buffer_hnd[cbMAXOPEN] = {NULL};        // Transmit queues only for local (this PC) use
+cbSharedMemHandle  cb_xmt_local_buffer_hnd[cbMAXOPEN] = {NULL};        // Transmit queues only for local (this PC) use
 cbXMTBUFF*  cb_xmt_local_buffer_ptr[cbMAXOPEN] = {NULL};
 LPCSTR LOCAL_XMT_NAME = "XmtLocal";
 
 LPCSTR REC_BUF_NAME = "cbRECbuffer";
-HANDLE      cb_rec_buffer_hnd[cbMAXOPEN] = {NULL};
+cbSharedMemHandle  cb_rec_buffer_hnd[cbMAXOPEN] = {NULL};
 cbRECBUFF*  cb_rec_buffer_ptr[cbMAXOPEN] = {NULL};
 LPCSTR CFG_BUF_NAME = "cbCFGbuffer";
-HANDLE      cb_cfg_buffer_hnd[cbMAXOPEN] = {NULL};
+cbSharedMemHandle  cb_cfg_buffer_hnd[cbMAXOPEN] = {NULL};
 cbCFGBUFF*  cb_cfg_buffer_ptr[cbMAXOPEN] = {NULL};
 LPCSTR STATUS_BUF_NAME = "cbSTATUSbuffer";
-HANDLE      cb_pc_status_buffer_hnd[cbMAXOPEN] = {NULL};
+cbSharedMemHandle  cb_pc_status_buffer_hnd[cbMAXOPEN] = {NULL};
 cbPcStatus* cb_pc_status_buffer_ptr[cbMAXOPEN] = {NULL};
 LPCSTR SPK_BUF_NAME = "cbSPKbuffer";
-HANDLE      cb_spk_buffer_hnd[cbMAXOPEN] = {NULL};
+cbSharedMemHandle  cb_spk_buffer_hnd[cbMAXOPEN] = {NULL};
 cbSPKBUFF*  cb_spk_buffer_ptr[cbMAXOPEN] = {NULL};
 LPCSTR SIG_EVT_NAME = "cbSIGNALevent";
 HANDLE      cb_sig_event_hnd[cbMAXOPEN] = {NULL};
@@ -123,26 +122,28 @@ uint32_t cbVersion()
 // Inputs:
 //  hMem - the handle to the memory to free up
 //  ppMem - the pointer to this same memory
-void DestroySharedObject(HANDLE & hMem, void ** ppMem, uint32_t size)
+void DestroySharedObject(cbSharedMemHandle & shmem, void ** ppMem)
 {
 #ifdef WIN32
     if (*ppMem != NULL)
         UnmapViewOfFile(*ppMem);
-    if (hMem != NULL)
-        CloseHandle(hMem);
+    if (shmem.hnd != NULL)
+        CloseHandle(shmem.hnd);
 #else
     if (*ppMem != NULL)
     {
         // Get the number of current attachments
         int errsv = 0;
-        if (munmap(hMem, size) == -1)
+        if (munmap(shmem.hnd, shmem.size) == -1)
         {
             errsv = errno;
             printf("munmap() failed with errno %d\n", errsv);
         }
+        close(shmem.fd);
+        shm_unlink(shmem.name);
     }
 #endif
-    hMem = 0;
+    shmem.hnd = 0;
     *ppMem = 0;
 }
 
@@ -182,98 +183,100 @@ void DestroySharedObjects(bool bStandAlone, uint32_t nInstance)
 #endif
 
     // release the shared pc status memory space
-    DestroySharedObject(cb_pc_status_buffer_hnd[nIdx], (void **)&cb_pc_status_buffer_ptr[nIdx], sizeof(cbPcStatus));
+    DestroySharedObject(cb_pc_status_buffer_hnd[nIdx], (void **)&cb_pc_status_buffer_ptr[nIdx]);
+
+    // release the shared spike buffer memory space
+    DestroySharedObject(cb_spk_buffer_hnd[nIdx], (void **)&cb_spk_buffer_ptr[nIdx]);
 
     // release the shared configuration memory space
-    DestroySharedObject(cb_spk_buffer_hnd[nIdx], (void **)&cb_spk_buffer_ptr[nIdx], sizeof(cbSPKBUFF));
-
-    // release the shared configuration memory space
-    DestroySharedObject(cb_cfg_buffer_hnd[nIdx], (void **)&cb_cfg_buffer_ptr[nIdx], sizeof(cbCFGBUFF));
+    DestroySharedObject(cb_cfg_buffer_hnd[nIdx], (void **)&cb_cfg_buffer_ptr[nIdx]);
 
     // release the shared global transmit memory space
-    const uint32_t cbXMT_GLOBAL_BUFFSTRUCTSIZE = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_GLOBAL_BUFFLEN);
-    DestroySharedObject(cb_xmt_global_buffer_hnd[nIdx], (void **)&cb_xmt_global_buffer_ptr[nIdx], cbXMT_GLOBAL_BUFFSTRUCTSIZE);
+    DestroySharedObject(cb_xmt_global_buffer_hnd[nIdx], (void **)&cb_xmt_global_buffer_ptr[nIdx]);
 
     // release the shared local transmit memory space
-    const uint32_t cbXMT_LOCAL_BUFFSTRUCTSIZE  = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_LOCAL_BUFFLEN);
-    DestroySharedObject(cb_xmt_local_buffer_hnd[nIdx], (void **)&cb_xmt_local_buffer_ptr[nIdx], cbXMT_LOCAL_BUFFSTRUCTSIZE);
+    DestroySharedObject(cb_xmt_local_buffer_hnd[nIdx], (void **)&cb_xmt_local_buffer_ptr[nIdx]);
 
     // release the shared receive memory space
-    DestroySharedObject(cb_rec_buffer_hnd[nIdx], (void **)&cb_rec_buffer_ptr[nIdx], sizeof(cbRECBUFF));
+    DestroySharedObject(cb_rec_buffer_hnd[nIdx], (void **)&cb_rec_buffer_ptr[nIdx]);
 }
 
 // Author & Date:   Ehsan Azar     29 April 2012
 // Purpose: Open shared memory section
 // Inputs:
-//   szName    - buffer name
+//   shmem    - cbSharedMemHandle object with .name filled in.
+//              This method will update .hnd (and .size on POSIX)
 //   bReadOnly - if should open memory for read-only operation
-HANDLE OpenSharedBuffer(LPCSTR szName, bool bReadOnly)
+void OpenSharedBuffer(cbSharedMemHandle& shmem, bool bReadOnly)
 {
-    HANDLE hnd = NULL;
 #ifdef WIN32
     // Keep windows version unchanged
-    hnd = OpenFileMappingA(bReadOnly ? FILE_MAP_READ : FILE_MAP_ALL_ACCESS, 0, szName);
+    shmem.hnd = OpenFileMappingA(bReadOnly ? FILE_MAP_READ : FILE_MAP_ALL_ACCESS, 0, shmem.name);
 #else
     int oflag = (bReadOnly ? O_RDONLY : O_RDWR);
     mode_t omode = (bReadOnly ? 0444 : 0660);
-    int fd = shm_open(szName, oflag, omode);
-    if (fd == -1)
+    shmem.fd = shm_open(shmem.name, oflag, omode);
+    if (shmem.fd == -1)
         /* Handle error */;
     struct stat shm_stat;
-    if (fstat(fd, &shm_stat) == -1)
+    if (fstat(shmem.fd, &shm_stat) == -1)
         /* Handle error */;
     int prot = (bReadOnly ? PROT_READ : PROT_READ | PROT_WRITE);
-    hnd = mmap(NULL, shm_stat.st_size, prot, MAP_SHARED, fd, 0);
-    if (hnd == MAP_FAILED || !hnd)
+    shmem.size = shm_stat.st_size;
+    shmem.hnd = mmap(NULL, shm_stat.st_size, prot, MAP_SHARED, shmem.fd, 0);
+    if (shmem.hnd == MAP_FAILED || !shmem.hnd)
         /* Handle error */;
 #endif
-    return hnd;
+    return;
 }
 
 // Author & Date:   Ehsan Azar     29 April 2012
 // Purpose: Open shared memory section
 // Inputs:
-//   szName - buffer name
-//   size   - shared segment size to create
-HANDLE CreateSharedBuffer(LPCSTR szName, uint32_t size)
+//   shmem - a cbSharedMemHandle object with correct szName and minimum size. Passed by ref and will be updated.
+void CreateSharedBuffer(cbSharedMemHandle& shmem)
 {
-    HANDLE hnd = NULL;
 #ifdef WIN32
     // Keep windows version unchanged
-    hnd = CreateFileMappingA((HANDLE)INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, size, szName);
+    shmem.hnd = CreateFileMappingA((HANDLE)INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, shmem.size, shmem.name);
 #else
+    // round up to the next pagesize.
     int pagesize = getpagesize();
-    size = size - (size % pagesize) + pagesize;
+    shmem.size = shmem.size - (shmem.size % pagesize) + pagesize;
+    // Pre-emptively attempt to unlink in case it already exists.
     int errsv = 0;
-    if (shm_unlink(szName)) {
+    if (shm_unlink(shmem.name)) {
         errsv = errno;
         if (errsv != ENOENT)
             printf("shm_unlink() failed with errno %d\n", errsv);
     }
-    int fd = shm_open(szName, O_CREAT | O_RDWR, 0660);
-    if (fd == -1){
+    // Create the shared memory object
+    shmem.fd = shm_open(shmem.name, O_CREAT | O_RDWR, 0660);
+    if (shmem.fd == -1){
         errsv = errno;
         printf("shm_open() failed with errno %d\n", errsv);
     }
-    if (ftruncate(fd, size) == -1) {
+    // Set the size of the shared memory object.
+    if (ftruncate(shmem.fd, shmem.size) == -1) {
         errsv = errno;
-        printf("ftruncate(fd, %d) failed with errno %d\n", size, errsv);
-        close(fd);
-        shm_unlink(szName);
-        return hnd;
+        printf("ftruncate(fd, %d) failed with errno %d\n", shmem.size, errsv);
+        close(shmem.fd);
+        shm_unlink(shmem.name);
+        return;
     }
-    void *rptr = mmap(NULL, size,
-                      PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    // Get a pointer to the shmem object.
+    void *rptr = mmap(NULL, shmem.size,
+                      PROT_READ | PROT_WRITE, MAP_SHARED, shmem.fd, 0);
     if (rptr == MAP_FAILED) {
         errsv = errno;
-        printf("mmap(NULL, %d, ...) failed with errno %d\n", size, errsv);
-        close(fd);
-        shm_unlink(szName);
+        printf("mmap(NULL, %d, ...) failed with errno %d\n", shmem.size, errsv);
+        close(shmem.fd);
+        shm_unlink(shmem.name);
     }
     else
-        hnd = rptr;
+        shmem.hnd = rptr;
 #endif
-    return hnd;
+    return;
 }
 
 // Author & Date:   Ehsan Azar     29 April 2012
@@ -353,41 +356,41 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
             return cbRet;
     }
 
-    if (nInstance == 0)
-        _snprintf(buf, sizeof(buf), "%s", REC_BUF_NAME);
-    else
-        _snprintf(buf, sizeof(buf), "%s%d", REC_BUF_NAME, nInstance);
     // Create the shared neuromatic receive buffer, if unsuccessful, return FALSE
-    cb_rec_buffer_hnd[nIdx] = OpenSharedBuffer(buf, true);
-    cb_rec_buffer_ptr[nIdx] = (cbRECBUFF*)GetSharedBuffer(cb_rec_buffer_hnd[nIdx], true);
+    if (nInstance == 0)
+        _snprintf(cb_rec_buffer_hnd[nIdx].name, sizeof(cb_rec_buffer_hnd[nIdx].name), "%s", REC_BUF_NAME);
+    else
+        _snprintf(cb_rec_buffer_hnd[nIdx].name, sizeof(cb_rec_buffer_hnd[nIdx].name), "%s%d", REC_BUF_NAME, nInstance);
+    OpenSharedBuffer(cb_rec_buffer_hnd[nIdx], true);
+    cb_rec_buffer_ptr[nIdx] = (cbRECBUFF*)GetSharedBuffer(cb_rec_buffer_hnd[nIdx].hnd, true);
     if (cb_rec_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
 
 
     if (nInstance == 0)
-        _snprintf(buf, sizeof(buf), "%s", GLOBAL_XMT_NAME);
+        _snprintf(cb_xmt_global_buffer_hnd[nIdx].name, sizeof(cb_xmt_global_buffer_hnd[nIdx].name), "%s", GLOBAL_XMT_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", GLOBAL_XMT_NAME, nInstance);
+        _snprintf(cb_xmt_global_buffer_hnd[nIdx].name, sizeof(cb_xmt_global_buffer_hnd[nIdx].name), "%s%d", GLOBAL_XMT_NAME, nInstance);
     // Create the shared global transmit buffer; if unsuccessful, release rec buffer and return FALSE
-    cb_xmt_global_buffer_hnd[nIdx] = OpenSharedBuffer(buf, false);
-    cb_xmt_global_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_global_buffer_hnd[nIdx], false);
+    OpenSharedBuffer(cb_xmt_global_buffer_hnd[nIdx], false);
+    cb_xmt_global_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_global_buffer_hnd[nIdx].hnd, false);
     if (cb_xmt_global_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
 
     if (nInstance == 0)
-        _snprintf(buf, sizeof(buf), "%s", LOCAL_XMT_NAME);
+        _snprintf(cb_xmt_local_buffer_hnd[nIdx].name, sizeof(cb_xmt_local_buffer_hnd[nIdx].name), "%s", LOCAL_XMT_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", LOCAL_XMT_NAME, nInstance);
+        _snprintf(cb_xmt_local_buffer_hnd[nIdx].name, sizeof(cb_xmt_local_buffer_hnd[nIdx].name), "%s%d", LOCAL_XMT_NAME, nInstance);
     // Create the shared local transmit buffer; if unsuccessful, release rec buffer and return FALSE
-    cb_xmt_local_buffer_hnd[nIdx] = OpenSharedBuffer(buf, false);;
-    cb_xmt_local_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_local_buffer_hnd[nIdx], false);
+    OpenSharedBuffer(cb_xmt_local_buffer_hnd[nIdx], false);;
+    cb_xmt_local_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_local_buffer_hnd[nIdx].hnd, false);
     if (cb_xmt_local_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
 
     if (nInstance == 0)
-        _snprintf(buf, sizeof(buf), "%s", CFG_BUF_NAME);
+        _snprintf(cb_cfg_buffer_hnd[nIdx].name, sizeof(cb_cfg_buffer_hnd[nIdx].name), "%s", CFG_BUF_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", CFG_BUF_NAME, nInstance);
+        _snprintf(cb_cfg_buffer_hnd[nIdx].name, sizeof(cb_cfg_buffer_hnd[nIdx].name), "%s%d", CFG_BUF_NAME, nInstance);
     // Create the shared neuromatic configuration buffer; if unsuccessful, release rec buffer and return FALSE
-    cb_cfg_buffer_hnd[nIdx] = OpenSharedBuffer(buf, true);
-    cb_cfg_buffer_ptr[nIdx] = (cbCFGBUFF*)GetSharedBuffer(cb_cfg_buffer_hnd[nIdx], true);
+    OpenSharedBuffer(cb_cfg_buffer_hnd[nIdx], true);
+    cb_cfg_buffer_ptr[nIdx] = (cbCFGBUFF*)GetSharedBuffer(cb_cfg_buffer_hnd[nIdx].hnd, true);
     if (cb_cfg_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
 
     // Check version of hardware protocol if available
@@ -403,21 +406,21 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
     }
 
     if (nInstance == 0)
-        _snprintf(buf, sizeof(buf), "%s", STATUS_BUF_NAME);
+        _snprintf(cb_pc_status_buffer_hnd[nIdx].name, sizeof(cb_pc_status_buffer_hnd[nIdx].name), "%s", STATUS_BUF_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", STATUS_BUF_NAME, nInstance);
+        _snprintf(cb_pc_status_buffer_hnd[nIdx].name, sizeof(cb_pc_status_buffer_hnd[nIdx].name), "%s%d", STATUS_BUF_NAME, nInstance);
     // Create the shared pc status buffer; if unsuccessful, release rec buffer and return FALSE
-    cb_pc_status_buffer_hnd[nIdx] = OpenSharedBuffer(buf, false);;
-    cb_pc_status_buffer_ptr[nIdx] = (cbPcStatus*)GetSharedBuffer(cb_pc_status_buffer_hnd[nIdx], false);
+    OpenSharedBuffer(cb_pc_status_buffer_hnd[nIdx], false);;
+    cb_pc_status_buffer_ptr[nIdx] = (cbPcStatus*)GetSharedBuffer(cb_pc_status_buffer_hnd[nIdx].hnd, false);
     if (cb_pc_status_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
 
     // Create the shared spike buffer
     if (nInstance == 0)
-        _snprintf(buf, sizeof(buf), "%s", SPK_BUF_NAME);
+        _snprintf(cb_spk_buffer_hnd[nIdx].name, sizeof(cb_spk_buffer_hnd[nIdx].name), "%s", SPK_BUF_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", SPK_BUF_NAME, nInstance);
-    cb_spk_buffer_hnd[nIdx] = OpenSharedBuffer(buf, false);;
-    cb_spk_buffer_ptr[nIdx] = (cbSPKBUFF*)GetSharedBuffer(cb_spk_buffer_hnd[nIdx], false);
+        _snprintf(cb_spk_buffer_hnd[nIdx].name, sizeof(cb_spk_buffer_hnd[nIdx].name), "%s%d", SPK_BUF_NAME, nInstance);
+    OpenSharedBuffer(cb_spk_buffer_hnd[nIdx], false);
+    cb_spk_buffer_ptr[nIdx] = (cbSPKBUFF*)GetSharedBuffer(cb_spk_buffer_hnd[nIdx].hnd, false);
     if (cb_spk_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
 
     // open the data availability signals
@@ -3668,100 +3671,91 @@ cbRESULT cbGetChannelSelection(cbPKT_UNIT_SELECTION* pPktUnitSel, uint32_t nProc
 //   nInstance - nsp number to open library for
 cbRESULT CreateSharedObjects(uint32_t nInstance)
 {
-    char buf[64] = {0};
     uint32_t nIdx = cb_library_index[nInstance];
 
     // Create the shared neuromatic receive buffer, if unsuccessful, return the associated error code
     if (nInstance == 0)
-        _snprintf(buf, sizeof(buf), "%s", REC_BUF_NAME);
+        _snprintf(cb_rec_buffer_hnd[nIdx].name, sizeof(cb_rec_buffer_hnd[nIdx].name), "%s", REC_BUF_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", REC_BUF_NAME, nInstance);
-    cb_rec_buffer_hnd[nIdx] = CreateSharedBuffer(buf, sizeof(cbRECBUFF));
-    cb_rec_buffer_ptr[nIdx] = (cbRECBUFF*)GetSharedBuffer(cb_rec_buffer_hnd[nIdx], false);
-
+        _snprintf(cb_rec_buffer_hnd[nIdx].name, sizeof(cb_rec_buffer_hnd[nIdx].name), "%s%d", REC_BUF_NAME, nInstance);
+    cb_rec_buffer_hnd[nIdx].size = sizeof(cbRECBUFF);
+    CreateSharedBuffer(cb_rec_buffer_hnd[nIdx]);
+    cb_rec_buffer_ptr[nIdx] = (cbRECBUFF*)GetSharedBuffer(cb_rec_buffer_hnd[nIdx].hnd, false);
     if (cb_rec_buffer_ptr[nIdx] == NULL)
         return cbRESULT_BUFRECALLOCERR;
-
-    memset(cb_rec_buffer_ptr[nIdx], 0, sizeof(cbRECBUFF));
+    memset(cb_rec_buffer_ptr[nIdx], 0, cb_rec_buffer_hnd[nIdx].size);
 
     // Create the shared transmit buffer; if unsuccessful, release rec buffer and associated error code
     {
         // create the global transmit buffer space
-        memset(buf, 0, sizeof(buf));  // Clear buffer name
         if (nInstance == 0)
-            _snprintf(buf, sizeof(buf), "%s", GLOBAL_XMT_NAME);
+            _snprintf(cb_xmt_global_buffer_hnd[nIdx].name, sizeof(cb_xmt_global_buffer_hnd[nIdx].name), "%s", GLOBAL_XMT_NAME);
         else
-            _snprintf(buf, sizeof(buf), "%s%d", GLOBAL_XMT_NAME, nInstance);
-        const uint32_t cbXMT_GLOBAL_BUFFSTRUCTSIZE = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_GLOBAL_BUFFLEN);
-        cb_xmt_global_buffer_hnd[nIdx] = CreateSharedBuffer(buf, cbXMT_GLOBAL_BUFFSTRUCTSIZE);
+            _snprintf(cb_xmt_global_buffer_hnd[nIdx].name, sizeof(cb_xmt_global_buffer_hnd[nIdx].name), "%s%d", GLOBAL_XMT_NAME, nInstance);
+        cb_xmt_global_buffer_hnd[nIdx].size = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_GLOBAL_BUFFLEN);
+        CreateSharedBuffer(cb_xmt_global_buffer_hnd[nIdx]);
         // map the global memory into local ram space and get pointer
-        cb_xmt_global_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_global_buffer_hnd[nIdx], false);
-
+        cb_xmt_global_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_global_buffer_hnd[nIdx].hnd, false);
         // clean up if error occurs
         if (cb_xmt_global_buffer_ptr[nIdx] == NULL)
             return cbRESULT_BUFGXMTALLOCERR;
+        // initialize the buffers...they MUST all be initialized to 0 for later logic to work!!
+        memset(cb_xmt_global_buffer_ptr[nIdx], 0, cb_xmt_global_buffer_hnd[nIdx].size);
+        cb_xmt_global_buffer_ptr[nIdx]->bufferlen = cbXMT_GLOBAL_BUFFLEN;
+        cb_xmt_global_buffer_ptr[nIdx]->last_valid_index =
+                cbXMT_GLOBAL_BUFFLEN - (cbCER_UDP_SIZE_MAX / 4) - 1; // assuming largest packet   array is 0 based
 
         // create the local transmit buffer space
-        memset(buf, 0, sizeof(buf));  // Clear buffer name
         if (nInstance == 0)
-            _snprintf(buf, sizeof(buf), "%s", LOCAL_XMT_NAME);
+            _snprintf(cb_xmt_local_buffer_hnd[nIdx].name, sizeof(cb_xmt_local_buffer_hnd[nIdx].name), "%s", LOCAL_XMT_NAME);
         else
-            _snprintf(buf, sizeof(buf), "%s%d", LOCAL_XMT_NAME, nInstance);
-        const uint32_t cbXMT_LOCAL_BUFFSTRUCTSIZE  = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_LOCAL_BUFFLEN);
-        cb_xmt_local_buffer_hnd[nIdx] = CreateSharedBuffer(buf, cbXMT_LOCAL_BUFFSTRUCTSIZE);
+            _snprintf(cb_xmt_local_buffer_hnd[nIdx].name, sizeof(cb_xmt_local_buffer_hnd[nIdx].name), "%s%d", LOCAL_XMT_NAME, nInstance);
+        cb_xmt_local_buffer_hnd[nIdx].size = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_LOCAL_BUFFLEN);
+        CreateSharedBuffer(cb_xmt_local_buffer_hnd[nIdx]);
         // map the global memory into local ram space and get pointer
-        cb_xmt_local_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_local_buffer_hnd[nIdx], false);
-
+        cb_xmt_local_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_local_buffer_hnd[nIdx].hnd, false);
         // clean up if error occurs
         if (cb_xmt_local_buffer_ptr[nIdx] == NULL)
             return cbRESULT_BUFLXMTALLOCERR;
-
         // initialize the buffers...they MUST all be initialized to 0 for later logic to work!!
-        memset(cb_xmt_global_buffer_ptr[nIdx], 0, cbXMT_GLOBAL_BUFFSTRUCTSIZE);
-        cb_xmt_global_buffer_ptr[nIdx]->bufferlen = cbXMT_GLOBAL_BUFFLEN;
-        cb_xmt_global_buffer_ptr[nIdx]->last_valid_index =
-            cbXMT_GLOBAL_BUFFLEN - (cbCER_UDP_SIZE_MAX / 4) - 1; // assuming largest packet   array is 0 based
-
-        memset(cb_xmt_local_buffer_ptr[nIdx], 0, cbXMT_LOCAL_BUFFSTRUCTSIZE);
+        memset(cb_xmt_local_buffer_ptr[nIdx], 0, cb_xmt_local_buffer_hnd[nIdx].size);
         cb_xmt_local_buffer_ptr[nIdx]->bufferlen = cbXMT_LOCAL_BUFFLEN;
         cb_xmt_local_buffer_ptr[nIdx]->last_valid_index =
             cbXMT_LOCAL_BUFFLEN - (cbCER_UDP_SIZE_MAX / 4) - 1; // assuming largest packet   array is 0 based
     }
 
     // Create the shared configuration buffer; if unsuccessful, release rec buffer and return FALSE
-    memset(buf, 0, sizeof(buf));  // Clear buffer name
     if (nInstance == 0)
-        _snprintf(buf, sizeof(buf), "%s", CFG_BUF_NAME);
+        _snprintf(cb_cfg_buffer_hnd[nIdx].name, sizeof(cb_cfg_buffer_hnd[nIdx].name), "%s", CFG_BUF_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", CFG_BUF_NAME, nInstance);
-    cb_cfg_buffer_hnd[nIdx] = CreateSharedBuffer(buf, sizeof(cbCFGBUFF));
-    cb_cfg_buffer_ptr[nIdx] = (cbCFGBUFF*)GetSharedBuffer(cb_cfg_buffer_hnd[nIdx], false);
+        _snprintf(cb_cfg_buffer_hnd[nIdx].name, sizeof(cb_cfg_buffer_hnd[nIdx].name), "%s%d", CFG_BUF_NAME, nInstance);
+    cb_cfg_buffer_hnd[nIdx].size = sizeof(cbCFGBUFF);
+    CreateSharedBuffer(cb_cfg_buffer_hnd[nIdx]);
+    cb_cfg_buffer_ptr[nIdx] = (cbCFGBUFF*)GetSharedBuffer(cb_cfg_buffer_hnd[nIdx].hnd, false);
     if (cb_cfg_buffer_ptr[nIdx] == NULL)
         return cbRESULT_BUFCFGALLOCERR;
-
-    memset(cb_cfg_buffer_ptr[nIdx], 0, sizeof(cbCFGBUFF));
+    memset(cb_cfg_buffer_ptr[nIdx], 0, cb_cfg_buffer_hnd[nIdx].size);
 
     // Create the shared pc status buffer; if unsuccessful, release rec buffer and return FALSE
-    memset(buf, 0, sizeof(buf));  // Clear buffer name
     if (nInstance == 0)
-        _snprintf(buf, sizeof(buf), "%s", STATUS_BUF_NAME);
+        _snprintf(cb_pc_status_buffer_hnd[nIdx].name, sizeof(cb_pc_status_buffer_hnd[nIdx].name), "%s", STATUS_BUF_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", STATUS_BUF_NAME, nInstance);
-    cb_pc_status_buffer_hnd[nIdx] = CreateSharedBuffer(buf, sizeof(cbPcStatus));
-    cb_pc_status_buffer_ptr[nIdx] = (cbPcStatus*)GetSharedBuffer(cb_pc_status_buffer_hnd[nIdx], false);
+        _snprintf(cb_pc_status_buffer_hnd[nIdx].name, sizeof(cb_pc_status_buffer_hnd[nIdx].name), "%s%d", STATUS_BUF_NAME, nInstance);
+    cb_pc_status_buffer_hnd[nIdx].size = sizeof(cbPcStatus);
+    CreateSharedBuffer(cb_pc_status_buffer_hnd[nIdx]);
+    cb_pc_status_buffer_ptr[nIdx] = (cbPcStatus*)GetSharedBuffer(cb_pc_status_buffer_hnd[nIdx].hnd, false);
     if (cb_pc_status_buffer_ptr[nIdx] == NULL)
         return cbRESULT_BUFPCSTATALLOCERR;
-
-    memset(cb_pc_status_buffer_ptr[nIdx], 0, sizeof(cbPcStatus));
+    memset(cb_pc_status_buffer_ptr[nIdx], 0, cb_pc_status_buffer_hnd[nIdx].size);
 
     // Create the shared spike cache buffer; if unsuccessful, release rec buffer and return FALSE
-    memset(buf, 0, sizeof(buf));  // Clear buffer name
     if (nInstance == 0)
-        _snprintf(buf, sizeof(buf), "%s", SPK_BUF_NAME);
+        _snprintf(cb_spk_buffer_hnd[nIdx].name, sizeof(cb_spk_buffer_hnd[nIdx].name), "%s", SPK_BUF_NAME);
     else
-        _snprintf(buf, sizeof(buf), "%s%d", SPK_BUF_NAME, nInstance);
-    cb_spk_buffer_hnd[nIdx] = CreateSharedBuffer(buf, sizeof(cbSPKBUFF));
-    cb_spk_buffer_ptr[nIdx] = (cbSPKBUFF*)GetSharedBuffer(cb_spk_buffer_hnd[nIdx], false);
+        _snprintf(cb_spk_buffer_hnd[nIdx].name, sizeof(cb_spk_buffer_hnd[nIdx].name), "%s%d", SPK_BUF_NAME, nInstance);
+    cb_spk_buffer_hnd[nIdx].size = sizeof(cbSPKBUFF);
+    CreateSharedBuffer(cb_spk_buffer_hnd[nIdx]);
+    cb_spk_buffer_ptr[nIdx] = (cbSPKBUFF*)GetSharedBuffer(cb_spk_buffer_hnd[nIdx].hnd, false);
     if (cb_spk_buffer_ptr[nIdx] == NULL)
         return cbRESULT_BUFSPKALLOCERR;
 
@@ -3800,6 +3794,7 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
     cb_cfg_buffer_ptr[nIdx]->colortable.disptemp[0]  = RGB(0,255,0);
 
     // create the shared event for data availability signalling
+    char buf[64] = {0};
     if (nInstance == 0)
         _snprintf(buf, sizeof(buf), "%s", SIG_EVT_NAME);
     else
