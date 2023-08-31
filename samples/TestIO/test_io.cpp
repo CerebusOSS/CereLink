@@ -17,12 +17,16 @@
 //
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <stdio.h>
+#include <iostream>
 #ifdef WIN32
 #include <conio.h>
 #endif //win32
+#include <memory>
 #include <inttypes.h>
 #include "debugmacs.h"
 
@@ -177,11 +181,12 @@ cbSdkResult testOpen(LPCSTR szOutIP)
 }
 
 
-void testGetConfig(void)
+void testSetConfig(bool bCont, bool bEv)
 {
     uint32_t proc = 1;
     uint32_t nChansInGroup;
     uint16_t pGroupList[cbNUM_ANALOG_CHANS];
+    bool b_30k = false;  // Make sure we have at least 10 channels on group 5 or 6.
     for (uint32_t group_ix = 1; group_ix < 7; group_ix++)
     {
         cbSdkResult res = cbSdkGetSampleGroupList(INST, proc, group_ix, &nChansInGroup, pGroupList);
@@ -190,6 +195,19 @@ void testGetConfig(void)
             printf("In sampling group %d, found %d channels.\n", group_ix, nChansInGroup);
         }
         handleResult(res);
+
+        b_30k |= (group_ix >= 5) && (nChansInGroup >= 10);
+    }
+    if (bCont && !b_30k)
+    {
+        // Set sample group 5 on the first 10 channels.
+        cbPKT_CHANINFO ch_info;
+        cbSdkResult res;
+        for (int chan_ix = 0; chan_ix < cbNUM_ANALOG_CHANS; ++chan_ix) {
+            res = cbSdkGetChannelConfig(INST, chan_ix + 1, &ch_info);
+            ch_info.smpgroup = chan_ix < 10 ? 5 : 0;
+            res = cbSdkSetChannelConfig(INST, chan_ix + 1, &ch_info);
+        }
     }
 }
 
@@ -243,16 +261,42 @@ int main(int argc, char *argv[])
     else
         printf("testOpen succeeded\n");
     
-    testGetConfig();
+    testSetConfig(bCont, bEv);
 
     cbsdk_config cfg;
-    testGetTrialConfig(cfg);
+    res = cbSdkGetTrialConfig(INST, &cfg.bActive,
+                              &cfg.begchan, &cfg.begmask, &cfg.begval,
+                              &cfg.endchan, &cfg.endmask, &cfg.endval,
+                              &cfg.bDouble, &cfg.uWaveforms,
+                              &cfg.uConts, &cfg.uEvents, &cfg.uComments, &cfg.uTrackings,
+                              &cfg.bAbsolute);
     cfg.bActive = 1;
-
     cfg.uConts = bCont ? cbSdk_CONTINUOUS_DATA_SAMPLES : 0;
     cfg.uEvents = bEv ? cbSdk_EVENT_DATA_SAMPLES : 0;
-    res = cbSdkSetTrialConfig(INST, cfg.bActive, cfg.begchan, cfg.begmask, cfg.begval, cfg.endchan, cfg.endmask, cfg.endval,
-        cfg.bDouble, cfg.uWaveforms, cfg.uConts, cfg.uEvents, cfg.uComments, cfg.uTrackings, cfg.bAbsolute);
+    res = cbSdkSetTrialConfig(INST, cfg.bActive,
+                              cfg.begchan, cfg.begmask, cfg.begval,
+                              cfg.endchan, cfg.endmask, cfg.endval,
+                              cfg.bDouble, cfg.uWaveforms,
+                              cfg.uConts, cfg.uEvents, cfg.uComments, cfg.uTrackings,
+                              cfg.bAbsolute);
+
+    std::unique_ptr<cbSdkTrialEvent> trialEvent = std::unique_ptr<cbSdkTrialEvent>(nullptr);
+    if (bEv)
+        trialEvent = std::make_unique<cbSdkTrialEvent>();
+    std::unique_ptr<cbSdkTrialCont> trialCont = std::unique_ptr<cbSdkTrialCont>(nullptr);
+    if (bCont)
+        trialCont = std::make_unique<cbSdkTrialCont>();
+    std::unique_ptr<cbSdkTrialComment> trialComm = std::unique_ptr<cbSdkTrialComment>(nullptr);
+    if (bComm)
+        trialComm = std::make_unique<cbSdkTrialComment>();
+
+    // We allocate a bunch of std::vectors now and we can grow them if the number of samples to be retrieved
+    //  exceeds the allocated space.
+    std::vector<int16_t> cont_short[cbMAXCHANS];
+    std::vector<double> cont_double[cbMAXCHANS];
+    std::vector<uint32_t> event_ts[cbMAXCHANS][cbMAXUNITS + 1];
+    std::vector<int16_t> event_wfs_short[cbMAXCHANS];
+    std::vector<double> event_wfs_double[cbMAXCHANS];
 
     PROCTIME start_time;
     PROCTIME elapsed_time = 0;
@@ -264,143 +308,116 @@ int main(int argc, char *argv[])
         elapsed_time -= start_time;
 
         // cbSdkInitTrialData to determine how many samples are available
-        cbSdkTrialEvent* ptrialevent = new cbSdkTrialEvent;
-        if (!bEv) {
-            delete ptrialevent;
-            ptrialevent = nullptr;
-        }
-        cbSdkTrialCont* ptrialcont = new cbSdkTrialCont;
-        if (!bCont) {
-            delete ptrialcont;
-            ptrialcont = nullptr;
-        }
-        cbSdkTrialComment* ptrialcomment = new cbSdkTrialComment;
-        if (!bComm) {
-            delete ptrialcomment;
-            ptrialcomment = nullptr;
-        }
-        res = cbSdkInitTrialData(INST, 0, ptrialevent, ptrialcont, ptrialcomment, 0);
+        res = cbSdkInitTrialData(INST, 0,
+                                 trialEvent.get(), trialCont.get(), trialComm.get(),
+                                 0);
 
         // allocate memory
-        if (ptrialevent && (ptrialevent->count > 0))
+        if (trialEvent && trialEvent->count)
         {
-            for (size_t ev_ix = 0; ev_ix < ptrialevent->count; ev_ix++)
+            for (size_t ev_ix = 0; ev_ix < trialEvent->count; ev_ix++)
             {
-                uint16_t chan_id = ptrialevent->chan[ev_ix];  // 1-based
-
                 // Every event channel, regardless of type (spike, digital, serial), gets an array of timestamps.
                 for (size_t un_ix = 0; un_ix < cbMAXUNITS + 1; un_ix++)
                 {
-                    uint32_t n_samples = ptrialevent->num_samples[ev_ix][un_ix];
-                    if (n_samples)
-                    {
-                        // alloc num_samples uint32_t
-                        ptrialevent->timestamps[ev_ix][un_ix] = malloc(n_samples * sizeof(uint32_t));
-                    }
-                    else {
-                        ptrialevent->timestamps[ev_ix][un_ix] = NULL;
-                    }
+                    uint32_t n_samples = trialEvent->num_samples[ev_ix][un_ix];
+                    event_ts[ev_ix][un_ix].resize(n_samples);
+                    std::fill(event_ts[ev_ix][un_ix].begin(), event_ts[ev_ix][un_ix].end(), 0);
+                    trialEvent->timestamps[ev_ix][un_ix] = event_ts[ev_ix][un_ix].data();
                 }
 
                 uint32_t bIsDig = false;
-                cbSdkIsChanAnyDigIn(INST, chan_id, &bIsDig);
+                cbSdkIsChanAnyDigIn(INST, trialEvent->chan[ev_ix], &bIsDig);
                 if (bIsDig)
                 {
                     // alloc waveform data
-                    uint32_t n_samples = ptrialevent->num_samples[ev_ix][0];
-                    ptrialevent->waveforms[ev_ix] = malloc(n_samples * sizeof(uint16_t));
-                    // TODO: If double then allocate sizeof(double)
+                    uint32_t n_samples = trialEvent->num_samples[ev_ix][0];
+                    if (cfg.bDouble)
+                    {
+                        event_wfs_short[ev_ix].resize(n_samples);
+                        std::fill(event_wfs_short[ev_ix].begin(), event_wfs_short[ev_ix].end(), 0);
+                        trialEvent->waveforms[ev_ix] = event_wfs_short[ev_ix].data();
+                    } else {
+                        event_wfs_double[ev_ix].resize(n_samples);
+                        std::fill(event_wfs_double[ev_ix].begin(), event_wfs_double[ev_ix].end(), 0);
+                        trialEvent->waveforms[ev_ix] = event_wfs_double[ev_ix].data();
+                    }
                 }
             }
         }
 
-        if (ptrialcont && (ptrialcont->count > 0))
+        if (trialCont && (trialCont->count > 0))
         {
-            // TODO: Allocate continuous data
+            // Allocate memory for continuous data
+            for (int chan_ix = 0; chan_ix < trialCont->count; ++chan_ix) {
+                uint32_t n_samples = trialCont->num_samples[chan_ix];
+                if (cfg.bDouble)
+                {
+                    cont_double[chan_ix].resize(n_samples);
+                    std::fill(cont_double[chan_ix].begin(), cont_double[chan_ix].end(), 0);
+                    trialCont->samples[chan_ix] = cont_double[chan_ix].data();  // Technically only needed if resize grows the vector.
+                } else {
+                    cont_short[chan_ix].resize(n_samples);
+                    std::fill(cont_short[chan_ix].begin(), cont_short[chan_ix].end(), 0);
+                    trialCont->samples[chan_ix] = cont_short[chan_ix].data();  // Technically only needed if resize grows the vector.
+                }
+            }
         }
         
         // cbSdkGetTrialData to fetch the data
-        res = cbSdkGetTrialData(INST, cfg.bActive, ptrialevent, ptrialcont, ptrialcomment, 0);
+        res = cbSdkGetTrialData(INST, cfg.bActive,
+                                trialEvent.get(), trialCont.get(), trialComm.get(),
+                                0);
 
         // Print something to do with the data.
-        if (ptrialevent && (ptrialevent->count > 0))
+        if (trialEvent && trialEvent->count)
         {
-            for (size_t ev_ix = 0; ev_ix < ptrialevent->count; ev_ix++)
+            for (size_t ev_ix = 0; ev_ix < trialEvent->count; ev_ix++)
             {
                 for (size_t un_ix = 0; un_ix < cbMAXUNITS + 1; un_ix++)
                 {
-                    if (ptrialevent->num_samples[ev_ix][un_ix])
+                    if (trialEvent->num_samples[ev_ix][un_ix])
                     {
-                        uint32_t* ts = (uint32_t *)ptrialevent->timestamps[ev_ix][un_ix];
-                        // printf(" %" PRIu32, *ts);
+                        printf("%" PRIu32, event_ts[ev_ix][un_ix][0]);
                     }
                 }
-                // printf("\n");
+                printf("\n");
                 
-                uint16_t chan_id = ptrialevent->chan[ev_ix];
+                uint16_t chan_id = trialEvent->chan[ev_ix];
                 uint32_t bIsDig = false;
                 cbSdkIsChanAnyDigIn(INST, chan_id, &bIsDig);
                 if (bIsDig)
                 {
-                    uint32_t n_samples = ptrialevent->num_samples[ev_ix][0];
+                    uint32_t n_samples = trialEvent->num_samples[ev_ix][0];
                     if (n_samples > 0)
                     {
-                        uint32_t* ts = (uint32_t *)ptrialevent->timestamps[ev_ix][0];
-                        printf("%" PRIu32 ":", *ts);
+                        printf("%" PRIu32 ":", event_ts[ev_ix][0][0]);
                     }
-                    uint16_t* wf = (uint16_t*)ptrialevent->waveforms[ev_ix];
-                    for (uint32_t sample_ix = 0; sample_ix < n_samples; sample_ix++)
-                    {
-                        printf(" %" PRIu16, wf[sample_ix]);
+                    if (cfg.bDouble) {
+                        for (uint32_t sample_ix = 0; sample_ix < n_samples; sample_ix++)
+                            printf(" %f", event_wfs_double[ev_ix][sample_ix]);
+                    } else {
+                        for (uint32_t sample_ix = 0; sample_ix < n_samples; sample_ix++)
+                            printf(" %" PRIu16, event_wfs_short[ev_ix][sample_ix]);
                     }
                     if (n_samples > 0) printf("\n");
                 }
             }
         }
 
-        if (ptrialcont && (ptrialcont->count > 0))
+        if (trialCont && trialCont->count)
         {
-            // TODO: Print continous data
-        }
-
-        // Free allocated memory.
-        if (ptrialevent)
-        {
-            if (ptrialevent->count > 0)
+            for (size_t chan_ix = 0; chan_ix < trialCont->count; chan_ix++)
             {
-                for (size_t ev_ix = 0; ev_ix < ptrialevent->count; ev_ix++)
-                {
-                    for (size_t un_ix = 0; un_ix < cbMAXUNITS + 1; un_ix++)
-                    {
-                        if (ptrialevent->num_samples[ev_ix][un_ix])
-                        {
-                            free(ptrialevent->timestamps[ev_ix][un_ix]);
-                            ptrialevent->timestamps[ev_ix][un_ix] = NULL;
-                        }
-                    }
-
-                    uint16_t chan_id = ptrialevent->chan[ev_ix];
-                    uint32_t bIsDig = false;
-                    cbSdkIsChanAnyDigIn(INST, chan_id, &bIsDig);
-                    if (bIsDig)
-                    {
-                        free(ptrialevent->waveforms[ev_ix]);
-                        ptrialevent->waveforms[ev_ix] = NULL;
-                    }
+                uint32_t n_samples = trialCont->num_samples[chan_ix];
+                if (cfg.bDouble) {
+                    const auto [min, max] = std::minmax_element(begin(cont_double[chan_ix]), end(cont_double[chan_ix]));
+                    std::cout << "chan = " << trialCont->chan[chan_ix] << ", nsamps = " << n_samples << ", min = " << *min << ", max = " << *max << '\n';
+                } else {
+                    const auto [min, max] = std::minmax_element(begin(cont_short[chan_ix]), end(cont_short[chan_ix]));
+                    std::cout << "chan = " << trialCont->chan[chan_ix] << ", nsamps = " << n_samples << ", min = " << *min << ", max = " << *max << '\n';
                 }
             }
-            delete ptrialevent;
-            ptrialevent = nullptr;
-        }
-
-        if (ptrialcont)
-        {
-            if (ptrialcont->count > 0)
-            {
-                // TODO: Free continous data
-            }
-            delete ptrialcont;
-            ptrialcont = nullptr;
         }
 
 #ifdef WIN32
@@ -416,6 +433,8 @@ int main(int argc, char *argv[])
         printf("testClose failed (%d)!\n", res);
     else
         printf("testClose succeeded\n");
+
+    // No need to clear trialCont, trialEvent and trialComm because they are smart pointers and will dealloc.
 
     return 0;
 }
