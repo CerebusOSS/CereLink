@@ -3704,6 +3704,38 @@ CBSDKAPI    cbSdkResult cbSdkSetSpikeConfig(uint32_t nInstance, uint32_t spkleng
 }
 
 // Author & Date:   Ehsan Azar     30 March 2011
+/** Send global spike configuration.
+*
+* @param[in]		spklength		spike length
+* @param[in]		spkpretrig		spike pre-trigger number of samples
+
+* \n This function returns the error code
+*/
+cbSdkResult SdkApp::SdkSetAinpSampling(uint32_t chan, uint32_t filter, uint32_t group)
+{
+    if (m_instInfo == 0)
+        return CBSDKRESULT_CLOSED;
+    cbRESULT cbres = cbSetAinpSampling(chan, filter, group, m_nInstance);
+    if (cbres == cbRESULT_NOLIBRARY)
+        return CBSDKRESULT_CLOSED;
+    if (cbres)
+        return CBSDKRESULT_UNKNOWN;
+    return CBSDKRESULT_SUCCESS;
+}
+
+/// sdk stub for SdkApp::SdkSetSpikeConfig
+CBSDKAPI    cbSdkResult cbSdkSetAinpSampling(uint32_t nInstance, uint32_t chan, uint32_t filter, uint32_t group)
+{
+    if (chan > cbMAXCHANS || filter >= cbMAXFILTS)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (nInstance >= cbMAXOPEN)
+        return CBSDKRESULT_INVALIDPARAM;
+    if (g_app[nInstance] == NULL)
+        return CBSDKRESULT_CLOSED;
+    return g_app[nInstance]->SdkSetAinpSampling(chan, filter, group);
+}
+
+// Author & Date:   Ehsan Azar     30 March 2011
 /** Get global system configuration.
 *
 * @param[out]		spklength		spike length

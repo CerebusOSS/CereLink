@@ -204,9 +204,10 @@ void testSetConfig(bool bCont, bool bEv)
         cbPKT_CHANINFO ch_info;
         cbSdkResult res;
         for (int chan_ix = 0; chan_ix < cbNUM_ANALOG_CHANS; ++chan_ix) {
-            res = cbSdkGetChannelConfig(INST, chan_ix + 1, &ch_info);
-            ch_info.smpgroup = chan_ix < 10 ? 5 : 0;
-            res = cbSdkSetChannelConfig(INST, chan_ix + 1, &ch_info);
+            res = cbSdkSetAinpSampling(INST, chan_ix + 1, 0, chan_ix < 10 ? 5 : 0);
+//            res = cbSdkGetChannelConfig(INST, chan_ix + 1, &ch_info);
+//            ch_info.smpgroup = chan_ix < 10 ? 5 : 0;
+//            res = cbSdkSetChannelConfig(INST, chan_ix + 1, &ch_info);
         }
     }
 }

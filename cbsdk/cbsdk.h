@@ -543,6 +543,9 @@ CBSDKAPI    cbSdkResult cbSdkGetSampleGroupList(uint32_t nInstance, uint32_t pro
 
 CBSDKAPI    cbSdkResult cbSdkGetSampleGroupInfo(uint32_t nInstance, uint32_t proc, uint32_t group, char *label, uint32_t *period, uint32_t *length);
 
+/// Modify channel's sample group and filter.
+CBSDKAPI    cbSdkResult cbSdkSetAinpSampling(uint32_t nInstance, uint32_t chan, uint32_t filter, uint32_t group);
+
 /*!
 * Get information about given trackable object
 * @param[in] id		trackable ID (1 to cbMAXTRACKOBJ)

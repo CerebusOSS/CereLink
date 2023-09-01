@@ -97,6 +97,7 @@ public:
     cbSdkResult SdkGetChannelConfig(uint16_t channel, cbPKT_CHANINFO * chaninfo);
     cbSdkResult SdkGetSampleGroupList(uint32_t proc, uint32_t group, uint32_t *length, uint16_t *list);
     cbSdkResult SdkGetSampleGroupInfo(uint32_t proc, uint32_t group, char *label, uint32_t *period, uint32_t *length);
+    cbSdkResult SdkSetAinpSampling(uint32_t chan, uint32_t filter, uint32_t group);
     cbSdkResult SdkGetFilterDesc(uint32_t proc, uint32_t filt, cbFILTDESC * filtdesc);
     cbSdkResult SdkGetTrackObj(char * name, uint16_t * type, uint16_t * pointCount, uint32_t id);
     cbSdkResult SdkGetVideoSource(char * name, float * fps, uint32_t id);
