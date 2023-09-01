@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <stdio.h>
 #include <iostream>
+#include <thread>         // std::this_thread::sleep_for
 #ifdef WIN32
 #include <conio.h>
 #endif //win32
@@ -116,7 +117,6 @@ void handleResult(cbSdkResult res)
     }
 }
 
-
 cbSdkVersion testGetVersion(void)
 {
     // Library version can be read even before library open (return value is a warning)
@@ -128,15 +128,14 @@ cbSdkVersion testGetVersion(void)
         printf("Unable to determine instrument version\n");
     }
     else {
-        printf("Initializing Cerebus real-time interface %d.%02d.%02d.%02d (protocol cb%d.%02d)...\n", ver.major, ver.minor, ver.release, ver.beta, ver.majorp, ver.minorp);
+        printf("Initializing Cerebus real-time interface %d.%02d.%02d.%02d (protocol cb%d.%02d)...\n",
+               ver.major, ver.minor, ver.release, ver.beta, ver.majorp, ver.minorp);
     }
     handleResult(res);
     return ver;
 }
 
-// Author & Date:   Ehsan Azar    24 Oct 2012
-// Purpose: Test openning the library
-cbSdkResult testOpen(LPCSTR szOutIP)
+cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
 {
     // Try to get the version. Should be a warning because we are not yet open.
     cbSdkVersion ver = testGetVersion();
@@ -144,7 +143,9 @@ cbSdkResult testOpen(LPCSTR szOutIP)
     // Open the device using default connection type.
     cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
     cbSdkConnection con = cbSdkConnection();
-    con.szOutIP = szOutIP;
+    con.szOutIP = inst_ip;
+    con.nOutPort = inst_port;
+    con.szInIP = client_ip;
     cbSdkResult res = cbSdkOpen(INST, conType, con);
     if (res != CBSDKRESULT_SUCCESS)
         printf("Unable to open instrument connection.\n");
@@ -160,7 +161,7 @@ cbSdkResult testOpen(LPCSTR szOutIP)
         handleResult(res);
         // if (instType == CBSDKINSTRUMENT_NPLAY || instType == CBSDKINSTRUMENT_REMOTENPLAY)
         //  	printf("Unable to open UDP interface to nPlay\n");
-        
+
 
         if (conType < 0 || conType > CBSDKCONNECTION_CLOSED)
             conType = CBSDKCONNECTION_COUNT;
@@ -174,19 +175,19 @@ cbSdkResult testOpen(LPCSTR szOutIP)
         ver = testGetVersion();
 
         // Summary results.
-        printf("%s real-time interface to %s (%d.%02d.%02d.%02d) successfully initialized\n", strConnection[conType], strInstrument[instType], ver.nspmajor, ver.nspminor, ver.nsprelease, ver.nspbeta);
+        printf("%s real-time interface to %s (%d.%02d.%02d.%02d) successfully initialized\n",
+               strConnection[conType], strInstrument[instType],
+               ver.nspmajor, ver.nspminor, ver.nsprelease, ver.nspbeta);
     }
 
     return res;
 }
-
 
 void testSetConfig(bool bCont, bool bEv)
 {
     uint32_t proc = 1;
     uint32_t nChansInGroup;
     uint16_t pGroupList[cbNUM_ANALOG_CHANS];
-    bool b_30k = false;  // Make sure we have at least 10 channels on group 5 or 6.
     for (uint32_t group_ix = 1; group_ix < 7; group_ix++)
     {
         cbSdkResult res = cbSdkGetSampleGroupList(INST, proc, group_ix, &nChansInGroup, pGroupList);
@@ -195,32 +196,21 @@ void testSetConfig(bool bCont, bool bEv)
             printf("In sampling group %d, found %d channels.\n", group_ix, nChansInGroup);
         }
         handleResult(res);
-
-        b_30k |= (group_ix >= 5) && (nChansInGroup >= 10);
     }
-    if (bCont && !b_30k)
+    if (bCont)
     {
-        // Set sample group 5 on the first 10 channels.
+        // Set sample group 3 and filter 7 on the first few channels.
+        // Also disable spiking.
         cbPKT_CHANINFO ch_info;
         cbSdkResult res;
         for (int chan_ix = 0; chan_ix < cbNUM_ANALOG_CHANS; ++chan_ix) {
-            res = cbSdkSetAinpSampling(INST, chan_ix + 1, 0, chan_ix < 10 ? 5 : 0);
-//            res = cbSdkGetChannelConfig(INST, chan_ix + 1, &ch_info);
-//            ch_info.smpgroup = chan_ix < 10 ? 5 : 0;
-//            res = cbSdkSetChannelConfig(INST, chan_ix + 1, &ch_info);
+            res = cbSdkSetAinpSampling(INST, chan_ix + 1, 7, chan_ix < 2 ? 3 : 0);
+            res = cbSdkSetAinpSpikeOptions(INST, chan_ix + 1, 0, 2);
         }
     }
+    std::this_thread::sleep_for(std::chrono::seconds(2));
 }
 
-void testGetTrialConfig(cbsdk_config& cfg)
-{
-    cbSdkResult res = cbSdkGetTrialConfig(INST, &cfg.bActive, &cfg.begchan, &cfg.begmask, &cfg.begval,
-        &cfg.endchan, &cfg.endmask, &cfg.endval, &cfg.bDouble,
-        &cfg.uWaveforms, &cfg.uConts, &cfg.uEvents, &cfg.uComments, &cfg.uTrackings, &cfg.bAbsolute);
-}
-
-// Author & Date:   Ehsan Azar    25 Oct 2012
-// Purpose: Test closing the library
 cbSdkResult testClose(void)
 {
     cbSdkResult res = cbSdkClose(INST);
@@ -236,29 +226,43 @@ cbSdkResult testClose(void)
     return res;
 }
 
-/////////////////////////////////////////////////////////////////////////////
-// The test suit main entry
 int main(int argc, char *argv[])
 {
-    // Parse command line arguments.
+    LPCSTR inst_ip = "";
+    int inst_port = cbNET_UDP_PORT_CNT;
+    LPCSTR client_ip = "";
     bool bCont = false;
     bool bEv = false;
     bool bComm = false;
-    LPCSTR szOutIP = cbNET_UDP_ADDR_CNT;  // TODO: Overwrite with argv
     uint32_t runtime = 30000;
-    size_t optind;
-    for (optind = 1; optind < argc && argv[optind][0] == '-'; optind++)
+
+    // Parse command line arguments.
     {
-        switch (argv[optind][1]) {
-        case 'c': bCont = true; break;
-        case 'e': bEv = true; break;
-        case 'r': runtime = 30000 * (argv[optind][2] - '0');
+        if (argc > 1 && argv[1][0] != '-') {inst_ip = argv[1];}
+        if (argc > 2 && argv[2][0] != '-') {inst_port = strtol(argv[2], NULL, 10);}
+        if (argc > 3 && argv[3][0] != '-') { client_ip = argv[3]; }
+
+        size_t optind;
+        for (optind = 1; optind < argc; optind++)
+        {
+            if (argv[optind][0] == '-')
+            {
+                switch (argv[optind][1]) {
+                    case 'c': bCont = true; break;
+                    case 'e': bEv = true; break;
+                    case 'r': runtime = 30000 * (argv[optind][2] - '0'); break;
+                }
+            }
         }
     }
 
-    cbSdkResult res = testOpen(szOutIP);
+    // Connect to the device.
+    cbSdkResult res = testOpen(inst_ip, inst_port, client_ip);
     if (res < 0)
+    {
         printf("testOpen failed (%d)!\n", res);
+        return -1;
+    }
     else
         printf("testOpen succeeded\n");
     
