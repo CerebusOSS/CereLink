@@ -865,6 +865,9 @@ private:
     uint32_t m_nNumTotalChans;
     NSP_STATUS  m_nNspStatus[cbMAXPROCS];       // true if the nsp has received a sysinfo from each NSP
     uint32_t m_nNumNTrodesPerInstrument[cbMAXPROCS];
+#ifndef CBPROTO_311
+    uint32_t m_nGeminiSystem;   // Used as boolean true if connected to a gemini system
+#endif
 
 public:
     cbPcStatus() :

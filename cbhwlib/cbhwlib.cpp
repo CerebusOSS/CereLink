@@ -333,7 +333,7 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
     // If it is stand alone application
     if (bStandAlone)
     {
-        // Aquire lock
+        // Acquire lock
         cbRet = cbAquireSystemLock(szLockName, cb_sys_lock_hnd[nInstance]);
         if (cbRet)
             return cbRet;
@@ -363,7 +363,11 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
         _snprintf(cb_rec_buffer_hnd[nIdx].name, sizeof(cb_rec_buffer_hnd[nIdx].name), "%s%d", REC_BUF_NAME, nInstance);
     OpenSharedBuffer(cb_rec_buffer_hnd[nIdx], true);
     cb_rec_buffer_ptr[nIdx] = (cbRECBUFF*)GetSharedBuffer(cb_rec_buffer_hnd[nIdx].hnd, true);
-    if (cb_rec_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
+    if (cb_rec_buffer_ptr[nIdx] == NULL)
+    {
+        cbClose(false, nInstance);
+        return cbRESULT_LIBINITERROR;
+    }
 
 
     if (nInstance == 0)
@@ -373,16 +377,24 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
     // Create the shared global transmit buffer; if unsuccessful, release rec buffer and return FALSE
     OpenSharedBuffer(cb_xmt_global_buffer_hnd[nIdx], false);
     cb_xmt_global_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_global_buffer_hnd[nIdx].hnd, false);
-    if (cb_xmt_global_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
+    if (cb_xmt_global_buffer_ptr[nIdx] == NULL)
+    {
+        cbClose(false, nInstance);
+        return cbRESULT_LIBINITERROR;
+    }
 
     if (nInstance == 0)
         _snprintf(cb_xmt_local_buffer_hnd[nIdx].name, sizeof(cb_xmt_local_buffer_hnd[nIdx].name), "%s", LOCAL_XMT_NAME);
     else
         _snprintf(cb_xmt_local_buffer_hnd[nIdx].name, sizeof(cb_xmt_local_buffer_hnd[nIdx].name), "%s%d", LOCAL_XMT_NAME, nInstance);
     // Create the shared local transmit buffer; if unsuccessful, release rec buffer and return FALSE
-    OpenSharedBuffer(cb_xmt_local_buffer_hnd[nIdx], false);;
+    OpenSharedBuffer(cb_xmt_local_buffer_hnd[nIdx], false);
     cb_xmt_local_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_local_buffer_hnd[nIdx].hnd, false);
-    if (cb_xmt_local_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
+    if (cb_xmt_local_buffer_ptr[nIdx] == NULL)
+    {
+        cbClose(false, nInstance);
+        return cbRESULT_LIBINITERROR;
+    }
 
     if (nInstance == 0)
         _snprintf(cb_cfg_buffer_hnd[nIdx].name, sizeof(cb_cfg_buffer_hnd[nIdx].name), "%s", CFG_BUF_NAME);
@@ -391,7 +403,11 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
     // Create the shared neuromatic configuration buffer; if unsuccessful, release rec buffer and return FALSE
     OpenSharedBuffer(cb_cfg_buffer_hnd[nIdx], true);
     cb_cfg_buffer_ptr[nIdx] = (cbCFGBUFF*)GetSharedBuffer(cb_cfg_buffer_hnd[nIdx].hnd, true);
-    if (cb_cfg_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
+    if (cb_cfg_buffer_ptr[nIdx] == NULL)
+    {
+        cbClose(false, nInstance);
+        return cbRESULT_LIBINITERROR;
+    }
 
     // Check version of hardware protocol if available
     if (cb_cfg_buffer_ptr[nIdx]->procinfo[0].cbpkt_header.chid != 0) {
@@ -410,9 +426,13 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
     else
         _snprintf(cb_pc_status_buffer_hnd[nIdx].name, sizeof(cb_pc_status_buffer_hnd[nIdx].name), "%s%d", STATUS_BUF_NAME, nInstance);
     // Create the shared pc status buffer; if unsuccessful, release rec buffer and return FALSE
-    OpenSharedBuffer(cb_pc_status_buffer_hnd[nIdx], false);;
+    OpenSharedBuffer(cb_pc_status_buffer_hnd[nIdx], false);
     cb_pc_status_buffer_ptr[nIdx] = (cbPcStatus*)GetSharedBuffer(cb_pc_status_buffer_hnd[nIdx].hnd, false);
-    if (cb_pc_status_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
+    if (cb_pc_status_buffer_ptr[nIdx] == NULL)
+    {
+        cbClose(false, nInstance);
+        return cbRESULT_LIBINITERROR;
+    }
 
     // Create the shared spike buffer
     if (nInstance == 0)
@@ -421,7 +441,11 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
         _snprintf(cb_spk_buffer_hnd[nIdx].name, sizeof(cb_spk_buffer_hnd[nIdx].name), "%s%d", SPK_BUF_NAME, nInstance);
     OpenSharedBuffer(cb_spk_buffer_hnd[nIdx], false);
     cb_spk_buffer_ptr[nIdx] = (cbSPKBUFF*)GetSharedBuffer(cb_spk_buffer_hnd[nIdx].hnd, false);
-    if (cb_spk_buffer_ptr[nIdx] == NULL) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
+    if (cb_spk_buffer_ptr[nIdx] == NULL)
+    {
+        cbClose(false, nInstance);
+        return cbRESULT_LIBINITERROR;
+    }
 
     // open the data availability signals
     if (nInstance == 0)
@@ -430,7 +454,11 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
         _snprintf(buf, sizeof(buf), "%s%d", SIG_EVT_NAME, nInstance);
 #ifdef WIN32
     cb_sig_event_hnd[nIdx] = OpenEventA(SYNCHRONIZE, TRUE, buf);
-    if (cb_sig_event_hnd[nIdx] == NULL)  {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
+    if (cb_sig_event_hnd[nIdx] == NULL)
+    {
+        cbClose(false, nInstance);
+        return cbRESULT_LIBINITERROR;
+    }
 #else
     sem_t *sem = sem_open(buf, 0);
     if (sem == SEM_FAILED) {  cbClose(false, nInstance);  return cbRESULT_LIBINITERROR; }
