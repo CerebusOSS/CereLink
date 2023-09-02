@@ -863,9 +863,9 @@ private:
     uint32_t m_nNumSerialChans;
     uint32_t m_nNumDigoutChans;
     uint32_t m_nNumTotalChans;
+#ifndef CBPROTO_311
     NSP_STATUS  m_nNspStatus[cbMAXPROCS];       // true if the nsp has received a sysinfo from each NSP
     uint32_t m_nNumNTrodesPerInstrument[cbMAXPROCS];
-#ifndef CBPROTO_311
     uint32_t m_nGeminiSystem;   // Used as boolean true if connected to a gemini system
 #endif
 
@@ -887,7 +887,9 @@ public:
         for (uint32_t nProc = 0; nProc < cbMAXPROCS; ++nProc)
         {
             isSelection[nProc].lastchan = 1;
+#ifndef CBPROTO_311
             m_nNspStatus[nProc] = NSP_INIT;
+#endif
         }
     }
     bool IsRecordingBlocked()           { return m_iBlockRecording != 0; }
@@ -902,8 +904,16 @@ public:
     uint32_t cbGetNumSerialChans()      { return m_nNumSerialChans; }
     uint32_t cbGetNumDigoutChans()      { return m_nNumDigoutChans; }
     uint32_t cbGetNumTotalChans()       { return m_nNumTotalChans; }
+
+#ifndef CBPROTO_311
     NSP_STATUS cbGetNspStatus(uint32_t nProc) { return m_nNspStatus[nProc]; }
     uint32_t cbGetNumNTrodesPerInstrument(uint32_t nProc) { return m_nNumNTrodesPerInstrument[nProc - 1]; }
+    void cbSetNspStatus(uint32_t nInstrument, NSP_STATUS nStatus) { m_nNspStatus[nInstrument] = nStatus; }
+    void cbSetNumNTrodesPerInstrument(uint32_t nInstrument, uint32_t nNumNTrodesPerInstrument) { m_nNumNTrodesPerInstrument[nInstrument - 1] = nNumNTrodesPerInstrument; }
+#else
+    // m_NspStatus not avail in 3.11 so set to always found to pass logic checks.
+    NSP_STATUS cbGetNspStatus(uint32_t nProc) { return NSP_FOUND; }
+#endif
     void SetBlockRecording(bool bBlockRecording)                { m_iBlockRecording += bBlockRecording ? 1 : -1; }
     void cbSetPCStatusFlags(uint32_t nPCStatusFlags)            { m_nPCStatusFlags = nPCStatusFlags; }
     void cbSetNumFEChans(uint32_t nNumFEChans)                  { m_nNumFEChans = nNumFEChans; }
@@ -916,8 +926,6 @@ public:
     void cbSetNumSerialChans(uint32_t nNumSerialChans)          { m_nNumSerialChans = nNumSerialChans; }
     void cbSetNumDigoutChans(uint32_t nNumDigoutChans)          { m_nNumDigoutChans = nNumDigoutChans; }
     void cbSetNumTotalChans(uint32_t nNumTotalChans)            { m_nNumTotalChans = nNumTotalChans; }
-    void cbSetNspStatus(uint32_t nInstrument, NSP_STATUS nStatus) { m_nNspStatus[nInstrument] = nStatus; }
-    void cbSetNumNTrodesPerInstrument(uint32_t nInstrument, uint32_t nNumNTrodesPerInstrument) { m_nNumNTrodesPerInstrument[nInstrument - 1] = nNumNTrodesPerInstrument; }
 };
 
 typedef struct {

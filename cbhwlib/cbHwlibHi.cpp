@@ -1180,6 +1180,7 @@ uint32_t cbGetNumActiveInstruments()
     return nNumActiveInstruments;
 }
 
+
 NSP_STATUS cbGetNspStatus(uint32_t nInstrument)
 {
     if (nInstrument > cbMAXPROCS)
@@ -1187,12 +1188,14 @@ NSP_STATUS cbGetNspStatus(uint32_t nInstrument)
     return cb_pc_status_buffer_ptr[0]->cbGetNspStatus(nInstrument - 1);
 }
 
+#ifndef CBPROTO_311
 void cbSetNspStatus(uint32_t nInstrument, NSP_STATUS nStatus)
 {
     ASSERT(nInstrument - 1 < cbMAXPROCS);
     if (nInstrument - 1 < cbMAXPROCS)
         cb_pc_status_buffer_ptr[0]->cbSetNspStatus(nInstrument - 1, nStatus);
 }
+#endif
 
 uint32_t cbGetExpandedChannelNumber(uint32_t nInstrument, uint32_t nChannel)
 {

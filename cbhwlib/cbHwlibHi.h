@@ -112,7 +112,9 @@ uint32_t GetDigoutChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
 
 uint32_t cbGetNumActiveInstruments();
 NSP_STATUS cbGetNspStatus(uint32_t nInstrument);
+#ifndef CBPROTO_311
 void cbSetNspStatus(uint32_t nInstrument, NSP_STATUS nStatus);
+#endif
 uint32_t cbGetExpandedChannelNumber(uint32_t nInstrument, uint32_t nChannel);
 uint32_t cbGetChanInstrument(uint32_t nChannel, uint32_t nInstance = 0);
 uint32_t cbGetInstrumentLocalChannelNumber(uint32_t nChan);

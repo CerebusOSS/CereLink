@@ -111,21 +111,20 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
 #ifndef CBPROTO_311
     if (pkt->cbpkt_header.instrument >= cbMAXPROCS)
         nInstrument = 0;
-#endif
-
     for (uint32_t nProc = 0; nProc < cbMAXPROCS; ++nProc)
     {
         if (NSP_FOUND == cbGetNspStatus(nProc + 1))
         {
             if (cbRESULT_OK == ::cbGetProcInfo(nProc + 1, &isProcInfo))
                 nChanProcMax += isProcInfo.chancount;
-#ifndef CBPROTO_311
+
             if (pkt->cbpkt_header.instrument == nProc)
                 break;
-#endif
+
             nChanProcStart = nChanProcMax;
         }
     }
+#endif
 
     // Get information about this group...
     uint32_t  period;

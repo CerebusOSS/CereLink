@@ -1077,6 +1077,7 @@ cbRESULT cbSetComment(uint8_t charset, uint32_t rgba, PROCTIME time, const char*
 #ifndef CBPROTO_311
     pktComment.rgba = rgba;
     pktComment.timeStarted = time;
+// else pktComment.info.flags, pktComment.data
 #endif
     uint32_t nLen = 0;
     if (comment)
