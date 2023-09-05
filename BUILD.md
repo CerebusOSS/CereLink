@@ -77,6 +77,10 @@ Note: This may generate an error related to the CLI builds. Please see further i
 * `-DCBMEX_INSTALL_PREFIX` can be used to install cbmex to given directory.
 * `-DBUILD_CLI=ON`
     * to build the C#/CLI bindings. Buggy.
+* `-DCBPROTO_311=OFF`
+    * Set this to ON to compile CereLink to work with NSPs using protocol 3.11 (firmware 7.0x).
+    * Matlab and Python wrappers not supported in this mode.
+    * Cannot run alongside Central x86 version (if in "Program Files (x86)") because the Qt6 dependency restricts compilation targets to x64. But it works fine on other computers or if Central is not running.
 
 # cerebus.cbpy (Python lib) Build Instructions
 
