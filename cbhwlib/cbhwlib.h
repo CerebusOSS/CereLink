@@ -125,6 +125,7 @@ cbPKT_GENERIC *cbGetNextPacketPtr(uint32_t nInstance = 0);
 
 // Cerebus Library function to send packets via the Central Application Queue
 cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance = 0);
+cbRESULT cbSendPacketToInstrument(void * pPacket, uint32_t nInstance = 0, uint32_t nInstrument = cbNSP1 - 1);
 cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance = 0);
 
 cbRESULT cbGetVideoSource(char *name, float *fps, uint32_t id, uint32_t nInstance = 0);

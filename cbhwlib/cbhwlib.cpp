@@ -762,7 +762,14 @@ cbRESULT cbGetChanCount(uint32_t *count, uint32_t nInstance)
 // Systemwide Inquiry and Configuration Functions
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
+cbRESULT cbSendPacketToInstrument(void * pPacket, uint32_t nInstance, uint32_t nInstrument)
+{
+#ifndef CBPROTO_311
+    cbPKT_GENERIC * pPkt = static_cast<cbPKT_GENERIC*>(pPacket);
+    pPkt->cbpkt_header.instrument = nInstrument;
+#endif
+    return cbSendPacket(pPacket, nInstance);
+}
 
 cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance)
 {
@@ -1028,7 +1035,7 @@ cbRESULT cbSetSystemRunLevel(uint32_t runlevel, uint32_t runflags, uint32_t rese
     sysinfo.runflags = runflags;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&sysinfo, nInstance);
+    return cbSendPacketToInstrument(&sysinfo, nInstance, nInstrument);
 }
 
 
@@ -1090,12 +1097,7 @@ cbRESULT cbSetComment(uint8_t charset, uint32_t rgba, PROCTIME time, const char*
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
     {
         if ((cbRESULT_OK == bRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
-        {
-#ifndef CBPROTO_311
-            pktComment.cbpkt_header.instrument = nProc - 1;
-#endif
-            bRes = cbSendPacket(&pktComment, nInstance);
-        }
+            bRes = cbSendPacketToInstrument(&pktComment, nInstance, nProc - 1);
     }
     return bRes;
 }
@@ -1131,15 +1133,12 @@ cbRESULT cbSetLncParameters(uint32_t proc, uint32_t nLncFreq, uint32_t nLncRefCh
     pktLnc.cbpkt_header.chid           = 0x8000;
     pktLnc.cbpkt_header.type           = cbPKTTYPE_LNCSET;
     pktLnc.cbpkt_header.dlen           = cbPKTDLEN_LNC;
-#ifndef CBPROTO_311
-    pktLnc.cbpkt_header.instrument     = proc - 1;
-#endif
     pktLnc.lncFreq        = nLncFreq;
     pktLnc.lncRefChan     = nLncRefChan;
     pktLnc.lncGlobalMode  = nLncGMode;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&pktLnc, nInstance);
+    return cbSendPacketToInstrument(&pktLnc, nInstance, proc - 1);
 }
 
 cbRESULT cbGetNplay(char *fname, float *speed, uint32_t *flags, PROCTIME *ftime, PROCTIME *stime, PROCTIME *etime, PROCTIME * filever, uint32_t nInstance)
@@ -1179,9 +1178,6 @@ cbRESULT cbSetNplay(const char *fname, float speed, uint32_t mode, PROCTIME val,
     pktNPlay.cbpkt_header.chid           = 0x8000;
     pktNPlay.cbpkt_header.type           = cbPKTTYPE_NPLAYSET;
     pktNPlay.cbpkt_header.dlen           = cbPKTDLEN_NPLAY;
-#ifndef CBPROTO_311
-    pktNPlay.cbpkt_header.instrument     = cbNSP1 - 1;
-#endif
     pktNPlay.speed          = speed;
     pktNPlay.mode           = mode;
     pktNPlay.flags          = cbNPLAY_FLAG_NONE; // No flags here
@@ -1192,7 +1188,7 @@ cbRESULT cbSetNplay(const char *fname, float speed, uint32_t mode, PROCTIME val,
     if (fname) strncpy(pktNPlay.fname, fname, cbNPLAY_FNAME_LEN);
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&pktNPlay, nInstance);
+    return cbSendPacketToInstrument(&pktNPlay, nInstance, cbNSP1 - 1);
 }
 
 // Author & Date: Ehsan Azar       25 May 2010
@@ -1271,12 +1267,7 @@ cbRESULT cbSetVideoSource(const char *name, float fps, uint32_t vs, uint32_t nIn
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
     {
         if ((cbRESULT_OK == cbRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
-        {
-#ifndef CBPROTO_311
-            pktNm.cbpkt_header.instrument = nProc - 1;
-#endif
-            cbRes = cbSendPacket(&pktNm, nInstance);
-        }
+            cbRes = cbSendPacketToInstrument(&pktNm, nInstance, nProc - 1);
     }
     return cbRes;
 }
@@ -1309,12 +1300,7 @@ cbRESULT cbSetTrackObj(const char *name, uint16_t type, uint16_t pointCount, uin
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
     {
         if ((cbRESULT_OK == cbRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
-        {
-#ifndef CBPROTO_311
-            pktNm.cbpkt_header.instrument = nProc - 1;
-#endif
-            cbRes = cbSendPacket(&pktNm, nInstance);
-        }
+            cbRes = cbSendPacketToInstrument(&pktNm, nInstance, nProc - 1);
     }
     return cbRes;
 }
@@ -1358,12 +1344,7 @@ cbRESULT cbSetSpikeLength(uint32_t length, uint32_t pretrig, uint32_t nInstance)
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
     {
         if ((cbRESULT_OK == bRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
-        {
-#ifndef CBPROTO_311
-            sysinfo.cbpkt_header.instrument = nProc - 1;
-#endif
-            bRes = cbSendPacket(&sysinfo, nInstance);  // Enter the packet into the XMT buffer queue
-        }
+            bRes = cbSendPacketToInstrument(&sysinfo, nInstance, nProc - 1);  // Enter the packet into the XMT buffer queue
     }
     return bRes;
 }
@@ -1598,9 +1579,6 @@ cbRESULT cbSetChanLabel(uint32_t chan, const char *label, uint32_t userflags, in
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETLABEL;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan                   = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     memcpy(chaninfo.label, label, cbLEN_STR_LABEL);
     chaninfo.userflags = userflags;
@@ -1610,7 +1588,7 @@ cbRESULT cbSetChanLabel(uint32_t chan, const char *label, uint32_t userflags, in
         memcpy(&chaninfo.position, &(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].position[0]), 4 * sizeof(int32_t));
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
 }
 
 
@@ -1653,15 +1631,12 @@ cbRESULT cbSetChanUnitMapping(uint32_t chan, cbMANUALUNITMAPPING *unitmapping, u
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETUNITOVERRIDES;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan                    = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     if (unitmapping)
         memcpy(&chaninfo.unitmapping, unitmapping, cbMAXUNITS * sizeof(cbMANUALUNITMAPPING));
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
 }
 
 
@@ -1700,16 +1675,13 @@ cbRESULT cbSetChanNTrodeGroup( uint32_t chan, const uint32_t NTrodeGroup, uint32
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETNTRODEGROUP;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFOSHORT;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan                    = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     if (0 == NTrodeGroup)
         chaninfo.spkgroup = 0;
     else
         chaninfo.spkgroup = cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[NTrodeGroup - 1].ntrode;  //NTrodeGroup;
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
 }
 
 cbRESULT cbGetChanAmplitudeReject(uint32_t chan, cbAMPLITUDEREJECT *AmplitudeReject, uint32_t nInstance)
@@ -1752,9 +1724,6 @@ cbRESULT cbSetChanAmplitudeReject(uint32_t chan, const cbAMPLITUDEREJECT Amplitu
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETREJECTAMPLITUDE;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFOSHORT;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan      = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.spkopts   = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].spkopts & ~cbAINPSPK_REJAMPL;
     chaninfo.spkopts  |= AmplitudeReject.bEnabled ? cbAINPSPK_REJAMPL : 0;
@@ -1762,7 +1731,7 @@ cbRESULT cbSetChanAmplitudeReject(uint32_t chan, const cbAMPLITUDEREJECT Amplitu
     chaninfo.amplrejneg = AmplitudeReject.nAmplNeg;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
 }
 
 // Author & Date:   Ehsan Azar     22 Jan 2013
@@ -1826,15 +1795,12 @@ cbRESULT cbSetChanAutoThreshold( uint32_t chan, const uint32_t bEnabled, uint32_
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETAUTOTHRESHOLD;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFOSHORT;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan      = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.spkopts   = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].spkopts & ~cbAINPSPK_THRAUTO;
     chaninfo.spkopts  |= bEnabled ? cbAINPSPK_THRAUTO : 0;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
 }
 
 
@@ -1875,9 +1841,6 @@ cbRESULT cbSetNTrodeInfo( const uint32_t ntrode, const char *label, cbMANUALUNIT
     ntrodeinfo.cbpkt_header.chid      = 0x8000;
     ntrodeinfo.cbpkt_header.type      = cbPKTTYPE_SETNTRODEINFO;
     ntrodeinfo.cbpkt_header.dlen      = cbPKTDLEN_NTRODEINFO;
-#ifndef CBPROTO_311
-    ntrodeinfo.cbpkt_header.instrument = cbGetNTrodeInstrument(ntrode) - 1;
-#endif
     ntrodeinfo.ntrode = cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[ntrode - 1].ntrode;
     ntrodeinfo.fs        = fs;
     if (label) memcpy(ntrodeinfo.label, label, sizeof(ntrodeinfo.label));
@@ -1887,7 +1850,7 @@ cbRESULT cbSetNTrodeInfo( const uint32_t ntrode, const char *label, cbMANUALUNIT
     else
         memset(ntrodeinfo.ellipses, 0, size_ell);
 
-    return cbSendPacket(&ntrodeinfo, nInstance);
+    return cbSendPacketToInstrument(&ntrodeinfo, nInstance, cbGetNTrodeInstrument(ntrode) - 1);
 }
 
 
@@ -1910,16 +1873,13 @@ cbRESULT cbSetNTrodeLabel(const uint32_t ntrode, const char* label, uint32_t nIn
     ntrodeinfo.cbpkt_header.chid = 0x8000;
     ntrodeinfo.cbpkt_header.type = cbPKTTYPE_SETNTRODEINFO;
     ntrodeinfo.cbpkt_header.dlen = cbPKTDLEN_NTRODEINFO;
-#ifndef CBPROTO_311
-    ntrodeinfo.cbpkt_header.instrument = cbGetNTrodeInstrument(ntrode) - 1;
-#endif
     ntrodeinfo.ntrode = cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[ntrode - 1].ntrode;
     ntrodeinfo.fs = cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[ntrode - 1].fs;
     if (label) memcpy(ntrodeinfo.label, label, sizeof(ntrodeinfo.label));
     int size_ell = sizeof(ntrodeinfo.ellipses);
     memcpy(ntrodeinfo.ellipses, cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[ntrode - 1].ellipses, size_ell);
 
-    return cbSendPacket(&ntrodeinfo, nInstance);
+    return cbSendPacketToInstrument(&ntrodeinfo, nInstance, cbGetNTrodeInstrument(ntrode) - 1);
 }
 
 
@@ -1984,15 +1944,12 @@ cbRESULT cbSetDinpOptions(uint32_t chan, uint32_t options, uint32_t eopchar, uin
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETDINP;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.dinpopts  = options;     // digital input options (composed of nmDINP_* flags)
     chaninfo.eopchar   = eopchar;     // digital input capablities (given by nmDINP_* flags)
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
 }
 
 // Purpose: Digital Output Inquiry and Configuration Functions
@@ -2081,9 +2038,6 @@ cbRESULT cbSetDoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uin
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETDOUT;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.doutopts  = options;
     if ((cbDOUT_FREQUENCY & options) || (cbDOUT_TRIGGERED & options))
@@ -2115,12 +2069,7 @@ cbRESULT cbSetDoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uin
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
     {
         if ((cbRESULT_OK == nResult) && (NSP_FOUND == cbGetNspStatus(nProc)))
-        {
-#ifndef CBPROTO_311
-            chaninfo.cbpkt_header.instrument = nProc - 1;
-#endif
-            nResult = cbSendPacket(&chaninfo, nInstance);
-        }
+            nResult = cbSendPacketToInstrument(&chaninfo, nInstance, nProc - 1);
     }
     return nResult;
 }
@@ -2191,16 +2140,13 @@ cbRESULT cbSetAinpOpts(uint32_t chan, const uint32_t ainpopts,  uint32_t LNCrate
     chaninfo.cbpkt_header.chid		 = 0x8000;
     chaninfo.cbpkt_header.type		 = cbPKTTYPE_CHANSETAINP;
     chaninfo.cbpkt_header.dlen		 = cbPKTDLEN_CHANINFOSHORT;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan        = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.ainpopts    = ainpopts;
     chaninfo.lncrate	 = LNCrate;
     chaninfo.refelecchan = refElecChan;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
 }
 
 // Purpose: Analog Input Inquiry and Configuration Functions
@@ -2243,15 +2189,12 @@ cbRESULT cbSetAinpScaling(uint32_t chan, cbSCALING *scalin, uint32_t nInstance)
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETSCALE;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cbGetChanInstrument(chan) - 1;
-#endif
     chaninfo.chan      = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.scalin    = *scalin;
     chaninfo.scalout   = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].scalout;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    return cbSendPacketToInstrument(&chaninfo, nInstance, cbGetChanInstrument(chan) - 1);
 }
 
 // Purpose: Analog Input Inquiry and Configuration Functions
@@ -2297,9 +2240,6 @@ cbRESULT cbSetAinpDisplay( uint32_t chan, int32_t smpdispmin, int32_t smpdispmax
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETDISP;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     if (smpdispmin) chaninfo.smpdispmin = smpdispmin;
         else chaninfo.smpdispmin = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].smpdispmin;
@@ -2311,7 +2251,7 @@ cbRESULT cbSetAinpDisplay( uint32_t chan, int32_t smpdispmin, int32_t smpdispmax
         else chaninfo.lncdispmax = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].lncdispmax;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
 }
 
 
@@ -2360,23 +2300,14 @@ cbRESULT cbSetAinpPreview(uint32_t chan, uint32_t prevopts, uint32_t nInstance)
         for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
         {
             if ((cbRESULT_OK == res) && (NSP_FOUND == cbGetNspStatus(nProc)))
-            {
-#ifndef CBPROTO_311
-                packet.cbpkt_header.instrument = nProc - 1;
-#endif
-                res = cbSendPacket(&packet, nInstance);
-            }
+                res = cbSendPacketToInstrument(&packet, nInstance, nProc - 1);
         }
     }
     else
     {
         packet.cbpkt_header.chid = 0x8000 + cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
-#ifndef CBPROTO_311
-        packet.cbpkt_header.instrument = cbGetChanInstrument(chan) - 1;
-#endif
-
         // Enter the packet into the XMT buffer queue
-        res = cbSendPacket(&packet, nInstance);
+        res = cbSendPacketToInstrument(&packet, nInstance, cbGetChanInstrument(chan) - 1);
     }
 
     return res;
@@ -2421,15 +2352,12 @@ cbRESULT cbSetAinpSampling(uint32_t chan, uint32_t filter, uint32_t group, uint3
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETSMP;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.smpfilter = filter;
     chaninfo.smpgroup  = group;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
 }
 
 // Purpose: AINP Spike Stream Functions
@@ -2490,15 +2418,12 @@ cbRESULT cbSetAinpSpikeOptions(uint32_t chan, uint32_t spkopts, uint32_t spkfilt
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETSPK;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.spkopts   = spkopts;
     chaninfo.spkfilter = spkfilter;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
 }
 
 // Purpose: AINP Spike Stream Functions
@@ -2545,14 +2470,11 @@ cbRESULT cbSetAinpSpikeThreshold(uint32_t chan, int32_t spkthrlevel, uint32_t nI
     chaninfo.cbpkt_header.chid        = 0x8000;
     chaninfo.cbpkt_header.type        = cbPKTTYPE_CHANSETSPKTHR;
     chaninfo.cbpkt_header.dlen        = cbPKTDLEN_CHANINFO;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.spkthrlevel = spkthrlevel;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
 }
 
 // Purpose: AINP Spike Stream Functions
@@ -2594,15 +2516,12 @@ cbRESULT cbSetAinpSpikeHoops(uint32_t chan, cbHOOP *hoops, uint32_t nInstance)
     chaninfo.cbpkt_header.chid        = 0x8000;
     chaninfo.cbpkt_header.type        = cbPKTTYPE_CHANSETSPKHPS;
     chaninfo.cbpkt_header.dlen        = cbPKTDLEN_CHANINFO;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
 
     memcpy(&(chaninfo.spkhoops[0][0]), hoops, sizeof(cbHOOP)*cbMAXUNITS*cbMAXHOOPS );
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
 }
 
 #define  nmAOUTCAP_AUDIO        0x00000001  // Channel is physically optimized for audio output
@@ -2672,15 +2591,12 @@ cbRESULT cbSetAoutScaling(uint32_t chan, cbSCALING *scalout, uint32_t nInstance)
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETSCALE;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.scalin    = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].scalin;
     chaninfo.scalout   = *scalout;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacket(&chaninfo, nInstance);
+    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
 }
 
 // Purpose: Analog Output Inquiry and Configuration Functions
@@ -2734,9 +2650,6 @@ cbRESULT cbSetAoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uin
     chaninfo.cbpkt_header.chid       = 0x8000;
     chaninfo.cbpkt_header.type       = cbPKTTYPE_CHANSETAOUT;
     chaninfo.cbpkt_header.dlen       = cbPKTDLEN_CHANINFO;
-#ifndef CBPROTO_311
-    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
-#endif
     chaninfo.chan       = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.aoutopts   = options;
 #ifdef CBPROTO_311
@@ -2750,12 +2663,7 @@ cbRESULT cbSetAoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uin
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
     {
         if ((cbRESULT_OK == nResult) && (NSP_FOUND == cbGetNspStatus(nProc)))
-        {
-#ifndef CBPROTO_311
-            chaninfo.cbpkt_header.instrument = nProc - 1;
-#endif
-            nResult = cbSendPacket(&chaninfo, nInstance);
-        }
+            nResult = cbSendPacketToInstrument(&chaninfo, nInstance, nProc - 1);
     }
     return nResult;
 }
@@ -2781,12 +2689,7 @@ cbRESULT cbGetSortingModel(uint32_t nInstance)
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
     {
         if ((cbRESULT_OK == ret) && (NSP_FOUND == cbGetNspStatus(nProc)))
-        {
-#ifndef CBPROTO_311
-            isPkt.cbpkt_header.instrument = nProc - 1;
-#endif
-            ret = cbSendPacket(&isPkt, nInstance);
-        }
+            ret = cbSendPacketToInstrument(&isPkt, nInstance, nProc - 1);
     }
 
     // FIXME: relying on sleep is racy, refactor the code
@@ -2821,12 +2724,7 @@ cbRESULT cbGetFeatureSpaceDomain(uint32_t nInstance)
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
     {
         if ((cbRESULT_OK == ret) && (NSP_FOUND == cbGetNspStatus(nProc)))
-        {
-#ifndef CBPROTO_311
-            isPkt.cbpkt_header.instrument = nProc - 1;
-#endif
-            ret = cbSendPacket(&isPkt, nInstance);
-        }
+            ret = cbSendPacketToInstrument(&isPkt, nInstance, nProc - 1);
     }
 
     // FIXME: relying on sleep is racy, refactor the code
@@ -2962,11 +2860,8 @@ cbRESULT cbSSSetNoiseBoundary(uint32_t chanIdx, float afCentroid[3], float afMaj
                            afMinor_1[0], afMinor_1[1], afMinor_1[2],
                            afMinor_2[0], afMinor_2[1], afMinor_2[2]);
     icPkt.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chan;
-#ifndef CBPROTO_311
-    icPkt.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].cbpkt_header.instrument;
-#endif
 
-    return cbSendPacket(&icPkt, nInstance);
+    return cbSendPacketToInstrument(&icPkt, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].cbpkt_header.instrument);
 }
 
 // Author & Date:   Jason Scott     August 7 2009
@@ -3173,12 +3068,7 @@ cbRESULT cbSSSetStatistics(uint32_t nUpdateSpikes, uint32_t nAutoalg, uint32_t n
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
     {
         if ((cbRESULT_OK == cbRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
-        {
-#ifndef CBPROTO_311
-            icPkt.cbpkt_header.instrument = nProc - 1;
-#endif
-            cbRes = cbSendPacket(&icPkt, nInstance);
-        }
+            cbRes = cbSendPacketToInstrument(&icPkt, nInstance, nProc - 1);
     }
     return cbRes;
 }
@@ -3231,12 +3121,7 @@ cbRESULT cbSSSetArtifactReject(uint32_t nMaxChans, uint32_t nRefractorySamples, 
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
     {
         if ((cbRESULT_OK == cbRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
-        {
-#ifndef CBPROTO_311
-            isPkt.cbpkt_header.instrument = nProc - 1;
-#endif
-            cbRes = cbSendPacket(&isPkt, nInstance);
-        }
+            cbRes = cbSendPacketToInstrument(&isPkt, nInstance, nProc - 1);
     }
     return cbRes;
 }
@@ -3291,12 +3176,7 @@ cbRESULT cbSSSetDetect(float fThreshold, float fScaling, uint32_t nInstance)
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
     {
         if ((cbRESULT_OK == cbRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
-        {
-#ifndef CBPROTO_311
-            isPkt.cbpkt_header.instrument = nProc - 1;
-#endif
-            cbRes = cbSendPacket(&isPkt, nInstance);
-        }
+            cbRes = cbSendPacketToInstrument(&isPkt, nInstance, nProc - 1);
     }
     return cbRes;
 }
@@ -3352,12 +3232,7 @@ cbRESULT cbSSSetStatus(cbAdaptControl cntlUnitStats, cbAdaptControl cntlNumUnits
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
     {
         if ((cbRESULT_OK == cbRes) && (NSP_FOUND == cbGetNspStatus(nProc)))
-        {
-#ifndef CBPROTO_311
-            icPkt.cbpkt_header.instrument = nProc - 1;
-#endif
-            cbRes = cbSendPacket(&icPkt, nInstance);
-        }
+            cbRes = cbSendPacketToInstrument(&icPkt, nInstance, nProc - 1);
     }
     return cbRes;
 }
@@ -3605,10 +3480,7 @@ cbRESULT cbSetAdaptFilter(uint32_t  proc,             // which NSP processor?
     if (pnRefChan2)     nRefChan2 =     *pnRefChan2;
 
     PktAdaptFiltInfo icPkt(nMode, dLearningRate, nRefChan1, nRefChan2);
-#ifndef CBPROTO_311
-    icPkt.cbpkt_header.instrument = proc - 1;
-#endif
-    return cbSendPacket(&icPkt, nInstance);
+    return cbSendPacketToInstrument(&icPkt, nInstance, proc - 1);
 }
 
 // Tell me about the current RefElecive filter settings
@@ -3671,7 +3543,7 @@ cbRESULT cbSetRefElecFilter(uint32_t  proc,             // which NSP processor?
     icPkt.nMode = nMode;
     icPkt.nRefChan = nRefChan;
 
-    return cbSendPacket(&icPkt, nInstance);
+    return cbSendPacketToInstrument(&icPkt, nInstance, proc - 1);
 }
 
 // Author & Date:   Ehsan Azar     6 Nov 2012
