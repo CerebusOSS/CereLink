@@ -1580,6 +1580,9 @@ cbRESULT cbSetChanLabel(uint32_t chan, const char *label, uint32_t userflags, in
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETLABEL;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
     chaninfo.chan                   = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
+#ifndef CBPROTO_311
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+#endif
     memcpy(chaninfo.label, label, cbLEN_STR_LABEL);
     chaninfo.userflags = userflags;
     if (position)
@@ -1588,7 +1591,7 @@ cbRESULT cbSetChanLabel(uint32_t chan, const char *label, uint32_t userflags, in
         memcpy(&chaninfo.position, &(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].position[0]), 4 * sizeof(int32_t));
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
+    return cbSendPacket(&chaninfo, nInstance);
 }
 
 
@@ -1631,12 +1634,15 @@ cbRESULT cbSetChanUnitMapping(uint32_t chan, cbMANUALUNITMAPPING *unitmapping, u
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETUNITOVERRIDES;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+#ifndef CBPROTO_311
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+#endif
     chaninfo.chan                    = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     if (unitmapping)
         memcpy(&chaninfo.unitmapping, unitmapping, cbMAXUNITS * sizeof(cbMANUALUNITMAPPING));
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
+    return cbSendPacket(&chaninfo, nInstance);
 }
 
 
@@ -1675,13 +1681,16 @@ cbRESULT cbSetChanNTrodeGroup( uint32_t chan, const uint32_t NTrodeGroup, uint32
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETNTRODEGROUP;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFOSHORT;
+#ifndef CBPROTO_311
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+#endif
     chaninfo.chan                    = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     if (0 == NTrodeGroup)
         chaninfo.spkgroup = 0;
     else
         chaninfo.spkgroup = cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[NTrodeGroup - 1].ntrode;  //NTrodeGroup;
     // Enter the packet into the XMT buffer queue
-    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
+    return cbSendPacket(&chaninfo, nInstance);
 }
 
 cbRESULT cbGetChanAmplitudeReject(uint32_t chan, cbAMPLITUDEREJECT *AmplitudeReject, uint32_t nInstance)
@@ -1724,6 +1733,9 @@ cbRESULT cbSetChanAmplitudeReject(uint32_t chan, const cbAMPLITUDEREJECT Amplitu
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETREJECTAMPLITUDE;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFOSHORT;
+#ifndef CBPROTO_311
+    chaninfo.cbpkt_header.instrument =  cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+#endif
     chaninfo.chan      = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.spkopts   = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].spkopts & ~cbAINPSPK_REJAMPL;
     chaninfo.spkopts  |= AmplitudeReject.bEnabled ? cbAINPSPK_REJAMPL : 0;
@@ -1731,7 +1743,7 @@ cbRESULT cbSetChanAmplitudeReject(uint32_t chan, const cbAMPLITUDEREJECT Amplitu
     chaninfo.amplrejneg = AmplitudeReject.nAmplNeg;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
+    return cbSendPacket(&chaninfo, nInstance);
 }
 
 // Author & Date:   Ehsan Azar     22 Jan 2013
@@ -1795,12 +1807,15 @@ cbRESULT cbSetChanAutoThreshold( uint32_t chan, const uint32_t bEnabled, uint32_
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETAUTOTHRESHOLD;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFOSHORT;
+#ifndef CBPROTO_311
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+#endif
     chaninfo.chan      = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.spkopts   = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].spkopts & ~cbAINPSPK_THRAUTO;
     chaninfo.spkopts  |= bEnabled ? cbAINPSPK_THRAUTO : 0;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
+    return cbSendPacket(&chaninfo, nInstance);
 }
 
 
@@ -1944,12 +1959,15 @@ cbRESULT cbSetDinpOptions(uint32_t chan, uint32_t options, uint32_t eopchar, uin
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETDINP;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+#ifndef CBPROTO_311
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.dinpopts  = options;     // digital input options (composed of nmDINP_* flags)
     chaninfo.eopchar   = eopchar;     // digital input capablities (given by nmDINP_* flags)
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
+    return cbSendPacket(&chaninfo, nInstance);
 }
 
 // Purpose: Digital Output Inquiry and Configuration Functions
@@ -2140,13 +2158,16 @@ cbRESULT cbSetAinpOpts(uint32_t chan, const uint32_t ainpopts,  uint32_t LNCrate
     chaninfo.cbpkt_header.chid		 = 0x8000;
     chaninfo.cbpkt_header.type		 = cbPKTTYPE_CHANSETAINP;
     chaninfo.cbpkt_header.dlen		 = cbPKTDLEN_CHANINFOSHORT;
+#ifndef CBPROTO_311
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+#endif
     chaninfo.chan        = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.ainpopts    = ainpopts;
     chaninfo.lncrate	 = LNCrate;
     chaninfo.refelecchan = refElecChan;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
+    return cbSendPacket(&chaninfo, nInstance);
 }
 
 // Purpose: Analog Input Inquiry and Configuration Functions
@@ -2240,6 +2261,9 @@ cbRESULT cbSetAinpDisplay( uint32_t chan, int32_t smpdispmin, int32_t smpdispmax
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETDISP;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+#ifndef CBPROTO_311
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     if (smpdispmin) chaninfo.smpdispmin = smpdispmin;
         else chaninfo.smpdispmin = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].smpdispmin;
@@ -2251,7 +2275,7 @@ cbRESULT cbSetAinpDisplay( uint32_t chan, int32_t smpdispmin, int32_t smpdispmax
         else chaninfo.lncdispmax = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].lncdispmax;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
+    return cbSendPacket(&chaninfo, nInstance);
 }
 
 
@@ -2352,12 +2376,15 @@ cbRESULT cbSetAinpSampling(uint32_t chan, uint32_t filter, uint32_t group, uint3
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETSMP;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+#ifndef CBPROTO_311
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.smpfilter = filter;
     chaninfo.smpgroup  = group;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
+    return cbSendPacket(&chaninfo, nInstance);
 }
 
 // Purpose: AINP Spike Stream Functions
@@ -2418,12 +2445,15 @@ cbRESULT cbSetAinpSpikeOptions(uint32_t chan, uint32_t spkopts, uint32_t spkfilt
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETSPK;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+#ifndef CBPROTO_311
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.spkopts   = spkopts;
     chaninfo.spkfilter = spkfilter;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
+    return cbSendPacket(&chaninfo, nInstance);
 }
 
 // Purpose: AINP Spike Stream Functions
@@ -2470,11 +2500,14 @@ cbRESULT cbSetAinpSpikeThreshold(uint32_t chan, int32_t spkthrlevel, uint32_t nI
     chaninfo.cbpkt_header.chid        = 0x8000;
     chaninfo.cbpkt_header.type        = cbPKTTYPE_CHANSETSPKTHR;
     chaninfo.cbpkt_header.dlen        = cbPKTDLEN_CHANINFO;
+#ifndef CBPROTO_311
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.spkthrlevel = spkthrlevel;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
+    return cbSendPacket(&chaninfo, nInstance);
 }
 
 // Purpose: AINP Spike Stream Functions
@@ -2516,12 +2549,15 @@ cbRESULT cbSetAinpSpikeHoops(uint32_t chan, cbHOOP *hoops, uint32_t nInstance)
     chaninfo.cbpkt_header.chid        = 0x8000;
     chaninfo.cbpkt_header.type        = cbPKTTYPE_CHANSETSPKHPS;
     chaninfo.cbpkt_header.dlen        = cbPKTDLEN_CHANINFO;
+#ifndef CBPROTO_311
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
 
     memcpy(&(chaninfo.spkhoops[0][0]), hoops, sizeof(cbHOOP)*cbMAXUNITS*cbMAXHOOPS );
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
+    return cbSendPacket(&chaninfo, nInstance);
 }
 
 #define  nmAOUTCAP_AUDIO        0x00000001  // Channel is physically optimized for audio output
@@ -2591,12 +2627,15 @@ cbRESULT cbSetAoutScaling(uint32_t chan, cbSCALING *scalout, uint32_t nInstance)
     chaninfo.cbpkt_header.chid      = 0x8000;
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETSCALE;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
+#ifndef CBPROTO_311
+    chaninfo.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument;
+#endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.scalin    = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].scalin;
     chaninfo.scalout   = *scalout;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacketToInstrument(&chaninfo, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.instrument);
+    return cbSendPacket(&chaninfo, nInstance);
 }
 
 // Purpose: Analog Output Inquiry and Configuration Functions
@@ -2860,8 +2899,11 @@ cbRESULT cbSSSetNoiseBoundary(uint32_t chanIdx, float afCentroid[3], float afMaj
                            afMinor_1[0], afMinor_1[1], afMinor_1[2],
                            afMinor_2[0], afMinor_2[1], afMinor_2[2]);
     icPkt.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chan;
+#ifndef CBPROTO_311
+    icPkt.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].cbpkt_header.instrument;
+#endif
 
-    return cbSendPacketToInstrument(&icPkt, nInstance, cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].cbpkt_header.instrument);
+    return cbSendPacket(&icPkt, nInstance);
 }
 
 // Author & Date:   Jason Scott     August 7 2009
