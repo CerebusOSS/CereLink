@@ -1966,7 +1966,7 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
             // We don't know for sure how many samples were allocated,
             // but this is what the client application was told to allocate.
             uint32_t num_allocated = 0;
-            for (int unit_ix = 0; unit_ix < cbMAXUNITS; unit_ix++)
+            for (int unit_ix = 0; unit_ix < (cbMAXUNITS + 1); unit_ix++)
             {
                 num_allocated += trialevent->num_samples[ev_ix][unit_ix];
             }
