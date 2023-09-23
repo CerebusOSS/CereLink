@@ -387,12 +387,19 @@ IF(${BUILD_TEST})
     TARGET_LINK_LIBRARIES(testccf ${LIB_NAME} )
     LIST(APPEND TEST_TARGET_LIST testccf)
 
-    ADD_EXECUTABLE(test_io ${PROJECT_SOURCE_DIR}/samples/TestIO/test_io.cpp )
+    ADD_EXECUTABLE(test_io ${PROJECT_SOURCE_DIR}/samples/TestIO/test_io.cpp)
     TARGET_INCLUDE_DIRECTORIES(test_io PRIVATE
         ${LIB_INCL_DIRS}
         ${PROJECT_SOURCE_DIR}/cbsdk)
     TARGET_LINK_LIBRARIES(test_io ${LIB_NAME} )
     LIST(APPEND TEST_TARGET_LIST test_io)
+
+    ADD_EXECUTABLE(test_callback ${PROJECT_SOURCE_DIR}/samples/TestIO/test_callback.cpp)
+    TARGET_INCLUDE_DIRECTORIES(test_callback PRIVATE
+            ${LIB_INCL_DIRS}
+            ${PROJECT_SOURCE_DIR}/cbsdk)
+    TARGET_LINK_LIBRARIES(test_callback ${LIB_NAME} )
+    LIST(APPEND TEST_TARGET_LIST test_callback)
 
     ADD_EXECUTABLE(test_comments ${PROJECT_SOURCE_DIR}/samples/TestComments/test_comments.cpp )
     TARGET_INCLUDE_DIRECTORIES(test_comments PRIVATE
@@ -416,6 +423,8 @@ IF(${BUILD_TEST})
             COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
         add_custom_command(TARGET test_io POST_BUILD
             COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
+        add_custom_command(TARGET test_callback POST_BUILD
+                COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
         add_custom_command(TARGET test_comments POST_BUILD
             COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
         add_custom_command(TARGET test_analog_out POST_BUILD
