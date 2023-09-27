@@ -197,7 +197,15 @@ ENDIF( MSVC )
 ##
 # cbsdk shared / dynamic
 ADD_LIBRARY( ${LIB_NAME} SHARED ${LIB_SOURCE} )
-TARGET_INCLUDE_DIRECTORIES( ${LIB_NAME} PRIVATE ${LIB_INCL_DIRS} )
+target_include_directories( ${LIB_NAME}
+        PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbsdk>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbhwlib>
+        $<INSTALL_INTERFACE:include/cbsdk>
+        PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Central>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CentralCommon>
+)
 TARGET_LINK_LIBRARIES( ${LIB_NAME} PRIVATE ${QT_LIBRARIES} )
 IF( WIN32 )
     TARGET_LINK_LIBRARIES( ${LIB_NAME} PRIVATE wsock32 ws2_32 winmm )
@@ -219,7 +227,15 @@ SET_TARGET_PROPERTIES(
 # cbsdk_static (optional)
 IF(${BUILD_STATIC})
     ADD_LIBRARY( ${LIB_NAME_STATIC} STATIC ${LIB_SOURCE} ${LIB_HEADERS_MOC} )
-    TARGET_INCLUDE_DIRECTORIES( ${LIB_NAME_STATIC} PRIVATE ${LIB_INCL_DIRS})
+    target_include_directories( ${LIB_NAME_STATIC}
+            PUBLIC
+                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbsdk>
+                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbhwlib>
+                $<INSTALL_INTERFACE:include/cbsdk>
+            PRIVATE
+                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Central>
+                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CentralCommon>
+    )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} PRIVATE ${QT_LIBRARIES} )
     IF( WIN32 )
         TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} PRIVATE ws2_32 winmm )
@@ -278,7 +294,7 @@ IF(${BUILD_CBMEX} AND MATLAB_FOUND )
     # Use static library to build cbmex
     ADD_DEPENDENCIES( ${LIB_NAME_CBMEX} ${LIB_NAME_STATIC} )
     TARGET_INCLUDE_DIRECTORIES( ${LIB_NAME_CBMEX}
-        PRIVATE ${LIB_INCL_DIRS} ${Matlab_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/cbsdk
+        PRIVATE ${Matlab_INCLUDE_DIRS}
     )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_CBMEX}
         ${LIB_NAME_STATIC}
@@ -321,7 +337,7 @@ IF( ${BUILD_CBOCT} AND OCTAVE_FOUND )
     # Use static library to build cbmex
     ADD_DEPENDENCIES( ${LIB_NAME_CBOCT} ${LIB_NAME_STATIC} )
     TARGET_INCLUDE_DIRECTORIES( ${LIB_NAME_CBOCT}
-        PRIVATE ${LIB_INCL_DIRS} ${OCTAVE_INCLUDE_DIR} ${PROJECT_SOURCE_DIR}/cbsdk
+        PRIVATE ${OCTAVE_INCLUDE_DIR}
     )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_CBOCT} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${OCTAVE_LIBRARIES} )
     INSTALL( TARGETS ${LIB_NAME_CBOCT}
@@ -381,37 +397,22 @@ IF(${BUILD_TEST})
     ADD_EXECUTABLE(testccf
             ${PROJECT_SOURCE_DIR}/samples/TestCCF/test_ccf.cpp
     )
-    TARGET_INCLUDE_DIRECTORIES(testccf PRIVATE
-            ${LIB_INCL_DIRS}
-            ${PROJECT_SOURCE_DIR}/cbsdk)
     TARGET_LINK_LIBRARIES(testccf ${LIB_NAME} )
     LIST(APPEND TEST_TARGET_LIST testccf)
 
-    ADD_EXECUTABLE(test_io ${PROJECT_SOURCE_DIR}/samples/TestIO/test_io.cpp)
-    TARGET_INCLUDE_DIRECTORIES(test_io PRIVATE
-        ${LIB_INCL_DIRS}
-        ${PROJECT_SOURCE_DIR}/cbsdk)
+    ADD_EXECUTABLE(test_io ${PROJECT_SOURCE_DIR}/samples/TestIO/test_io.cpp )
     TARGET_LINK_LIBRARIES(test_io ${LIB_NAME} )
     LIST(APPEND TEST_TARGET_LIST test_io)
 
     ADD_EXECUTABLE(test_callback ${PROJECT_SOURCE_DIR}/samples/TestIO/test_callback.cpp)
-    TARGET_INCLUDE_DIRECTORIES(test_callback PRIVATE
-            ${LIB_INCL_DIRS}
-            ${PROJECT_SOURCE_DIR}/cbsdk)
     TARGET_LINK_LIBRARIES(test_callback ${LIB_NAME} )
     LIST(APPEND TEST_TARGET_LIST test_callback)
 
     ADD_EXECUTABLE(test_comments ${PROJECT_SOURCE_DIR}/samples/TestComments/test_comments.cpp )
-    TARGET_INCLUDE_DIRECTORIES(test_comments PRIVATE
-        ${LIB_INCL_DIRS}
-        ${PROJECT_SOURCE_DIR}/cbsdk)
     TARGET_LINK_LIBRARIES(test_comments ${LIB_NAME} )
     LIST(APPEND TEST_TARGET_LIST test_comments)
 
     ADD_EXECUTABLE(test_analog_out ${PROJECT_SOURCE_DIR}/samples/TestAnalogOut/test_analog_out.cpp )
-    TARGET_INCLUDE_DIRECTORIES(test_analog_out PRIVATE
-        ${LIB_INCL_DIRS}
-        ${PROJECT_SOURCE_DIR}/cbsdk)
     TARGET_LINK_LIBRARIES(test_analog_out ${LIB_NAME})
     LIST(APPEND TEST_TARGET_LIST test_analog_out)
 
