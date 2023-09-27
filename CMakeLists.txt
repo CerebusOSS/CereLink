@@ -469,6 +469,22 @@ ENDIF(${BUILD_HDF5} AND HDF5_FOUND )
 # C++ / CLI
 add_subdirectory(cli)
 
+
+## SWIG -- not working; segfault on import
+#find_package(SWIG REQUIRED)
+#include(${SWIG_USE_FILE})
+#find_package(Python REQUIRED COMPONENTS Development)
+#set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/cbmex/cbmex.i PROPERTIES CPLUSPLUS ON)  # for C++ types like bool
+#set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/cbmex/cbmex.i PROPERTIES SWIG_FLAGS "-builtin")
+#swig_add_library(cbsdk_swig
+#        LANGUAGE python
+#        SOURCES ${CMAKE_CURRENT_LIST_DIR}/cbmex/cbmex.i
+#)
+#set_target_properties(cbsdk_swig PROPERTIES SWIG_USE_TARGET_INCLUDE_DIRECTORIES ON)
+#set_target_properties(cbsdk_swig PROPERTIES COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
+#swig_link_libraries(cbsdk_swig PRIVATE cbsdk Python::Python)
+
+
 #########################################################################################
 # Install libraries, test executable, and headers
 INSTALL( TARGETS ${INSTALL_TARGET_LIST}
