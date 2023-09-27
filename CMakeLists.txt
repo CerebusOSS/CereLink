@@ -209,6 +209,7 @@ target_include_directories( ${LIB_NAME}
 TARGET_LINK_LIBRARIES( ${LIB_NAME} PRIVATE ${QT_LIBRARIES} )
 IF( WIN32 )
     TARGET_LINK_LIBRARIES( ${LIB_NAME} PRIVATE wsock32 ws2_32 winmm )
+    target_include_directories(${LIB_NAME} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/compat>)
 ELSE()
     IF(NOT APPLE)
         TARGET_LINK_LIBRARIES(${LIB_NAME} PRIVATE rt)
@@ -238,6 +239,7 @@ IF(${BUILD_STATIC})
     )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} PRIVATE ${QT_LIBRARIES} )
     IF( WIN32 )
+        target_include_directories(${LIB_NAME} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/compat>)
         TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} PRIVATE ws2_32 winmm )
         SET_TARGET_PROPERTIES( ${LIB_NAME_STATIC} PROPERTIES
             COMPILE_FLAGS "-DSTATIC_CBSDK_LINK"
@@ -387,6 +389,7 @@ IF(${BUILD_TEST})
             PRIVATE
                wsock32 ws2_32 winmm
         )
+        target_include_directories(testcbsdk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/compat>)
     ELSEIF(NOT APPLE)
         # Hide unexported symbols
         TARGET_LINK_LIBRARIES(testcbsdk PRIVATE rt)
