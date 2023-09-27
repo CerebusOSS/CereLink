@@ -399,7 +399,8 @@ cdef extern from "cbsdk.h":
     cbSdkResult cbSdkGetFileConfig(uint32_t nInstance, char * filename, char * username, bool * pbRecording)
     cbSdkResult cbSdkSetPatientInfo(uint32_t nInstance, const char * ID, const char * firstname, const char * lastname, uint32_t DOBMonth, uint32_t DOBDay, uint32_t DOBYear)
     cbSdkResult cbSdkInitiateImpedance(uint32_t nInstance)
-    cbSdkResult cbSdkSendPoll(uint32_t nInstance, const char* appname, uint32_t mode, uint32_t flags, uint32_t extra)
+    #cbSdkResult cbSdkSendPoll(uint32_t nInstance, const char* appname, uint32_t mode, uint32_t flags, uint32_t extra)
+    cbSdkResult cbSdkSendPoll(uint32_t nInstance, void * ppckt)
     #cbSdkSendPacket
     #cbSdkSetSystemRunLevel
     cbSdkResult cbSdkSetDigitalOutput(uint32_t nInstance, uint16_t channel, uint16_t value)

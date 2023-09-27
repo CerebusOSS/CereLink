@@ -502,7 +502,7 @@ CBSDKAPI    cbSdkResult cbSdkSetPatientInfo(uint32_t nInstance, const char * ID,
 CBSDKAPI    cbSdkResult cbSdkInitiateImpedance(uint32_t nInstance);
 
 /*! This sends an arbitrary packet without any validation. Please use with care or it might break the system */
-CBSDKAPI    cbSdkResult cbSdkSendPacket(uint32_t nInstance, void * ppckt);
+//CBSDKAPI    cbSdkResult cbSdkSendPacket(uint32_t nInstance, void * ppckt);
 
 /*! Get/Set the runlevel of the instrument */
 CBSDKAPI    cbSdkResult cbSdkSetSystemRunLevel(uint32_t nInstance, uint32_t runlevel, uint32_t locked, uint32_t resetque);
@@ -578,6 +578,6 @@ CBSDKAPI    cbSdkResult cbSdkAnalogToDigital(uint32_t nInstance, uint16_t channe
 
 }
 
-CBSDKAPI    cbSdkResult cbSdkSendPoll(uint32_t nInstance, const char* appname, uint32_t mode, uint32_t flags, uint32_t extra);
+CBSDKAPI    cbSdkResult cbSdkSendPoll(uint32_t nInstance, void * ppckt);
 
 #endif /* CBSDK_H_INCLUDED */
