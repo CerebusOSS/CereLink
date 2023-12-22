@@ -243,8 +243,10 @@ ADD_LIBRARY( ${LIB_NAME} SHARED ${LIB_SOURCE} )
 target_include_directories( ${LIB_NAME}
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbsdk>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbproto>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbhwlib>
         $<INSTALL_INTERFACE:include/cbsdk>
+        $<INSTALL_INTERFACE:include/cbproto>
         PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Central>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CentralCommon>
@@ -277,7 +279,9 @@ IF(${BUILD_STATIC})
             PUBLIC
                 $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbsdk>
                 $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbhwlib>
+                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbproto>
                 $<INSTALL_INTERFACE:include/cbsdk>
+                $<INSTALL_INTERFACE:include/cbproto>
             PRIVATE
                 $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Central>
                 $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CentralCommon>
