@@ -956,33 +956,7 @@ typedef struct {
 
 } cbCFGBUFF;
 
-// Latest CCF structure
-typedef struct {
-    cbPKT_CHANINFO isChan[cbMAXCHANS];
-    cbPKT_ADAPTFILTINFO isAdaptInfo;
-    cbPKT_SS_DETECT isSS_Detect;
-    cbPKT_SS_ARTIF_REJECT isSS_ArtifactReject;
-    cbPKT_SS_NOISE_BOUNDARY isSS_NoiseBoundary[cbNUM_ANALOG_CHANS];
-    cbPKT_SS_STATISTICS isSS_Statistics;
-    cbPKT_SS_STATUS isSS_Status;
-    cbPKT_SYSINFO isSysInfo;
-    cbPKT_NTRODEINFO isNTrodeInfo[cbMAXNTRODES];
-    cbPKT_AOUT_WAVEFORM isWaveform[AOUT_NUM_GAIN_CHANS][cbMAX_AOUT_TRIGGER];
-    cbPKT_FILTINFO filtinfo[cbNUM_DIGITAL_FILTERS];
-    cbPKT_LNC       isLnc;
-} cbCCF;
 
-// CCF processing state
-typedef enum _cbStateCCF
-{
-    CCFSTATE_READ = 0,     // Reading in progress
-    CCFSTATE_WRITE,        // Writing in progress
-    CCFSTATE_SEND ,        // Sendign in progress
-    CCFSTATE_CONVERT,      // Conversion in progress
-    CCFSTATE_THREADREAD,   // Total threaded read progress
-    CCFSTATE_THREADWRITE,  // Total threaded write progress
-    CCFSTATE_UNKNOWN, // (Always the last) unknown state
-} cbStateCCF;
 
 // External Global Variables
 
