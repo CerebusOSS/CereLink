@@ -389,7 +389,7 @@ IF(${BUILD_TEST})
             PRIVATE
                wsock32 ws2_32 winmm
         )
-        target_include_directories(testcbsdk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/compat>)
+        target_include_directories(testcbsdk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/compat)
     ELSEIF(NOT APPLE)
         # Hide unexported symbols
         TARGET_LINK_LIBRARIES(testcbsdk PRIVATE rt)
