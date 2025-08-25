@@ -101,6 +101,7 @@ int main(int argc, char *argv[]) {
     con.szOutIP = inst_ip;
     con.nOutPort = inst_port;
     con.szInIP = client_ip;
+    con.nInPort = inst_port;
     cbSdkResult res = cbSdkOpen(INST, conType, con);
     handleResult(res);
     if (res == CBSDKRESULT_SUCCESS) {

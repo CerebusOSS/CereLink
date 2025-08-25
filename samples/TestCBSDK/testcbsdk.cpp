@@ -126,6 +126,7 @@ cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
     con.szOutIP = inst_ip;
     con.nOutPort = inst_port;
     con.szInIP = client_ip;
+    con.nInPort = inst_port;
     cbSdkResult res = cbSdkOpen(INST, conType, con);
     if (res != CBSDKRESULT_SUCCESS)
         printf("Unable to open instrument connection.\n");
