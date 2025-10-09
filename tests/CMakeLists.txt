@@ -1,5 +1,3 @@
-include(FetchContent)
-
 # Enable CTest for unit tests
 include(CTest)
 if (NOT BUILD_GTEST)

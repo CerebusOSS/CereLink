@@ -419,10 +419,10 @@ endfunction()
 
 ##
 # test
-IF(${BUILD_TEST})
+IF(${CBSDK_BUILD_TEST})
     enable_testing()
     add_subdirectory(tests)
-ENDIF()
+ENDIF(${CBSDK_BUILD_TEST})
 
 ##
 # Very Simple Sample Applications
