@@ -45,11 +45,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED On)
 
 ##########################################################################################
 # Optional Targets
-option(BUILD_STATIC "Build static cbsdk library" ON)
-option(BUILD_CBMEX "Build Matlab wrapper" ON)
-option(BUILD_CBOCT "Build Octave wrapper" ON)
-option(BUILD_TEST "Build tests" ON)
-option(BUILD_HDF5 "Build HDF5" ON)
+option(CBSDK_BUILD_STATIC "Build static cbsdk library" ON)
+option(CBSDK_BUILD_CBMEX "Build Matlab wrapper" ON)
+option(CBSDK_BUILD_CBOCT "Build Octave wrapper" ON)
+option(CBSDK_BUILD_TEST "Build tests" ON)
+option(CBSDK_BUILD_SAMPLE "Build sample applications" ON)
+option(CBSDK_BUILD_HDF5 "Build HDF5" ON)
 option(CBPROTO_311 "Build for protocol 3.11" OFF)
 
 ##########################################################################################
@@ -116,12 +117,12 @@ if(TARGET pugixml AND NOT TARGET pugixml::pugixml)
 endif()
 
 # -HDF5
-IF(${BUILD_HDF5})
+IF(${CBSDK_BUILD_HDF5})
     FIND_PACKAGE( HDF5 COMPONENTS C HL)
 ENDIF()
 
 # -Matlab
-IF(${BUILD_CBMEX})
+IF(${CBSDK_BUILD_CBMEX})
     # Try MATLAB locally first, then on MATLAB install
     FIND_PATH( Matlab_INCLUDE_DIRS
         "mex.h"
@@ -160,7 +161,7 @@ IF(${BUILD_CBMEX})
 ENDIF()
 
 # -Octave
-IF(${BUILD_CBOCT})
+IF(${CBSDK_BUILD_CBOCT})
     FIND_PACKAGE( Octave )
 ENDIF()
 
@@ -272,7 +273,7 @@ SET_TARGET_PROPERTIES(
 
 ##
 # cbsdk_static (optional)
-IF(${BUILD_STATIC})
+IF(${CBSDK_BUILD_STATIC})
     ADD_LIBRARY( ${LIB_NAME_STATIC} STATIC ${LIB_SOURCE} ${LIB_HEADERS_MOC} )
     target_include_directories( ${LIB_NAME_STATIC}
             PUBLIC
@@ -309,11 +310,11 @@ IF(${BUILD_STATIC})
         #SET_TARGET_PROPERTIES(${LIB_NAME_STATIC} PROPERTIES XCODE_ATTRIBUTE_SEPARATE_STRIP "YES")
     ENDIF( WIN32)
     LIST(APPEND INSTALL_TARGET_LIST ${LIB_NAME_STATIC})
-ENDIF(${BUILD_STATIC})
+ENDIF(${CBSDK_BUILD_STATIC})
 
 ##
 # cbmex
-IF(${BUILD_CBMEX} AND MATLAB_FOUND )
+IF(${CBSDK_BUILD_CBMEX} AND MATLAB_FOUND )
     MESSAGE ( STATUS "Add cbmex build target using MATLAB libs at " ${Matlab_ROOT_DIR})
     ADD_LIBRARY( ${LIB_NAME_CBMEX} SHARED ${LIB_SOURCE_CBMEX} )
     
@@ -358,11 +359,11 @@ IF(${BUILD_CBMEX} AND MATLAB_FOUND )
         LIBRARY DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
         ARCHIVE DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
     )
-ENDIF( ${BUILD_CBMEX} AND MATLAB_FOUND )
+ENDIF( ${CBSDK_BUILD_CBMEX} AND MATLAB_FOUND )
 
 ##
 # octave
-IF( ${BUILD_CBOCT} AND OCTAVE_FOUND )
+IF( ${CBSDK_BUILD_CBOCT} AND OCTAVE_FOUND )
     MESSAGE ( STATUS "Add cbmex build target using Octave libs at " ${OCTAVE_OCT_LIB_DIR})
     ADD_LIBRARY( ${LIB_NAME_CBOCT} SHARED ${LIB_SOURCE_CBMEX} )
     
@@ -397,7 +398,7 @@ IF( ${BUILD_CBOCT} AND OCTAVE_FOUND )
         LIBRARY DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
         ARCHIVE DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
     )
-ENDIF( ${BUILD_CBOCT} AND OCTAVE_FOUND )
+ENDIF( ${CBSDK_BUILD_CBOCT} AND OCTAVE_FOUND )
 
 # Some Test applications.
 # These all use deployqt so let's create some helper functions for that.
@@ -422,10 +423,11 @@ IF(${BUILD_TEST})
     enable_testing()
     add_subdirectory(tests)
 ENDIF()
-# These are not real tests. They are simply utilities to help debug CBSDK.
-IF(${BUILD_TEST})
-    SET(TEST_TARGET_LIST)
 
+##
+# Very Simple Sample Applications
+IF(${CBSDK_BUILD_SAMPLE})
+    SET(SAMPLE_TARGET_LIST)
     # testcbsdk is a bit weird because it does not link the library, but adds the library sources.
     #  This is convenient for development, but also annoying because we have to manually add transitive dependencies.
     #  TODO: It would be better if we made a simple obj target then reused that.
@@ -434,14 +436,14 @@ IF(${BUILD_TEST})
             ${LIB_SOURCE} ${LIB_HEADERS_MOC}
     )
     TARGET_INCLUDE_DIRECTORIES(testcbsdk PRIVATE
-        ${LIB_INCL_DIRS}
-        ${PROJECT_SOURCE_DIR}/cbsdk
+            ${LIB_INCL_DIRS}
+            ${PROJECT_SOURCE_DIR}/cbsdk
     )
     TARGET_LINK_LIBRARIES(testcbsdk PRIVATE ${QT_LIBRARIES} CCFUtils)
     IF(WIN32)
         TARGET_LINK_LIBRARIES(testcbsdk
-            PRIVATE
-               wsock32 ws2_32 winmm
+                PRIVATE
+                wsock32 ws2_32 winmm
         )
         target_include_directories(testcbsdk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/compat)
     ELSEIF(NOT APPLE)
@@ -449,49 +451,55 @@ IF(${BUILD_TEST})
         TARGET_LINK_LIBRARIES(testcbsdk PRIVATE rt)
         SET_TARGET_PROPERTIES(testcbsdk PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
     ENDIF(WIN32)
-    LIST(APPEND TEST_TARGET_LIST testcbsdk)
+    LIST(APPEND SAMPLE_TARGET_LIST testcbsdk)
 
     ADD_EXECUTABLE(testccf
             ${PROJECT_SOURCE_DIR}/samples/TestCCF/test_ccf.cpp
     )
     TARGET_LINK_LIBRARIES(testccf ${LIB_NAME} )
-    LIST(APPEND TEST_TARGET_LIST testccf)
+    LIST(APPEND SAMPLE_TARGET_LIST testccf)
+
+    #    ADD_EXECUTABLE(test_parse_ccf
+    #            ${PROJECT_SOURCE_DIR}/samples/TestCCF/test_parse_ccf.cpp
+    #    )
+    #    TARGET_LINK_LIBRARIES(test_parse_ccf ${LIB_NAME} pugixml::pugixml)
+    #    LIST(APPEND SAMPLE_TARGET_LIST test_parse_ccf)
 
     ADD_EXECUTABLE(test_io ${PROJECT_SOURCE_DIR}/samples/TestIO/test_io.cpp )
     TARGET_LINK_LIBRARIES(test_io ${LIB_NAME} )
-    LIST(APPEND TEST_TARGET_LIST test_io)
+    LIST(APPEND SAMPLE_TARGET_LIST test_io)
 
     ADD_EXECUTABLE(test_callback ${PROJECT_SOURCE_DIR}/samples/TestIO/test_callback.cpp)
     TARGET_LINK_LIBRARIES(test_callback ${LIB_NAME} )
-    LIST(APPEND TEST_TARGET_LIST test_callback)
+    LIST(APPEND SAMPLE_TARGET_LIST test_callback)
 
     ADD_EXECUTABLE(test_comments ${PROJECT_SOURCE_DIR}/samples/TestComments/test_comments.cpp )
     TARGET_LINK_LIBRARIES(test_comments ${LIB_NAME} )
-    LIST(APPEND TEST_TARGET_LIST test_comments)
+    LIST(APPEND SAMPLE_TARGET_LIST test_comments)
 
     ADD_EXECUTABLE(test_analog_out ${PROJECT_SOURCE_DIR}/samples/TestAnalogOut/test_analog_out.cpp )
     TARGET_LINK_LIBRARIES(test_analog_out ${LIB_NAME})
-    LIST(APPEND TEST_TARGET_LIST test_analog_out)
+    LIST(APPEND SAMPLE_TARGET_LIST test_analog_out)
 
-    LIST(APPEND INSTALL_TARGET_LIST ${TEST_TARGET_LIST})
+    LIST(APPEND INSTALL_TARGET_LIST ${SAMPLE_TARGET_LIST})
 
     IF(WIN32)
         findQtInstallationTool("windeployqt")
         add_custom_command(TARGET testcbsdk POST_BUILD
-            COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
+                COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
         add_custom_command(TARGET test_io POST_BUILD
-            COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
+                COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
         add_custom_command(TARGET test_callback POST_BUILD
                 COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
         add_custom_command(TARGET test_comments POST_BUILD
-            COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
+                COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
         add_custom_command(TARGET test_analog_out POST_BUILD
-            COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
+                COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
     ENDIF(WIN32)
 
     if(NOT CMAKE_INSTALL_RPATH)
         set(LIBDIR "../lib64")
-        foreach(test_app ${TEST_TARGET_LIST})
+        foreach(test_app ${TEST_SAMPLE_LIST})
             if(APPLE)
                 set_property(TARGET ${test_app} APPEND
                         PROPERTY INSTALL_RPATH "@executable_path/;@executable_path/${LIBDIR};@executable_path/../Frameworks")
@@ -501,11 +509,11 @@ IF(${BUILD_TEST})
             endif(APPLE)
         endforeach()
     endif(NOT CMAKE_INSTALL_RPATH)
-ENDIF(${BUILD_TEST})
+ENDIF(${CBSDK_BUILD_SAMPLE})
 
 ##
 # n2h5
-IF(${BUILD_HDF5} AND HDF5_FOUND )
+IF(${CBSDK_BUILD_HDF5} AND HDF5_FOUND )
     SET( N2H5_SOURCE
         ${PROJECT_SOURCE_DIR}/n2h5/main.cpp
         ${PROJECT_SOURCE_DIR}/n2h5/n2h5.cpp
@@ -520,7 +528,7 @@ IF(${BUILD_HDF5} AND HDF5_FOUND )
     TARGET_INCLUDE_DIRECTORIES( ${N2H5_NAME} PRIVATE ${LIB_INCL_DIRS} ${HDF5_INCLUDE_DIRS})
     TARGET_LINK_LIBRARIES (${N2H5_NAME} ${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})
     LIST(APPEND INSTALL_TARGET_LIST ${N2H5_NAME})
-ENDIF(${BUILD_HDF5} AND HDF5_FOUND )
+ENDIF(${CBSDK_BUILD_HDF5} AND HDF5_FOUND )
 
 ##
 # C++ / CLI

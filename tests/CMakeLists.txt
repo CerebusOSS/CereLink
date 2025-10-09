@@ -23,8 +23,10 @@ add_executable(ccfutils_tests
 
 # Include necessary headers
 target_include_directories(ccfutils_tests PRIVATE
-    ${PROJECT_SOURCE_DIR}/cbhwlib
+    ${PROJECT_SOURCE_DIR}/CCFUtils
+    ${PROJECT_SOURCE_DIR}/cbproto
     ${PROJECT_SOURCE_DIR}/cbsdk
+    ${PROJECT_SOURCE_DIR}/cbhwlib
     ${PROJECT_SOURCE_DIR}/Central
     ${PROJECT_SOURCE_DIR}/CentralCommon
     ${PROJECT_SOURCE_DIR}/compat
