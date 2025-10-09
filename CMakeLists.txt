@@ -368,6 +368,10 @@ endfunction()
 
 ##
 # test
+IF(${BUILD_TEST})
+    enable_testing()
+    add_subdirectory(tests)
+ENDIF()
 # These are not real tests. They are simply utilities to help debug CBSDK.
 IF(${BUILD_TEST})
     SET(TEST_TARGET_LIST)

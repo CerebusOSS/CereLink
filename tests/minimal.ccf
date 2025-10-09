@@ -1,0 +1,395 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<CCF Version="12">
+ <ChanInfo Type="Array">
+  <ChanInfo_item Type="cbPKT_CHANINFO" label="chan1">
+   <chid Type="UINT16">32768</chid>
+   <type Type="UINT8">78</type>
+   <dlen Type="UINT8">165</dlen>
+   <chan Type="UINT32">1</chan>
+   <proc Type="UINT32">1</proc>
+   <bank Type="UINT32">1</bank>
+   <term Type="UINT32">1</term>
+   <caps>
+    <chancaps Type="UINT32">263</chancaps>
+    <doutcaps Type="UINT32">0</doutcaps>
+    <dinpcaps Type="UINT32">0</dinpcaps>
+    <aoutcaps Type="UINT32">0</aoutcaps>
+    <ainpcaps Type="UINT32">8055</ainpcaps>
+    <spkcaps Type="UINT32">2093071</spkcaps>
+   </caps>
+   <scale>
+    <physcalin Type="cbSCALING">
+     <digmin Type="INT16">-1</digmin>
+     <digmax Type="INT16">1</digmax>
+     <anamin Type="INT32">-2</anamin>
+     <anamax Type="INT32">2</anamax>
+     <anagain Type="INT32">1</anagain>
+     <anaunit Type="cstring">uV</anaunit>
+    </physcalin>
+    <physcalout Type="cbSCALING">
+     <digmin Type="INT16">0</digmin>
+     <digmax Type="INT16">0</digmax>
+     <anamin Type="INT32">0</anamin>
+     <anamax Type="INT32">0</anamax>
+     <anagain Type="INT32">0</anagain>
+     <anaunit Type="cstring"></anaunit>
+    </physcalout>
+    <scalin Type="cbSCALING">
+     <digmin Type="INT16">-32764</digmin>
+     <digmax Type="INT16">32764</digmax>
+     <anamin Type="INT32">-8191</anamin>
+     <anamax Type="INT32">8191</anamax>
+     <anagain Type="INT32">1</anagain>
+     <anaunit Type="cstring">uV</anaunit>
+    </scalin>
+    <scalout Type="cbSCALING">
+     <digmin Type="INT16">0</digmin>
+     <digmax Type="INT16">0</digmax>
+     <anamin Type="INT32">0</anamin>
+     <anamax Type="INT32">0</anamax>
+     <anagain Type="INT32">0</anagain>
+     <anaunit Type="cstring"></anaunit>
+    </scalout>
+   </scale>
+   <filterdesc>
+    <phyfiltin Type="cbFILTDESC">
+     <label Type="cstring">Front End</label>
+     <hpfreq Type="UINT32">300</hpfreq>
+     <hporder Type="UINT32">1</hporder>
+     <hptype Type="UINT32">1</hptype>
+     <lpfreq Type="UINT32">7500000</lpfreq>
+     <lporder Type="UINT32">3</lporder>
+     <lptype Type="UINT32">257</lptype>
+    </phyfiltin>
+    <phyfiltout Type="cbFILTDESC">
+     <label Type="cstring"></label>
+     <hpfreq Type="UINT32">0</hpfreq>
+     <hporder Type="UINT32">0</hporder>
+     <hptype Type="UINT32">0</hptype>
+     <lpfreq Type="UINT32">0</lpfreq>
+     <lporder Type="UINT32">0</lporder>
+     <lptype Type="UINT32">0</lptype>
+    </phyfiltout>
+   </filterdesc>
+   <label Type="cstring">chan1</label>
+   <userflags Type="UINT32">0</userflags>
+   <position Type="Array">
+    <position_item Type="INT32">0</position_item>
+    <position_item Type="INT32">0</position_item>
+    <position_item Type="INT32">0</position_item>
+    <position_item Type="INT32">0</position_item>
+   </position>
+   <options>
+    <doutopts Type="UINT32">0</doutopts>
+    <dinpopts Type="UINT32">0</dinpopts>
+    <aoutopts Type="UINT32">0</aoutopts>
+    <ainpopts Type="UINT32">256</ainpopts>
+    <spkopts Type="UINT32">0</spkopts>
+   </options>
+   <eopchar Type="UINT32">0</eopchar>
+   <monitor>
+    <lowsamples Type="UINT16">0</lowsamples>
+    <highsamples Type="UINT16">0</highsamples>
+    <offset Type="INT32">0</offset>
+   </monitor>
+   <lnc>
+    <rate Type="UINT32">10000</rate>
+    <dispmax Type="INT32">2047</dispmax>
+   </lnc>
+   <sample>
+    <filter Type="UINT32">0</filter>
+    <group Type="UINT32">5</group>
+    <dispmin Type="INT32">-2047</dispmin>
+    <dispmax Type="INT32">2047</dispmax>
+   </sample>
+   <spike>
+    <filter Type="UINT32">0</filter>
+    <dispmax Type="INT32">1023</dispmax>
+    <threshold>
+     <level Type="INT32">-255</level>
+     <limit Type="INT32">0</limit>
+    </threshold>
+    <group Type="UINT32">0</group>
+    <amplituderejecet>
+     <positive Type="INT16">0</positive>
+     <negative Type="INT16">0</negative>
+    </amplituderejecet>
+    <hoops Type="Array">
+     <hoop Type="Array">
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+     </hoop>
+     <hoop Type="Array">
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+     </hoop>
+     <hoop Type="Array">
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+     </hoop>
+     <hoop Type="Array">
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+     </hoop>
+     <hoop Type="Array">
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">0</max>
+      </hoop_item>
+      <hoop_item Type="cbHOOP">
+       <valid Type="UINT16">0</valid>
+       <time Type="INT16">0</time>
+       <min Type="INT16">0</min>
+       <max Type="INT16">15872</max>
+      </hoop_item>
+     </hoop>
+    </hoops>
+   </spike>
+   <refelecchan Type="UINT32">0</refelecchan>
+   <unitmapping Type="Array">
+    <unitmapping_item Type="cbMANUALUNITMAPPING">
+     <Override Type="INT16">0</Override>
+     <center Type="Array">
+      <center_item Type="INT16">0</center_item>
+      <center_item Type="INT16">0</center_item>
+      <center_item Type="INT16">0</center_item>
+     </center>
+     <axes Type="Array">
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+     </axes>
+     <Phi Type="INT16">0</Phi>
+     <Valid Type="UINT32">0</Valid>
+    </unitmapping_item>
+    <unitmapping_item Type="cbMANUALUNITMAPPING">
+     <Override Type="INT16">1</Override>
+     <center Type="Array">
+      <center_item Type="INT16">0</center_item>
+      <center_item Type="INT16">0</center_item>
+      <center_item Type="INT16">0</center_item>
+     </center>
+     <axes Type="Array">
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+     </axes>
+     <Phi Type="INT16">0</Phi>
+     <Valid Type="UINT32">0</Valid>
+    </unitmapping_item>
+    <unitmapping_item Type="cbMANUALUNITMAPPING">
+     <Override Type="INT16">2</Override>
+     <center Type="Array">
+      <center_item Type="INT16">0</center_item>
+      <center_item Type="INT16">0</center_item>
+      <center_item Type="INT16">0</center_item>
+     </center>
+     <axes Type="Array">
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+     </axes>
+     <Phi Type="INT16">0</Phi>
+     <Valid Type="UINT32">0</Valid>
+    </unitmapping_item>
+    <unitmapping_item Type="cbMANUALUNITMAPPING">
+     <Override Type="INT16">3</Override>
+     <center Type="Array">
+      <center_item Type="INT16">0</center_item>
+      <center_item Type="INT16">0</center_item>
+      <center_item Type="INT16">0</center_item>
+     </center>
+     <axes Type="Array">
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+     </axes>
+     <Phi Type="INT16">0</Phi>
+     <Valid Type="UINT32">0</Valid>
+    </unitmapping_item>
+    <unitmapping_item Type="cbMANUALUNITMAPPING">
+     <Override Type="INT16">4</Override>
+     <center Type="Array">
+      <center_item Type="INT16">0</center_item>
+      <center_item Type="INT16">0</center_item>
+      <center_item Type="INT16">0</center_item>
+     </center>
+     <axes Type="Array">
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+      <axis Type="Array">
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+       <axis_item Type="INT16">0</axis_item>
+      </axis>
+     </axes>
+     <Phi Type="INT16">0</Phi>
+     <Valid Type="UINT32">0</Valid>
+    </unitmapping_item>
+   </unitmapping>
+   <douttrig>
+    <type Type="UINT8">0</type>
+    <chan Type="UINT16">0</chan>
+    <val Type="UINT16">0</val>
+   </douttrig>
+  </ChanInfo_item>
+ </ChanInfo>
+</CCF>
