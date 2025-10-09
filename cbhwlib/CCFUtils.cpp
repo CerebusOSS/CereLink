@@ -366,6 +366,8 @@ ccfResult CCFUtils::ReadCCF(LPCSTR szFileName, bool bConvert)
             ReadCCFOfNSP(); // Read from NSP
         return res;
     }
+    if (res == CCFRESULT_SUCCESS || res == ccf::CCFRESULT_WARN_CONVERT || res == ccf::CCFRESULT_WARN_VERSION)
+    if (res == CCFRESULT_SUCCESS || res == ccf::CCFRESULT_WARN_CONVERT || res == ccf::CCFRESULT_WARN_VERSION)
 
     CCFUtils * pConfig = NULL;
 
@@ -410,6 +412,8 @@ ccfResult CCFUtils::ReadCCF(LPCSTR szFileName, bool bConvert)
             res = pConfig->ReadCCF(szFileName, bConvert);
             if (m_pCallbackFn)
                 m_pCallbackFn(m_nInstance, res, szFileName, CCFSTATE_READ, 100);
+        if (res == CCFRESULT_SUCCESS || res == ccf::CCFRESULT_WARN_CONVERT || res == ccf::CCFRESULT_WARN_VERSION)
+        if (res == CCFRESULT_SUCCESS || res == ccf::CCFRESULT_WARN_CONVERT || res == ccf::CCFRESULT_WARN_VERSION)
 
             // Start the conversion chain
             if (res == CCFRESULT_SUCCESS)
