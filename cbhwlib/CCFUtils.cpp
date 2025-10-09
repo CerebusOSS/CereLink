@@ -354,87 +354,83 @@ ccfResult CCFUtils::ReadCCF(LPCSTR szFileName, bool bConvert)
     // First read version
     res = ReadVersion(szFileName);
 
-    if (res)
-        return res;
-
-    if (szFileName == NULL)
-    {
-        uint32_t nIdx = cb_library_index[m_nInstance];
-        if (!cb_library_initialized[nIdx] || cb_cfg_buffer_ptr[nIdx] == NULL || cb_cfg_buffer_ptr[nIdx]->sysinfo.cbpkt_header.chid == 0)
-            res = CCFRESULT_ERR_OFFLINE;
-        else
-            ReadCCFOfNSP(); // Read from NSP
-        return res;
-    }
     if (res == CCFRESULT_SUCCESS || res == ccf::CCFRESULT_WARN_CONVERT || res == ccf::CCFRESULT_WARN_VERSION)
-    if (res == CCFRESULT_SUCCESS || res == ccf::CCFRESULT_WARN_CONVERT || res == ccf::CCFRESULT_WARN_VERSION)
-
-    CCFUtils * pConfig = NULL;
-
-    if (m_bBinaryOriginal)
     {
-        pConfig = new CCFUtilsBinary();
-    }
-    else
-    {
-        switch (m_pImpl->GetInternalOriginalVersion())
+        if (szFileName == NULL)
         {
-        case 12:
-            pConfig = new CCFUtilsXml_v1();
-            break;
-        default:
-            // This means a newer unsupported XML
-            break;
+            uint32_t nIdx = cb_library_index[m_nInstance];
+            if (!cb_library_initialized[nIdx] || cb_cfg_buffer_ptr[nIdx] == NULL || cb_cfg_buffer_ptr[nIdx]->sysinfo.cbpkt_header.chid == 0)
+                res = CCFRESULT_ERR_OFFLINE;
+            else
+                ReadCCFOfNSP(); // Read from NSP
+            return res;
         }
-    }
-    if (pConfig == NULL)
-        res = CCFRESULT_ERR_FORMAT;
 
-    // If conversion is needed, check permission
-    if (res == CCFRESULT_SUCCESS && !bConvert)
-    {
-        if (m_nInternalVersion != m_nInternalOriginalVersion || m_bBinaryOriginal)
-            res = CCFRESULT_WARN_CONVERT;
-    }
+        CCFUtils * pConfig = NULL;
 
-    if (res == CCFRESULT_SUCCESS)
-    {
-        if (m_bThreaded)
+        if (m_bBinaryOriginal)
         {
-            // Perform a threaded read (and optional send) operation
-            ccf::ConReadCCF(szFileName, m_bSend, m_pCCF, m_pCallbackFn, m_nInstance);
+            pConfig = new CCFUtilsBinary();
         }
         else
         {
-            if (m_pCallbackFn)
-                m_pCallbackFn(m_nInstance, res, szFileName, CCFSTATE_READ, 0);
-            // Ask the right version to read its own data
-            res = pConfig->ReadCCF(szFileName, bConvert);
-            if (m_pCallbackFn)
-                m_pCallbackFn(m_nInstance, res, szFileName, CCFSTATE_READ, 100);
-        if (res == CCFRESULT_SUCCESS || res == ccf::CCFRESULT_WARN_CONVERT || res == ccf::CCFRESULT_WARN_VERSION)
-        if (res == CCFRESULT_SUCCESS || res == ccf::CCFRESULT_WARN_CONVERT || res == ccf::CCFRESULT_WARN_VERSION)
-
-            // Start the conversion chain
-            if (res == CCFRESULT_SUCCESS)
+            switch (m_pImpl->GetInternalOriginalVersion())
             {
-                if (m_pCallbackFn)
-                    m_pCallbackFn(m_nInstance, res, szFileName, CCFSTATE_CONVERT, 0);
-                m_pImpl->Convert(pConfig);
-                if (m_pCallbackFn)
-                    m_pCallbackFn(m_nInstance, res, szFileName, CCFSTATE_CONVERT, 100);
-                // Take a copy if needed
-                if (m_pCCF)
-                    *m_pCCF = dynamic_cast<ccfXml *>(m_pImpl)->m_data;
-                // Auto send if asked for
-                if (m_bSend)
-                    res = SendCCF();
+            case 12:
+                pConfig = new CCFUtilsXml_v1();
+                break;
+            default:
+                // This means a newer unsupported XML
+                break;
             }
         }
+        if (pConfig == NULL)
+            res = CCFRESULT_ERR_FORMAT;
+
+        // If conversion is needed, check permission
+        if (res == CCFRESULT_SUCCESS && !bConvert)
+        {
+            if (m_nInternalVersion != m_nInternalOriginalVersion || m_bBinaryOriginal)
+                res = CCFRESULT_WARN_CONVERT;
+        }
+
+        if (res == CCFRESULT_SUCCESS || res == ccf::CCFRESULT_WARN_CONVERT || res == ccf::CCFRESULT_WARN_VERSION)
+        {
+            if (m_bThreaded)
+            {
+                // Perform a threaded read (and optional send) operation
+                ccf::ConReadCCF(szFileName, m_bSend, m_pCCF, m_pCallbackFn, m_nInstance);
+            }
+            else
+            {
+                if (m_pCallbackFn)
+                    m_pCallbackFn(m_nInstance, res, szFileName, CCFSTATE_READ, 0);
+                // Ask the right version to read its own data
+                res = pConfig->ReadCCF(szFileName, bConvert);
+                if (m_pCallbackFn)
+                    m_pCallbackFn(m_nInstance, res, szFileName, CCFSTATE_READ, 100);
+
+                if (res == CCFRESULT_SUCCESS || res == CCFRESULT_WARN_VERSION)
+                {
+                    if (m_pCallbackFn)
+                        m_pCallbackFn(m_nInstance, res, szFileName, CCFSTATE_CONVERT, 0);
+                    m_pImpl->Convert(pConfig);
+                    if (m_pCallbackFn)
+                        m_pCallbackFn(m_nInstance, res, szFileName, CCFSTATE_CONVERT, 100);
+                    if (m_pCCF)
+                    {
+                        *m_pCCF = dynamic_cast<ccfXml *>(m_pImpl)->m_data;
+                    }
+                    // Auto send if asked for
+                    if (m_bSend)
+                        res = SendCCF();
+                }
+            }
+        }
+        // Cleanup
+        if (pConfig)
+            delete pConfig;
     }
-    // Cleanup
-    if (pConfig)
-        delete pConfig;
 
     return res;
 }
