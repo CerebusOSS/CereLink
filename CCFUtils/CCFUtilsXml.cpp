@@ -22,10 +22,14 @@
 #include <iostream>
 #include <algorithm>
 #include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 #include "pugixml.hpp"
 #ifndef WIN32
 #include <unistd.h>
 #endif
+#include "../cbhwlib/cbhwlib.h" // for cbGetProcInfo fallback
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -205,6 +209,14 @@ ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(LPCSTR szFileName)
                 xml.addGroup("Protocol", "", 0, std::to_string(cbVERSION_MAJOR) + "." + std::to_string(cbVERSION_MINOR));
                 xml.addGroup("Cerebus", "", 0, std::string(BMI_VERSION_STR));
 
+                // Fallback: if caller didn't provide processor info attempt to query device
+                if (m_procInfo.idcode == 0) {
+                    cbPROCINFO isInfo{};
+                    if (cbGetProcInfo(cbNSP1, &isInfo, m_nInstance) == cbRESULT_OK) {
+                        m_procInfo = isInfo;
+                    }
+                }
+
                 int nspmajor   = (m_procInfo.idcode & 0x000000ff);
                 int nspminor   = (m_procInfo.idcode & 0x0000ff00) >> 8;
                 int nsprelease = (m_procInfo.idcode & 0x00ff0000) >> 16;
@@ -229,8 +241,18 @@ ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(LPCSTR szFileName)
 
             auto now = std::chrono::system_clock::now();
             std::time_t currentTime = std::chrono::system_clock::to_time_t(now);
-            std::tm* dateTime = std::localtime(&currentTime);
-            xml.addGroup("Date", "", 0, std::asctime(dateTime));
+            std::tm dateTime{};
+#ifdef _WIN32
+            localtime_s(&dateTime, &currentTime);
+#else
+            localtime_r(&currentTime, &dateTime);
+#endif
+            char dateBuf[64];
+            if (std::strftime(dateBuf, sizeof(dateBuf), "%Y-%m-%d %H:%M:%S", &dateTime)) {
+                xml.addGroup("Date", "", 0, std::string(dateBuf));
+            } else {
+                xml.addGroup("Date", "", 0, "UNKNOWN");
+            }
         }
         xml.endGroup(); // Session
     }

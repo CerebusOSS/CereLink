@@ -183,7 +183,7 @@ set( CCF_SOURCE
     ${PROJECT_SOURCE_DIR}/CCFUtils/XmlItem.h
 )
 add_library( CCFUtils OBJECT ${CCF_SOURCE} )
-target_link_libraries( CCFUtils PRIVATE pugixml::static)
+target_link_libraries( CCFUtils PRIVATE pugixml::pugixml)
 target_include_directories(CCFUtils
         PRIVATE
             ${PROJECT_SOURCE_DIR}/cbproto
@@ -567,6 +567,10 @@ if(WIN32)
     install(FILES $<TARGET_FILE:pugixml::static>
             DESTINATION lib${LIB_SUFFIX}
     )
+    if(TARGET pugixml::pugixml)
+        install(FILES $<TARGET_FILE:pugixml::pugixml>
+                DESTINATION lib${LIB_SUFFIX})
+    endif()
 elseif(APPLE)
     install(CODE "
         execute_process(COMMAND codesign --force --deep --sign - ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/lib${LIB_NAME}.dylib)

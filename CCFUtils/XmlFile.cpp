@@ -226,7 +226,7 @@ bool XmlFile::beginGroup(std::string nodeName, const std::map<std::string, std::
         for (int j = 0; j < (index + 1 - count); ++j)
         {
             bRet = true;
-            set = m_doc.append_child(strTagName.c_str());
+            set = parent.append_child(strTagName.c_str());
         }
         // Add all the parent nodes without attribute or value
         if (i < level - 1)
@@ -242,7 +242,13 @@ bool XmlFile::beginGroup(std::string nodeName, const std::map<std::string, std::
         bool bTextLeaf = false;
         std::vector<std::any> vec;
         if ((value.type() == typeid(std::vector<std::string>)) || (value.type() == typeid(std::vector<std::any>))) {
-            vec = std::any_cast<std::vector<std::any>>(value);
+            if (value.type() == typeid(std::vector<std::any>)) {
+                vec = std::any_cast<std::vector<std::any>>(value);
+            } else {
+                const auto & vstr = std::any_cast<const std::vector<std::string>&>(value);
+                vec.reserve(vstr.size());
+                for (const auto & s : vstr) vec.push_back(std::any(s));
+            }
             if (AddList(vec, nodepath.back()))
                 set.append_attribute("Type") = "Array";
         }
@@ -265,7 +271,13 @@ bool XmlFile::beginGroup(std::string nodeName, const std::map<std::string, std::
                 } 
                 else if ((subval.type() == typeid(std::vector<std::string>)) || (subval.type() == typeid(std::vector<std::any>)))
                 {
-                    vec = std::any_cast<std::vector<std::any>>(subval);
+                    if (subval.type() == typeid(std::vector<std::any>)) {
+                        vec = std::any_cast<std::vector<std::any>>(subval);
+                    } else {
+                        const auto & vstr = std::any_cast<const std::vector<std::string>&>(subval);
+                        vec.reserve(vstr.size());
+                        for (const auto & s : vstr) vec.push_back(std::any(s));
+                    }
                     if (AddList(vec, nodepath.back()))
                         set.append_attribute("Type") = "Array";
                 } else {
@@ -572,7 +584,7 @@ std::string XmlFile::toString()
         doc.append_copy(m_nodes.back());
     }
     std::ostringstream ss;
-    m_doc.save(ss);
+    doc.save(ss);
     return ss.str();
 }
 

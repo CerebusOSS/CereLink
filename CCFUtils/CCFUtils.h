@@ -78,7 +78,11 @@ typedef void (* cbCCFCallback)(uint32_t nInstance, const ccf::ccfResult res, LPC
 class CCFUtils
 {
 public:
+    // New simplified constructor (no automatic send support)
     CCFUtils(bool bThreaded = false, cbCCF * pCCF = NULL, cbCCFCallback pCallbackFn = NULL, uint32_t nInstance = 0);
+    // Backward-compatible constructor signature (bSend ignored). Prefer the simplified one.
+    CCFUtils(bool bSend /*ignored*/, bool bThreaded, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance) :
+        CCFUtils(bThreaded, pCCF, pCallbackFn, nInstance) {}
     virtual ~CCFUtils();
 
 public:
@@ -89,6 +93,8 @@ public:
     int GetInternalOriginalVersion();
     bool IsBinaryOriginal();
     bool IsAutosort();
+    // Deprecated: legacy API placeholder. Automatic sending removed from this refactor.
+    virtual ccf::ccfResult SendCCF() { return ccf::CCFRESULT_SUCCESS; }
     virtual ccf::ccfResult SetProcInfo(const cbPROCINFO& isInfo);
 
 private:

@@ -15,6 +15,7 @@
 #include "CCFUtilsConcurrent.h"
 #include <future>
 #include <cstring>
+#include <thread>
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -51,8 +52,10 @@ void ReadCCFHelper(std::string strFileName, cbCCF * pCCF, cbCCFCallback pCallbac
 void ccf::ConReadCCF(LPCSTR szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance)
 {
     std::string strFileName = szFileName == NULL ? "" : std::string(szFileName);
-    // Parameters are copied before thread starts, originals will go out of scope
-    auto future = std::async(std::launch::async, ReadCCFHelper, strFileName, pCCF, pCallbackFn, nInstance);
+    // Launch detached thread (std::async future destruction was synchronizing and negating concurrency)
+    std::thread([strFileName, pCCF, pCallbackFn, nInstance]() {
+        ReadCCFHelper(strFileName, pCCF, pCallbackFn, nInstance);
+    }).detach();
 }
 
 // Author & Date: Ehsan Azar       10 June 2012
@@ -84,7 +87,8 @@ void ccf::ConWriteCCF(LPCSTR szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn
     if (pCCF != NULL)
         ccf = *pCCF;
     // Parameters are copied before thread starts, originals will go out of scope
-    auto future = std::async(std::launch::async, WriteCCFHelper, strFileName, ccf, pCallbackFn, nInstance);
+    std::thread([strFileName, ccf, pCallbackFn, nInstance]() {
+        WriteCCFHelper(strFileName, ccf, pCallbackFn, nInstance);
+    }).detach();
     // TODO: Instead of std::async, use threading and set to lowest priority.
 }
-
