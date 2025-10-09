@@ -20,6 +20,9 @@
 #include "debugmacs.h"
 #include "../CentralCommon/BmiVersion.h"
 #include <iostream>
+#ifndef WIN32
+#include <unistd.h>
+#endif
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -164,7 +167,20 @@ ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(LPCSTR szFileName)
     DWORD cchBuff = sizeof(szUsername);
     GetComputerNameA(szUsername, &cchBuff) ; // get the computer name with NeuroMotive running
 #else
-    strncpy(szUsername, getenv("HOSTNAME"), sizeof(szUsername));
+    const char* envHost = getenv("HOSTNAME");
+    if (envHost && *envHost) {
+        strncpy(szUsername, envHost, sizeof(szUsername)-1);
+        szUsername[sizeof(szUsername)-1] = 0;
+    } else {
+        char hostbuf[256] = {0};
+        if (gethostname(hostbuf, sizeof(hostbuf)) == 0 && hostbuf[0]) {
+            strncpy(szUsername, hostbuf, sizeof(szUsername)-1);
+            szUsername[sizeof(szUsername)-1] = 0;
+        } else {
+            strncpy(szUsername, "unknown", sizeof(szUsername)-1);
+            szUsername[sizeof(szUsername)-1] = 0;
+        }
+    }
 #endif
 
     XmlFile xml(strFilename, false);
@@ -272,4 +288,3 @@ ccfResult CCFUtilsXml_v1::ReadVersion(LPCSTR szFileName)
         res = CCFUtilsBinary::ReadVersion(szFileName);
     return res;
 }
-
