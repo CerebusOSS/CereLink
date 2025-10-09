@@ -101,19 +101,18 @@ SET(QT_LIBRARIES Qt6::Core)
 ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP)
 
 # -PugiXML
-find_package(pugixml QUIET)  # NO_SYSTEM_ENVIRONMENT_PATH)
-if(NOT pugixml_FOUND)
-    message(STATUS "Did not find pugixml, will use FetchContent instead.")
-    FetchContent_Declare(
-            pugixml
-            GIT_REPOSITORY https://github.com/zeux/pugixml.git
-            GIT_TAG v1.13
-    )
-    FetchContent_GetProperties(pugixml)
-    if(NOT pugixml_POPULATED)
-        FetchContent_Populate(pugixml)
-        add_subdirectory(${pugixml_SOURCE_DIR} ${pugixml_BINARY_DIR} EXCLUDE_FROM_ALL)
-    endif()
+set(PUGIXML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(PUGIXML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(PUGIXML_BUILD_SHARED_AND_STATIC OFF)
+FetchContent_Declare(
+        pugixml
+        GIT_REPOSITORY https://github.com/zeux/pugixml.git
+        GIT_TAG v1.15
+        GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(pugixml)
+if(TARGET pugixml AND NOT TARGET pugixml::pugixml)
+    add_library(pugixml::pugixml ALIAS pugixml)
 endif()
 
 # -HDF5
