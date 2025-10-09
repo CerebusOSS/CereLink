@@ -209,6 +209,8 @@ ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(LPCSTR szFileName)
                 xml.addGroup("Protocol", "", 0, std::to_string(cbVERSION_MAJOR) + "." + std::to_string(cbVERSION_MINOR));
                 xml.addGroup("Cerebus", "", 0, std::string(BMI_VERSION_STR));
 
+                // Optional fallback: attempt to query device only if enabled
+#ifdef CCFUTILS_ENABLE_DEVICE_QUERY
                 // Fallback: if caller didn't provide processor info attempt to query device
                 if (m_procInfo.idcode == 0) {
                     cbPROCINFO isInfo{};
@@ -216,6 +218,7 @@ ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(LPCSTR szFileName)
                         m_procInfo = isInfo;
                     }
                 }
+#endif
 
                 int nspmajor   = (m_procInfo.idcode & 0x000000ff);
                 int nspminor   = (m_procInfo.idcode & 0x0000ff00) >> 8;

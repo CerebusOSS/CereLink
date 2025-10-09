@@ -79,19 +79,27 @@ XmlItem::XmlItem(const XmlItem & other)
 XmlFile::XmlFile(std::string fname, bool bRead) :
     m_fname(fname), m_bError(false)
 {
-    if (m_fname.empty())
-    {
-        m_doc.reset();  // Start with empty xml
-    } else { 
-        if (!bRead || setContent())
-        {
-            m_doc.reset();  // Start with empty xml
-            // Add XML version
+    if (m_fname.empty()) {
+        m_doc.reset();
+        return; // Empty in-memory document; declaration deferred until first save
+    }
+    if (bRead) {
+        // Attempt to load; set error flag on failure but leave an empty doc
+        if (setContent()) {
+            m_bError = true;
+            m_doc.reset();
+            // Provide a declaration so subsequent writes still produce valid XML
             auto decl = m_doc.prepend_child(pugi::node_declaration);
-            decl.append_attribute("version")    = "1.0";
-            decl.append_attribute("encoding")   = "UTF-8";
-            // decl.append_attribute("standalone") = "yes";
+            decl.append_attribute("version") = "1.0";
+            decl.append_attribute("encoding") = "UTF-8";
         }
+        // On success, m_doc already contains parsed content; do not reset or add duplicate declaration
+    } else {
+        // Write mode: start blank and add declaration now
+        m_doc.reset();
+        auto decl = m_doc.prepend_child(pugi::node_declaration);
+        decl.append_attribute("version") = "1.0";
+        decl.append_attribute("encoding") = "UTF-8";
     }
 }
 
@@ -531,22 +539,20 @@ std::vector<std::string> XmlFile::childKeys(int count) const
 
     pugi::xml_node parent;
     if (!m_nodes.empty())
-    {
-        // Get the current node
         parent = m_nodes.back();
-    } else {
+    else
         parent = m_doc;
-    }
     if (parent)
     {
         for(pugi::xml_node elem = parent.first_child(); elem; elem = elem.next_sibling())
         {
-            res.push_back(elem.name());
-            if (count > 0)
-            {
-                count--;
-                if (count == 0)
-                    break;
+            // Skip declaration or unnamed nodes to keep API expectations simple
+            if (elem.type() == pugi::node_declaration) continue;
+            const char * nm = elem.name();
+            if (!nm || !nm[0]) continue;
+            res.push_back(nm);
+            if (count > 0) {
+                if (--count == 0) break;
             }
         }
     }
