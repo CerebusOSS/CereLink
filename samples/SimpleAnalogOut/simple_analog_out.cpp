@@ -93,7 +93,7 @@ void handleResult(cbSdkResult res)
 }
 
 
-cbSdkVersion testGetVersion(void)
+cbSdkVersion getVersion(void)
 {
 	// Library version can be read even before library open (return value is a warning)
 	//  actual NSP version however needs library to be open
@@ -112,10 +112,10 @@ cbSdkVersion testGetVersion(void)
 
 // Author & Date:   Ehsan Azar    24 Oct 2012
 // Purpose: Test openning the library
-cbSdkResult testOpen(void)
+cbSdkResult open(void)
 {
     // Try to get the version. Should be a warning because we are not yet open.
-    cbSdkVersion ver = testGetVersion();
+    cbSdkVersion ver = getVersion();
 
 	// Open the device using default connection type.
 	cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
@@ -145,7 +145,7 @@ cbSdkResult testOpen(void)
         char strInstrument[CBSDKINSTRUMENT_COUNT + 1][13] = {"NSP", "nPlay", "Local NSP", "Remote nPlay", "Unknown"};
 
 		// Now that we are open, get the version again.
-		ver = testGetVersion();
+		ver = getVersion();
 
 		// Summary results.
         printf("%s real-time interface to %s (%d.%02d.%02d.%02d) successfully initialized\n", strConnection[conType], strInstrument[instType], ver.nspmajor, ver.nspminor, ver.nsprelease, ver.nspbeta);
@@ -155,7 +155,7 @@ cbSdkResult testOpen(void)
 }
 
 
-void testGetConfig(void)
+void getConfig(void)
 {
 	uint32_t proc = 1;
 	uint32_t nChansInGroup;
@@ -171,7 +171,7 @@ void testGetConfig(void)
 	}
 }
 
-void testSetConfig(void)
+void setConfig(void)
 {
 	uint32_t bActive = false;
 	uint16_t Begchan = 0;
@@ -195,7 +195,7 @@ void testSetConfig(void)
 	handleResult(res);
 }
 
-void testGetTime(void)
+void getTime(void)
 {
 	PROCTIME cbtime = 0;
 	cbSdkResult res = cbSdkGetTime(INST, &cbtime);
@@ -206,7 +206,7 @@ void testGetTime(void)
 	handleResult(res);
 }
 
-void testSetAnaout(uint16_t channel)
+void setAnaout(uint16_t channel)
 {
     cbSdkWaveformData * wf = nullptr;
     cbSdkAoutMon mon = { channel, false, false };
@@ -221,7 +221,7 @@ void testSetAnaout(uint16_t channel)
 
 // Author & Date:   Ehsan Azar    25 Oct 2012
 // Purpose: Test closing the library
-cbSdkResult testClose(void)
+cbSdkResult close(void)
 {
     cbSdkResult res = cbSdkClose(INST);
 	if (res == CBSDKRESULT_SUCCESS)
@@ -240,26 +240,26 @@ cbSdkResult testClose(void)
 // The test suit main entry
 int main(int argc, char *argv[])
 {
-    cbSdkResult res = testOpen();
+    cbSdkResult res = open();
     if (res < 0)
-        printf("testOpen failed (%d)!\n", res);
+        printf("open failed (%d)!\n", res);
     else
-        printf("testOpen succeeded\n");
+        printf("open succeeded\n");
 	
-	testGetConfig();
+	getConfig();
 
-	testSetConfig();
+	setConfig();
 
 	for (uint16_t chan_ix = 1; chan_ix < (1 + 128 + 16); chan_ix++)
 	{
-		testSetAnaout(chan_ix);
+		setAnaout(chan_ix);
 	}
 
-    res = testClose();
+    res = close();
     if (res < 0)
-        printf("testClose failed (%d)!\n", res);
+        printf("close failed (%d)!\n", res);
     else
-        printf("testClose succeeded\n");
+        printf("close succeeded\n");
 
     return 0;
 }

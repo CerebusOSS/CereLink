@@ -95,7 +95,7 @@ void handleResult(cbSdkResult res)
 }
 
 
-cbSdkVersion testGetVersion(void)
+cbSdkVersion getVersion(void)
 {
     // Library version can be read even before library open (return value is a warning)
     //  actual NSP version however needs library to be open
@@ -115,10 +115,10 @@ cbSdkVersion testGetVersion(void)
 
 // Author & Date:   Ehsan Azar    24 Oct 2012
 // Purpose: Test opening the library
-cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
+cbSdkResult open(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
 {
     // Try to get the version. Should be a warning because we are not yet open.
-    cbSdkVersion ver = testGetVersion();
+    cbSdkVersion ver = getVersion();
 
     // Open the device using default connection type.
     cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
@@ -153,7 +153,7 @@ cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
         char strInstrument[CBSDKINSTRUMENT_COUNT + 1][13] = {"NSP", "nPlay", "Local NSP", "Remote nPlay", "Unknown"};
 
         // Now that we are open, get the version again.
-        ver = testGetVersion();
+        ver = getVersion();
 
         // Summary results.
         printf("%s real-time interface to %s (%d.%02d.%02d.%02d; proto %d.%02d) successfully initialized\n",
@@ -166,7 +166,7 @@ cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
 }
 
 
-cbSdkResult testGetConfig(void)
+cbSdkResult getConfig(void)
 {
     uint32_t proc = 1;
     uint32_t nChansInGroup;
@@ -186,7 +186,7 @@ cbSdkResult testGetConfig(void)
 
 // Author & Date:   Ehsan Azar    25 Oct 2012
 // Purpose: Test closing the library
-cbSdkResult testClose(void)
+cbSdkResult close(void)
 {
     cbSdkResult res = cbSdkClose(INST);
     if (res == CBSDKRESULT_SUCCESS)
@@ -211,29 +211,29 @@ int main(int argc, char *argv[])
     if (argc > 1) {inst_ip = argv[1];}
     if (argc > 2) {inst_port = strtol(argv[2], NULL, 10);}
     if (argc > 3) { client_ip = argv[3]; }
-    cbSdkResult res = testOpen(inst_ip, inst_port, client_ip);
+    cbSdkResult res = open(inst_ip, inst_port, client_ip);
     if (res < 0)
     {
-        printf("testOpen failed (%d)!\n", res);
+        printf("open failed (%d)!\n", res);
         return 0;
     }
     else
-        printf("testOpen succeeded\n");
+        printf("open succeeded\n");
 
-    res = testGetConfig();
+    res = getConfig();
     if (res < 0)
     {
-        printf("testGetConfig failed (%d)!\n", res);
+        printf("getConfig failed (%d)!\n", res);
         return 0;
     }
     else
-        printf("testGetConfig succeeded\n");
+        printf("getConfig succeeded\n");
 
-    res = testClose();
+    res = close();
     if (res < 0)
-        printf("testClose failed (%d)!\n", res);
+        printf("close failed (%d)!\n", res);
     else
-        printf("testClose succeeded\n");
+        printf("close succeeded\n");
 
     return 0;
 }

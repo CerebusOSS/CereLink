@@ -117,7 +117,7 @@ void handleResult(cbSdkResult res)
     }
 }
 
-cbSdkVersion testGetVersion(void)
+cbSdkVersion getVersion(void)
 {
     // Library version can be read even before library open (return value is a warning)
     //  actual NSP version however needs library to be open
@@ -135,10 +135,10 @@ cbSdkVersion testGetVersion(void)
     return ver;
 }
 
-cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
+cbSdkResult open(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
 {
     // Try to get the version. Should be a warning because we are not yet open.
-    cbSdkVersion ver = testGetVersion();
+    cbSdkVersion ver = getVersion();
 
     // Open the device using default connection type.
     cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
@@ -173,7 +173,7 @@ cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
         char strInstrument[CBSDKINSTRUMENT_COUNT + 1][13] = {"NSP", "nPlay", "Local NSP", "Remote nPlay", "Unknown"};
 
         // Now that we are open, get the version again.
-        ver = testGetVersion();
+        ver = getVersion();
 
         // Summary results.
         printf("%s real-time interface to %s (%d.%02d.%02d.%02d) successfully initialized\n",
@@ -184,7 +184,7 @@ cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
     return res;
 }
 
-void testSetConfig(bool bCont, bool bEv)
+void setConfig(bool bCont, bool bEv)
 {
     uint32_t proc = 1;
     uint32_t nChansInGroup;
@@ -212,7 +212,7 @@ void testSetConfig(bool bCont, bool bEv)
     std::this_thread::sleep_for(std::chrono::seconds(2));
 }
 
-cbSdkResult testClose(void)
+cbSdkResult close(void)
 {
     cbSdkResult res = cbSdkClose(INST);
     if (res == CBSDKRESULT_SUCCESS)
@@ -258,16 +258,16 @@ int main(int argc, char *argv[])
     }
 
     // Connect to the device.
-    cbSdkResult res = testOpen(inst_ip, inst_port, client_ip);
+    cbSdkResult res = open(inst_ip, inst_port, client_ip);
     if (res < 0)
     {
-        printf("testOpen failed (%d)!\n", res);
+        printf("open failed (%d)!\n", res);
         return -1;
     }
     else
-        printf("testOpen succeeded\n");
+        printf("open succeeded\n");
     
-    testSetConfig(bCont, bEv);
+    setConfig(bCont, bEv);
 
     cbsdk_config cfg;
     res = cbSdkGetTrialConfig(INST, &cfg.bActive,
@@ -434,11 +434,11 @@ int main(int argc, char *argv[])
 #endif
     }
 
-    res = testClose();
+    res = close();
     if (res < 0)
-        printf("testClose failed (%d)!\n", res);
+        printf("close failed (%d)!\n", res);
     else
-        printf("testClose succeeded\n");
+        printf("close succeeded\n");
 
     // No need to clear trialCont, trialEvent and trialComm because they are smart pointers and will dealloc.
 

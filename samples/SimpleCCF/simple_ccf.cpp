@@ -114,7 +114,7 @@ void handleResult(cbSdkResult res)
 }
 
 
-cbSdkVersion testGetVersion(void)
+cbSdkVersion getVersion(void)
 {
     // Library version can be read even before library open (return value is a warning)
     //  actual NSP version however needs library to be open
@@ -133,10 +133,10 @@ cbSdkVersion testGetVersion(void)
 
 // Author & Date:   Ehsan Azar    24 Oct 2012
 // Purpose: Test opening the library
-cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
+cbSdkResult open(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
 {
     // Try to get the version. Should be a warning because we are not yet open.
-    cbSdkVersion ver = testGetVersion();
+    cbSdkVersion ver = getVersion();
 
     // Open the device using default connection type.
     cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
@@ -171,7 +171,7 @@ cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
         char strInstrument[CBSDKINSTRUMENT_COUNT + 1][13] = {"NSP", "nPlay", "Local NSP", "Remote nPlay", "Unknown"};
 
         // Now that we are open, get the version again.
-        ver = testGetVersion();
+        ver = getVersion();
 
         // Summary results.
         printf("%s real-time interface to %s (%d.%02d.%02d.%02d) successfully initialized\n", strConnection[conType], strInstrument[instType], ver.nspmajor, ver.nspminor, ver.nsprelease, ver.nspbeta);
@@ -182,7 +182,7 @@ cbSdkResult testOpen(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
 
 // Author & Date:   Ehsan Azar    25 Oct 2012
 // Purpose: Test closing the library
-cbSdkResult testClose(void)
+cbSdkResult close(void)
 {
     cbSdkResult res = cbSdkClose(INST);
     if (res == CBSDKRESULT_SUCCESS)
@@ -211,7 +211,7 @@ int main(int argc, char *argv[])
     if (argc > 2) {inst_ip = argv[2];}
     if (argc > 3) {inst_port = strtol(argv[3], NULL, 10);}
     cbSdkResult  res;
-    res = testOpen(inst_ip, inst_port, client_ip);
+    res = open(inst_ip, inst_port, client_ip);
     handleResult(res);
 
     cbSdkCCF data;
@@ -230,11 +230,11 @@ int main(int argc, char *argv[])
     else
         printf("cbSdkReadCCF failed to read %s.\n", argv[1]);
 
-    res = testClose();
+    res = close();
     if (res < 0)
-        printf("testClose failed (%d)!\n", res);
+        printf("close failed (%d)!\n", res);
     else
-        printf("testClose succeeded\n");
+        printf("close succeeded\n");
 
     return 0;
 }
