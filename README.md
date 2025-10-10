@@ -2,7 +2,7 @@
 
 Blackrock Microsystems Cerebus Link
 
-The software develoment kit for Blackrock Microsystems neural signal processing hardware includes:
+The software development kit for Blackrock Microsystems neural signal processing hardware includes:
 * c++ library (cbsdk): cross platform library for two-way communication with hardware
 * MATLAB/Octave wrapper (cbmex/cboct): MATLAB executable (mex) to configure and pull data using cbsdk
 * Python wrapper (cerebus.cbpy): Python binding for cbsdk to configure, pull data, and receive callbacks
