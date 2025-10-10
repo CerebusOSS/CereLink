@@ -32,7 +32,7 @@
 #include "cbHwlibHi.h"
 #include "debugmacs.h"
 #include <math.h>
-#include "../cbmex/res/cbmex.rc2"
+#include "../wrappers/cbmex/res/cbmex.rc2"
 
 #ifndef WIN32
 #ifndef Sleep
