@@ -20,11 +20,7 @@
 #    able to build the INSTALL target, as by default it tries to install to C:\Program Files.
 #    Change the install target using CMAKE_INSTALL_PREFIX. See example CMAKE command below.
 #    - If you would like to build the C# libraries and examples then add -DBUILD_CLI=ON
-# QT:
-#     On Mac OS, assuming qt installed with homebrew,
-#     run CMake with -DCMAKE_PREFIX_PATH=$(brew --prefix qt)
-#     On Windows, run CMake with -DQt6_DIR=path\to\qt\version\platform\lib\cmake\Qt6
-#     For example: cmake .. -G "Visual Studio 15 2017 Win64" -DQt6_DIR=C:\Qt\6.2.1\msvc2017_64\lib\cmake\Qt6 -DCMAKE_INSTALL_PREFIX=install -DBUILD_CLI=ON
+# NOTE: Qt dependency has been completely removed (replaced with C++ standard library)
 #
 
 
@@ -80,7 +76,7 @@ if(${CBPROTO_311})
 endif()
 ADD_DEFINITIONS( -DCBSDK_EXPORTS )
 IF( WIN32 )
-    # From cbhwlib/cbmex.vcproj: PreprocessorDefinitions="WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS;QT_APP"
+    # From cbhwlib/cbmex.vcproj: PreprocessorDefinitions="WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS"
     ADD_DEFINITIONS(
         -DWIN32 -D_WINDOWS -DNO_AFX -DNOMINMAX
         -D_CRT_SECURE_NO_WARNINGS
@@ -95,11 +91,7 @@ cmake_policy(SET CMP0042 NEW) # ENABLE CMP0042: MACOSX_RPATH is enabled by defau
 # Third party libraries
 include(FetchContent)
 
-# -Qt
-FIND_PACKAGE(Qt6 REQUIRED COMPONENTS Core)
-set(CMAKE_AUTOMOC ON)
-SET(QT_LIBRARIES Qt6::Core)
-ADD_DEFINITIONS( ${QT_DEFINITIONS} -DQT_APP)
+# Qt has been completely removed from the codebase and replaced with C++ standard library
 
 # -PugiXML
 set(PUGIXML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -252,7 +244,6 @@ target_include_directories( ${LIB_NAME}
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CentralCommon>
 )
 TARGET_LINK_LIBRARIES( ${LIB_NAME}
-        PRIVATE ${QT_LIBRARIES}
         PUBLIC CCFUtils)
 IF( WIN32 )
     TARGET_LINK_LIBRARIES( ${LIB_NAME} PRIVATE wsock32 ws2_32 winmm )
@@ -287,7 +278,6 @@ IF(${CBSDK_BUILD_STATIC})
                 $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CentralCommon>
     )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC}
-            PRIVATE ${QT_LIBRARIES}
             PUBLIC CCFUtils)
     IF( WIN32 )
         target_include_directories(${LIB_NAME_STATIC} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/compat>)
@@ -351,7 +341,6 @@ IF(${CBSDK_BUILD_CBMEX} AND MATLAB_FOUND )
     )
     TARGET_LINK_LIBRARIES( ${LIB_NAME_CBMEX}
         ${LIB_NAME_STATIC}
-        ${QT_LIBRARIES}
         ${Matlab_LIBRARIES}
     )
     INSTALL( TARGETS ${LIB_NAME_CBMEX}
@@ -392,30 +381,13 @@ IF( ${CBSDK_BUILD_CBOCT} AND OCTAVE_FOUND )
     TARGET_INCLUDE_DIRECTORIES( ${LIB_NAME_CBOCT}
         PRIVATE ${OCTAVE_INCLUDE_DIR}
     )
-    TARGET_LINK_LIBRARIES( ${LIB_NAME_CBOCT} ${LIB_NAME_STATIC} ${QT_LIBRARIES} ${OCTAVE_LIBRARIES} )
+    TARGET_LINK_LIBRARIES( ${LIB_NAME_CBOCT} ${LIB_NAME_STATIC} ${OCTAVE_LIBRARIES} )
     INSTALL( TARGETS ${LIB_NAME_CBOCT}
         RUNTIME DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
         LIBRARY DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
         ARCHIVE DESTINATION ${CBMEX_INSTALL_PREFIX}/CereLink 
     )
 ENDIF( ${CBSDK_BUILD_CBOCT} AND OCTAVE_FOUND )
-
-# Some Test applications.
-# These all use deployqt so let's create some helper functions for that.
-function(findQtInstallationTool qtdeploytoolname)
-    if(QT_DEPLOYQT_EXECUTABLE)
-        return()
-    endif()
-    get_target_property(QT_QMAKE_EXE Qt${QT_VERSION_MAJOR}::qmake IMPORTED_LOCATION)
-    get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXE}" DIRECTORY)
-    find_program (QT_DEPLOYQT_EXECUTABLE ${qtdeploytoolname} HINTS "${QT_BIN_DIR}")
-    if (QT_DEPLOYQT_EXECUTABLE)
-        message(STATUS "Qt deploy tool found at ${QT_DEPLOYQT_EXECUTABLE}")
-    else()
-        message(WARNING "Qt deploy tool wasn't found, installing ${PROJECT_NAME} will fail!")
-        return()
-    endif()
-endfunction()
 
 ##
 # test
