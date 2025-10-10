@@ -26,6 +26,7 @@
 
 #include "StdAfx.h"
 #include <algorithm>  // Use C++ default min and max implementation.
+#include <chrono>     // For std::chrono::milliseconds
 #include "SdkApp.h"
 #include "../CentralCommon/BmiVersion.h"
 #include "cbHwlibHi.h"
@@ -245,7 +246,7 @@ void SdkApp::OnPktEvent(const cbPKT_GENERIC * const pPkt)
                         if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
                             m_bPacketsEvent = false;
-                            m_waitPacketsEvent.wakeAll();
+                            m_waitPacketsEvent.notify_all();
                         }
                     m_lockGetPacketsEvent.unlock();
                 }
@@ -307,7 +308,7 @@ void SdkApp::OnPktComment(const cbPKT_COMMENT * const pPkt)
                         if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
                             m_bPacketsCmt = false;
-                            m_waitPacketsCmt.wakeAll();
+                            m_waitPacketsCmt.notify_all();
                         }
                     m_lockGetPacketsCmt.unlock();
                 }
@@ -353,7 +354,7 @@ void SdkApp::OnPktLog(const cbPKT_LOG * const pPkt)
                         if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
                             m_bPacketsCmt = false;
-                            m_waitPacketsCmt.wakeAll();
+                            m_waitPacketsCmt.notify_all();
                         }
                     m_lockGetPacketsCmt.unlock();
                 }
@@ -449,7 +450,7 @@ void SdkApp::OnPktTrack(const cbPKT_VIDEOTRACK * const pPkt)
                         if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
                             m_bPacketsTrack = false;
-                            m_waitPacketsTrack.wakeAll();
+                            m_waitPacketsTrack.notify_all();
                         }
                     m_lockGetPacketsTrack.unlock();
                 }
@@ -1096,26 +1097,27 @@ cbSdkResult SdkApp::SdkOpen(uint32_t nInstance, cbSdkConnectionType conType, cbS
     if (QCoreApplication::instance() == NULL && QAppPriv::pApp == NULL)
         QAppPriv::pApp = new QCoreApplication(QAppPriv::argc, QAppPriv::argv);
 
+    std::unique_lock<std::mutex> connectLock(m_connectLock);
+
     if (conType == CBSDKCONNECTION_UDP)
     {
-        m_connectLock.lock();
         Open(nInstance, con.nInPort, con.nOutPort, con.szInIP, con.szOutIP, con.nRecBufSize, con.nRange);
     }
     else if (conType == CBSDKCONNECTION_CENTRAL)
     {
-        m_connectLock.lock();
         Open(nInstance);
     }
     else
         return CBSDKRESULT_NOTIMPLEMENTED;
 
     // Wait for (dis)connection to happen (wait forever if debug)
+    bool bWait;
 #ifndef NDEBUG
-    bool bWait = m_connectWait.wait(&m_connectLock);
+    m_connectWait.wait(connectLock);
+    bWait = true;
 #else
-    bool bWait = m_connectWait.wait(&m_connectLock, 15000);
+    bWait = (m_connectWait.wait_for(connectLock, std::chrono::milliseconds(15000)) == std::cv_status::no_timeout);
 #endif
-    m_connectLock.unlock();
 
     if (!bWait)
         return CBSDKRESULT_TIMEOUT;
@@ -2608,10 +2610,11 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
                 return CBSDKRESULT_ERRCONFIG;
 
             // Wait for packets to come in
-            m_lockGetPacketsCmt.lock();
-            m_bPacketsCmt = true;
-            m_waitPacketsCmt.wait(&m_lockGetPacketsCmt, wait_for_comment_msec);
-            m_lockGetPacketsCmt.unlock();
+            {
+                std::unique_lock<std::mutex> lock(m_lockGetPacketsCmt);
+                m_bPacketsCmt = true;
+                m_waitPacketsCmt.wait_for(lock, std::chrono::milliseconds(wait_for_comment_msec));
+            }
 
             // Take a snapshot of the current write pointer
             m_lockTrialComment.lock();
@@ -2646,10 +2649,11 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
             uint32_t read_end_index[cbMAXTRACKOBJ];
 
             // Wait for packets to come in
-            m_lockGetPacketsTrack.lock();
-            m_bPacketsTrack = true;
-            m_waitPacketsTrack.wait(&m_lockGetPacketsTrack, 250);
-            m_lockGetPacketsTrack.unlock();
+            {
+                std::unique_lock<std::mutex> lock(m_lockGetPacketsTrack);
+                m_bPacketsTrack = true;
+                m_waitPacketsTrack.wait_for(lock, std::chrono::milliseconds(250));
+            }
 
             // Take a snapshot of the current write pointer
             m_lockTrialTracking.lock();
@@ -4597,14 +4601,14 @@ void SdkApp::OnInstNetworkEvent(NetEventType type, unsigned int code)
     {
     case NET_EVENT_INSTINFO:
         m_connectLock.lock();
-        m_connectWait.wakeAll();
+        m_connectWait.notify_all();
         m_connectLock.unlock();
         InstInfoEvent(m_instInfo);
         break;
     case NET_EVENT_CLOSE:
         m_instInfo = 0;
         m_connectLock.lock();
-        m_connectWait.wakeAll();
+        m_connectWait.notify_all();
         m_connectLock.unlock();
         InstInfoEvent(m_instInfo);
         break;
@@ -4612,14 +4616,14 @@ void SdkApp::OnInstNetworkEvent(NetEventType type, unsigned int code)
         m_lastCbErr = code;
         m_instInfo = 0;
         m_connectLock.lock();
-        m_connectWait.wakeAll();
+        m_connectWait.notify_all();
         m_connectLock.unlock();
         break;
     case NET_EVENT_NETOPENERR:
         m_lastCbErr = code;
         m_instInfo = 0;
         m_connectLock.lock();
-        m_connectWait.wakeAll();
+        m_connectWait.notify_all();
         m_connectLock.unlock();
         lostEvent.type = CBSDKPKTLOSTEVENT_NET;
         LinkFailureEvent(lostEvent);

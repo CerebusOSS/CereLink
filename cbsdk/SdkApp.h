@@ -22,8 +22,8 @@
 #include "InstNetwork.h"
 #include "cbsdk.h"
 #include "CCFUtils.h"
-#include <QMutex>
-#include <QWaitCondition>
+#include <mutex>
+#include <condition_variable>
 
 /// Wrapper class for SDK Qt application
 class SdkApp : public InstNetwork, public InstNetwork::Listener
@@ -119,8 +119,8 @@ private:
     cbRESULT m_lastCbErr; // Last error
 
     // Wait condition for connection open
-    QWaitCondition m_connectWait;
-    QMutex m_connectLock;
+    std::condition_variable m_connectWait;
+    std::mutex m_connectLock;
 
     // Which channels to listen to
     bool m_bChannelMask[cbMAXCHANS];
@@ -130,7 +130,7 @@ private:
     cbSdkInstInfo m_lastInstInfo; // Last instrument info event
 
     // Lock for accessing the callbacks
-    QMutex m_lockCallback;
+    std::mutex m_lockCallback;
     // Actual registered callbacks
     cbSdkCallback m_pCallback[CBSDKCALLBACK_COUNT];
     void * m_pCallbackParams[CBSDKCALLBACK_COUNT];
@@ -141,22 +141,22 @@ private:
     /////////////////////////////////////////////////////////////////////////////
     // Declarations for tracking the beginning and end of trials
 
-    QMutex m_lockTrial;
-    QMutex m_lockTrialEvent;
-    QMutex m_lockTrialComment;
-    QMutex m_lockTrialTracking;
+    std::mutex m_lockTrial;
+    std::mutex m_lockTrialEvent;
+    std::mutex m_lockTrialComment;
+    std::mutex m_lockTrialTracking;
 
     // For synchronization of threads
-    QMutex m_lockGetPacketsEvent;
-    QWaitCondition m_waitPacketsEvent;
+    std::mutex m_lockGetPacketsEvent;
+    std::condition_variable m_waitPacketsEvent;
     bool m_bPacketsEvent;
 
-    QMutex m_lockGetPacketsCmt;
-    QWaitCondition m_waitPacketsCmt;
+    std::mutex m_lockGetPacketsCmt;
+    std::condition_variable m_waitPacketsCmt;
     bool m_bPacketsCmt;
 
-    QMutex m_lockGetPacketsTrack;
-    QWaitCondition m_waitPacketsTrack;
+    std::mutex m_lockGetPacketsTrack;
+    std::condition_variable m_waitPacketsTrack;
     bool m_bPacketsTrack;
 
     uint16_t m_uTrialBeginChannel;  // Channel ID that is watched for the trial begin notification

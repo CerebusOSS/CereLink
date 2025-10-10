@@ -19,6 +19,12 @@ add_executable(ccfutils_tests
     test_main.cpp
 )
 
+# Synchronization tests (for verifying Phase 2 migration)
+add_executable(sync_tests
+    SynchronizationTests.cpp
+    test_main.cpp
+)
+
 # Include necessary headers
 target_include_directories(ccfutils_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/CCFUtils
@@ -42,3 +48,11 @@ target_link_libraries(ccfutils_tests
 target_compile_definitions(ccfutils_tests PRIVATE PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
 add_test(NAME ccfutils_tests COMMAND ccfutils_tests)
+
+# Synchronization tests don't need special includes or links
+target_link_libraries(sync_tests
+    PRIVATE
+        gtest
+)
+
+add_test(NAME sync_tests COMMAND sync_tests)
