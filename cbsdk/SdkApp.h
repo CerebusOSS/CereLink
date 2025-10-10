@@ -54,7 +54,7 @@ public:
     // All SDK functions come here
     // ---------------------------
 
-    void SdkAsynchCCF(const ccf::ccfResult res, LPCSTR szFileName, const cbStateCCF state, const uint32_t nProgress);
+    void SdkAsynchCCF(ccf::ccfResult res, LPCSTR szFileName, cbStateCCF state, uint32_t nProgress);
     cbSdkResult SdkGetVersion(cbSdkVersion *version);
     cbSdkResult SdkReadCCF(cbSdkCCF * pData, const char * szFileName, bool bConvert, bool bSend, bool bThreaded);  // From file or device if szFileName is null
     cbSdkResult SdkFetchCCF(cbSdkCCF * pData);  // from device only
@@ -113,8 +113,8 @@ public:
     cbSdkResult SdkAnalogToDigital(uint16_t channel, const char * szVoltsUnitString, int32_t * digital);
 
 
-private:
-    void OnInstNetworkEvent(NetEventType type, unsigned int code); // Event from the instrument network
+protected:
+    void OnInstNetworkEvent(NetEventType type, unsigned int code) override; // Event from the instrument network
     bool m_bInitialized; // If initialized
     cbRESULT m_lastCbErr; // Last error
 

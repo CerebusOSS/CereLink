@@ -28,9 +28,9 @@
 #include "cki_common.h"
 #include <vector>
 #include <string>
-#include <QThread>
-#include <QTimer>
-#include <QMetaType>
+#include <memory>
+#include <atomic>
+#include <thread>
 
 enum NetCommandType
 {
@@ -65,11 +65,8 @@ enum NetEventType
 
 // Author & Date: Ehsan Azar       15 March 2010
 // Purpose: Instrument networking thread
-class InstNetwork: public QThread
+class InstNetwork
 {
-
-    Q_OBJECT
-
 public:
     // Instrument network listener
     class Listener
@@ -88,11 +85,12 @@ public:
     uint32_t getPacketCounter() {return m_nRecentPacketCount;}
     uint32_t getDataCounter() {return m_dataCounter;}
     void SetNumChans();
+    void Start(); // Start the network thread
 protected:
     enum { INST_TICK_COUNT = 10 };
     void run();
     void ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt); // Process incoming packets in stand-alone mode
-    void timerEvent(QTimerEvent *event); // the QT timer event for stand-alone networking
+    void processTimerTick(); // Process one timer tick (was timerEvent for Qt)
     void OnWaitEvent(); // Non-stand-alone networking
     inline void CheckForLinkFailure(uint32_t nTicks, uint32_t nCurrentPacketCount); // Check link failure
 private:
@@ -100,12 +98,12 @@ private:
     void UpdateBasisModel(const cbPKT_FS_BASIS & rBasisModel);
 private:
     static const uint32_t MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS;
+    std::unique_ptr<std::thread> m_thread; // The network thread
     cbLevelOfConcern m_enLOC; // level of concern
     STARTUP_OPTIONS m_nStartupOptionsFlags;
     std::vector<Listener *> m_listener;   // instrument network listeners
     uint32_t m_timerTicks;    // network timer ticks
-    int m_timerId; // Stand-alone timer ID
-    bool m_bDone;// flag to finish networking thread
+    std::atomic<bool> m_bDone;// flag to finish networking thread
     uint32_t m_nRecentPacketCount; // number of real packets
     uint32_t m_dataCounter;        // data counter
     uint32_t m_nLastNumberOfPacketsReceived;
@@ -127,19 +125,28 @@ protected:
     std::string m_strOutIP; // Instrument IPv4 address
     int m_nRange; // number of IP addresses to try (default is 16)
 
-public Q_SLOTS:
+public:
     void Close(); // stop timer and close the message loop
 
-private Q_SLOTS:
+private:
     void OnNetCommand(NetCommandType cmd, unsigned int code = 0);
 
-    // Heper slots to specialize this class for networking
-private Q_SLOTS:
+    // Helper functions to specialize this class for networking
+protected:
     virtual void OnInstNetworkEvent(NetEventType, unsigned int) {;}
     virtual void OnExec() {;}
 
-Q_SIGNALS:
-    void InstNetworkEvent(NetEventType type, unsigned int code = 0);
+    // Called to notify about network events (was Qt signal, now virtual function)
+    // Note: No default arguments on virtual functions (linter warning)
+    virtual void InstNetworkEvent(NetEventType type, unsigned int code) {
+        // Default implementation calls the virtual handler
+        OnInstNetworkEvent(type, code);
+    }
+
+    // Non-virtual overload to provide default argument (code = 0)
+    void InstNetworkEvent(NetEventType type) {
+        InstNetworkEvent(type, 0);
+    }
 };
 
 #endif // include guard

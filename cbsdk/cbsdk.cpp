@@ -32,7 +32,6 @@
 #include "cbHwlibHi.h"
 #include "debugmacs.h"
 #include <math.h>
-#include <QCoreApplication>
 #include "../cbmex/res/cbmex.rc2"
 
 #ifndef WIN32
@@ -43,15 +42,6 @@
 
 // The sdk instances
 SdkApp * g_app[cbMAXOPEN] = {NULL};
-
-// Private Qt application
-namespace QAppPriv
-{
-    static int argc = 1;
-    static char appname[] = "cbsdk.app";
-    static char* argv[] = {appname, NULL};
-    static QCoreApplication * pApp = NULL;
-};
 
 #ifdef WIN32
 // Author & Date:   Ehsan Azar     31 March 2011
@@ -1092,10 +1082,6 @@ cbSdkResult SdkApp::SdkOpen(uint32_t nInstance, cbSdkConnectionType conType, cbS
     // not be saving data and then set up the cache control variables
     m_bWithinTrial = false;
     m_uTrialStartTime = 0;
-
-    // If this is not part of another Qt application, and the-only Qt app instance is not present
-    if (QCoreApplication::instance() == NULL && QAppPriv::pApp == NULL)
-        QAppPriv::pApp = new QCoreApplication(QAppPriv::argc, QAppPriv::argv);
 
     std::unique_lock<std::mutex> connectLock(m_connectLock);
 
@@ -4362,12 +4348,7 @@ void SdkApp::Open(uint32_t nInstance, int nInPort, int nOutPort, LPCSTR szInIP, 
     if (!m_bInitialized)
     {
         m_bInitialized = true;
-        // connect the network events and commands.
-        // Note this uses Qt::DirectConnection, so the slot function is called in the signal's thread.
-        // AFAICT, there are no other slots connecting to this signal, so we could alternatively
-        // skip the signal and simply call ~~On~~DoInstNetworkEvent (after we change its visibility).
-        QObject::connect(this, SIGNAL(InstNetworkEvent(NetEventType, unsigned int)),
-                this, SLOT(OnInstNetworkEvent(NetEventType, unsigned int)), Qt::DirectConnection);
+        // InstNetworkEvent now directly calls OnInstNetworkEvent (virtual function call)
         // Add myself as the sole listener
         InstNetwork::Open(this);
     }
@@ -4386,7 +4367,7 @@ void SdkApp::Open(uint32_t nInstance, int nInPort, int nOutPort, LPCSTR szInIP, 
 #endif
 
     // Restart networking thread
-    start(QThread::HighPriority);
+    Start();
 }
 
 // Author & Date: Ehsan Azar       29 April 2012

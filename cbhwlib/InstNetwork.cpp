@@ -19,6 +19,8 @@
 //
 #include "StdAfx.h"
 #include <algorithm>  // Use C++ default min and max implementation.
+#include <thread>     // For std::thread
+#include <chrono>     // For std::chrono timing
 #include "InstNetwork.h"
 #ifndef WIN32
     #include <semaphore.h>
@@ -29,11 +31,9 @@ const uint32_t InstNetwork::MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS = 5000;  // T
 // Author & Date: Ehsan Azar       15 March 2010
 // Purpose: Constructor for instrument networking thread
 InstNetwork::InstNetwork(STARTUP_OPTIONS startupOption) :
-    QThread(),
     m_enLOC(LOC_LOW),
     m_nStartupOptionsFlags(startupOption),
     m_timerTicks(0),
-    m_timerId(0),
     m_bDone(false),
     m_nRecentPacketCount(0),
     m_dataCounter(0),
@@ -55,10 +55,7 @@ InstNetwork::InstNetwork(STARTUP_OPTIONS startupOption) :
     m_nRange(0)
 {
 
-    qRegisterMetaType<NetEventType>("NetEventType"); // For QT connect to recognize this type
-    qRegisterMetaType<NetCommandType>("NetCommandType"); // For QT connect to recognize this type
-    // This should be the last
-    moveToThread(this); // The object could not be moved if it had a parent
+    // Object initialization complete
 }
 
 // Author & Date: Ehsan Azar       15 March 2010
@@ -98,8 +95,24 @@ void InstNetwork::Close()
     // Signal thread to finish
     m_bDone = true;
     // Wait for thread to finish
-    if (QThread::currentThread() != thread())
-        wait();
+    if (m_thread && m_thread->joinable())
+        m_thread->join();
+}
+
+// Author & Date: Ehsan Azar       15 March 2010
+// Purpose: Start the network thread
+void InstNetwork::Start()
+{
+    m_thread = std::make_unique<std::thread>(&InstNetwork::run, this);
+
+    // Set thread priority (platform-specific)
+#ifdef WIN32
+    SetThreadPriority(m_thread->native_handle(), THREAD_PRIORITY_HIGHEST);
+#else
+    // On Unix/Linux, setting thread priority may require privileges
+    // For now, we'll skip priority setting on non-Windows platforms
+    // If needed, you can use pthread_setschedparam with appropriate permissions
+#endif
 }
 
 // Author & Date: Ehsan Azar       14 Feb 2012
@@ -115,7 +128,7 @@ void InstNetwork::OnNetCommand(NetCommandType cmd, unsigned int /*code*/)
         // Do nothing
         break;
     case NET_COMMAND_OPEN:
-        start(QThread::HighPriority);
+        Start();
         break;
     case NET_COMMAND_CLOSE:
         Close();
@@ -531,10 +544,8 @@ inline void InstNetwork::CheckForLinkFailure(uint32_t nTicks, uint32_t nCurrentP
 }
 
 // Author & Date: Ehsan Azar       15 March 2010
-// Purpose: Networking timer timeout function
-// Inputs:
-//   event - QT timer event for networking
-void InstNetwork::timerEvent(QTimerEvent * /*event*/)
+// Purpose: Process one timer tick (replaced Qt timerEvent)
+void InstNetwork::processTimerTick()
 {
     m_timerTicks++; // number of intervals
     int burstcount = 0;
@@ -542,13 +553,7 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
 //    TRACE("m_timerTicks: %d\n", m_timerTicks);
     if (m_bDone)
     {
-        if (m_timerId)
-        {
-            killTimer(m_timerId);
-            m_timerId = 0;
-        }
-        quit();  // Stop the thread's event loop with code 0 (success).
-        return;
+        return;  // Exit timer loop
     }
     /////////////////////////////////////////
     // below 5 seconds, call startup routines
@@ -822,13 +827,25 @@ void InstNetwork::run()
     // If stand-alone setup network packet handling timer
     if (m_bStandAlone)
     {
-        // Start network packet processing timer later in the message loop
+        // Start network packet processing using custom timer loop (10ms ticks)
 #ifdef WIN32
         timeBeginPeriod(1);
 #endif
-        m_timerId = startTimer(10);  // Milliseconds
-        // Start the message loop
-        exec();
+        // Custom timer loop replacing Qt event loop
+        using namespace std::chrono;
+        auto nextTick = steady_clock::now();
+        const auto tickInterval = milliseconds(10);
+
+        while (!m_bDone)
+        {
+            nextTick += tickInterval;
+            processTimerTick();
+            std::this_thread::sleep_until(nextTick);
+        }
+
+#ifdef WIN32
+        timeEndPeriod(1);
+#endif
     } else { // else wait for central application data
         // Instrument info for non-stand-alone
         InstNetworkEvent(NET_EVENT_INSTINFO, m_instInfo);  // Wake's main thread's wait
@@ -858,7 +875,7 @@ void InstNetwork::run()
     // No instrument anymore
     m_instInfo = 0;
     InstNetworkEvent(NET_EVENT_CLOSE);
-    msleep(500); // Give apps some to flush their work
+    std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Give apps some time to flush their work
     if (m_bStandAlone)
     {
         // Close the Data Socket and Winsock Subsystem
