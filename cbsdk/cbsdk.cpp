@@ -4377,7 +4377,7 @@ void SdkApp::Open(uint32_t nInstance, int nInPort, int nOutPort, LPCSTR szInIP, 
 
 #ifndef WIN32
     // On Linux bind to broadcast
-    if (m_strInIP.endsWith(".255"))
+    if (m_strInIP.size() >= 4 && m_strInIP.substr(m_strInIP.size() - 4) == ".255")
         m_bBroadcast = true;
 #endif
 

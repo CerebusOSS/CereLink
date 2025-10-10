@@ -68,7 +68,7 @@ InstNetwork::InstNetwork(STARTUP_OPTIONS startupOption) :
 void InstNetwork::Open(Listener * listener)
 {
     if (listener)
-        m_listener += listener;
+        m_listener.push_back(listener);
 }
 
 // Author & Date: Ehsan Azar       23 Sept 2010
@@ -472,7 +472,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
     }
 
     // -- Process the incoming packet inside the listeners --
-    for (int i = 0; i < m_listener.count(); ++i)
+    for (int i = 0; i < m_listener.size(); ++i)
         m_listener[i]->ProcessIncomingPacket(pPkt);
 }
 
@@ -749,7 +749,7 @@ void InstNetwork::run()
     // Start initializing instrument network
     InstNetworkEvent(NET_EVENT_INIT);
 
-    if (m_listener.count() == 0)
+    if (m_listener.size() == 0)
     {
         // If listener not set
         InstNetworkEvent(NET_EVENT_LISTENERERR);
@@ -798,9 +798,8 @@ void InstNetwork::run()
         bool bHighLatency = (m_instInfo & (cbINSTINFO_NPLAY | cbINSTINFO_CEREPLEX));
         m_icInstrument.Reset(bHighLatency ? (int)INST_TICK_COUNT : (int)Instrument::TICK_COUNT);
         // Set network connection details
-        const QByteArray inIP = m_strInIP.toLatin1();
-        const QByteArray outIP = m_strOutIP.toLatin1();
-        m_icInstrument.SetNetwork(PROTOCOL_UDP, m_nInPort, m_nOutPort, inIP, outIP, m_nRange);
+        m_icInstrument.SetNetwork(PROTOCOL_UDP, m_nInPort, m_nOutPort,
+                                  m_strInIP.c_str(), m_strOutIP.c_str(), m_nRange);
         // Open UDP
         cbRESULT cbres = m_icInstrument.Open(startupOption, m_bBroadcast, m_bDontRoute, m_bNonBlocking, m_nRecBufSize);
         if (cbres)

@@ -26,11 +26,11 @@
 #include "cbHwlibHi.h"
 #include "Instrument.h"
 #include "cki_common.h"
+#include <vector>
+#include <string>
 #include <QThread>
 #include <QTimer>
 #include <QMetaType>
-#include <QVector>
-#include <QString>
 
 enum NetCommandType
 {
@@ -102,7 +102,7 @@ private:
     static const uint32_t MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS;
     cbLevelOfConcern m_enLOC; // level of concern
     STARTUP_OPTIONS m_nStartupOptionsFlags;
-    QVector<Listener *> m_listener;   // instrument network listeners
+    std::vector<Listener *> m_listener;   // instrument network listeners
     uint32_t m_timerTicks;    // network timer ticks
     int m_timerId; // Stand-alone timer ID
     bool m_bDone;// flag to finish networking thread
@@ -123,8 +123,8 @@ protected:
     bool m_bDontRoute;
     bool m_bNonBlocking;
     int m_nRecBufSize;
-    QString m_strInIP;  // Client IPv4 address
-    QString m_strOutIP; // Instrument IPv4 address
+    std::string m_strInIP;  // Client IPv4 address
+    std::string m_strOutIP; // Instrument IPv4 address
     int m_nRange; // number of IP addresses to try (default is 16)
 
 public Q_SLOTS:
