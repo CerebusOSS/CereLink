@@ -874,7 +874,11 @@ cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance)
 #ifdef WIN32
     InterlockedExchange((LPLONG)&(cb_xmt_global_buffer_ptr[nIdx]->buffer[orig_headindex]),*((LONG*)pPacket));
 #else
-    __sync_lock_test_and_set((int32_t*)&(cb_xmt_global_buffer_ptr[nIdx]->buffer[orig_headindex]),*((int32_t*)pPacket));
+    // buffer is uint32_t[] which guarantees 4-byte alignment, but compiler can't prove it at compile-time
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Watomic-alignment"
+    __atomic_exchange_n((int32_t*)&(cb_xmt_global_buffer_ptr[nIdx]->buffer[orig_headindex]),*((int32_t*)pPacket), __ATOMIC_SEQ_CST);
+    #pragma clang diagnostic pop
 #endif
     return cbRESULT_OK;
 }
@@ -983,7 +987,11 @@ cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance)
 #ifdef WIN32
     InterlockedExchange((LPLONG)&(cb_xmt_local_buffer_ptr[nIdx]->buffer[orig_headindex]),*((LONG*)pPacket));
 #else
-    __sync_lock_test_and_set((int32_t*)&(cb_xmt_local_buffer_ptr[nIdx]->buffer[orig_headindex]),*((int32_t*)pPacket));
+    // buffer is uint32_t[] which guarantees 4-byte alignment, but compiler can't prove it at compile-time
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Watomic-alignment"
+    __atomic_exchange_n((int32_t*)&(cb_xmt_local_buffer_ptr[nIdx]->buffer[orig_headindex]),*((int32_t*)pPacket), __ATOMIC_SEQ_CST);
+    #pragma clang diagnostic pop
 #endif
 
     return cbRESULT_OK;
