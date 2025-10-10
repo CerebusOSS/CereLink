@@ -224,7 +224,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
             {
                 if (m_bStandAlone)
                 {
-                    const cbPKT_CHANINFO * pNew = reinterpret_cast<const cbPKT_CHANINFO *>(pPkt);
+                    const auto * pNew = reinterpret_cast<const cbPKT_CHANINFO *>(pPkt);
                     uint32_t chan = pNew->chan;
                     if (chan > 0 && chan <= cbMAXCHANS)
                     {
@@ -240,7 +240,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
             }
             else if ((pPkt->cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP)
             {
-                const cbPKT_SYSINFO * pNew = reinterpret_cast<const cbPKT_SYSINFO *>(pPkt);
+                const auto * pNew = reinterpret_cast<const cbPKT_SYSINFO *>(pPkt);
                 if (m_bStandAlone)
                 {
                     cbPKT_SYSINFO & rOld = cb_cfg_buffer_ptr[m_nIdx]->sysinfo;
@@ -384,7 +384,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
             {
                 if (m_bStandAlone)
                 {
-                    const cbPKT_FILECFG * pPktFileCfg = reinterpret_cast<const cbPKT_FILECFG*>(pPkt);
+                    const auto * pPktFileCfg = reinterpret_cast<const cbPKT_FILECFG*>(pPkt);
                     if (pPktFileCfg->options == cbFILECFG_OPT_REC || pPktFileCfg->options == cbFILECFG_OPT_STOP || (pPktFileCfg->options == cbFILECFG_OPT_TIMEOUT))
                     {
                         cb_cfg_buffer_ptr[m_nIdx]->fileinfo = * reinterpret_cast<const cbPKT_FILECFG *>(pPkt);
@@ -400,7 +400,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
             {
                 if (m_bStandAlone)
                 {
-                    const cbPKT_NM * pPktNm = reinterpret_cast<const cbPKT_NM *>(pPkt);
+                    const auto * pPktNm = reinterpret_cast<const cbPKT_NM *>(pPkt);
                     // video source to go to the file header
                     if (pPktNm->mode == cbNM_MODE_SETVIDEOSOURCE)
                     {
@@ -435,7 +435,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 if (m_bStandAlone)
                 {
                     SetNumChans();
-                    const cbPKT_AOUT_WAVEFORM * pPktAoutWave = reinterpret_cast<const cbPKT_AOUT_WAVEFORM *>(pPkt);
+                    const auto * pPktAoutWave = reinterpret_cast<const cbPKT_AOUT_WAVEFORM *>(pPkt);
                     uint16_t nChan = pPktAoutWave->chan;
                     if (IsChanAnalogOut(nChan))
                     {
@@ -453,7 +453,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
             {
                 if (m_bStandAlone)
                 {
-                    const cbPKT_NPLAY * pNew = reinterpret_cast<const cbPKT_NPLAY *>(pPkt);
+                    const auto * pNew = reinterpret_cast<const cbPKT_NPLAY *>(pPkt);
                     // Only store the main config packet in stand-alone mode
                     if (pNew->flags == cbNPLAY_FLAG_MAIN)
                     {
@@ -625,7 +625,7 @@ void InstNetwork::processTimerTick()
         }
 
         // get pointer to the first packet in received data block
-        cbPKT_GENERIC *pktptr = (cbPKT_GENERIC*) &(cb_rec_buffer_ptr[m_nIdx]->buffer[cb_rec_buffer_ptr[m_nIdx]->headindex]);
+        auto *pktptr = (cbPKT_GENERIC*) &(cb_rec_buffer_ptr[m_nIdx]->buffer[cb_rec_buffer_ptr[m_nIdx]->headindex]);
 
         uint32_t bytes_to_process = recv_returned;
         do {
@@ -706,9 +706,7 @@ void InstNetwork::processTimerTick()
         // appear to not have this problem any more. The real solution is to ensure that packets are sent
         UINT nPacketsLeftInBurst = 4;
 
-        cbPKT_GENERIC
-                *xmtpacket =
-                        (cbPKT_GENERIC*) &(cb_xmt_global_buffer_ptr[m_nIdx]->buffer[cb_xmt_global_buffer_ptr[m_nIdx]->tailindex]);
+        auto *xmtpacket = (cbPKT_GENERIC*) &(cb_xmt_global_buffer_ptr[m_nIdx]->buffer[cb_xmt_global_buffer_ptr[m_nIdx]->tailindex]);
 
         while ((xmtpacket->cbpkt_header.time) && (nPacketsLeftInBurst--))
         {
@@ -754,7 +752,7 @@ void InstNetwork::run()
     // Start initializing instrument network
     InstNetworkEvent(NET_EVENT_INIT);
 
-    if (m_listener.size() == 0)
+    if (m_listener.empty())
     {
         // If listener not set
         InstNetworkEvent(NET_EVENT_LISTENERERR);
@@ -906,7 +904,7 @@ void InstNetwork::OnWaitEvent()
     for(unsigned int p = 0; p < pktstogo; ++p)
     {
         cbPKT_GENERIC *pktptr = cbGetNextPacketPtr(m_nInstance);
-        if (pktptr == NULL)
+        if (pktptr == nullptr)
         {
             cbMakePacketReadingBeginNow(m_nInstance);
             InstNetworkEvent(NET_EVENT_CRITICAL);

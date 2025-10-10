@@ -72,24 +72,26 @@ public:
     class Listener
     {
     public:
+        virtual ~Listener() = default;
         // Callback function to process packets, must be implemented in target class
-        virtual void ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt) = 0;
+        virtual void ProcessIncomingPacket(const cbPKT_GENERIC * pPkt) = 0;
     };
 
 public:
     InstNetwork(STARTUP_OPTIONS startupOption = OPT_NONE);
+    virtual ~InstNetwork() = default;
     void Open(Listener * listener); // Open the network
     void ShutDown(); // Instrument shutdown
     void StandBy();  // Instrument standby
-    bool IsStandAlone() {return m_bStandAlone;} // If running in stand-alone
-    uint32_t getPacketCounter() {return m_nRecentPacketCount;}
-    uint32_t getDataCounter() {return m_dataCounter;}
+    bool IsStandAlone() const {return m_bStandAlone;} // If running in stand-alone
+    uint32_t getPacketCounter() const {return m_nRecentPacketCount;}
+    uint32_t getDataCounter() const {return m_dataCounter;}
     void SetNumChans();
     void Start(); // Start the network thread
 protected:
     enum { INST_TICK_COUNT = 10 };
     void run();
-    void ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt); // Process incoming packets in stand-alone mode
+    void ProcessIncomingPacket(const cbPKT_GENERIC * pPkt); // Process incoming packets in stand-alone mode
     void processTimerTick(); // Process one timer tick (was timerEvent for Qt)
     void OnWaitEvent(); // Non-stand-alone networking
     inline void CheckForLinkFailure(uint32_t nTicks, uint32_t nCurrentPacketCount); // Check link failure
@@ -149,4 +151,4 @@ protected:
     }
 };
 
-#endif // include guard
+#endif // INSTNETWORK_H_INCLUDED

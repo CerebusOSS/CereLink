@@ -30,19 +30,20 @@ class SdkApp : public InstNetwork, public InstNetwork::Listener
 {
 public:
     SdkApp();
-    ~SdkApp();
+    ~SdkApp() override;
 public:
-    void ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt); // Process incoming packets
-    uint32_t GetInstInfo() {return m_instInfo;}
-    cbRESULT GetLastCbErr() {return m_lastCbErr;}
+    // Override the Listener::ProcessIncomingPacket virtual function
+    void ProcessIncomingPacket(const cbPKT_GENERIC * pPkt) override; // Process incoming packets
+    uint32_t GetInstInfo() const {return m_instInfo;}
+    cbRESULT GetLastCbErr() const {return m_lastCbErr;}
     void Open(uint32_t id, int nInPort = cbNET_UDP_PORT_BCAST, int nOutPort = cbNET_UDP_PORT_CNT,
         LPCSTR szInIP = cbNET_UDP_ADDR_INST, LPCSTR szOutIP = cbNET_UDP_ADDR_CNT, int nRecBufSize = NSP_REC_BUF_SIZE, int nRange = 0);
 private:
-    void OnPktGroup(const cbPKT_GROUP * const pkt);
-    void OnPktEvent(const cbPKT_GENERIC * const pPkt);
-    void OnPktComment(const cbPKT_COMMENT * const pPkt);
-    void OnPktLog(const cbPKT_LOG * const pPkt);
-    void OnPktTrack(const cbPKT_VIDEOTRACK * const pPkt);
+    void OnPktGroup(const cbPKT_GROUP * pkt);
+    void OnPktEvent(const cbPKT_GENERIC * pPkt);
+    void OnPktComment(const cbPKT_COMMENT * pPkt);
+    void OnPktLog(const cbPKT_LOG * pPkt);
+    void OnPktTrack(const cbPKT_VIDEOTRACK * pPkt);
 
     void LateBindCallback(cbSdkCallbackType callbacktype);
     void LinkFailureEvent(cbSdkPktLostEvent & lost);
@@ -234,7 +235,7 @@ protected:
                     memset(units[i], 0, size * sizeof(uint16_t));
                 }
             }
-            waveform_data = NULL;
+            waveform_data = nullptr;
             memset(write_index, 0, sizeof(write_index));
             memset(write_start_index, 0, sizeof(write_start_index));
         }
@@ -302,4 +303,4 @@ protected:
     } * m_TR;
 };
 
-#endif // include guard
+#endif // SDKAPP_H_INCLUDED
