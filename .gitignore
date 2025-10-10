@@ -3,6 +3,7 @@ dist/
 build*/
 .vs/
 .vscode/
+.claude/
 package/
 cmake-build*/
 *.egg-info
