@@ -1,5 +1,6 @@
 #include "gtest/gtest.h"
 #include "CCFUtils.h"
+#include "cbhwlib.h"
 #include <string>
 #include <filesystem>
 #include <fstream>
@@ -19,7 +20,7 @@ TEST(CCFUtilsTest, LoadAndValidateCCF_WithConvert) {
     ASSERT_TRUE(std::filesystem::exists(ccf_path)) << "Test CCF file missing: " << ccf_path;
 
     cbCCF ccf_data; memset(&ccf_data, 0, sizeof(cbCCF));
-    CCFUtils ccfUtils(false, false, &ccf_data);
+    CCFUtils ccfUtils(false, &ccf_data);
     ccf::ccfResult result = ccfUtils.ReadCCF(ccf_path.string().c_str(), true);
 
     ASSERT_TRUE(result == ccf::CCFRESULT_SUCCESS || result == ccf::CCFRESULT_WARN_VERSION)
@@ -43,7 +44,7 @@ TEST(CCFUtilsTest, LoadWithoutConvertExpectWarnVersionAndNoData) {
     ASSERT_TRUE(std::filesystem::exists(ccf_path));
 
     cbCCF ccf_data; memset(&ccf_data, 0, sizeof(cbCCF));
-    CCFUtils ccfUtils(false, false, &ccf_data);
+    CCFUtils ccfUtils(false, &ccf_data);
     ccf::ccfResult result = ccfUtils.ReadCCF(ccf_path.string().c_str(), false);
     EXPECT_EQ(result, ccf::CCFRESULT_WARN_VERSION);
     // Ensure no channel has label chan1 populated
@@ -62,7 +63,7 @@ TEST(CCFUtilsTest, WriteAndReadRoundTrip) {
     }
 
     cbCCF ccf_data; memset(&ccf_data, 0, sizeof(cbCCF));
-    CCFUtils reader(false, false, &ccf_data);
+    CCFUtils reader(false, &ccf_data);
     ASSERT_EQ(reader.ReadCCF(ccf_path.string().c_str(), true), ccf::CCFRESULT_SUCCESS);
 
     int origIndex = -1;
@@ -73,7 +74,7 @@ TEST(CCFUtilsTest, WriteAndReadRoundTrip) {
     }
     ASSERT_EQ(ccf_data.isChan[origIndex].physcalin.digmin, -1) << "Pre-write sanity check failed";
 
-    CCFUtils writer(false, false, &ccf_data);
+    CCFUtils writer(false, &ccf_data);
     std::filesystem::path out_path = std::filesystem::temp_directory_path() / "cerebus_minimal_roundtrip.ccf";
     ASSERT_EQ(writer.WriteCCFNoPrompt(out_path.string().c_str()), ccf::CCFRESULT_SUCCESS);
     ASSERT_TRUE(std::filesystem::exists(out_path));
@@ -90,7 +91,7 @@ TEST(CCFUtilsTest, NonexistentFileReturnsOpenFailedRead) {
     if (std::filesystem::exists(missing)) std::filesystem::remove(missing);
 
     cbCCF ccf_data; memset(&ccf_data, 0, sizeof(cbCCF));
-    CCFUtils ccfUtils(false, false, &ccf_data);
+    CCFUtils ccfUtils(false, &ccf_data);
     ccf::ccfResult result = ccfUtils.ReadCCF(missing.string().c_str(), true);
     EXPECT_EQ(result, ccf::CCFRESULT_ERR_OPENFAILEDREAD);
 }
@@ -98,7 +99,7 @@ TEST(CCFUtilsTest, NonexistentFileReturnsOpenFailedRead) {
 TEST(CCFUtilsTest, ReadVersionParsesOriginalVersion) {
     std::filesystem::path ccf_path = GetMinimalCCFPath();
     ASSERT_TRUE(std::filesystem::exists(ccf_path));
-    CCFUtils ccfUtils; // no pCCF needed for version read
+    CCFUtils ccfUtils; // default ok
     ccf::ccfResult res = ccfUtils.ReadVersion(ccf_path.string().c_str());
     ASSERT_TRUE(res == ccf::CCFRESULT_SUCCESS || res == ccf::CCFRESULT_WARN_CONVERT || res == ccf::CCFRESULT_WARN_VERSION)
         << "Unexpected ReadVersion result: " << res;

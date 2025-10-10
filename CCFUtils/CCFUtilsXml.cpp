@@ -77,7 +77,11 @@ ccfResult CCFUtilsXml_v1::ReadCCF(LPCSTR szFileName, bool bConvert)
             {
                 // Also check for protocol version
                 xml.beginGroup("Session/Version/Protocol");
-                std::string strProtocolVersion = std::any_cast<std::string>(xml.value());  // .trimmed();
+                std::any val = xml.value();
+                std::string strProtocolVersion;
+                if (val.has_value() && val.type() == typeid(std::string)) {
+                    strProtocolVersion = std::any_cast<std::string>(val);
+                }
                 xml.endGroup();
                 // Although internal versioning has not changed,
                 //  any protocol difference also requires customer permission to proceed

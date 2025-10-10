@@ -42,6 +42,7 @@
 //
 
 #include <algorithm>  // Use C++ default min and max implementation.
+#include <type_traits>  // For std::is_same_v
 #include "CCFUtilsXmlItems.h"
 #include "CCFUtilsXmlItemsGenerate.h"
 #include "CCFUtilsXmlItemsParse.h"
@@ -683,7 +684,7 @@ std::any ccf::GetCCFXmlItem<char>(char pkt[], int count, std::string strName)
 
 // Author & Date: Ehsan Azar       16 April 2012
 // Purpose: Read generic version of item
-//          (item should be something QVariant can parse)
+//          (item should be something that can be parsed from string or value)
 // Inputs:
 //   xml      - the xml file in the item group
 //   item     - item to read
@@ -692,7 +693,64 @@ template <typename T>
 void ccf::ReadItem(XmlFile * const xml, T & item)
 {
     std::any var = xml->value();
-    item = std::any_cast<T>(var);
+
+    // Check if var is empty (node doesn't exist or has no value)
+    if (!var.has_value()) {
+        if constexpr (std::is_arithmetic_v<T>) {
+            item = T{};
+        }
+        return;
+    }
+
+    // Unlike QVariant, std::any does not auto-convert types.
+    // XML parsing always returns strings, so we need to convert them to numeric types.
+    if (var.type() == typeid(std::string)) {
+        std::string str = std::any_cast<std::string>(var);
+        // Handle empty strings for numeric types (default to 0)
+        if (str.empty() && std::is_arithmetic_v<T>) {
+            item = T{};
+            return;
+        }
+        // Convert string to the target type using compile-time type checks
+        if constexpr (std::is_integral_v<T>) {
+            if constexpr (std::is_signed_v<T>) {
+                // Signed integral types
+                if constexpr (sizeof(T) == 1) {
+                    item = static_cast<T>(std::stoi(str));
+                } else if constexpr (sizeof(T) == 2) {
+                    item = static_cast<T>(std::stoi(str));
+                } else if constexpr (sizeof(T) == 4) {
+                    item = static_cast<T>(std::stoi(str));
+                } else {
+                    item = static_cast<T>(std::stoll(str));
+                }
+            } else {
+                // Unsigned integral types
+                if constexpr (sizeof(T) == 1) {
+                    item = static_cast<T>(std::stoul(str));
+                } else if constexpr (sizeof(T) == 2) {
+                    item = static_cast<T>(std::stoul(str));
+                } else if constexpr (sizeof(T) == 4) {
+                    item = static_cast<T>(std::stoul(str));
+                } else {
+                    item = static_cast<T>(std::stoull(str));
+                }
+            }
+        } else if constexpr (std::is_floating_point_v<T>) {
+            // Floating point types
+            if constexpr (sizeof(T) == 4) {
+                item = static_cast<T>(std::stof(str));
+            } else {
+                item = static_cast<T>(std::stod(str));
+            }
+        } else {
+            // For non-numeric types, try direct cast
+            item = std::any_cast<T>(var);
+        }
+    } else {
+        // If not a string, try direct cast (shouldn't normally happen from XML)
+        item = std::any_cast<T>(var);
+    }
 }
 
 // Author & Date: Ehsan Azar       16 April 2012
@@ -1174,7 +1232,12 @@ void ccf::ReadItem(XmlFile * const xml, T item[], int count)
 template<>
 void ccf::ReadItem(XmlFile * const xml, char item[], int count)
 {
-    std::string var = std::any_cast<std::string>(xml->value());
+    std::any val = xml->value();
+    std::string var;
+    if (val.has_value() && val.type() == typeid(std::string)) {
+        var = std::any_cast<std::string>(val);
+    }
+    // If val is empty or not a string, var will be empty string
     strncpy(item, var.c_str(), count);
     item[count - 1] = 0;  // '\0'
 }

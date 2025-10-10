@@ -31,12 +31,12 @@ target_include_directories(ccfutils_tests PRIVATE
     ${PROJECT_BINARY_DIR}/_deps/pugixml-src/src/
 )
 
-# Link libraries (use gtest + custom main) and Qt core for QCoreApplication in test_main
+# Link libraries (use gtest + custom main)
 target_link_libraries(ccfutils_tests
     PRIVATE
         gtest
         cbsdk_static
-        Qt6::Core
+        CCFUtils
 )
 
 target_compile_definitions(ccfutils_tests PRIVATE PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

@@ -19,6 +19,7 @@
 #include <sstream>
 #include <vector>
 #include <algorithm>
+#include <cstdint>
 
 // Uncomment to debug
 //#define DEBUG_XMLFILE
@@ -31,6 +32,103 @@ std::vector<std::string> split(const std::string& str, char delimiter) {
         tokens.push_back(token);
     }
     return tokens;
+}
+
+// Helper function to convert std::any to string
+// Unlike QVariant::toString(), std::any doesn't auto-convert types
+std::string anyToString(const std::any& val) {
+    if (!val.has_value()) {
+        return "";
+    }
+
+    // Direct string types
+    if (val.type() == typeid(std::string)) {
+        return std::any_cast<std::string>(val);
+    }
+    if (val.type() == typeid(const char*)) {
+        return std::string(std::any_cast<const char*>(val));
+    }
+    if (val.type() == typeid(char*)) {
+        return std::string(std::any_cast<char*>(val));
+    }
+
+    // Numeric type conversions
+    // Note: We check both standard types and fixed-width types since they may differ
+    if (val.type() == typeid(int) || val.type() == typeid(int32_t)) {
+        if (val.type() == typeid(int)) {
+            return std::to_string(std::any_cast<int>(val));
+        } else {
+            return std::to_string(std::any_cast<int32_t>(val));
+        }
+    }
+    if (val.type() == typeid(unsigned int) || val.type() == typeid(uint32_t)) {
+        if (val.type() == typeid(unsigned int)) {
+            return std::to_string(std::any_cast<unsigned int>(val));
+        } else {
+            return std::to_string(std::any_cast<uint32_t>(val));
+        }
+    }
+    if (val.type() == typeid(short) || val.type() == typeid(int16_t)) {
+        if (val.type() == typeid(short)) {
+            return std::to_string(std::any_cast<short>(val));
+        } else {
+            return std::to_string(std::any_cast<int16_t>(val));
+        }
+    }
+    if (val.type() == typeid(unsigned short) || val.type() == typeid(uint16_t)) {
+        if (val.type() == typeid(unsigned short)) {
+            return std::to_string(std::any_cast<unsigned short>(val));
+        } else {
+            return std::to_string(std::any_cast<uint16_t>(val));
+        }
+    }
+    if (val.type() == typeid(char) || val.type() == typeid(int8_t)) {
+        if (val.type() == typeid(char)) {
+            return std::to_string(static_cast<int>(std::any_cast<char>(val)));
+        } else {
+            return std::to_string(static_cast<int>(std::any_cast<int8_t>(val)));
+        }
+    }
+    if (val.type() == typeid(unsigned char) || val.type() == typeid(uint8_t)) {
+        if (val.type() == typeid(unsigned char)) {
+            return std::to_string(static_cast<unsigned int>(std::any_cast<unsigned char>(val)));
+        } else {
+            return std::to_string(static_cast<unsigned int>(std::any_cast<uint8_t>(val)));
+        }
+    }
+    if (val.type() == typeid(signed char)) {
+        return std::to_string(static_cast<int>(std::any_cast<signed char>(val)));
+    }
+    if (val.type() == typeid(long)) {
+        return std::to_string(std::any_cast<long>(val));
+    }
+    if (val.type() == typeid(unsigned long)) {
+        return std::to_string(std::any_cast<unsigned long>(val));
+    }
+    if (val.type() == typeid(long long)) {
+        return std::to_string(std::any_cast<long long>(val));
+    }
+    if (val.type() == typeid(unsigned long long)) {
+        return std::to_string(std::any_cast<unsigned long long>(val));
+    }
+    if (val.type() == typeid(float)) {
+        return std::to_string(std::any_cast<float>(val));
+    }
+    if (val.type() == typeid(double)) {
+        return std::to_string(std::any_cast<double>(val));
+    }
+
+    // If we can't convert, return type name for debugging
+    // In Qt, QVariant would auto-convert unknown types to empty string
+    // For std::any, we'll return the type name to help identify the issue
+    std::string type_name = val.type().name();
+    // Try one last time to cast to string
+    try {
+        return std::any_cast<std::string>(val);
+    } catch (const std::bad_any_cast&) {
+        // Return empty string like QVariant would have
+        return "";
+    }
 }
 
 
@@ -289,11 +387,11 @@ bool XmlFile::beginGroup(std::string nodeName, const std::map<std::string, std::
                     if (AddList(vec, nodepath.back()))
                         set.append_attribute("Type") = "Array";
                 } else {
-                    text = std::any_cast<std::string>(subval);
+                    text = anyToString(subval);
                     bTextLeaf = true;
                 }
             } else {
-                text = std::any_cast<std::string>(value);
+                text = anyToString(value);
                 bTextLeaf = true;
             }
             if (bTextLeaf)
