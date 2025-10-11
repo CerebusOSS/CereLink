@@ -40,10 +40,11 @@ jobs:
         run: |
           cmake --version
           cmake -B build -S . \
-          -DBUILD_CBMEX=OFF \
-          -DBUILD_CBOCT=OFF \
-          -DBUILD_TEST=OFF \
-          -DBUILD_HDF5=OFF \
+          -DCBSDK_BUILD_CBMEX=OFF \
+          -DCBSDK_BUILD_CBOCT=OFF \
+          -DCBSDK_BUILD_TEST=OFF \
+          -DCBSDK_BUILD_SAMPLE=OFF \
+          -DCBSDK_BUILD_HDF5=OFF \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=${PWD}/install \
           -DCPACK_PACKAGE_DIRECTORY=${PWD}/dist \

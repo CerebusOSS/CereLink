@@ -10,7 +10,7 @@ TARGET_INCLUDE_DIRECTORIES(simple_cbsdk PRIVATE
         ${LIB_INCL_DIRS}
         ${PROJECT_SOURCE_DIR}/cbsdk
 )
-TARGET_LINK_LIBRARIES(simple_cbsdk PRIVATE ${QT_LIBRARIES} CCFUtils)
+TARGET_LINK_LIBRARIES(simple_cbsdk PRIVATE CCFUtils)
 IF(WIN32)
     TARGET_LINK_LIBRARIES(simple_cbsdk
             PRIVATE
@@ -55,17 +55,8 @@ LIST(APPEND SAMPLE_TARGET_LIST simple_analog_out)
 LIST(APPEND INSTALL_TARGET_LIST ${SAMPLE_TARGET_LIST})
 
 IF(WIN32)
-    findQtInstallationTool("windeployqt")
-    add_custom_command(TARGET testcbsdk POST_BUILD
-            COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
-    add_custom_command(TARGET test_io POST_BUILD
-            COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
-    add_custom_command(TARGET simple_callback POST_BUILD
-            COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
-    add_custom_command(TARGET test_comments POST_BUILD
-            COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
-    add_custom_command(TARGET test_analog_out POST_BUILD
-            COMMAND ${QT_DEPLOYQT_EXECUTABLE} $<TARGET_FILE:${LIB_NAME}>)
+    # TODO: For each sample, post-build copy required DLLs to the output directory.
+    # TODO: For each sample, post-install fixup the install directory with required DLLs.
 ENDIF(WIN32)
 
 if(NOT CMAKE_INSTALL_RPATH)
