@@ -1,0 +1,49 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - 'master'
+      - 'releases/**'
+  pull_request:
+    branches:
+      - master
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: Test ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {name: "windows-x64", os: "windows-latest", cmake_extra: "-T v142,host=x86"}
+          - {name: "macOS-latest", os: "macOS-latest"}
+          - {name: "ubuntu-latest", os: "ubuntu-latest"}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Configure CBSDK
+        run: |
+          cmake --version
+          cmake -B build -S . \
+          -DCBSDK_BUILD_CBMEX=OFF \
+          -DCBSDK_BUILD_CBOCT=OFF \
+          -DCBSDK_BUILD_TEST=ON \
+          -DCBSDK_BUILD_SAMPLE=OFF \
+          -DCBSDK_BUILD_HDF5=OFF \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=${PWD}/install \
+          ${{ matrix.config.cmake_extra }}
+
+      - name: Build
+        run: cmake --build build --config Release -j
+
+      - name: Run Tests
+        run: ctest --test-dir build --build-config Release --output-on-failure

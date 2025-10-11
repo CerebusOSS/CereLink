@@ -6,11 +6,11 @@ on:
     branches:
       - 'master'
       - 'releases/**'
-    tags:
-      - v*.*
   pull_request:
     branches:
       - master
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -85,9 +85,25 @@ jobs:
           done
           popd
 
-      - name: Release
+      - name: Upload C++ Packages
+        uses: actions/upload-artifact@v3
+        with:
+          name: cpp-packages-${{ matrix.config.name }}
+          path: dist/*
+          if-no-files-found: ignore
+
+      - name: Upload Python Wheels
+        uses: actions/upload-artifact@v3
+        if: "!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest'"
+        with:
+          name: python-wheels-${{ matrix.config.name }}
+          path: wrappers/Python/dist/*.whl
+          if-no-files-found: ignore
+
+      - name: Attach to Release
         uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'release'
         with:
           files: |
             dist/*
+            wrappers/Python/dist/*.whl
