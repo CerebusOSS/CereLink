@@ -9,6 +9,11 @@ from Cython.Build import build_ext
 
 
 def get_cbsdk_path(root):
+    # Check for environment variable first (for CI/CD builds)
+    env_path = os.environ.get("CBSDK_INSTALL_PATH")
+    if env_path and os.path.exists(env_path):
+        return env_path
+
     if "win32" in sys.platform:
         vs_out = os.path.join(root, "out", "install", "x64-Release")
         if os.path.exists(vs_out):
@@ -33,8 +38,8 @@ def get_extras():
     x_link_args = []
     x_compile_args = []
 
-    # C++11 standard
-    x_compile_args.append("/std:c++11" if "win32" in sys.platform else "-std=c++11")
+    # C++17 standard (matching CMake build configuration)
+    x_compile_args.append("/std:c++17" if "win32" in sys.platform else "-std=c++17")
 
     # CBSDK
     x_includes.append(os.path.join(cbsdk_path, "include"))
