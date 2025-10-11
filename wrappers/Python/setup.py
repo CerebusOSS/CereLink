@@ -16,7 +16,6 @@ def get_cbsdk_path(root):
     for build_dir in [".", "build", "cmake-build-release"]:
         cbsdk_path = os.path.join(root, build_dir, "install")
         if os.path.exists(cbsdk_path):
-            print(f"Found CBSDK path: {cbsdk_path}")
             return cbsdk_path
 
 
@@ -49,6 +48,8 @@ def get_extras():
     # pugixml for CCF
     for build_dir in [".", "build", "cmake-build-release"]:
         pugixml_path = Path(cbsdk_path).parent / build_dir / "_deps" / "pugixml-build"
+        if (pugixml_path / "Release").exists():
+            pugixml_path = pugixml_path / "Release"
         if pugixml_path.exists():
             break
     x_link_args.append(
