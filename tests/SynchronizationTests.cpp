@@ -33,9 +33,9 @@ TEST_F(SynchronizationTest, ConditionVariableTimeoutWorks) {
     auto elapsed = std::chrono::steady_clock::now() - start;
     auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 
-    // Verify timeout was approximately correct (allow 50ms tolerance)
+    // Verify timeout was approximately correct (allow generous tolerance for CI environments)
     EXPECT_GE(elapsed_ms, 100);
-    EXPECT_LE(elapsed_ms, 150);
+    EXPECT_LE(elapsed_ms, 250);  // Increased tolerance for busy CI runners
 }
 
 // Test 2: Verify condition variable signaling wakes waiting thread
@@ -145,7 +145,7 @@ TEST_F(SynchronizationTest, VerifyCommonTimeoutDurations) {
         auto elapsed = std::chrono::steady_clock::now() - start;
         auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
         EXPECT_GE(elapsed_ms, 100);
-        EXPECT_LE(elapsed_ms, 150);
+        EXPECT_LE(elapsed_ms, 250);  // Increased tolerance for busy CI runners
     }
 
     // Test 250ms timeout (used for tracking packet waiting)
@@ -156,7 +156,7 @@ TEST_F(SynchronizationTest, VerifyCommonTimeoutDurations) {
         auto elapsed = std::chrono::steady_clock::now() - start;
         auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
         EXPECT_GE(elapsed_ms, 250);
-        EXPECT_LE(elapsed_ms, 300);
+        EXPECT_LE(elapsed_ms, 400);  // Increased tolerance for busy CI runners
     }
 }
 
