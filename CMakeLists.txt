@@ -102,6 +102,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/zeux/pugixml.git
         GIT_TAG v1.15
         GIT_SHALLOW TRUE
+        EXCLUDE_FROM_ALL
 )
 FetchContent_MakeAvailable(pugixml)
 if(TARGET pugixml AND NOT TARGET pugixml::pugixml)

@@ -8,7 +8,7 @@ package/
 cmake-build*/
 *.egg-info
 *.pyd
-cerebus/cbpy.cp*
+wrappers/Python/cerebus/cbpy.cp*
 *.whl
 .idea/
 out/

@@ -35,7 +35,7 @@ And optionally, to build zips or debs:
 
 The build products should appear in the CereLink/install or CereLink/build/install directory.
 
-Note: This may generate an error related to the CLI builds. Please see further instructions in the [cli\README.md](./cli/README.md).
+Note: This may generate an error related to the CLI builds. Please see further instructions in the [wrappers/cli/README.md](wrappers/cli/README.md).
 
 ### CMake Options
 
@@ -62,18 +62,3 @@ Note: This may generate an error related to the CLI builds. Please see further i
     * Set this to ON to compile CereLink to work with NSPs using protocol 3.11 (firmware 7.0x).
     * Matlab and Python wrappers not supported in this mode.
     * Cannot run alongside Central x86 version (if in "Program Files (x86)") because the Qt6 dependency restricts compilation targets to x64. But it works fine on other computers or if Central is not running.
-
-# cerebus.cbpy (Python lib) Build Instructions
-
-* Open a Terminal or Anaconda prompt and activate your Python environment.
-* Your Python environment must match that of the eventual machine that will run the package, and it must already have Cython, numpy, pip, and wheel installed.
-  * We do not set these as explicit dependencies on the package to avoid bundling them 
-* Change to the CereLink directory.
-* If you haven't already, build CereLink following the above instructions.
-* Windows: Close Visual Studio.
-* Install locally: `pip install .`
-* or, if you are making a wheel to bring to another machine,
-  * activate an environment matching the target machine,
-  * `pip wheel . -w dist/`
-  * The wheels will be in the `dist` folder.
-  * See the [Wiki](https://github.com/CerebusOSS/CereLink/wiki/cerebus.cbpy) for more information.
