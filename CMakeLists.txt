@@ -320,13 +320,7 @@ if(WIN32)
             $<TARGET_RUNTIME_DLLS:${LIB_NAME}>
             TYPE BIN
     )
-    install(FILES $<TARGET_FILE:pugixml::static>
-            DESTINATION lib${LIB_SUFFIX}
-    )
-    if(TARGET pugixml::pugixml)
-        install(FILES $<TARGET_FILE:pugixml::pugixml>
-                DESTINATION lib${LIB_SUFFIX})
-    endif()
+
 elseif(APPLE)
     install(CODE "
         execute_process(COMMAND codesign --force --deep --sign - ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/lib${LIB_NAME}.dylib)
