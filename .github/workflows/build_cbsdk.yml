@@ -86,14 +86,14 @@ jobs:
           popd
 
       - name: Upload C++ Packages
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: cpp-packages-${{ matrix.config.name }}
           path: dist/*
           if-no-files-found: ignore
 
       - name: Upload Python Wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: "!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest'"
         with:
           name: python-wheels-${{ matrix.config.name }}
