@@ -884,12 +884,16 @@ public:
             m_nNumSerialChans(0),
             m_nNumDigoutChans(0),
             m_nNumTotalChans(0)
+#ifndef CBPROTO_311
+    , m_nGeminiSystem(0)
+#endif
     {
         for (uint32_t nProc = 0; nProc < cbMAXPROCS; ++nProc)
         {
             isSelection[nProc].lastchan = 1;
 #ifndef CBPROTO_311
             m_nNspStatus[nProc] = NSP_INIT;
+            m_nNumNTrodesPerInstrument[nProc] = cbMAXNTRODES;
 #endif
         }
     }
