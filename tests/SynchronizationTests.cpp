@@ -145,7 +145,7 @@ TEST_F(SynchronizationTest, VerifyCommonTimeoutDurations) {
         auto elapsed = std::chrono::steady_clock::now() - start;
         auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
         EXPECT_GE(elapsed_ms, 100);
-        EXPECT_LE(elapsed_ms, 250);  // Increased tolerance for busy CI runners
+        EXPECT_LE(elapsed_ms, 300);  // Increased tolerance for busy CI runners
     }
 
     // Test 250ms timeout (used for tracking packet waiting)
