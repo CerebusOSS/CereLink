@@ -1,32 +1,37 @@
 # CereLink
 
-Blackrock Microsystems Cerebus Link
+Cerebus Link for Blackrock Neurotech hardware
 
-The software develoment kit for Blackrock Microsystems neural signal processing hardware includes:
-* c++ library (cbsdk): cross platform library for two-way communication with hardware
-* MATLAB/Octave wrapper (cbmex/cboct): MATLAB executable (mex) to configure and pull data using cbsdk
+The software development kit for Blackrock Neurotech neural signal processing hardware includes:
+* c++ library (cbsdk): cross-platform library for two-way communication with hardware
 * Python wrapper (cerebus.cbpy): Python binding for cbsdk to configure, pull data, and receive callbacks
+* MATLAB/Octave wrapper (cbmex/cboct): MATLAB executable (mex) to configure and pull data using cbsdk
+* C#/CLI wrapper
 * File conversion utility (n2h5): Converts nsx and nev files to hdf5 format
 
 Downloads are on the [releases page](https://github.com/CerebusOSS/CereLink/releases).
 
 ## Build
 
-The BUILD.md document has the most up-to-date build instructions.
+The [BUILD.md](./BUILD.md) document has the most up-to-date build instructions.
 
 ## Usage
 
+You must be connected to a Blackrock Neurotech device (Cerebus, CerePlex, NSP, or Gemini) or a simulator (nPlayServer) to use cbsdk, cbmex, cboct, or cerebus.cbpy.
+
 ### Testing with nPlayServer
 
-On Windows, download and install the latest version of Cerebus Central Suite from the [Blackrock Neurotech support website (scroll down)](https://blackrockneurotech.com/support/).
+On Windows, download and install the latest version of Cerebus Central Suite from the [Blackrock Neurotech support website (scroll down)](https://blackrockneurotech.com/support/). You may also wish to download some sample data from this same website.
 
-#### Testing with a localhost client
+nPlayServer for other platforms is available upon request. Post an issue in this repository with details about your system configuration, and we will try to help.
+
+#### Testing with nPlayServer on localhost
 
 After installing, navigate an explorer Window to `C:\Program Files\Blackrock Microsystems\Cerebus Central Suite\` and run `runNPlayAndCentral.bat`. This will run a device simulator (nPlayServer) and Central on the localhost loopback. cbsdk / cerebus / cbmex should be able to connect as a Slave (Central is the Master) to the nPlay instance.
 
-#### Testing with a networked client
+#### Testing with nPlayServer on network
 
-If you want to test using nPlayServer on one computer with CereLink on a secondary computer, then you will have to run nPlayServer with special settings. It will also make your life easier if you change the IP address of the network adapter of your Windows machine to mimic that of a Cerebus device (192.168.137.128 for NSP or 192.168.137.200 for Gemini Hub).
+If you want to test using nPlayServer on a different computer to better emulate the device, you must first configure the IP addresses of the ethernet adapters of both the client computer with CereLink and the device-computer with nPlayServer. The client computer should be set to 192.168.137.198 or .199. The nPlayServer computer's IP address should be set to 192.168.137.128 to mimic a Cerebus NSP or 192.168.137.200 to mimic a Gemini Hub.
 
 > Run `nPlayServer --help` to get a list of available options.
 
@@ -35,11 +40,7 @@ If you want to test using nPlayServer on one computer with CereLink on a seconda
 
 ### cerebus.cbpy
 
-* Download a wheel from the releases page or [build it yourself](BUILD.md#cerebuscbpy-python-lib-build-instructions).
-* Activate a Python environment with pip, Cython, and numpy
-* Install the wheel: `pip install path\to\filename.whl`
-* Test with `python -c "from cerebus import cbpy; cbpy.open(parameter=cbpy.defaultConParams())"`
-    * You might get `RuntimeError: -30, Instrument is offline.`. That's OK, depending on your device and network settings.
+See [wrappers/Python/README.md](./wrappers/Python/README.md) for usage and build instructions.
 
 ## Getting Help
 

@@ -26,13 +26,13 @@
 
 #include "StdAfx.h"
 #include <algorithm>  // Use C++ default min and max implementation.
+#include <chrono>     // For std::chrono::milliseconds
 #include "SdkApp.h"
 #include "../CentralCommon/BmiVersion.h"
 #include "cbHwlibHi.h"
 #include "debugmacs.h"
 #include <math.h>
-#include <QCoreApplication>
-#include "../cbmex/res/cbmex.rc2"
+#include "../wrappers/cbmex/res/cbmex.rc2"
 
 #ifndef WIN32
 #ifndef Sleep
@@ -42,15 +42,6 @@
 
 // The sdk instances
 SdkApp * g_app[cbMAXOPEN] = {NULL};
-
-// Private Qt application
-namespace QAppPriv
-{
-    static int argc = 1;
-    static char appname[] = "cbsdk.app";
-    static char* argv[] = {appname, NULL};
-    static QCoreApplication * pApp = NULL;
-};
 
 #ifdef WIN32
 // Author & Date:   Ehsan Azar     31 March 2011
@@ -245,7 +236,7 @@ void SdkApp::OnPktEvent(const cbPKT_GENERIC * const pPkt)
                         if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
                             m_bPacketsEvent = false;
-                            m_waitPacketsEvent.wakeAll();
+                            m_waitPacketsEvent.notify_all();
                         }
                     m_lockGetPacketsEvent.unlock();
                 }
@@ -307,7 +298,7 @@ void SdkApp::OnPktComment(const cbPKT_COMMENT * const pPkt)
                         if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
                             m_bPacketsCmt = false;
-                            m_waitPacketsCmt.wakeAll();
+                            m_waitPacketsCmt.notify_all();
                         }
                     m_lockGetPacketsCmt.unlock();
                 }
@@ -353,7 +344,7 @@ void SdkApp::OnPktLog(const cbPKT_LOG * const pPkt)
                         if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
                             m_bPacketsCmt = false;
-                            m_waitPacketsCmt.wakeAll();
+                            m_waitPacketsCmt.notify_all();
                         }
                     m_lockGetPacketsCmt.unlock();
                 }
@@ -449,7 +440,7 @@ void SdkApp::OnPktTrack(const cbPKT_VIDEOTRACK * const pPkt)
                         if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                         {
                             m_bPacketsTrack = false;
-                            m_waitPacketsTrack.wakeAll();
+                            m_waitPacketsTrack.notify_all();
                         }
                     m_lockGetPacketsTrack.unlock();
                 }
@@ -668,18 +659,70 @@ cbSdkResult SdkApp::SdkReadCCF(cbSdkCCF * pData, const char * szFileName, bool b
         if (m_instInfo == 0)
             return CBSDKRESULT_CLOSED;
     }
-    CCFUtils config(bSend, bThreaded, &pData->data, m_pCallback[CBSDKCALLBACK_CCF] ? &cbSdkAsynchCCF : NULL, m_nInstance);
-    ccf::ccfResult res = config.ReadCCF(szFileName, bConvert);
+    CCFUtils config(bThreaded, &pData->data, m_pCallback[CBSDKCALLBACK_CCF] ? &cbSdkAsynchCCF : NULL, m_nInstance);
+    cbSdkResult res = CBSDKRESULT_SUCCESS;
+    if (szFileName == NULL)
+        res = SdkFetchCCF(pData);
+    else
+    {
+        ccf::ccfResult ccfres = config.ReadCCF(szFileName, bConvert);  // Updates pData->data via config.m_pImpl->m_data;
+        if (bSend)
+            SdkSendCCF(pData, config.IsAutosort());
+        res = cbSdkErrorFromCCFError(ccfres);
+    }
     if (res)
-        return cbSdkErrorFromCCFError(res);
+        return res;
     pData->ccfver = config.GetInternalOriginalVersion();
     if (m_instInfo == 0)
         return CBSDKRESULT_WARNCLOSED;
     return CBSDKRESULT_SUCCESS;
 }
 
+cbSdkResult SdkApp::SdkFetchCCF(cbSdkCCF * pData) {
+    ccf::ccfResult res = ccf::CCFRESULT_SUCCESS;
+    uint32_t nIdx = cb_library_index[m_nInstance];
+    if (!cb_library_initialized[nIdx] || cb_cfg_buffer_ptr[nIdx] == NULL || cb_cfg_buffer_ptr[nIdx]->sysinfo.cbpkt_header.chid == 0)
+        res = ccf::CCFRESULT_ERR_OFFLINE;
+    else {
+        cbCCF & data = pData->data;
+        for (int i = 0; i < cbNUM_DIGITAL_FILTERS; ++i)
+            data.filtinfo[i] = cb_cfg_buffer_ptr[nIdx]->filtinfo[0][cbFIRST_DIGITAL_FILTER + i - 1];    // First is 1 based, but index is 0 based
+        for (int i = 0; i < cbMAXCHANS; ++i)
+            data.isChan[i] = cb_cfg_buffer_ptr[nIdx]->chaninfo[i];
+        data.isAdaptInfo = cb_cfg_buffer_ptr[nIdx]->adaptinfo[cbNSP1];
+        data.isSS_Detect = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktDetect;
+        data.isSS_ArtifactReject = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktArtifReject;
+        for (uint32_t i = 0; i < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++i)
+            data.isSS_NoiseBoundary[i] = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktNoiseBoundary[i];
+        data.isSS_Statistics = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktStatistics;
+        {
+            data.isSS_Status = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktStatus;
+            data.isSS_Status.cntlNumUnits.fElapsedMinutes = 99;
+            data.isSS_Status.cntlUnitStats.fElapsedMinutes = 99;
+        }
+        {
+            data.isSysInfo = cb_cfg_buffer_ptr[nIdx]->sysinfo;
+            // only set spike len and pre trigger len
+            data.isSysInfo.cbpkt_header.type = cbPKTTYPE_SYSSETSPKLEN;
+        }
+        for (int i = 0; i < cbMAXNTRODES; ++i)
+            data.isNTrodeInfo[i] = cb_cfg_buffer_ptr[nIdx]->isNTrodeInfo[i];
+        data.isLnc = cb_cfg_buffer_ptr[nIdx]->isLnc[cbNSP1];
+        for (int i = 0; i < AOUT_NUM_GAIN_CHANS; ++i)
+        {
+            for (int j = 0; j < cbMAX_AOUT_TRIGGER; ++j)
+            {
+                data.isWaveform[i][j] = cb_cfg_buffer_ptr[nIdx]->isWaveform[i][j];
+                // Unset triggered state, so that when loading it does not start generating waveform
+                data.isWaveform[i][j].active = 0;
+            }
+        }
+    }
+    return cbSdkErrorFromCCFError(res);
+}
+
 /// sdk stub for SdkApp::SdkGetVersion
-CBSDKAPI    cbSdkResult cbSdkReadCCF(uint32_t nInstance, cbSdkCCF * pData, const char * szFileName, bool bConvert, bool bSend, bool bThreaded)
+CBSDKAPI cbSdkResult cbSdkReadCCF(uint32_t nInstance, cbSdkCCF * pData, const char * szFileName, bool bConvert, bool bSend, bool bThreaded)
 {
     if (pData == NULL)
         return CBSDKRESULT_NULLPTR;
@@ -716,11 +759,23 @@ cbSdkResult SdkApp::SdkWriteCCF(cbSdkCCF * pData, const char * szFileName, bool 
         if (m_instInfo == 0)
             return CBSDKRESULT_CLOSED;
     }
-    bool bSend = (szFileName == NULL);
-    ccf::ccfResult res;
-    CCFUtils config(bSend, bThreaded, &pData->data, m_pCallback[CBSDKCALLBACK_CCF] ? &cbSdkAsynchCCF : NULL, m_nInstance);
-    if (bSend)
-        res = config.SendCCF();
+    cbCCFCallback callbackFn = m_pCallback[CBSDKCALLBACK_CCF] ? &cbSdkAsynchCCF : NULL;
+    CCFUtils config(bThreaded, &pData->data, callbackFn, m_nInstance);
+    // Set proc info on config object. This might be used by Write* operations (if XML).
+    cbPROCINFO isInfo;
+    cbRESULT cbRet = cbGetProcInfo(cbNSP1, &isInfo, m_nInstance);
+    config.SetProcInfo(isInfo);  // Ignore return. It works if XML, and fails otherwise.
+
+    ccf::ccfResult res = ccf::CCFRESULT_SUCCESS;
+    if (szFileName == NULL)
+    {
+        // No filename, attempt to send CCF to NSP
+        if (callbackFn)
+            callbackFn(m_nInstance, res, NULL, CCFSTATE_SEND, 0);
+        SdkSendCCF(pData, false);
+        if (callbackFn)
+            callbackFn(m_nInstance, res, NULL, CCFSTATE_SEND, 100);
+    }
     else
         res = config.WriteCCFNoPrompt(szFileName);
     if (res)
@@ -729,6 +784,199 @@ cbSdkResult SdkApp::SdkWriteCCF(cbSdkCCF * pData, const char * szFileName, bool 
     if (m_instInfo == 0)
         return CBSDKRESULT_WARNCLOSED;
     return CBSDKRESULT_SUCCESS;
+}
+
+cbSdkResult SdkApp::SdkSendCCF(cbSdkCCF * pData, bool bAutosort)
+{
+    if (pData == NULL)
+        return CBSDKRESULT_NULLPTR;
+
+    cbSdkResult res = CBSDKRESULT_SUCCESS;
+    cbCCF data = pData->data;
+
+    // Custom digital filters
+    for (int i = 0; i < cbNUM_DIGITAL_FILTERS; ++i)
+    {
+        if (data.filtinfo[i].filt)
+        {
+            data.filtinfo[i].cbpkt_header.type = cbPKTTYPE_FILTSET;
+            cbSendPacket(&data.filtinfo[i], m_nInstance);
+        }
+    }
+    // Chaninfo
+    int nAinChan = 1;
+    int nAoutChan = 1;
+    int nDinChan = 1;
+    int nSerialChan = 1;
+    int nDoutChan = 1;
+    uint32_t nChannelNumber = 0;
+    for (int i = 0; i < cbMAXCHANS; ++i)
+    {
+        if (data.isChan[i].chan)
+        {
+            // this function is supposed to line up channels based on channel capabilities.  It doesn't
+            // work with the multiple NSP setup.  TODO look into this at a future time
+            nChannelNumber = 0;
+            switch (data.isChan[i].chancaps)
+            {
+                case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_ISOLATED | cbCHAN_AINP:  // FE channels
+#ifdef CBPROTO_311
+                    nChannelNumber = cbGetExpandedChannelNumber(1, data.isChan[i].chan);
+#else
+                    nChannelNumber = cbGetExpandedChannelNumber(data.isChan[i].cbpkt_header.instrument + 1, data.isChan[i].chan);
+#endif
+                    break;
+                case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_AINP:  // Analog input channels
+                    nChannelNumber = GetAIAnalogInChanNumber(nAinChan++);
+                    break;
+                case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_AOUT:  // Analog & Audio output channels
+                    nChannelNumber = GetAnalogOrAudioOutChanNumber(nAoutChan++);
+                    break;
+                case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_DINP:  // digital & serial input channels
+                    if (data.isChan[i].dinpcaps & cbDINP_SERIALMASK)
+                    {
+                        nChannelNumber = GetSerialChanNumber(nSerialChan++);
+                    }
+                    else
+                    {
+                        nChannelNumber = GetDiginChanNumber(nDinChan++);
+                    }
+                    break;
+                case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_DOUT:  // digital output channels
+                    nChannelNumber = GetDigoutChanNumber(nDoutChan++);
+                    break;
+                default:
+                    nChannelNumber = 0;
+            }
+            // send it if it's a valid channel number
+            if ((0 != nChannelNumber))  // && (data.isChan[i].chan))
+            {
+                data.isChan[i].chan = nChannelNumber;
+                data.isChan[i].cbpkt_header.type = cbPKTTYPE_CHANSET;
+#ifndef CBPROTO_311
+                data.isChan[i].cbpkt_header.instrument = data.isChan[i].proc - 1;   // send to the correct instrument
+#endif
+                cbSendPacket(&data.isChan[i], m_nInstance);
+            }
+        }
+    }
+    // Sorting
+    {
+        if (data.isSS_Statistics.cbpkt_header.type)
+        {
+            data.isSS_Statistics.cbpkt_header.type = cbPKTTYPE_SS_STATISTICSSET;
+            cbSendPacket(&data.isSS_Statistics, m_nInstance);
+        }
+        for (uint32_t nChan = 0; nChan < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++nChan)
+        {
+            if (data.isSS_NoiseBoundary[nChan].chan)
+            {
+                data.isSS_NoiseBoundary[nChan].cbpkt_header.type = cbPKTTYPE_SS_NOISE_BOUNDARYSET;
+                cbSendPacket(&data.isSS_NoiseBoundary[nChan], m_nInstance);
+            }
+        }
+        if (data.isSS_Detect.cbpkt_header.type)
+        {
+            data.isSS_Detect.cbpkt_header.type  = cbPKTTYPE_SS_DETECTSET;
+            cbSendPacket(&data.isSS_Detect, m_nInstance);
+        }
+        if (data.isSS_ArtifactReject.cbpkt_header.type)
+        {
+            data.isSS_ArtifactReject.cbpkt_header.type = cbPKTTYPE_SS_ARTIF_REJECTSET;
+            cbSendPacket(&data.isSS_ArtifactReject, m_nInstance);
+        }
+    }
+    // Sysinfo
+    if (data.isSysInfo.cbpkt_header.type)
+    {
+        data.isSysInfo.cbpkt_header.type = cbPKTTYPE_SYSSETSPKLEN;
+        cbSendPacket(&data.isSysInfo, m_nInstance);
+    }
+    // LNC
+    if (data.isLnc.cbpkt_header.type)
+    {
+        data.isLnc.cbpkt_header.type = cbPKTTYPE_LNCSET;
+        cbSendPacket(&data.isLnc, m_nInstance);
+    }
+    // Analog output waveforms
+    for (uint32_t nChan = 0; nChan < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogoutChans(); ++nChan)
+    {
+        for (int nTrigger = 0; nTrigger < cbMAX_AOUT_TRIGGER; ++nTrigger)
+        {
+            if (data.isWaveform[nChan][nTrigger].chan)
+            {
+                data.isWaveform[nChan][nTrigger].chan = GetAnalogOutChanNumber(nChan + 1);
+#ifndef CBPROTO_311
+                data.isWaveform[nChan][nTrigger].cbpkt_header.instrument = cbGetChanInstrument(data.isWaveform[nChan][nTrigger].chan);
+#endif
+                data.isWaveform[nChan][nTrigger].cbpkt_header.type = cbPKTTYPE_WAVEFORMSET;
+                cbSendPacket(&data.isWaveform[nChan][nTrigger], m_nInstance);
+            }
+        }
+    }
+    // NTrode
+    for (int nNTrode = 0; nNTrode < cbMAXNTRODES; ++nNTrode)
+    {
+        char szNTrodeLabel[cbLEN_STR_LABEL + 1];     // leave space for trailing null
+        memset(szNTrodeLabel, 0, sizeof(szNTrodeLabel));
+        cbGetNTrodeInfo(nNTrode + 1, szNTrodeLabel, NULL, NULL, NULL, NULL);
+
+        if (
+                (0 != strlen(szNTrodeLabel))
+#ifndef CBPROTO_311
+                && (cbGetNTrodeInstrument(nNTrode + 1) == data.isNTrodeInfo->cbpkt_header.instrument + 1)
+#endif
+                )
+        {
+            if (data.isNTrodeInfo[nNTrode].ntrode)
+            {
+                data.isNTrodeInfo[nNTrode].cbpkt_header.type = cbPKTTYPE_SETNTRODEINFO;
+                cbSendPacket(&data.isNTrodeInfo[nNTrode], m_nInstance);
+            }
+        }
+    }
+    // Adaptive filter
+    if (data.isAdaptInfo.cbpkt_header.type)
+    {
+        data.isAdaptInfo.cbpkt_header.type = cbPKTTYPE_ADAPTFILTSET;
+        cbSendPacket(&data.isAdaptInfo, m_nInstance);
+    }
+    // if any spike sorting packets were read and the protocol is before the combined firmware,
+    // set all the channels to autosorting
+    CCFUtils config(false, &pData->data, NULL, m_nInstance);
+    if ((config.GetInternalVersion() < 8) && !bAutosort)
+    {
+        cbPKT_SS_STATISTICS isSSStatistics;
+
+        isSSStatistics.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        isSSStatistics.cbpkt_header.type = cbPKTTYPE_SS_STATISTICSSET;
+        isSSStatistics.cbpkt_header.dlen = ((sizeof(*this) / 4) - cbPKT_HEADER_32SIZE);
+
+        isSSStatistics.nUpdateSpikes = 300;
+        isSSStatistics.nAutoalg = cbAUTOALG_HOOPS;
+        isSSStatistics.nMode = cbAUTOALG_MODE_APPLY;
+        isSSStatistics.fMinClusterPairSpreadFactor = 9;
+        isSSStatistics.fMaxSubclusterSpreadFactor = 125;
+        isSSStatistics.fMinClusterHistCorrMajMeasure = 0.80f;
+        isSSStatistics.fMaxClusterPairHistCorrMajMeasure = 0.94f;
+        isSSStatistics.fClusterHistValleyPercentage = 0.50f;
+        isSSStatistics.fClusterHistClosePeakPercentage = 0.50f;
+        isSSStatistics.fClusterHistMinPeakPercentage = 0.016f;
+        isSSStatistics.nWaveBasisSize = 250;
+        isSSStatistics.nWaveSampleSize = 0;
+
+        cbSendPacket(&isSSStatistics, m_nInstance);
+
+    }
+    if (data.isSS_Status.cbpkt_header.type)
+    {
+        data.isSS_Status.cbpkt_header.type = cbPKTTYPE_SS_STATUSSET;
+        data.isSS_Status.cntlNumUnits.nMode = ADAPT_NEVER; // Prevent rebuilding spike sorting when loading ccf.
+        cbSendPacket(&data.isSS_Status, m_nInstance);
+    }
+
+
+    return res;
 }
 
 /// sdk stub for SdkApp::SdkWriteCCF
@@ -835,30 +1083,27 @@ cbSdkResult SdkApp::SdkOpen(uint32_t nInstance, cbSdkConnectionType conType, cbS
     m_bWithinTrial = false;
     m_uTrialStartTime = 0;
 
-    // If this is not part of another Qt application, and the-only Qt app intance is not present
-    if (QCoreApplication::instance() == NULL && QAppPriv::pApp == NULL)
-        QAppPriv::pApp = new QCoreApplication(QAppPriv::argc, QAppPriv::argv);
+    std::unique_lock<std::mutex> connectLock(m_connectLock);
 
     if (conType == CBSDKCONNECTION_UDP)
     {
-        m_connectLock.lock();
         Open(nInstance, con.nInPort, con.nOutPort, con.szInIP, con.szOutIP, con.nRecBufSize, con.nRange);
     }
     else if (conType == CBSDKCONNECTION_CENTRAL)
     {
-        m_connectLock.lock();
         Open(nInstance);
     }
     else
         return CBSDKRESULT_NOTIMPLEMENTED;
 
     // Wait for (dis)connection to happen (wait forever if debug)
+    bool bWait;
 #ifndef NDEBUG
-    bool bWait = m_connectWait.wait(&m_connectLock);
+    m_connectWait.wait(connectLock);
+    bWait = true;
 #else
-    bool bWait = m_connectWait.wait(&m_connectLock, 15000);
+    bWait = (m_connectWait.wait_for(connectLock, std::chrono::milliseconds(15000)) == std::cv_status::no_timeout);
 #endif
-    m_connectLock.unlock();
 
     if (!bWait)
         return CBSDKRESULT_TIMEOUT;
@@ -2351,10 +2596,11 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
                 return CBSDKRESULT_ERRCONFIG;
 
             // Wait for packets to come in
-            m_lockGetPacketsCmt.lock();
-            m_bPacketsCmt = true;
-            m_waitPacketsCmt.wait(&m_lockGetPacketsCmt, wait_for_comment_msec);
-            m_lockGetPacketsCmt.unlock();
+            {
+                std::unique_lock<std::mutex> lock(m_lockGetPacketsCmt);
+                m_bPacketsCmt = true;
+                m_waitPacketsCmt.wait_for(lock, std::chrono::milliseconds(wait_for_comment_msec));
+            }
 
             // Take a snapshot of the current write pointer
             m_lockTrialComment.lock();
@@ -2389,10 +2635,11 @@ cbSdkResult SdkApp::SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent * trialev
             uint32_t read_end_index[cbMAXTRACKOBJ];
 
             // Wait for packets to come in
-            m_lockGetPacketsTrack.lock();
-            m_bPacketsTrack = true;
-            m_waitPacketsTrack.wait(&m_lockGetPacketsTrack, 250);
-            m_lockGetPacketsTrack.unlock();
+            {
+                std::unique_lock<std::mutex> lock(m_lockGetPacketsTrack);
+                m_bPacketsTrack = true;
+                m_waitPacketsTrack.wait_for(lock, std::chrono::milliseconds(250));
+            }
 
             // Take a snapshot of the current write pointer
             m_lockTrialTracking.lock();
@@ -3034,7 +3281,7 @@ cbSdkResult cbSdkUpload(const char * szSrc, const char * szDstDir, uint32_t nIns
     upkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     upkt.cbpkt_header.type = cbPKTTYPE_UPDATESET;
     upkt.cbpkt_header.dlen = cbPKTDLEN_UPDATE;
-    sprintf(upkt.filename, "%s/%s", szDstDir, szBaseName);
+    _snprintf(upkt.filename, sizeof(upkt.filename), "%s/%s", szDstDir, szBaseName);
 
     uint32_t b, blocks = (cbFile / 512) + 1;
     for (b = 0; b < blocks; ++b)
@@ -4101,9 +4348,7 @@ void SdkApp::Open(uint32_t nInstance, int nInPort, int nOutPort, LPCSTR szInIP, 
     if (!m_bInitialized)
     {
         m_bInitialized = true;
-        // connect the network events and commands
-        QObject::connect(this, SIGNAL(InstNetworkEvent(NetEventType, unsigned int)),
-                this, SLOT(OnInstNetworkEvent(NetEventType, unsigned int)), Qt::DirectConnection);
+        // InstNetworkEvent now directly calls OnInstNetworkEvent (virtual function call)
         // Add myself as the sole listener
         InstNetwork::Open(this);
     }
@@ -4117,12 +4362,12 @@ void SdkApp::Open(uint32_t nInstance, int nInPort, int nOutPort, LPCSTR szInIP, 
 
 #ifndef WIN32
     // On Linux bind to broadcast
-    if (m_strInIP.endsWith(".255"))
+    if (m_strInIP.size() >= 4 && m_strInIP.substr(m_strInIP.size() - 4) == ".255")
         m_bBroadcast = true;
 #endif
 
     // Restart networking thread
-    start(QThread::HighPriority);
+    Start();
 }
 
 // Author & Date: Ehsan Azar       29 April 2012
@@ -4337,14 +4582,14 @@ void SdkApp::OnInstNetworkEvent(NetEventType type, unsigned int code)
     {
     case NET_EVENT_INSTINFO:
         m_connectLock.lock();
-        m_connectWait.wakeAll();
+        m_connectWait.notify_all();
         m_connectLock.unlock();
         InstInfoEvent(m_instInfo);
         break;
     case NET_EVENT_CLOSE:
         m_instInfo = 0;
         m_connectLock.lock();
-        m_connectWait.wakeAll();
+        m_connectWait.notify_all();
         m_connectLock.unlock();
         InstInfoEvent(m_instInfo);
         break;
@@ -4352,14 +4597,14 @@ void SdkApp::OnInstNetworkEvent(NetEventType type, unsigned int code)
         m_lastCbErr = code;
         m_instInfo = 0;
         m_connectLock.lock();
-        m_connectWait.wakeAll();
+        m_connectWait.notify_all();
         m_connectLock.unlock();
         break;
     case NET_EVENT_NETOPENERR:
         m_lastCbErr = code;
         m_instInfo = 0;
         m_connectLock.lock();
-        m_connectWait.wakeAll();
+        m_connectWait.notify_all();
         m_connectLock.unlock();
         lostEvent.type = CBSDKPKTLOSTEVENT_NET;
         LinkFailureEvent(lostEvent);

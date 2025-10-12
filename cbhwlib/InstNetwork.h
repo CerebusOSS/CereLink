@@ -26,11 +26,11 @@
 #include "cbHwlibHi.h"
 #include "Instrument.h"
 #include "cki_common.h"
-#include <QThread>
-#include <QTimer>
-#include <QMetaType>
-#include <QVector>
-#include <QString>
+#include <vector>
+#include <string>
+#include <memory>
+#include <atomic>
+#include <thread>
 
 enum NetCommandType
 {
@@ -65,34 +65,34 @@ enum NetEventType
 
 // Author & Date: Ehsan Azar       15 March 2010
 // Purpose: Instrument networking thread
-class InstNetwork: public QThread
+class InstNetwork
 {
-
-    Q_OBJECT
-
 public:
     // Instrument network listener
     class Listener
     {
     public:
+        virtual ~Listener() = default;
         // Callback function to process packets, must be implemented in target class
-        virtual void ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt) = 0;
+        virtual void ProcessIncomingPacket(const cbPKT_GENERIC * pPkt) = 0;
     };
 
 public:
     InstNetwork(STARTUP_OPTIONS startupOption = OPT_NONE);
+    virtual ~InstNetwork() = default;
     void Open(Listener * listener); // Open the network
     void ShutDown(); // Instrument shutdown
     void StandBy();  // Instrument standby
-    bool IsStandAlone() {return m_bStandAlone;} // If running in stand-alone
-    uint32_t getPacketCounter() {return m_nRecentPacketCount;}
-    uint32_t getDataCounter() {return m_dataCounter;}
+    bool IsStandAlone() const {return m_bStandAlone;} // If running in stand-alone
+    uint32_t getPacketCounter() const {return m_nRecentPacketCount;}
+    uint32_t getDataCounter() const {return m_dataCounter;}
     void SetNumChans();
+    void Start(); // Start the network thread
 protected:
     enum { INST_TICK_COUNT = 10 };
     void run();
-    void ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt); // Process incoming packets in stand-alone mode
-    void timerEvent(QTimerEvent *event); // the QT timer event for stand-alone networking
+    void ProcessIncomingPacket(const cbPKT_GENERIC * pPkt); // Process incoming packets in stand-alone mode
+    void processTimerTick(); // Process one timer tick (was timerEvent for Qt)
     void OnWaitEvent(); // Non-stand-alone networking
     inline void CheckForLinkFailure(uint32_t nTicks, uint32_t nCurrentPacketCount); // Check link failure
 private:
@@ -100,12 +100,12 @@ private:
     void UpdateBasisModel(const cbPKT_FS_BASIS & rBasisModel);
 private:
     static const uint32_t MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS;
+    std::unique_ptr<std::thread> m_thread; // The network thread
     cbLevelOfConcern m_enLOC; // level of concern
     STARTUP_OPTIONS m_nStartupOptionsFlags;
-    QVector<Listener *> m_listener;   // instrument network listeners
+    std::vector<Listener *> m_listener;   // instrument network listeners
     uint32_t m_timerTicks;    // network timer ticks
-    int m_timerId; // Stand-alone timer ID
-    bool m_bDone;// flag to finish networking thread
+    std::atomic<bool> m_bDone;// flag to finish networking thread
     uint32_t m_nRecentPacketCount; // number of real packets
     uint32_t m_dataCounter;        // data counter
     uint32_t m_nLastNumberOfPacketsReceived;
@@ -123,23 +123,32 @@ protected:
     bool m_bDontRoute;
     bool m_bNonBlocking;
     int m_nRecBufSize;
-    QString m_strInIP;  // Client IPv4 address
-    QString m_strOutIP; // Instrument IPv4 address
+    std::string m_strInIP;  // Client IPv4 address
+    std::string m_strOutIP; // Instrument IPv4 address
     int m_nRange; // number of IP addresses to try (default is 16)
 
-public Q_SLOTS:
+public:
     void Close(); // stop timer and close the message loop
 
-private Q_SLOTS:
+private:
     void OnNetCommand(NetCommandType cmd, unsigned int code = 0);
 
-    // Heper slots to specialize this class for networking
-private Q_SLOTS:
+    // Helper functions to specialize this class for networking
+protected:
     virtual void OnInstNetworkEvent(NetEventType, unsigned int) {;}
     virtual void OnExec() {;}
 
-Q_SIGNALS:
-    void InstNetworkEvent(NetEventType type, unsigned int code = 0);
+    // Called to notify about network events (was Qt signal, now virtual function)
+    // Note: No default arguments on virtual functions (linter warning)
+    virtual void InstNetworkEvent(NetEventType type, unsigned int code) {
+        // Default implementation calls the virtual handler
+        OnInstNetworkEvent(type, code);
+    }
+
+    // Non-virtual overload to provide default argument (code = 0)
+    void InstNetworkEvent(NetEventType type) {
+        InstNetworkEvent(type, 0);
+    }
 };
 
-#endif // include guard
+#endif // INSTNETWORK_H_INCLUDED

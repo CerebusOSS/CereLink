@@ -22,27 +22,28 @@
 #include "InstNetwork.h"
 #include "cbsdk.h"
 #include "CCFUtils.h"
-#include <QMutex>
-#include <QWaitCondition>
+#include <mutex>
+#include <condition_variable>
 
 /// Wrapper class for SDK Qt application
 class SdkApp : public InstNetwork, public InstNetwork::Listener
 {
 public:
     SdkApp();
-    ~SdkApp();
+    ~SdkApp() override;
 public:
-    void ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt); // Process incoming packets
-    uint32_t GetInstInfo() {return m_instInfo;}
-    cbRESULT GetLastCbErr() {return m_lastCbErr;}
+    // Override the Listener::ProcessIncomingPacket virtual function
+    void ProcessIncomingPacket(const cbPKT_GENERIC * pPkt) override; // Process incoming packets
+    uint32_t GetInstInfo() const {return m_instInfo;}
+    cbRESULT GetLastCbErr() const {return m_lastCbErr;}
     void Open(uint32_t id, int nInPort = cbNET_UDP_PORT_BCAST, int nOutPort = cbNET_UDP_PORT_CNT,
         LPCSTR szInIP = cbNET_UDP_ADDR_INST, LPCSTR szOutIP = cbNET_UDP_ADDR_CNT, int nRecBufSize = NSP_REC_BUF_SIZE, int nRange = 0);
 private:
-    void OnPktGroup(const cbPKT_GROUP * const pkt);
-    void OnPktEvent(const cbPKT_GENERIC * const pPkt);
-    void OnPktComment(const cbPKT_COMMENT * const pPkt);
-    void OnPktLog(const cbPKT_LOG * const pPkt);
-    void OnPktTrack(const cbPKT_VIDEOTRACK * const pPkt);
+    void OnPktGroup(const cbPKT_GROUP * pkt);
+    void OnPktEvent(const cbPKT_GENERIC * pPkt);
+    void OnPktComment(const cbPKT_COMMENT * pPkt);
+    void OnPktLog(const cbPKT_LOG * pPkt);
+    void OnPktTrack(const cbPKT_VIDEOTRACK * pPkt);
 
     void LateBindCallback(cbSdkCallbackType callbacktype);
     void LinkFailureEvent(cbSdkPktLostEvent & lost);
@@ -54,10 +55,12 @@ public:
     // All SDK functions come here
     // ---------------------------
 
-    void SdkAsynchCCF(const ccf::ccfResult res, LPCSTR szFileName, const cbStateCCF state, const uint32_t nProgress);
+    void SdkAsynchCCF(ccf::ccfResult res, LPCSTR szFileName, cbStateCCF state, uint32_t nProgress);
     cbSdkResult SdkGetVersion(cbSdkVersion *version);
-    cbSdkResult SdkReadCCF(cbSdkCCF * pData, const char * szFileName, bool bConvert, bool bSend, bool bThreaded);
-    cbSdkResult SdkWriteCCF(cbSdkCCF * pData, const char * szFileName, bool bThreaded);
+    cbSdkResult SdkReadCCF(cbSdkCCF * pData, const char * szFileName, bool bConvert, bool bSend, bool bThreaded);  // From file or device if szFileName is null
+    cbSdkResult SdkFetchCCF(cbSdkCCF * pData);  // from device only
+    cbSdkResult SdkWriteCCF(cbSdkCCF * pData, const char * szFileName, bool bThreaded);  // to file or device if szFileName is null
+    cbSdkResult SdkSendCCF(cbSdkCCF * pData, bool bAutosort = false);  // to device only
     cbSdkResult SdkOpen(uint32_t nInstance, cbSdkConnectionType conType, cbSdkConnection con);
     cbSdkResult SdkGetType(cbSdkConnectionType * conType, cbSdkInstrumentType * instType);
     cbSdkResult SdkUnsetTrialConfig(cbSdkTrialType type);
@@ -111,14 +114,14 @@ public:
     cbSdkResult SdkAnalogToDigital(uint16_t channel, const char * szVoltsUnitString, int32_t * digital);
 
 
-private:
-    void OnInstNetworkEvent(NetEventType type, unsigned int code); // Event from the instrument network
+protected:
+    void OnInstNetworkEvent(NetEventType type, unsigned int code) override; // Event from the instrument network
     bool m_bInitialized; // If initialized
     cbRESULT m_lastCbErr; // Last error
 
     // Wait condition for connection open
-    QWaitCondition m_connectWait;
-    QMutex m_connectLock;
+    std::condition_variable m_connectWait;
+    std::mutex m_connectLock;
 
     // Which channels to listen to
     bool m_bChannelMask[cbMAXCHANS];
@@ -128,7 +131,7 @@ private:
     cbSdkInstInfo m_lastInstInfo; // Last instrument info event
 
     // Lock for accessing the callbacks
-    QMutex m_lockCallback;
+    std::mutex m_lockCallback;
     // Actual registered callbacks
     cbSdkCallback m_pCallback[CBSDKCALLBACK_COUNT];
     void * m_pCallbackParams[CBSDKCALLBACK_COUNT];
@@ -139,22 +142,22 @@ private:
     /////////////////////////////////////////////////////////////////////////////
     // Declarations for tracking the beginning and end of trials
 
-    QMutex m_lockTrial;
-    QMutex m_lockTrialEvent;
-    QMutex m_lockTrialComment;
-    QMutex m_lockTrialTracking;
+    std::mutex m_lockTrial;
+    std::mutex m_lockTrialEvent;
+    std::mutex m_lockTrialComment;
+    std::mutex m_lockTrialTracking;
 
     // For synchronization of threads
-    QMutex m_lockGetPacketsEvent;
-    QWaitCondition m_waitPacketsEvent;
+    std::mutex m_lockGetPacketsEvent;
+    std::condition_variable m_waitPacketsEvent;
     bool m_bPacketsEvent;
 
-    QMutex m_lockGetPacketsCmt;
-    QWaitCondition m_waitPacketsCmt;
+    std::mutex m_lockGetPacketsCmt;
+    std::condition_variable m_waitPacketsCmt;
     bool m_bPacketsCmt;
 
-    QMutex m_lockGetPacketsTrack;
-    QWaitCondition m_waitPacketsTrack;
+    std::mutex m_lockGetPacketsTrack;
+    std::condition_variable m_waitPacketsTrack;
     bool m_bPacketsTrack;
 
     uint16_t m_uTrialBeginChannel;  // Channel ID that is watched for the trial begin notification
@@ -232,7 +235,7 @@ private:
                     memset(units[i], 0, size * sizeof(uint16_t));
                 }
             }
-            waveform_data = NULL;
+            waveform_data = nullptr;
             memset(write_index, 0, sizeof(write_index));
             memset(write_start_index, 0, sizeof(write_start_index));
         }
@@ -300,4 +303,4 @@ private:
     } * m_TR;
 };
 
-#endif // include guard
+#endif // SDKAPP_H_INCLUDED

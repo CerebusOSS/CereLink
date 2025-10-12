@@ -19,6 +19,8 @@
 //
 #include "StdAfx.h"
 #include <algorithm>  // Use C++ default min and max implementation.
+#include <thread>     // For std::thread
+#include <chrono>     // For std::chrono timing
 #include "InstNetwork.h"
 #ifndef WIN32
     #include <semaphore.h>
@@ -29,11 +31,9 @@ const uint32_t InstNetwork::MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS = 5000;  // T
 // Author & Date: Ehsan Azar       15 March 2010
 // Purpose: Constructor for instrument networking thread
 InstNetwork::InstNetwork(STARTUP_OPTIONS startupOption) :
-    QThread(),
     m_enLOC(LOC_LOW),
     m_nStartupOptionsFlags(startupOption),
     m_timerTicks(0),
-    m_timerId(0),
     m_bDone(false),
     m_nRecentPacketCount(0),
     m_dataCounter(0),
@@ -55,10 +55,7 @@ InstNetwork::InstNetwork(STARTUP_OPTIONS startupOption) :
     m_nRange(0)
 {
 
-    qRegisterMetaType<NetEventType>("NetEventType"); // For QT connect to recognize this type
-    qRegisterMetaType<NetCommandType>("NetCommandType"); // For QT connect to recognize this type
-    // This should be the last
-    moveToThread(this); // The object could not be moved if it had a parent
+    // Object initialization complete
 }
 
 // Author & Date: Ehsan Azar       15 March 2010
@@ -68,7 +65,7 @@ InstNetwork::InstNetwork(STARTUP_OPTIONS startupOption) :
 void InstNetwork::Open(Listener * listener)
 {
     if (listener)
-        m_listener += listener;
+        m_listener.push_back(listener);
 }
 
 // Author & Date: Ehsan Azar       23 Sept 2010
@@ -98,8 +95,30 @@ void InstNetwork::Close()
     // Signal thread to finish
     m_bDone = true;
     // Wait for thread to finish
-    if (QThread::currentThread() != thread())
-        wait();
+    if (m_thread && m_thread->joinable())
+        m_thread->join();
+}
+
+// Author & Date: Ehsan Azar       15 March 2010
+// Purpose: Start the network thread
+void InstNetwork::Start()
+{
+    m_thread = std::make_unique<std::thread>(&InstNetwork::run, this);
+
+    // Set thread priority (platform-specific)
+#ifdef WIN32
+#if defined(__MINGW32__) || defined(__MINGW64__)
+    // For MinGW with pthreads, native_handle() returns a pthread_t, but pthread_getw32threadhandle_np is not available.
+    // Disabling thread priority setting for MinGW for now.
+#else
+    // For MSVC, native_handle() returns a HANDLE.
+    SetThreadPriority(m_thread->native_handle(), THREAD_PRIORITY_HIGHEST);
+#endif
+#else
+    // On Unix/Linux, setting thread priority may require privileges
+    // For now, we'll skip priority setting on non-Windows platforms
+    // If needed, you can use pthread_setschedparam with appropriate permissions
+#endif
 }
 
 // Author & Date: Ehsan Azar       14 Feb 2012
@@ -115,7 +134,7 @@ void InstNetwork::OnNetCommand(NetCommandType cmd, unsigned int /*code*/)
         // Do nothing
         break;
     case NET_COMMAND_OPEN:
-        start(QThread::HighPriority);
+        Start();
         break;
     case NET_COMMAND_CLOSE:
         Close();
@@ -211,7 +230,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
             {
                 if (m_bStandAlone)
                 {
-                    const cbPKT_CHANINFO * pNew = reinterpret_cast<const cbPKT_CHANINFO *>(pPkt);
+                    const auto * pNew = reinterpret_cast<const cbPKT_CHANINFO *>(pPkt);
                     uint32_t chan = pNew->chan;
                     if (chan > 0 && chan <= cbMAXCHANS)
                     {
@@ -227,7 +246,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
             }
             else if ((pPkt->cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP)
             {
-                const cbPKT_SYSINFO * pNew = reinterpret_cast<const cbPKT_SYSINFO *>(pPkt);
+                const auto * pNew = reinterpret_cast<const cbPKT_SYSINFO *>(pPkt);
                 if (m_bStandAlone)
                 {
                     cbPKT_SYSINFO & rOld = cb_cfg_buffer_ptr[m_nIdx]->sysinfo;
@@ -371,7 +390,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
             {
                 if (m_bStandAlone)
                 {
-                    const cbPKT_FILECFG * pPktFileCfg = reinterpret_cast<const cbPKT_FILECFG*>(pPkt);
+                    const auto * pPktFileCfg = reinterpret_cast<const cbPKT_FILECFG*>(pPkt);
                     if (pPktFileCfg->options == cbFILECFG_OPT_REC || pPktFileCfg->options == cbFILECFG_OPT_STOP || (pPktFileCfg->options == cbFILECFG_OPT_TIMEOUT))
                     {
                         cb_cfg_buffer_ptr[m_nIdx]->fileinfo = * reinterpret_cast<const cbPKT_FILECFG *>(pPkt);
@@ -387,7 +406,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
             {
                 if (m_bStandAlone)
                 {
-                    const cbPKT_NM * pPktNm = reinterpret_cast<const cbPKT_NM *>(pPkt);
+                    const auto * pPktNm = reinterpret_cast<const cbPKT_NM *>(pPkt);
                     // video source to go to the file header
                     if (pPktNm->mode == cbNM_MODE_SETVIDEOSOURCE)
                     {
@@ -422,7 +441,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 if (m_bStandAlone)
                 {
                     SetNumChans();
-                    const cbPKT_AOUT_WAVEFORM * pPktAoutWave = reinterpret_cast<const cbPKT_AOUT_WAVEFORM *>(pPkt);
+                    const auto * pPktAoutWave = reinterpret_cast<const cbPKT_AOUT_WAVEFORM *>(pPkt);
                     uint16_t nChan = pPktAoutWave->chan;
                     if (IsChanAnalogOut(nChan))
                     {
@@ -440,7 +459,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
             {
                 if (m_bStandAlone)
                 {
-                    const cbPKT_NPLAY * pNew = reinterpret_cast<const cbPKT_NPLAY *>(pPkt);
+                    const auto * pNew = reinterpret_cast<const cbPKT_NPLAY *>(pPkt);
                     // Only store the main config packet in stand-alone mode
                     if (pNew->flags == cbNPLAY_FLAG_MAIN)
                     {
@@ -472,7 +491,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
     }
 
     // -- Process the incoming packet inside the listeners --
-    for (int i = 0; i < m_listener.count(); ++i)
+    for (int i = 0; i < m_listener.size(); ++i)
         m_listener[i]->ProcessIncomingPacket(pPkt);
 }
 
@@ -531,10 +550,8 @@ inline void InstNetwork::CheckForLinkFailure(uint32_t nTicks, uint32_t nCurrentP
 }
 
 // Author & Date: Ehsan Azar       15 March 2010
-// Purpose: Networking timer timeout function
-// Inputs:
-//   event - QT timer event for networking
-void InstNetwork::timerEvent(QTimerEvent * /*event*/)
+// Purpose: Process one timer tick (replaced Qt timerEvent)
+void InstNetwork::processTimerTick()
 {
     m_timerTicks++; // number of intervals
     int burstcount = 0;
@@ -542,13 +559,7 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
 //    TRACE("m_timerTicks: %d\n", m_timerTicks);
     if (m_bDone)
     {
-        if (m_timerId)
-        {
-            killTimer(m_timerId);
-            m_timerId = 0;
-        }
-        quit();
-        return;
+        return;  // Exit timer loop
     }
     /////////////////////////////////////////
     // below 5 seconds, call startup routines
@@ -620,7 +631,7 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
         }
 
         // get pointer to the first packet in received data block
-        cbPKT_GENERIC *pktptr = (cbPKT_GENERIC*) &(cb_rec_buffer_ptr[m_nIdx]->buffer[cb_rec_buffer_ptr[m_nIdx]->headindex]);
+        auto *pktptr = (cbPKT_GENERIC*) &(cb_rec_buffer_ptr[m_nIdx]->buffer[cb_rec_buffer_ptr[m_nIdx]->headindex]);
 
         uint32_t bytes_to_process = recv_returned;
         do {
@@ -701,9 +712,7 @@ void InstNetwork::timerEvent(QTimerEvent * /*event*/)
         // appear to not have this problem any more. The real solution is to ensure that packets are sent
         UINT nPacketsLeftInBurst = 4;
 
-        cbPKT_GENERIC
-                *xmtpacket =
-                        (cbPKT_GENERIC*) &(cb_xmt_global_buffer_ptr[m_nIdx]->buffer[cb_xmt_global_buffer_ptr[m_nIdx]->tailindex]);
+        auto *xmtpacket = (cbPKT_GENERIC*) &(cb_xmt_global_buffer_ptr[m_nIdx]->buffer[cb_xmt_global_buffer_ptr[m_nIdx]->tailindex]);
 
         while ((xmtpacket->cbpkt_header.time) && (nPacketsLeftInBurst--))
         {
@@ -749,7 +758,7 @@ void InstNetwork::run()
     // Start initializing instrument network
     InstNetworkEvent(NET_EVENT_INIT);
 
-    if (m_listener.count() == 0)
+    if (m_listener.empty())
     {
         // If listener not set
         InstNetworkEvent(NET_EVENT_LISTENERERR);
@@ -765,7 +774,7 @@ void InstNetwork::run()
         m_nIdx = cb_library_index[m_nInstance];
         m_bStandAlone = false;
         InstNetworkEvent(NET_EVENT_NETCLIENT); // Client to the Central application
-    } else if (cbRet == cbRESULT_NOCENTRALAPP) { // If Central is not running run as stand alone
+    } else if (cbRet == cbRESULT_NOCENTRALAPP) { // If Central is not running then run as stand alone
         m_bStandAlone = true; // Run stand alone without Central
         // Run as stand-alone application
         cbRet = cbOpen(true, m_nInstance);
@@ -798,9 +807,8 @@ void InstNetwork::run()
         bool bHighLatency = (m_instInfo & (cbINSTINFO_NPLAY | cbINSTINFO_CEREPLEX));
         m_icInstrument.Reset(bHighLatency ? (int)INST_TICK_COUNT : (int)Instrument::TICK_COUNT);
         // Set network connection details
-        const QByteArray inIP = m_strInIP.toLatin1();
-        const QByteArray outIP = m_strOutIP.toLatin1();
-        m_icInstrument.SetNetwork(PROTOCOL_UDP, m_nInPort, m_nOutPort, inIP, outIP, m_nRange);
+        m_icInstrument.SetNetwork(PROTOCOL_UDP, m_nInPort, m_nOutPort,
+                                  m_strInIP.c_str(), m_strOutIP.c_str(), m_nRange);
         // Open UDP
         cbRESULT cbres = m_icInstrument.Open(startupOption, m_bBroadcast, m_bDontRoute, m_bNonBlocking, m_nRecBufSize);
         if (cbres)
@@ -823,16 +831,28 @@ void InstNetwork::run()
     // If stand-alone setup network packet handling timer
     if (m_bStandAlone)
     {
-        // Start network packet processing timer later in the message loop
+        // Start network packet processing using custom timer loop (10ms ticks)
 #ifdef WIN32
         timeBeginPeriod(1);
 #endif
-        m_timerId = startTimer(10);
-        // Start the message loop
-        exec();
+        // Custom timer loop replacing Qt event loop
+        using namespace std::chrono;
+        auto nextTick = steady_clock::now();
+        const auto tickInterval = milliseconds(10);
+
+        while (!m_bDone)
+        {
+            nextTick += tickInterval;
+            processTimerTick();
+            std::this_thread::sleep_until(nextTick);
+        }
+
+#ifdef WIN32
+        timeEndPeriod(1);
+#endif
     } else { // else wait for central application data
         // Instrument info for non-stand-alone
-        InstNetworkEvent(NET_EVENT_INSTINFO, m_instInfo);
+        InstNetworkEvent(NET_EVENT_INSTINFO, m_instInfo);  // Wake's main thread's wait
         bool bMonitorThreadMessageWaiting = false; // If message is waiting in non stand-alone mode
         UINT missed_messages = 0;
         // Start the network loop
@@ -859,7 +879,7 @@ void InstNetwork::run()
     // No instrument anymore
     m_instInfo = 0;
     InstNetworkEvent(NET_EVENT_CLOSE);
-    msleep(500); // Give apps some to flush their work
+    std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Give apps some time to flush their work
     if (m_bStandAlone)
     {
         // Close the Data Socket and Winsock Subsystem
@@ -890,7 +910,7 @@ void InstNetwork::OnWaitEvent()
     for(unsigned int p = 0; p < pktstogo; ++p)
     {
         cbPKT_GENERIC *pktptr = cbGetNextPacketPtr(m_nInstance);
-        if (pktptr == NULL)
+        if (pktptr == nullptr)
         {
             cbMakePacketReadingBeginNow(m_nInstance);
             InstNetworkEvent(NET_EVENT_CRITICAL);

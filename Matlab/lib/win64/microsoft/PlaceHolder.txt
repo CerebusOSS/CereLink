@@ -1,6 +1,0 @@
-Place holder for these files:
-
-libeng.lib
-libmat.lib
-libmex.lib
-libmx.lib

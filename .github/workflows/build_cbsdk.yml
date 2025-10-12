@@ -6,11 +6,11 @@ on:
     branches:
       - 'master'
       - 'releases/**'
-    tags:
-      - v*.*
   pull_request:
     branches:
       - master
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -27,46 +27,25 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - {name: "windows-x64", os: "windows-latest",
-            qt_arch: "win64_msvc2019_64", qt_ver: "6.4.3",
-            cmake_extra: "-DCMAKE_PREFIX_PATH='D:\\a\\CereLink\\Qt\\6.4.3\\msvc2019_64' -T v142,host=x86"}
+          - {name: "windows-x64", os: "windows-latest", cmake_extra: "-T v142,host=x86"}
           - { name: "macOS-latest", os: "macOS-latest"}
           - { name: "jammy", os: "ubuntu-22.04"}
-          - { name: "focal", os: "ubuntu-20.04"}
+          - { name: "ubuntu-latest", os: "ubuntu-latest"}
 
     steps:
 
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Install Dependencies (Ubuntu)
-        if: startsWith(matrix.config.os, 'ubuntu-')
-        run: |
-          sudo apt-get update -y
-          if [[ "${{ matrix.config.name }}" = focal ]]; then
-            sudo add-apt-repository -y ppa:okirby/qt6-backports
-          fi
-          sudo apt-get install -y cmake qt6-base-dev
-
-      - name: Install Dependencies (Windows)
-        if: matrix.config.os == 'windows-latest'
-        uses: jurplel/install-qt-action@v3.2.1
-        with:
-          version: ${{ matrix.config.qt_ver }}
-          arch: ${{ matrix.config.qt_arch }}
-
-      - name: Install Dependencies (MacOS)
-        if: startsWith(matrix.config.os, 'macOS-')
-        run: brew install qt
-
       - name: Configure CBSDK
         run: |
           cmake --version
           cmake -B build -S . \
-          -DBUILD_CBMEX=OFF \
-          -DBUILD_CBOCT=OFF \
-          -DBUILD_TEST=OFF \
-          -DBUILD_HDF5=OFF \
+          -DCBSDK_BUILD_CBMEX=OFF \
+          -DCBSDK_BUILD_CBOCT=OFF \
+          -DCBSDK_BUILD_TEST=OFF \
+          -DCBSDK_BUILD_SAMPLE=OFF \
+          -DCBSDK_BUILD_HDF5=OFF \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=${PWD}/install \
           -DCPACK_PACKAGE_DIRECTORY=${PWD}/dist \
@@ -78,30 +57,22 @@ jobs:
           cmake --build build --target install --config Release -j
           cmake --build build --target package --config Release -j
 
-      - uses: conda-incubator/setup-miniconda@v2
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          miniconda-version: "latest"
-      - name: Build Wheels
-        shell: bash -el {0}
-        run: |
-          if [[ "${{ matrix.config.name }}" = windows-x64 ]]; then
-            cp install/bin/Qt*.dll cerebus/
-          fi
-          conda create -n py39 python=3.9 numpy Cython pip wheel setuptools
-          conda activate py39
-          pip wheel . -w dist/
-          conda create -n py310 python=3.10 numpy Cython pip wheel setuptools
-          conda activate py310
-          pip wheel . -w dist/
-          conda create -n py311 python=3.11 numpy Cython pip wheel setuptools
-          conda activate py311
-          pip wheel . -w dist/
-          rm -f dist/numpy*.whl dist/Cython*.whl
-# While it would be great if we could use cibuildhweels, this is not realistic because of the Qt6 dependency.
-# We could delocate-wheel (Mac) or auditwheel (linux) but these produce huge binaries and it's fairly easy to
-# install Qt6 (the only truly missing dependency) on these platforms.
-# On Windows, we might want to unzip the wheel, drop in Qt6Core.dll, and then re-zip it.
-# I'd rather spend development time removing Qt6 altogether.
+          python-version: '3.12'
+
+      - name: Install cibuildwheel
+        run: python -m pip install cibuildwheel==2.16.5
+
+      - name: Build wheels
+        if: "!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest'"
+        run: python -m cibuildwheel wrappers/Python --output-dir wrappers/Python/dist
+        env:
+          CIBW_BUILD: cp39-* cp310-* cp311-* cp312-*
+          CIBW_SKIP: "*-musllinux_* *-win32 *-manylinux_i686"
+          CIBW_BUILD_VERBOSITY: 1
+          CIBW_ENVIRONMENT: CBSDK_INSTALL_PATH="${{ github.workspace }}/install"
 
       - name: Ubuntu - Prefix package with release name
         if: startswith(matrix.config.os, 'ubuntu-')
@@ -114,9 +85,25 @@ jobs:
           done
           popd
 
-      - name: Release
+      - name: Upload C++ Packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-packages-${{ matrix.config.name }}
+          path: dist/*
+          if-no-files-found: ignore
+
+      - name: Upload Python Wheels
+        uses: actions/upload-artifact@v4
+        if: "!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest'"
+        with:
+          name: python-wheels-${{ matrix.config.name }}
+          path: wrappers/Python/dist/*.whl
+          if-no-files-found: ignore
+
+      - name: Attach to Release
         uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'release'
         with:
           files: |
             dist/*
+            wrappers/Python/dist/*.whl

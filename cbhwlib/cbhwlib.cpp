@@ -23,20 +23,18 @@
 // cbhwlib library is currently based on non unicode only
 #undef UNICODE
 #undef _UNICODE
-#ifndef  QT_APP
-    #include "DataVector.h" // TODO: This file is now being used outside of "Single",
-#else
 #ifndef WIN32
-    // For non-windows Qt applications
+    // For non-Windows systems, include POSIX headers
     #include <sys/mman.h>
     #include <semaphore.h>
     #include <sys/file.h>
     #include <sys/types.h>
     #include <sys/stat.h>
+    #include <fcntl.h>
     #include <errno.h>
     #include <time.h>
 #endif
-#endif
+#include "DataVector.h" // Vector math utilities
 #ifndef _MSC_VER
 #include <unistd.h>
 #endif
@@ -876,7 +874,11 @@ cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance)
 #ifdef WIN32
     InterlockedExchange((LPLONG)&(cb_xmt_global_buffer_ptr[nIdx]->buffer[orig_headindex]),*((LONG*)pPacket));
 #else
-    __sync_lock_test_and_set((int32_t*)&(cb_xmt_global_buffer_ptr[nIdx]->buffer[orig_headindex]),*((int32_t*)pPacket));
+    // buffer is uint32_t[] which guarantees 4-byte alignment, but compiler can't prove it at compile-time
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Watomic-alignment"
+    __atomic_exchange_n((int32_t*)&(cb_xmt_global_buffer_ptr[nIdx]->buffer[orig_headindex]),*((int32_t*)pPacket), __ATOMIC_SEQ_CST);
+    #pragma clang diagnostic pop
 #endif
     return cbRESULT_OK;
 }
@@ -985,7 +987,11 @@ cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance)
 #ifdef WIN32
     InterlockedExchange((LPLONG)&(cb_xmt_local_buffer_ptr[nIdx]->buffer[orig_headindex]),*((LONG*)pPacket));
 #else
-    __sync_lock_test_and_set((int32_t*)&(cb_xmt_local_buffer_ptr[nIdx]->buffer[orig_headindex]),*((int32_t*)pPacket));
+    // buffer is uint32_t[] which guarantees 4-byte alignment, but compiler can't prove it at compile-time
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Watomic-alignment"
+    __atomic_exchange_n((int32_t*)&(cb_xmt_local_buffer_ptr[nIdx]->buffer[orig_headindex]),*((int32_t*)pPacket), __ATOMIC_SEQ_CST);
+    #pragma clang diagnostic pop
 #endif
 
     return cbRESULT_OK;
@@ -2985,7 +2991,7 @@ cbRESULT cbSSSetNoiseBoundaryByTheta(uint32_t chanIdx, const float afCentroid[3]
     // Create the packet
     cbPKT_SS_NOISE_BOUNDARY icPkt;
     memset(&icPkt, 0, sizeof(icPkt));
-    icPkt.set(chanIdx,
+    InitPktSSNoiseBoundary(&icPkt, chanIdx,
         afCentroid[0], afCentroid[1], afCentroid[2],
         major[0], major[1], major[2],
         minor_1[0], minor_1[1], minor_1[2],
