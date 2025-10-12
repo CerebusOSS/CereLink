@@ -107,7 +107,13 @@ void InstNetwork::Start()
 
     // Set thread priority (platform-specific)
 #ifdef WIN32
+#if defined(__MINGW32__) || defined(__MINGW64__)
+    // For MinGW with pthreads, native_handle() returns a pthread_t, but pthread_getw32threadhandle_np is not available.
+    // Disabling thread priority setting for MinGW for now.
+#else
+    // For MSVC, native_handle() returns a HANDLE.
     SetThreadPriority(m_thread->native_handle(), THREAD_PRIORITY_HIGHEST);
+#endif
 #else
     // On Unix/Linux, setting thread priority may require privileges
     // For now, we'll skip priority setting on non-Windows platforms
