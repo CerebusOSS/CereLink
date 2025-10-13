@@ -1741,7 +1741,7 @@ cbSdkResult SdkApp::SdkSetTrialConfig(uint32_t bActive, uint16_t begchan, uint32
                 // for indexing m_ED while processing packets.
                 for (uint32_t i = 0; i < cbMAXCHANS; ++i)
                 {
-                    m_ED->timestamps[i] = new uint32_t[m_ED->size];
+                    m_ED->timestamps[i] = new PROCTIME[m_ED->size];
                     m_ED->units[i] = new uint16_t[m_ED->size];
                     if (m_ED->timestamps[i] == NULL || m_ED->units[i] == NULL)
                     {
@@ -1774,7 +1774,7 @@ cbSdkResult SdkApp::SdkSetTrialConfig(uint32_t bActive, uint16_t begchan, uint32
         {
             m_CMT->size = uComments;
             bool bErr = false;
-            m_CMT->timestamps = new uint32_t[m_CMT->size];
+            m_CMT->timestamps = new PROCTIME[m_CMT->size];
             m_CMT->rgba = new uint32_t[m_CMT->size];
             m_CMT->charset = new uint8_t[m_CMT->size];
             m_CMT->comments = new uint8_t * [m_CMT->size]; // uint8_t * array[m_CMT->size]
@@ -1821,7 +1821,7 @@ cbSdkResult SdkApp::SdkSetTrialConfig(uint32_t bActive, uint16_t begchan, uint32
             for (uint32_t i = 0; i < cbMAXTRACKOBJ; ++i)
             {
                 try {
-                    m_TR->timestamps[i] = new uint32_t[m_TR->size];
+                    m_TR->timestamps[i] = new PROCTIME[m_TR->size];
                     m_TR->synch_timestamps[i] = new uint32_t[m_TR->size];
                     m_TR->synch_frame_numbers[i] = new uint32_t[m_TR->size];
                     m_TR->point_counts[i] = new uint16_t[m_TR->size];
@@ -2108,8 +2108,7 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
     if (m_instInfo == 0)
         return CBSDKRESULT_CLOSED;
 
-
-    uint32_t prevStartTime = m_uPrevTrialStartTime;
+    const PROCTIME prevStartTime = m_uPrevTrialStartTime;
 
     if (trialcont)
     {
@@ -2252,7 +2251,7 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
                         // Null means ignore
                         if (dataptr)
                         {
-                            uint32_t ts = m_ED->timestamps[ch - 1][read_index];
+                            auto ts = m_ED->timestamps[ch - 1][read_index];
                             // If time wraps or due to reset, time will restart amidst trial
                             if (!m_bTrialAbsolute && ts >= prevStartTime)
                                 ts -= prevStartTime;
@@ -2314,7 +2313,7 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
             // Null means ignore
             if (dataptr)
             {
-                uint32_t ts = m_CMT->timestamps[read_index];
+                auto ts = m_CMT->timestamps[read_index];
                 // If time wraps or due to reset, time will restart amidst trial
                 if (!m_bTrialAbsolute && ts >= prevStartTime)
                     ts -= prevStartTime;
@@ -2398,7 +2397,7 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
                     // Null means ignore
                     if (dataptr)
                     {
-                        uint32_t ts = m_TR->timestamps[id][read_index];
+                        auto ts = m_TR->timestamps[id][read_index];
                         // If time wraps or due to reset, time will restart amidst trial
                         if (!m_bTrialAbsolute && ts >= prevStartTime)
                             ts -= prevStartTime;

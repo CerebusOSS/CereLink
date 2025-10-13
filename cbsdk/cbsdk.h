@@ -301,7 +301,7 @@ typedef struct _cbSdkTrialCont
     uint16_t chan[cbNUM_ANALOG_CHANS]; ///< Channel numbers (1-based)
     uint16_t sample_rates[cbNUM_ANALOG_CHANS]; ///< Current sample rate (samples per second)
     uint32_t num_samples[cbNUM_ANALOG_CHANS]; ///< Number of samples
-    uint32_t time;  ///< Start time for trial continuous data
+    PROCTIME time;  ///< Start time for trial continuous data
     void * samples[cbNUM_ANALOG_CHANS]; ///< Buffer to hold sample vectors
 } cbSdkTrialCont;
 

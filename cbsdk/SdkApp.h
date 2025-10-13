@@ -177,7 +177,7 @@ protected:
     uint32_t m_bWithinTrial;        // True is we are within a trial, False if not within a trial
 
     PROCTIME m_uTrialStartTime;     // Holds theCerebus timestamp of the trial start time
-    PROCTIME m_uPrevTrialStartTime;
+    PROCTIME m_uPrevTrialStartTime{};
 
     PROCTIME m_uCbsdkTime;            // Holds the Cerebus timestamp of the last packet received
 
@@ -219,7 +219,7 @@ protected:
         // Later I may add a m_ChIdxInType or m_ChIdxInBuff for such a map.
         // - chadwick.boulay@gmail.com
         uint32_t size; // default is cbSdk_EVENT_DATA_SAMPLES
-        uint32_t * timestamps[cbMAXCHANS];
+        PROCTIME * timestamps[cbMAXCHANS];
         uint16_t * units[cbMAXCHANS];
         int16_t  * waveform_data; // buffer with maximum size of array [cbNUM_ANALOG_CHANS][size][cbMAX_PNTS]
         uint32_t write_index[cbMAXCHANS];                  // next index location to write data
@@ -231,8 +231,8 @@ protected:
             {
                 for (uint32_t i = 0; i < (cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans() + 2); ++i)
                 {
-                    memset(timestamps[i], 0, size * sizeof(uint32_t));
-                    memset(units[i], 0, size * sizeof(uint16_t));
+                    std::fill_n(timestamps[i], size, 0);
+                    std::fill_n(units[i], size, 0);
                 }
             }
             waveform_data = nullptr;
@@ -249,7 +249,7 @@ protected:
         uint8_t * charset;
         uint32_t * rgba;
         uint8_t * * comments;
-        uint32_t * timestamps;
+        PROCTIME * timestamps;
         uint32_t write_index;
         uint32_t write_start_index;
 
@@ -274,7 +274,7 @@ protected:
         uint16_t node_type[cbMAXTRACKOBJ]; // cbTRACKOBJ_TYPE_* (note that 0 means undefined)
         uint16_t * point_counts[cbMAXTRACKOBJ];
         void * * coords[cbMAXTRACKOBJ];
-        uint32_t * timestamps[cbMAXTRACKOBJ];
+        PROCTIME * timestamps[cbMAXTRACKOBJ];
         uint32_t * synch_frame_numbers[cbMAXTRACKOBJ];
         uint32_t * synch_timestamps[cbMAXTRACKOBJ];
         uint32_t write_index[cbMAXTRACKOBJ];
@@ -286,10 +286,10 @@ protected:
             {
                 for (uint32_t i = 0; i < cbMAXTRACKOBJ; ++i)
                 {
-                    memset(point_counts[i], 0, size * sizeof(uint16_t));
-                    memset(timestamps[i], 0, size * sizeof(uint32_t));
-                    memset(synch_frame_numbers[i], 0, size * sizeof(uint32_t));
-                    memset(synch_timestamps[i], 0, size * sizeof(uint32_t));
+                    std::fill_n(point_counts[i], size, 0);
+                    std::fill_n(timestamps[i], size, 0);
+                    std::fill_n(synch_frame_numbers[i], size, 0);
+                    std::fill_n(synch_timestamps[i], size, 0);
                 }
             }
 
