@@ -178,18 +178,29 @@ def trial_config(int instance=0, reset=True,
                  buffer_parameter={}, 
                  range_parameter={},
                  noevent=0, nocontinuous=0, nocomment=0):
-    """Configure trial settings.
+    """
+    Configure trial settings. See cbSdkSetTrialConfig in cbsdk.h for details.
+
     Inputs:
        reset - boolean, set True to flush data cache and start collecting data immediately,
                set False to stop collecting data immediately or, if not already in a trial,
                to rely on the begin/end channel mask|value to start/stop collecting data.
        buffer_parameter - (optional) dictionary with following keys (all optional)
-               'double': boolean, if specified, the data is in double precision format
-               'absolute': boolean, if specified event timing is absolute (new polling will not reset time for events)
-               'continuous_length': set the number of continuous data to be cached
-               'event_length': set the number of events to be cached
-               'comment_length': set number of comments to be cached
-               'tracking_length': set the number of video tracking events to be cached
+               'double': boolean, if specified and true then the data and timestamps are assumed to be
+                    double precision format, else it remains the previous value.
+               'absolute': boolean, if specified and True then event timing is absolute
+                    (new polling will not reset time for events)
+               'continuous_length': if specified then this sets the number of continuous data samples to be cached.
+                    0 means no continuous data is cached. default is cbSdk_CONTINUOUS_DATA_SAMPLES.
+                    Only used if not `nocontinuous`.
+               'event_length': if specified then this sets the number of events to be cached.
+                    default is cbSdk_EVENT_DATA_SAMPLES.
+                    Only used if not `noevent`.
+               'comment_length': if specified then this sets the number of comments to be cached.
+                    default is 0.
+                    Only used if not `nocomment`.
+               'tracking_length': set the number of video tracking events to be cached.
+                    Deprecated.
        range_parameter - (optional) dictionary with following keys (all optional)
                'begin_channel': integer, channel to monitor to trigger trial start
                'begin_mask': integer, mask to bitwise-and with data on begin_channel to look for trigger
@@ -247,7 +258,9 @@ def trial_event(int instance=0, bool reset=False, bool reset_clock=False):
                set True to clear all the data after it has been retrieved.
        reset_clock - (optional) boolean
                 set False (default) to leave the trial clock alone.
-                set True to update the trial time to the current time (seems inconsistent?)
+                set True to update the _next_ trial time to the current time.
+                    This is overly complicated. Leave this as `False` unless you really know what you are doing.
+                    Better yet, use trial_config(buffer_parameter={'absolute':True}) to avoid confusion.
     Outputs:
        list of arrays [channel, {'timestamps':[unit0_ts, ..., unitN_ts], 'events':digital_events}]
            channel: integer, channel number (1-based)
@@ -327,22 +340,26 @@ def trial_event(int instance=0, bool reset=False, bool reset_clock=False):
     return <int>res, trial
 
 
-def trial_continuous(int instance=0, bool reset=False):
+def trial_continuous(int instance=0, bool reset=False, bool reset_clock=False):
     """
     Trial continuous data.
     Inputs:
-       reset - (optional) boolean 
-               set False (default) to leave buffer intact.
-               set True to clear all the data and reset the trial time to the current time.
        instance - (optional) library instance number
+       reset - (optional) boolean
+               set False (default) to leave buffer intact.
+               set True to clear all the data.
+       reset_clock - (optional) boolean
+             Keep False (default) unless you really know what you are doing.
     Outputs:
        res   - result code
        trial - list of the form [channel, continuous_array]
            channel: integer, channel number (1-based)
-           continuous_array: array, continuous values for channel)
-       timestamp of sample 0
+           continuous_array: array, continuous values for channel
+       timestamp of the first sample since trial reset (either by config or _previous_ call with reset_clock=True)
+            Note: the behaviour of reset_clock is complicated and not recommended for use.
+            Unfortunately, this means that the user is responsible for keeping track of the number of samples
+            since the trial config.
     """
-    
     cdef cbSdkResult res
     cdef cbSdkConfigParam cfg_param
     cdef cbSdkTrialCont trialcont
@@ -354,7 +371,7 @@ def trial_continuous(int instance=0, bool reset=False):
     handle_result(res)
 
     # get how many samples are available
-    res = cbsdk_init_trial_cont(<uint32_t>instance, <int>reset, &trialcont)
+    res = cbsdk_init_trial_cont(<uint32_t>instance, <int>reset_clock, &trialcont)
     handle_result(res)
 
     if trialcont.count == 0:
@@ -402,12 +419,14 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
                set True to clear all the data and reset the trial time to the current time.
     :param reset_clock - (optional) boolean
                 set False (default) to leave the trial clock alone.
-                set True to update the trial time to the current time (seems inconsistent?)
+                set True to update the _next_ trial time to the current time.
+                    This is overly complicated. Leave this as `False` unless you really know what you are doing.
+                    Better yet, use trial_config(buffer_parameter={'absolute':True}) to avoid confusion.
     :param is_double: (optional) boolean
                 set False (default) to use int16
                 set True to use double
-    :param do_event: (optional) boolean. Set to False to skip fetching events.
-    :param do_cont: (optional) boolean. Set to False to skip fetching continuous data.
+    :param do_event: (optional) boolean. Set False to skip fetching events.
+    :param do_cont: (optional) boolean. Set False to skip fetching continuous data.
     :param do_comment: (optional) boolean. Set to True to fetch comments.
     :param wait_for_comment_msec: (optional) unsigned long. How long we should wait for new comments.
                Default (0) will not wait and will only return comments that existed prior to calling this.
@@ -419,7 +438,7 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
                 unitN_ts: array, spike timestamps of unit N for channel (if an electrode channel));
              continuous data: list of the form [channel, continuous_array]
                 channel: integer, channel number (1-based)
-                continuous_array: array, continuous values for channel)
+                continuous_array: array, continuous values for channel
              t_zero: timestamp of sample 0
              comment_data: list of lists the form [timestamp, comment_str, charset, rgba]
                 timestamp: ?

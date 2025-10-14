@@ -23,7 +23,6 @@
 //
 
 #include "cbproto.h"
-#include <cstddef>
 
 // Latest CCF structure
 typedef struct {
@@ -46,7 +45,7 @@ typedef enum _cbStateCCF
 {
     CCFSTATE_READ = 0,     // Reading in progress
     CCFSTATE_WRITE,        // Writing in progress
-    CCFSTATE_SEND ,        // Sendign in progress
+    CCFSTATE_SEND ,        // Sending in progress
     CCFSTATE_CONVERT,      // Conversion in progress
     CCFSTATE_THREADREAD,   // Total threaded read progress
     CCFSTATE_THREADWRITE,  // Total threaded write progress
@@ -79,14 +78,14 @@ class CCFUtils
 {
 public:
     // New simplified constructor (no automatic send support)
-    CCFUtils(bool bThreaded = false, cbCCF * pCCF = NULL, cbCCFCallback pCallbackFn = NULL, uint32_t nInstance = 0);
+    explicit CCFUtils(bool bThreaded = false, cbCCF * pCCF = nullptr, cbCCFCallback pCallbackFn = nullptr, uint32_t nInstance = 0);
     // Backward-compatible constructor signature (bSend ignored). Prefer the simplified one.
-    CCFUtils(bool bSend /*ignored*/, bool bThreaded, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance) :
+    CCFUtils(bool bSend /*ignored*/, const bool bThreaded, cbCCF * pCCF, const cbCCFCallback pCallbackFn, const uint32_t nInstance) :
         CCFUtils(bThreaded, pCCF, pCallbackFn, nInstance) {}
     virtual ~CCFUtils();
 
 public:
-    virtual ccf::ccfResult ReadCCF(LPCSTR szFileName = NULL, bool bConvert = false);
+    virtual ccf::ccfResult ReadCCF(LPCSTR szFileName = nullptr, bool bConvert = false);
     virtual ccf::ccfResult WriteCCFNoPrompt(LPCSTR szFileName);
     virtual ccf::ccfResult ReadVersion(LPCSTR szFileName);
     int GetInternalVersion();
@@ -117,4 +116,4 @@ protected:
     bool m_bBinaryOriginal; // if original file is binary
 };
 
-#endif // include guard
+#endif // CCFUTILS_H_INCLUDED

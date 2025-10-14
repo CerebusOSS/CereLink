@@ -296,7 +296,7 @@ int main(int argc, char *argv[])
     if (bComm)
         trialComm = std::make_unique<cbSdkTrialComment>();
 
-    // We allocate a bunch of std::vectors now and we can grow them if the number of samples to be retrieved
+    // We allocate a bunch of std::vectors now, and we can grow them if the number of samples to be retrieved
     //  exceeds the allocated space.
     std::vector<int16_t> cont_short[cbMAXCHANS];
     std::vector<double> cont_double[cbMAXCHANS];
@@ -316,7 +316,7 @@ int main(int argc, char *argv[])
         // cbSdkInitTrialData to determine how many samples are available
         res = cbSdkInitTrialData(INST, 0,
                                  trialEvent.get(), trialCont.get(), trialComm.get(),
-                                 0);
+                                 nullptr);
 
         // allocate memory
         if (trialEvent && trialEvent->count)
@@ -326,7 +326,7 @@ int main(int argc, char *argv[])
                 // Every event channel, regardless of type (spike, digital, serial), gets an array of timestamps.
                 for (size_t un_ix = 0; un_ix < cbMAXUNITS + 1; un_ix++)
                 {
-                    uint32_t n_samples = trialEvent->num_samples[ev_ix][un_ix];
+                    const uint32_t n_samples = trialEvent->num_samples[ev_ix][un_ix];
                     event_ts[ev_ix][un_ix].resize(n_samples);
                     std::fill(event_ts[ev_ix][un_ix].begin(), event_ts[ev_ix][un_ix].end(), 0);
                     trialEvent->timestamps[ev_ix][un_ix] = event_ts[ev_ix][un_ix].data();
