@@ -300,7 +300,7 @@ int main(int argc, char *argv[])
     //  exceeds the allocated space.
     std::vector<int16_t> cont_short[cbMAXCHANS];
     std::vector<double> cont_double[cbMAXCHANS];
-    std::vector<uint32_t> event_ts[cbMAXCHANS][cbMAXUNITS + 1];
+    std::vector<PROCTIME> event_ts[cbMAXCHANS][cbMAXUNITS + 1];
     std::vector<int16_t> event_wfs_short[cbMAXCHANS];
     std::vector<double> event_wfs_double[cbMAXCHANS];
 
@@ -384,7 +384,7 @@ int main(int argc, char *argv[])
                 {
                     if (trialEvent->num_samples[ev_ix][un_ix])
                     {
-                        printf("%" PRIu32, event_ts[ev_ix][un_ix][0]);
+                        printf("%" PRIu64, static_cast<uint64_t>(event_ts[ev_ix][un_ix][0]));
                     }
                 }
                 printf("\n");
@@ -397,7 +397,7 @@ int main(int argc, char *argv[])
                     uint32_t n_samples = trialEvent->num_samples[ev_ix][0];
                     if (n_samples > 0)
                     {
-                        printf("%" PRIu32 ":", event_ts[ev_ix][0][0]);
+                        printf("%" PRIu64 ":", static_cast<uint64_t>(event_ts[ev_ix][0][0]));
                     }
                     if (cfg.bDouble) {
                         for (uint32_t sample_ix = 0; sample_ix < n_samples; sample_ix++)

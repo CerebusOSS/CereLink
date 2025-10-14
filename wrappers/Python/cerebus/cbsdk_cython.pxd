@@ -14,6 +14,7 @@ cdef extern from "stdint.h":
     ctypedef unsigned long long uint64_t
 
 cdef extern from "cbproto.h":
+    ctypedef uint64_t PROCTIME  # Will be uint32_t or uint64_t depending on CBPROTO_311, but we detect size at runtime
 
     cdef char* cbNET_UDP_ADDR_INST  "cbNET_UDP_ADDR_INST"   # Cerebus default address
     cdef char* cbNET_UDP_ADDR_CNT   "cbNET_UDP_ADDR_CNT"    # NSP default control address
@@ -116,7 +117,7 @@ cdef extern from "cbproto.h":
         int16_t  max   # maximum value for the hoop window
 
     ctypedef struct cbPKT_HEADER:
-        uint64_t        time            # system clock timestamp
+        PROCTIME        time            # system clock timestamp
         uint16_t        chid            # channel identifier
         uint16_t        type            # packet type
         uint16_t        dlen            # length of data field in 32-bit chunks
@@ -330,7 +331,7 @@ cdef extern from "cbsdk.h":
         uint16_t    chan[cbNUM_ANALOG_CHANS+0]          # channel numbers (1-based)
         uint16_t    sample_rates[cbNUM_ANALOG_CHANS+0]  # current sample rate (samples per second)
         uint32_t    num_samples[cbNUM_ANALOG_CHANS+0]   # number of samples
-        uint32_t    time                                # start time for trial continuous data
+        PROCTIME    time                                # start time for trial continuous data
         void *      samples[cbNUM_ANALOG_CHANS+0]       # Buffer to hold sample vectors
         
     ctypedef struct cbSdkTrialComment:
@@ -378,7 +379,7 @@ cdef extern from "cbsdk.h":
     cbSdkResult cbSdkOpen(uint32_t nInstance, cbSdkConnectionType conType, cbSdkConnection con) nogil
     cbSdkResult cbSdkGetType(uint32_t nInstance, cbSdkConnectionType * conType, cbSdkInstrumentType * instType)  # Get connection and instrument type
     cbSdkResult cbSdkClose(uint32_t nInstance)  # Close the library
-    cbSdkResult cbSdkGetTime(uint32_t nInstance, uint64_t * cbtime)  # Get the instrument sample clock time
+    cbSdkResult cbSdkGetTime(uint32_t nInstance, PROCTIME * cbtime)  # Get the instrument sample clock time
     cbSdkResult cbSdkGetSpkCache(uint32_t nInstance, uint16_t channel, cbSPKCACHE **cache)
     cbSdkResult cbSdkUnsetTrialConfig(uint32_t nInstance, cbSdkTrialType type)
     cbSdkResult cbSdkGetChannelLabel(int nInstance, uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position)

@@ -2258,7 +2258,7 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
                             if (m_bTrialDouble)
                                 *((double *)dataptr + num_samples_unit[unit]) = cbSdk_SECONDS_PER_TICK * ts;
                             else
-                                *((uint32_t *)dataptr + num_samples_unit[unit]) = ts;
+                                *(static_cast<PROCTIME *>(dataptr) + num_samples_unit[unit]) = ts;
                         }
                         num_samples_unit[unit]++;
                         
@@ -2320,7 +2320,7 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
                 if (m_bTrialDouble)
                     *((double *)dataptr + i) = cbSdk_SECONDS_PER_TICK * ts;
                 else
-                    *((uint32_t *)dataptr + i) = ts;
+                    *(static_cast<PROCTIME *>(dataptr) + i) = ts;
             }
             dataptr = trialcomment->rgbas;
             if (dataptr)
@@ -2404,7 +2404,7 @@ cbSdkResult SdkApp::SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialeve
                         if (m_bTrialDouble)
                             *((double *)dataptr + i) = cbSdk_SECONDS_PER_TICK * ts;
                         else
-                            *((uint32_t *)dataptr + i) = ts;
+                            *(static_cast<PROCTIME *>(dataptr) + i) = ts;
                     }
                 }
                 {

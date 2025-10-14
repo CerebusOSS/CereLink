@@ -17,8 +17,24 @@ from libc.string cimport strncpy
 import sys
 import numpy as np
 import locale
-cimport numpy as np
+cimport numpy as cnp
 cimport cython
+
+# Initialize numpy C API
+cnp.import_array()
+
+
+# Determine the correct numpy dtype for PROCTIME based on its size
+cdef object _proctime_dtype():
+    if sizeof(PROCTIME) == 4:
+        return np.uint32
+    elif sizeof(PROCTIME) == 8:
+        return np.uint64
+    else:
+        raise RuntimeError("Unexpected PROCTIME size: %d" % sizeof(PROCTIME))
+
+# Cache the dtype for performance
+_PROCTIME_DTYPE = _proctime_dtype()
 
 
 def version(int instance=0):
@@ -165,7 +181,8 @@ def trial_config(int instance=0, reset=True,
     """Configure trial settings.
     Inputs:
        reset - boolean, set True to flush data cache and start collecting data immediately,
-               set False to stop collecting data immediately
+               set False to stop collecting data immediately or, if not already in a trial,
+               to rely on the begin/end channel mask|value to start/stop collecting data.
        buffer_parameter - (optional) dictionary with following keys (all optional)
                'double': boolean, if specified, the data is in double precision format
                'absolute': boolean, if specified event timing is absolute (new polling will not reset time for events)
@@ -174,12 +191,12 @@ def trial_config(int instance=0, reset=True,
                'comment_length': set number of comments to be cached
                'tracking_length': set the number of video tracking events to be cached
        range_parameter - (optional) dictionary with following keys (all optional)
-               'begin_channel': integer, channel to start polling if certain value seen
-               'begin_mask': integer, channel mask to start polling if certain value seen
-               'begin_value': value to start polling
-               'end_channel': channel to end polling if certain value seen
-               'end_mask': channel mask to end polling if certain value seen
-               'end_value': value to end polling
+               'begin_channel': integer, channel to monitor to trigger trial start
+               'begin_mask': integer, mask to bitwise-and with data on begin_channel to look for trigger
+               'begin_value': value to trigger trial start
+               'end_channel': channel to monitor to trigger trial stop
+               'end_mask': mask to bitwise-and with data on end_channel to evaluate trigger
+               'end_value': value to trigger trial stop
        'noevent': equivalent of setting buffer_parameter['event_length'] to 0
        'nocontinuous': equivalent of setting buffer_parameter['continuous_length'] to 0
        'nocomment': equivalent of setting buffer_parameter['comment_length'] to 0
@@ -257,14 +274,14 @@ def trial_event(int instance=0, bool reset=False, bool reset_clock=False):
     if trialevent.count == 0:
         return res, trial
 
-    cdef np.double_t[:] mxa_d
-    cdef np.uint32_t[:] mxa_u32
-    cdef np.uint16_t[:] mxa_u16
-    
+    cdef cnp.double_t[:] mxa_d
+    cdef cnp.ndarray mxa_proctime
+    cdef cnp.uint16_t[:] mxa_u16
+
     # allocate memory
     for ev_ix in range(trialevent.count):
         ch = trialevent.chan[ev_ix] # Actual channel number
-        
+
         timestamps = []
         # Fill timestamps for non-empty events
         for u in range(cbMAXUNITS+1):
@@ -277,9 +294,9 @@ def trial_event(int instance=0, bool reset=False, bool reset_clock=False):
                     trialevent.timestamps[ev_ix][u] = <void *>&mxa_d[0]
                     ts = np.asarray(mxa_d)
                 else:
-                    mxa_u32 = np.zeros(num_samples, dtype=np.uint32)
-                    trialevent.timestamps[ev_ix][u] = <void *>&mxa_u32[0]
-                    ts = np.asarray(mxa_u32)
+                    mxa_proctime = np.zeros(num_samples, dtype=_PROCTIME_DTYPE)
+                    trialevent.timestamps[ev_ix][u] = <void *>cnp.PyArray_DATA(mxa_proctime)
+                    ts = mxa_proctime
             timestamps.append(ts)
         
         trialevent.waveforms[ev_ix] = NULL
@@ -331,20 +348,20 @@ def trial_continuous(int instance=0, bool reset=False):
     cdef cbSdkTrialCont trialcont
     
     trial = []
-    
+
     # retrieve old values
     res = cbsdk_get_trial_config(<uint32_t>instance, &cfg_param)
     handle_result(res)
-    
+
     # get how many samples are available
     res = cbsdk_init_trial_cont(<uint32_t>instance, <int>reset, &trialcont)
     handle_result(res)
-    
+
     if trialcont.count == 0:
         return res, trial, None
 
-    cdef np.double_t[:] mxa_d
-    cdef np.int16_t[:] mxa_i16
+    cdef cnp.double_t[:] mxa_d
+    cdef cnp.int16_t[:] mxa_i16
 
     # allocate memory
     for channel in range(trialcont.count):
@@ -426,11 +443,12 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
     cdef uint16_t ch
     cdef int u
 
-    cdef np.double_t[:] mxa_d
-    cdef np.int16_t[:] mxa_i16
-    cdef np.uint32_t[:] mxa_u32
-    cdef np.uint16_t[:] mxa_u16
-    cdef np.uint8_t[:] mxa_u8
+    cdef cnp.double_t[:] mxa_d
+    cdef cnp.int16_t[:] mxa_i16
+    cdef cnp.ndarray mxa_proctime
+    cdef cnp.uint16_t[:] mxa_u16
+    cdef cnp.uint8_t[:] mxa_u8
+    cdef cnp.uint32_t[:] mxa_u32
 
     trial_event = []
     trial_cont = []
@@ -464,9 +482,9 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
                         trialevent.timestamps[channel][u] = <void *>&mxa_d[0]
                         ts = np.asarray(mxa_d)
                     else:
-                        mxa_u32 = np.zeros(num_samples, dtype=np.uint32)
-                        trialevent.timestamps[channel][u] = <void *>&mxa_u32[0]
-                        ts = np.asarray(mxa_u32)
+                        mxa_proctime = np.zeros(num_samples, dtype=_PROCTIME_DTYPE)
+                        trialevent.timestamps[channel][u] = <void *>cnp.PyArray_DATA(mxa_proctime)
+                        ts = mxa_proctime
                 ev_timestamps.append(ts)
 
             ch = trialevent.chan[channel] # Actual channel number
@@ -532,9 +550,9 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
             trialcomm.timestamps = <void *>&mxa_d[0]
             my_timestamps = np.asarray(mxa_d)
         else:
-            mxa_u32 = np.zeros(trialcomm.num_samples, dtype=np.uint32)
-            trialcomm.timestamps = <void *>&mxa_u32[0]
-            my_timestamps = np.asarray(mxa_u32)
+            mxa_proctime = np.zeros(trialcomm.num_samples, dtype=_PROCTIME_DTYPE)
+            trialcomm.timestamps = <void *>cnp.PyArray_DATA(mxa_proctime)
+            my_timestamps = mxa_proctime
         # For comments
         trialcomm.comments = <uint8_t **>malloc(trialcomm.num_samples * sizeof(uint8_t*))
         for comm_ix in range(trialcomm.num_samples):
@@ -590,10 +608,10 @@ def trial_comment(int instance=0, bool reset=False, unsigned long wait_for_comme
     # allocate memory
 
     # types
-    cdef np.uint8_t[:] mxa_u8_cs  # charsets
-    cdef np.uint32_t[:] mxa_u32_rgbas
-    cdef np.uint32_t[:] mxa_u32_ts
-    cdef np.double_t[:] mxa_d_ts
+    cdef cnp.uint8_t[:] mxa_u8_cs  # charsets
+    cdef cnp.uint32_t[:] mxa_u32_rgbas
+    cdef cnp.ndarray mxa_proctime
+    cdef cnp.double_t[:] mxa_d_ts
 
     # For charsets;
     mxa_u8_cs = np.zeros(trialcomm.num_samples, dtype=np.uint8)
@@ -617,9 +635,9 @@ def trial_comment(int instance=0, bool reset=False, unsigned long wait_for_comme
         trialcomm.timestamps = <void *>&mxa_d_ts[0]
         my_timestamps = np.asarray(mxa_d_ts)
     else:
-        mxa_u32_ts = np.zeros(trialcomm.num_samples, dtype=np.uint32)
-        trialcomm.timestamps = <void *>&mxa_u32_ts[0]
-        my_timestamps = np.asarray(mxa_u32_ts)
+        mxa_proctime = np.zeros(trialcomm.num_samples, dtype=_PROCTIME_DTYPE)
+        trialcomm.timestamps = <void *>cnp.PyArray_DATA(mxa_proctime)
+        my_timestamps = mxa_proctime
 
     trial = []
     try:
@@ -740,7 +758,7 @@ def time(int instance=0, unit='samples'):
     else:
         raise RuntimeError("Invalid time unit %s" % unit)
 
-    cdef uint64_t cbtime
+    cdef PROCTIME cbtime
     res = cbSdkGetTime(<uint32_t>instance, &cbtime)
     handle_result(res)
 
@@ -1005,7 +1023,7 @@ def set_spike_config(int spklength=48, int spkpretrig=10, int instance=0):
 
 
 cdef extern from "numpy/arrayobject.h":
-    void PyArray_ENABLEFLAGS(np.ndarray arr, int flags)
+    void PyArray_ENABLEFLAGS(cnp.ndarray arr, int flags)
 
 
 cdef class SpikeCache:
@@ -1042,8 +1060,8 @@ cdef class SpikeCache:
         cdef int new_valid = self.p_cache.valid
         cdef int new_head = self.p_cache.head
         cdef int n_new = min(max(new_valid - self.last_valid, 0), 400)
-        cdef np.ndarray[np.int16_t, ndim=2, mode="c"] np_waveforms = np.empty((n_new, self.n_samples), dtype=np.int16)
-        cdef np.ndarray[np.uint16_t, ndim=1] np_unit_ids = np.empty(n_new, dtype=np.uint16)
+        cdef cnp.ndarray[cnp.int16_t, ndim=2, mode="c"] np_waveforms = np.empty((n_new, self.n_samples), dtype=np.int16)
+        cdef cnp.ndarray[cnp.uint16_t, ndim=1] np_unit_ids = np.empty(n_new, dtype=np.uint16)
         cdef int wf_ix, pkt_ix, samp_ix
         for wf_ix in range(n_new):
             pkt_ix = (new_head - 2 - n_new + wf_ix) % 400
@@ -1053,7 +1071,7 @@ cdef class SpikeCache:
             for samp_ix in range(self.n_samples):
                 np_waveforms[wf_ix, samp_ix] = self.p_cache.spkpkt[pkt_ix].wave[samp_ix]
         #unit_ids_out = [<int>unit_ids[wf_ix] for wf_ix in range(n_new)]
-        PyArray_ENABLEFLAGS(np_waveforms, np.NPY_OWNDATA)
+        PyArray_ENABLEFLAGS(np_waveforms, cnp.NPY_OWNDATA)
         self.last_valid = new_valid
         return np_waveforms, np_unit_ids
 
