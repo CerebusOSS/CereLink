@@ -57,7 +57,7 @@ namespace CereLink
         private static extern void CbSdkNative_PrefetchData(IntPtr pCbSdk, ref UInt16 chan_count, UInt32[] samps_per_chan, UInt16[] chan_numbers);
 
         [DllImport("cbsdk_ext")]
-        private static extern void CbSdkNative_TransferData(IntPtr pCbSdk, IntPtr arr, ref UInt32 timestamp);
+        private static extern void CbSdkNative_TransferData(IntPtr pCbSdk, IntPtr arr, ref UInt64 timestamp);
 
         [DllImport("cbsdk_ext")]
         private static extern void CbSdkNative_Delete(IntPtr value);
@@ -102,7 +102,7 @@ namespace CereLink
             UInt32[] samps_per_chan = new UInt32[Constants.cbNUM_ANALOG_CHANS];
             UInt16[] chan_numbers = new UInt16[Constants.cbNUM_ANALOG_CHANS];
             CbSdkNative_PrefetchData(pNative, ref chan_count, samps_per_chan, chan_numbers);
-            UInt32 timestamp = 0;
+            UInt64 timestamp = 0;
 
             data = new double[chan_count][];
 
@@ -145,7 +145,7 @@ namespace CereLink
             UInt32[] samps_per_chan = new UInt32[Constants.cbNUM_ANALOG_CHANS];
             UInt16[] chan_numbers = new UInt16[Constants.cbNUM_ANALOG_CHANS];
             CbSdkNative_PrefetchData(pNative, ref chan_count, samps_per_chan, chan_numbers);
-            UInt32 timestamp = 0;
+            UInt64 timestamp = 0;
 
             data = new short[chan_count][];
 

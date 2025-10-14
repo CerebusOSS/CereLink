@@ -110,10 +110,10 @@ void CbSdkNative::PrefetchData(uint16_t &chan_count, uint32_t* samps_per_chan, u
 	}
 }
 
-// Receives a pointer to an array of pointers from C# to copy data to. 
+// Receives a pointer to an array of pointers from C# to copy data to.
 // We just need to pass the pointer to p_trialCont->samples.
-// Whether the data are double or int16 will be determined in C#. 
-void CbSdkNative::TransferData(void** buffer, uint32_t* timestamp)
+// Whether the data are double or int16 will be determined in C#.
+void CbSdkNative::TransferData(void** buffer, PROCTIME* timestamp)
 {
 	if (timestamp != NULL) *timestamp = p_trialCont->time;
 	if (p_trialCont->count > 0)
@@ -212,7 +212,7 @@ void CbSdkNative_PrefetchData(CbSdkNative* pCbSdk, uint16_t &chan_count, uint32_
 		
 }
 
-void CbSdkNative_TransferData(CbSdkNative* pCbSdk, void** buffer, uint32_t* timestamp)
+void CbSdkNative_TransferData(CbSdkNative* pCbSdk, void** buffer, PROCTIME* timestamp)
 {
 	if (pCbSdk != NULL)
 		pCbSdk->TransferData(buffer, timestamp);
