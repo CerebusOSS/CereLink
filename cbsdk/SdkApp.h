@@ -36,7 +36,7 @@ public:
     void ProcessIncomingPacket(const cbPKT_GENERIC * pPkt) override; // Process incoming packets
     uint32_t GetInstInfo() const {return m_instInfo;}
     cbRESULT GetLastCbErr() const {return m_lastCbErr;}
-    void Open(uint32_t id, int nInPort = cbNET_UDP_PORT_BCAST, int nOutPort = cbNET_UDP_PORT_CNT,
+    void Open(uint32_t nInstance, int nInPort = cbNET_UDP_PORT_BCAST, int nOutPort = cbNET_UDP_PORT_CNT,
         LPCSTR szInIP = cbNET_UDP_ADDR_INST, LPCSTR szOutIP = cbNET_UDP_ADDR_CNT, int nRecBufSize = NSP_REC_BUF_SIZE, int nRange = 0);
 private:
     void OnPktGroup(const cbPKT_GROUP * pkt);
@@ -45,8 +45,8 @@ private:
     void OnPktLog(const cbPKT_LOG * pPkt);
     void OnPktTrack(const cbPKT_VIDEOTRACK * pPkt);
 
-    void LateBindCallback(cbSdkCallbackType callbacktype);
-    void LinkFailureEvent(cbSdkPktLostEvent & lost);
+    void LateBindCallback(cbSdkCallbackType callbackType);
+    void LinkFailureEvent(const cbSdkPktLostEvent & lost);
     void InstInfoEvent(uint32_t instInfo);
     cbSdkResult unsetTrialConfig(cbSdkTrialType type);
 
@@ -56,62 +56,62 @@ public:
     // ---------------------------
 
     void SdkAsynchCCF(ccf::ccfResult res, LPCSTR szFileName, cbStateCCF state, uint32_t nProgress);
-    cbSdkResult SdkGetVersion(cbSdkVersion *version);
+    cbSdkResult SdkGetVersion(cbSdkVersion *version) const;
     cbSdkResult SdkReadCCF(cbSdkCCF * pData, const char * szFileName, bool bConvert, bool bSend, bool bThreaded);  // From file or device if szFileName is null
-    cbSdkResult SdkFetchCCF(cbSdkCCF * pData);  // from device only
+    cbSdkResult SdkFetchCCF(cbSdkCCF * pData) const;  // from device only
     cbSdkResult SdkWriteCCF(cbSdkCCF * pData, const char * szFileName, bool bThreaded);  // to file or device if szFileName is null
     cbSdkResult SdkSendCCF(cbSdkCCF * pData, bool bAutosort = false);  // to device only
     cbSdkResult SdkOpen(uint32_t nInstance, cbSdkConnectionType conType, cbSdkConnection con);
-    cbSdkResult SdkGetType(cbSdkConnectionType * conType, cbSdkInstrumentType * instType);
+    cbSdkResult SdkGetType(cbSdkConnectionType * conType, cbSdkInstrumentType * instType) const;
     cbSdkResult SdkUnsetTrialConfig(cbSdkTrialType type);
     cbSdkResult SdkClose();
-    cbSdkResult SdkGetTime(PROCTIME * cbtime);
-    cbSdkResult SdkGetSpkCache(uint16_t channel, cbSPKCACHE **cache);
+    cbSdkResult SdkGetTime(PROCTIME * cbtime) const;
+    cbSdkResult SdkGetSpkCache(uint16_t channel, cbSPKCACHE **cache) const;
     cbSdkResult SdkGetTrialConfig(uint32_t * pbActive, uint16_t * pBegchan, uint32_t * pBegmask, uint32_t * pBegval,
                                   uint16_t * pEndchan, uint32_t * pEndmask, uint32_t * pEndval, bool * pbDouble,
                                   uint32_t * puWaveforms, uint32_t * puConts, uint32_t * puEvents,
-                                  uint32_t * puComments, uint32_t * puTrackings, bool * pbAbsolute);
+                                  uint32_t * puComments, uint32_t * puTrackings, bool * pbAbsolute) const;
     cbSdkResult SdkSetTrialConfig(uint32_t bActive, uint16_t begchan, uint32_t begmask, uint32_t begval,
                                   uint16_t endchan, uint32_t endmask, uint32_t endval, bool bDouble,
                                   uint32_t uWaveforms, uint32_t uConts, uint32_t uEvents, uint32_t uComments, uint32_t uTrackings,
                                   bool bAbsolute);
-    cbSdkResult SdkGetChannelLabel(uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position);
-    cbSdkResult SdkSetChannelLabel(uint16_t channel, const char * label, uint32_t userflags, int32_t * position);
+    cbSdkResult SdkGetChannelLabel(uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position) const;
+    cbSdkResult SdkSetChannelLabel(uint16_t channel, const char * label, uint32_t userflags, int32_t * position) const;
     cbSdkResult SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                 cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
     cbSdkResult SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent* trialevent, cbSdkTrialCont * trialcont,
                                  cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking, unsigned long wait_for_comment_msec = 250);
     cbSdkResult SdkSetFileConfig(const char * filename, const char * comment, uint32_t bStart, uint32_t options);
-    cbSdkResult SdkGetFileConfig(char * filename, char * username, bool * pbRecording);
+    cbSdkResult SdkGetFileConfig(char * filename, char * username, bool * pbRecording) const;
     cbSdkResult SdkSetPatientInfo(const char * ID, const char * firstname, const char * lastname,
-                                  uint32_t DOBMonth, uint32_t DOBDay, uint32_t DOBYear);
-    cbSdkResult SdkInitiateImpedance();
+                                  uint32_t DOBMonth, uint32_t DOBDay, uint32_t DOBYear) const;
+    cbSdkResult SdkInitiateImpedance() const;
     cbSdkResult SdkSendPoll(const char* appname, uint32_t mode, uint32_t flags, uint32_t extra);
-    cbSdkResult SdkSendPacket(void * ppckt);
-    cbSdkResult SdkSetSystemRunLevel(uint32_t runlevel, uint32_t locked, uint32_t resetque);
-    cbSdkResult SdkGetSystemRunLevel(uint32_t * runlevel, uint32_t * runflags, uint32_t * resetque);
-    cbSdkResult SdkSetDigitalOutput(uint16_t channel, uint16_t value);
-    cbSdkResult SdkSetSynchOutput(uint16_t channel, uint32_t nFreq, uint32_t nRepeats);
-    cbSdkResult SdkExtDoCommand(cbSdkExtCmd * extCmd);
-    cbSdkResult SdkSetAnalogOutput(uint16_t channel, cbSdkWaveformData * wf, cbSdkAoutMon * mon);
+    cbSdkResult SdkSendPacket(void * ppckt) const;
+    cbSdkResult SdkSetSystemRunLevel(uint32_t runlevel, uint32_t locked, uint32_t resetque) const;
+    cbSdkResult SdkGetSystemRunLevel(uint32_t * runlevel, uint32_t * runflags, uint32_t * resetque) const;
+    cbSdkResult SdkSetDigitalOutput(uint16_t channel, uint16_t value) const;
+    cbSdkResult SdkSetSynchOutput(uint16_t channel, uint32_t nFreq, uint32_t nRepeats) const;
+    cbSdkResult SdkExtDoCommand(const cbSdkExtCmd * extCmd) const;
+    cbSdkResult SdkSetAnalogOutput(uint16_t channel, const cbSdkWaveformData * wf, const cbSdkAoutMon * mon) const;
     cbSdkResult SdkSetChannelMask(uint16_t channel, uint32_t bActive);
-    cbSdkResult SdkSetComment(uint32_t rgba, uint8_t charset, const char * comment);
-    cbSdkResult SdkSetChannelConfig(uint16_t channel, cbPKT_CHANINFO * chaninfo);
-    cbSdkResult SdkGetChannelConfig(uint16_t channel, cbPKT_CHANINFO * chaninfo);
-    cbSdkResult SdkGetSampleGroupList(uint32_t proc, uint32_t group, uint32_t *length, uint16_t *list);
-    cbSdkResult SdkGetSampleGroupInfo(uint32_t proc, uint32_t group, char *label, uint32_t *period, uint32_t *length);
-    cbSdkResult SdkSetAinpSampling(uint32_t chan, uint32_t filter, uint32_t group);
-    cbSdkResult SdkSetAinpSpikeOptions(uint32_t chan, uint32_t flags, uint32_t filter);
-    cbSdkResult SdkGetFilterDesc(uint32_t proc, uint32_t filt, cbFILTDESC * filtdesc);
-    cbSdkResult SdkGetTrackObj(char * name, uint16_t * type, uint16_t * pointCount, uint32_t id);
-    cbSdkResult SdkGetVideoSource(char * name, float * fps, uint32_t id);
-    cbSdkResult SdkSetSpikeConfig(uint32_t spklength, uint32_t spkpretrig);
-    cbSdkResult SdkGetSysConfig(uint32_t * spklength, uint32_t * spkpretrig, uint32_t * sysfreq);
-    cbSdkResult SdkSystem(cbSdkSystemType cmd);
-    cbSdkResult SdkCallbackStatus(cbSdkCallbackType callbacktype);
-    cbSdkResult SdkRegisterCallback(cbSdkCallbackType callbacktype, cbSdkCallback pCallbackFn, void * pCallbackData);
-    cbSdkResult SdkUnRegisterCallback(cbSdkCallbackType callbacktype);
-    cbSdkResult SdkAnalogToDigital(uint16_t channel, const char * szVoltsUnitString, int32_t * digital);
+    cbSdkResult SdkSetComment(uint32_t rgba, uint8_t charset, const char * comment) const;
+    cbSdkResult SdkSetChannelConfig(uint16_t channel, cbPKT_CHANINFO * chaninfo) const;
+    cbSdkResult SdkGetChannelConfig(uint16_t channel, cbPKT_CHANINFO * chaninfo) const;
+    cbSdkResult SdkGetSampleGroupList(uint32_t proc, uint32_t group, uint32_t *length, uint16_t *list) const;
+    cbSdkResult SdkGetSampleGroupInfo(uint32_t proc, uint32_t group, char *label, uint32_t *period, uint32_t *length) const;
+    cbSdkResult SdkSetAinpSampling(uint32_t chan, uint32_t filter, uint32_t group) const;
+    cbSdkResult SdkSetAinpSpikeOptions(uint32_t chan, uint32_t flags, uint32_t filter) const;
+    cbSdkResult SdkGetFilterDesc(uint32_t proc, uint32_t filt, cbFILTDESC * filtdesc) const;
+    cbSdkResult SdkGetTrackObj(char * name, uint16_t * type, uint16_t * pointCount, uint32_t id) const;
+    cbSdkResult SdkGetVideoSource(char * name, float * fps, uint32_t id) const;
+    cbSdkResult SdkSetSpikeConfig(uint32_t spklength, uint32_t spkpretrig) const;
+    cbSdkResult SdkGetSysConfig(uint32_t * spklength, uint32_t * spkpretrig, uint32_t * sysfreq) const;
+    cbSdkResult SdkSystem(cbSdkSystemType cmd) const;
+    cbSdkResult SdkCallbackStatus(cbSdkCallbackType callbackType) const;
+    cbSdkResult SdkRegisterCallback(cbSdkCallbackType callbackType, cbSdkCallback pCallbackFn, void * pCallbackData);
+    cbSdkResult SdkUnRegisterCallback(cbSdkCallbackType callbackType);
+    cbSdkResult SdkAnalogToDigital(uint16_t channel, const char * szVoltsUnitString, int32_t * digital) const;
 
 
 protected:
@@ -124,20 +124,20 @@ protected:
     std::mutex m_connectLock;
 
     // Which channels to listen to
-    bool m_bChannelMask[cbMAXCHANS];
-    cbPKT_VIDEOSYNCH m_lastPktVideoSynch; // last video synchronization packet
+    bool m_bChannelMask[cbMAXCHANS]{};
+    cbPKT_VIDEOSYNCH m_lastPktVideoSynch{}; // last video synchronization packet
 
-    cbSdkPktLostEvent m_lastLost; // Last lost event
-    cbSdkInstInfo m_lastInstInfo; // Last instrument info event
+    cbSdkPktLostEvent m_lastLost{}; // Last lost event
+    cbSdkInstInfo m_lastInstInfo{}; // Last instrument info event
 
     // Lock for accessing the callbacks
     std::mutex m_lockCallback;
     // Actual registered callbacks
-    cbSdkCallback m_pCallback[CBSDKCALLBACK_COUNT];
-    void * m_pCallbackParams[CBSDKCALLBACK_COUNT];
+    cbSdkCallback m_pCallback[CBSDKCALLBACK_COUNT]{};
+    void * m_pCallbackParams[CBSDKCALLBACK_COUNT]{};
     // Late bound versions are internal
-    cbSdkCallback m_pLateCallback[CBSDKCALLBACK_COUNT];
-    void * m_pLateCallbackParams[CBSDKCALLBACK_COUNT];
+    cbSdkCallback m_pLateCallback[CBSDKCALLBACK_COUNT]{};
+    void * m_pLateCallbackParams[CBSDKCALLBACK_COUNT]{};
 
     /////////////////////////////////////////////////////////////////////////////
     // Declarations for tracking the beginning and end of trials
@@ -184,7 +184,7 @@ protected:
     /////////////////////////////////////////////////////////////////////////////
     // Declarations for the data caching structures and variables
 
-    // Structure to store all of the variables associated with the continuous data
+    // Structure to store all the variables associated with the continuous data
     struct ContinuousData
     {
         uint32_t size; // default is cbSdk_CONTINUOUS_DATA_SAMPLES
@@ -192,14 +192,14 @@ protected:
         int16_t * continuous_channel_data[cbNUM_ANALOG_CHANS];
         uint32_t write_index[cbNUM_ANALOG_CHANS];                 // next index location to write data
         uint32_t write_start_index[cbNUM_ANALOG_CHANS];           // index location that writing began
-        uint32_t read_end_index[cbNUM_ANALOG_CHANS];              // index location that reading will end. set in InitTrialData and used in GetTrialData
+        uint32_t read_end_index[cbNUM_ANALOG_CHANS];              // The last known safe read index. Reset to the write_index on init;
 
         void reset()
         {
             if (size)
             {
                 for (uint32_t i = 0; i < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++i)
-                    memset(continuous_channel_data[i], 0, size * sizeof(int16_t));
+                    std::fill_n(continuous_channel_data[i], size, 0);
             }
             memset(current_sample_rates, 0, sizeof(current_sample_rates));
             memset(write_index, 0, sizeof(write_index));
@@ -208,7 +208,7 @@ protected:
 
     } * m_CD;
 
-    // Structure to store all of the variables associated with the event data
+    // Structure to store all the variables associated with the event data
     struct EventData
     {
         // We use cbMAXCHANS to size the arrays,
@@ -242,7 +242,7 @@ protected:
 
     } * m_ED;
 
-    // Structure to store all of the variables associated with the comment data
+    // Structure to store all the variables associated with the comment data
     struct CommentData
     {
         uint32_t size; // default is 0
@@ -265,7 +265,7 @@ protected:
 
     } * m_CMT;
 
-    // Structure to store all of the variables associated with the video tracking data
+    // Structure to store all the variables associated with the video tracking data
     struct TrackingData
     {
         uint32_t size; // default is 0

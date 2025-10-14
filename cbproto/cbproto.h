@@ -9,7 +9,7 @@
 ///
 /// @brief      Definition of the Neuromatic library protocols.
 ///
-/// This code library defines an standardized control and data acess interface for microelectrode
+/// This code library defines a standardized control and data access interface for microelectrode
 /// neurophysiology equipment.  The interface allows several applications to simultaneously access
 /// the control and data stream for the equipment through a central control application.  This
 /// central application governs the flow of information to the user interface applications and
@@ -27,7 +27,7 @@
 /// sending and receiving configuration and data packets through the Central Control Application.
 /// In order to aid efficiency, the Central Control App caches information regarding hardware
 /// configuration so that multiple applications do not need to request hardware configuration
-/// packets from the system.  The Neuromatic Library provides high-level functions for retreiving
+/// packets from the system.  The Neuromatic Library provides high-level functions for retrieving
 /// data from this cache and high-level functions for transmitting configuration packets to the
 /// hardware.  Neuromatic applications must provide a callback function for receiving data and
 /// configuration acknowledgement packets.
@@ -40,7 +40,7 @@
 /// On start, central sends cbPKT_SYSINFO with the runlevel set to cbRUNLEVEL_RUNNING
 /// The NSP responds with its current runlevel (cbRUNLEVEL_STARTUP, STANDBY, or RUNNING)
 /// At 0.5 seconds Central checks the returned runlevel and sets a flag if it is STARTUP for other
-///     processing such as auto loading a CCF file.  Then it sends a cbRUNLEVEL_HARDRESET
+///     processing such as autoloading a CCF file.  Then it sends a cbRUNLEVEL_HARDRESET
 /// At 1.0 seconds Central sends a generic packet with the type set to cbPKTTYPE_REQCONFIGALL
 /// The NSP responds with a boatload of configuration packets
 /// At 2.0 seconds, Central sets runlevel to cbRUNLEVEL_RUNNING
@@ -144,7 +144,7 @@
 //                          cbPKT_SS_NOISE_LINE
 //                          cbPKT_SS_STATISTICS
 //
-//  2.0 - 11 Apr 2005 kfk - Redifined the Spike packet to include classificaiton data
+//  2.0 - 11 Apr 2005 kfk - Redefined the Spike packet to include classification data
 //
 //  1.8 - 27 Mar 2006 ab  - Added cbPKT_SS_STATUS
 //  1.7 -  7 Feb 2006 hls - Added anagain to cbSCALING structure
@@ -160,7 +160,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// Fixed storage size definitions for delcared variables
+// Fixed storage size definitions for declared variables
 // (includes conditional testing so that there is no clash with win32 headers)
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -257,14 +257,14 @@ typedef int16_t           A2D_DATA;
 #define cbMAXSITEPLOTS ((cbMAXSITES - 1) * cbMAXSITES / 2)  // combination of 2 out of n is n!/((n-2)!2!) -- the only issue is the display
 
 // Channel Definitions
-#define cbNUM_ANAIN_CHANS     16 * cbMAXPROCS                                       // #Analog Input channels
+#define cbNUM_ANAIN_CHANS     (16 * cbMAXPROCS)                         // #Analog Input channels
 #define cbNUM_ANALOG_CHANS    (cbNUM_FE_CHANS + cbNUM_ANAIN_CHANS)      // Total Analog Inputs
-#define cbNUM_ANAOUT_CHANS    4 * cbMAXPROCS                                         // #Analog Output channels
-#define cbNUM_AUDOUT_CHANS    2 * cbMAXPROCS                                         // #Audio Output channels
+#define cbNUM_ANAOUT_CHANS    (4 * cbMAXPROCS)                          // #Analog Output channels
+#define cbNUM_AUDOUT_CHANS    (2 * cbMAXPROCS)                          // #Audio Output channels
 #define cbNUM_ANALOGOUT_CHANS (cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS) // Total Analog Output
-#define cbNUM_DIGIN_CHANS     1 * cbMAXPROCS                                         // #Digital Input channels
-#define cbNUM_SERIAL_CHANS    1 * cbMAXPROCS                                         // #Serial Input channels
-#define cbNUM_DIGOUT_CHANS    4 * cbMAXPROCS                                         // #Digital Output channels
+#define cbNUM_DIGIN_CHANS     (1 * cbMAXPROCS)                          // #Digital Input channels
+#define cbNUM_SERIAL_CHANS    (1 * cbMAXPROCS)                          // #Serial Input channels
+#define cbNUM_DIGOUT_CHANS    (4 * cbMAXPROCS)                          // #Digital Output channels
 
 // Total of all channels = 156
 #define cbMAXCHANS            (cbNUM_ANALOG_CHANS +  cbNUM_ANALOGOUT_CHANS + cbNUM_DIGIN_CHANS + cbNUM_SERIAL_CHANS + cbNUM_DIGOUT_CHANS)
@@ -320,7 +320,7 @@ enum UnitClassification
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// Library Result defintions
+// Library Result definitions
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -360,8 +360,8 @@ typedef unsigned int cbRESULT;
 //
 // Library Initialization Functions
 //
-// The standard procedure for intializing and using this library is to:
-//   1) Intialize the library with cbOpen().
+// The standard procedure for initializing and using this library is to:
+//   1) Initialize the library with cbOpen().
 //   2) Obtain system and channel configuration info with cbGet* commands.
 //   3) Configure the system channels with appropriate cbSet* commands.
 //   4) Receive data through the callback function
@@ -371,7 +371,7 @@ typedef unsigned int cbRESULT;
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-uint32_t cbVersion(void);
+uint32_t cbVersion();
 // Returns the major/minor revision of the current library in the upper/lower uint16_t fields.
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -484,7 +484,7 @@ typedef struct {
 typedef struct {
     uint32_t idcode;      //!< manufacturer part and rom ID code of the Signal Processor
     char   ident[cbLEN_STR_IDENT];   //!< ID string with the equipment name of the Signal Processor
-    uint32_t chanbase;    //!< lowest channel identifier claimed by this processor
+    uint32_t chanbase;    //!< The lowest channel identifier claimed by this processor
     uint32_t chancount;   //!< number of channel identifiers claimed by this processor
     uint32_t bankcount;   //!< number of signal banks supported by the processor
     uint32_t groupcount;  //!< number of sample groups supported by the processor
@@ -501,7 +501,7 @@ typedef struct {
     uint32_t idcode;     //!< manufacturer part and rom ID code of the module addressed to this bank
     char   ident[cbLEN_STR_IDENT];  //!< ID string with the equipment name of the Signal Bank hardware module
     char   label[cbLEN_STR_LABEL];  //!< Label on the instrument for the signal bank, eg "Analog In"
-    uint32_t chanbase;   //!< lowest channel identifier claimed by this bank
+    uint32_t chanbase;   //!< The lowest channel identifier claimed by this bank
     uint32_t chancount;  //!< number of channel identifiers claimed by this bank
 } cbBANKINFO;
 
@@ -661,7 +661,7 @@ typedef struct {
 //
 // This system forks the signal into 2 separate streams: a continuous stream and a spike stream.
 // All simpler systems are derived from this structure and unincluded elements are bypassed or
-// ommitted, for example the structure of the NSAS neural channels would be:
+// omitted, for example the structure of the NSAS neural channels would be:
 //
 //   Input with --------+-- Spike Processing       ( NOTE: the physical filter is tuned )
 //    physical          |                          (   for spikes and spike processing  )
@@ -689,7 +689,7 @@ typedef struct {
 // etc and they are limited to 8 ASCII characters for description.
 //
 // The anamin and anamax represent the min and max values of the analog signal.  The digmin and
-// digmax values are their cooresponding converted digital values.  If the signal is inverted in
+// digmax values are their corresponding converted digital values.  If the signal is inverted in
 // the scaling conversion, the digmin value will be greater than the digmax value.
 //
 // For example if a +/-5V signal is mapped into a +/-1024 digital value, the preferred unit
@@ -699,8 +699,8 @@ typedef struct {
 ///
 /// Structure used in cbPKT_CHANINFO
 typedef struct {
-    int16_t   digmin;     //!< digital value that cooresponds with the anamin value
-    int16_t   digmax;     //!< digital value that cooresponds with the anamax value
+    int16_t   digmin;     //!< digital value that corresponds with the anamin value
+    int16_t   digmax;     //!< digital value that corresponds with the anamax value
     int32_t   anamin;     //!< the minimum analog value present in the signal
     int32_t   anamax;     //!< the maximum analog value present in the signal
     int32_t   anagain;    //!< the gain applied to the default analog values to get the analog values
@@ -816,7 +816,7 @@ typedef struct {
 #define cbRUNLEVEL_UPDATE   78
 #define cbPKTTYPE_UPDATESET 0xF1
 #define cbPKTTYPE_UPDATEREP 0x71
-#define cbPKTDLEN_UPDATE    (sizeof(cbPKT_UPDATE)/4)-2
+#define cbPKTDLEN_UPDATE    ((sizeof(cbPKT_UPDATE)/4)-2)
 
 /// @brief PKT Set:0xF1 Rep:0x71 - Update Packet
 ///
@@ -881,7 +881,7 @@ typedef struct {
 
 
 /// Note: cbMAX_PNTS must be an even number
-#define cbMAX_PNTS  128 // make large enough to track longest possible - spike width in samples
+#define cbMAX_PNTS  128 // spike width in samples; should be long enough for widest possible spike waveform
 
 #define cbPKTDLEN_SPK   ((sizeof(cbPKT_SPK)/4) - cbPKT_HEADER_32SIZE)
 #define cbPKTDLEN_SPKSHORT (cbPKTDLEN_SPK - ((sizeof(int16_t)*cbMAX_PNTS)/4))
@@ -940,7 +940,7 @@ typedef struct {
 #define cbNPLAY_FILE_NEV23           (3 << 8)   // Nev 2.3 file
 #define cbNPLAY_FILE_NEV30           (4 << 8)   // Nev 3.0 file
 // nPlay commands and status changes (cbPKT_NPLAY.mode)
-#define cbNPLAY_FNAME_LEN            cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - 40   //!< length of the file name (with terminating null) Note: if changing info in the packet, change the constant
+#define cbNPLAY_FNAME_LEN            (cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - 40)   //!< length of the file name (with terminating null) Note: if changing info in the packet, change the constant
 #define cbNPLAY_MODE_NONE            0    //!< no command (parameters)
 #define cbNPLAY_MODE_PAUSE           1    //!< PC->NPLAY pause if "val" is non-zero, un-pause otherwise
 #define cbNPLAY_MODE_SEEK            2    //!< PC->NPLAY seek to time "val"
@@ -976,7 +976,7 @@ typedef struct {
     PROCTIME val;         //!< Used for current time to traverse, file index, file version, ...
     uint16_t mode;          //!< cbNPLAY_MODE_* command to nPlay
     uint16_t flags;         //!< cbNPLAY_FLAG_* status of nPlay
-    float speed;          //!< positive means fast forward, negative means rewind, 0 means go as fast as you can.
+    float speed;          //!< positive means fast-forward, negative means rewind, 0 means go as fast as you can.
     char  fname[cbNPLAY_FNAME_LEN];   //!< This is a String with the file name.
 } cbPKT_NPLAY;
 
@@ -1226,7 +1226,7 @@ typedef struct {
     uint32_t proc;        //!< index of the bank
     uint32_t idcode;      //!< manufacturer part and rom ID code of the Signal Processor
     char   ident[cbLEN_STR_IDENT];   //!< ID string with the equipment name of the Signal Processor
-    uint32_t chanbase;    //!< lowest channel number of channel id range claimed by this processor
+    uint32_t chanbase;    //!< The lowest channel number of channel id range claimed by this processor
     uint32_t chancount;   //!< number of channel identifiers claimed by this processor
     uint32_t bankcount;   //!< number of signal banks supported by the processor
     uint32_t groupcount;  //!< number of sample groups supported by the processor
@@ -1251,7 +1251,7 @@ typedef struct {
     uint32_t idcode;      //!< manufacturer part and rom ID code of the module addressed to this bank
     char   ident[cbLEN_STR_IDENT];   //!< ID string with the equipment name of the Signal Bank hardware module
     char   label[cbLEN_STR_LABEL];   //!< Label on the instrument for the signal bank, eg "Analog In"
-    uint32_t chanbase;    //!< lowest channel number of channel id range claimed by this bank
+    uint32_t chanbase;    //!< The lowest channel number of channel id range claimed by this bank
     uint32_t chancount;   //!< number of channel identifiers claimed by this bank
 } cbPKT_BANKINFO;
 
@@ -1302,7 +1302,7 @@ typedef struct {
 
     uint32_t chan;           //!< actual channel id of the channel being configured
 
-    // For all of the values that follow
+    // For all the values that follow
     // 0 = NOT change value; nonzero = reset to factory defaults
 
     uint8_t  label;          //!< Channel label
@@ -1713,7 +1713,7 @@ typedef struct {
 
 /// @brief PKT Set:0xD0 Rep:0x50 - Get the spike sorting model for all channels (Histogram Peak Count)
 ///
-/// This packet says, "Give me all of the model". In response, you will get a series of cbPKTTYPE_MODELREP
+/// This packet says, "Give me all the model". In response, you will get a series of cbPKTTYPE_MODELREP
 typedef struct {
     cbPKT_HEADER cbpkt_header;  //!< packet header
 
