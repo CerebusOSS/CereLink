@@ -25,7 +25,7 @@
 
 #endif
 
-#include "cbsdk.h"
+#include <cerelink/cbsdk.h>
 #include "SpkDisp.h"
 
 // CSDKSampleDlg dialog

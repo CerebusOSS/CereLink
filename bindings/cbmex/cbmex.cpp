@@ -30,7 +30,7 @@
 #include "debugmacs.h"
 
 #include "cbmex.h"
-#include "cbsdk.h"
+#include <cerelink/cbsdk.h>
 #include "cbHwlibHi.h"
 
 #ifdef _DEBUG

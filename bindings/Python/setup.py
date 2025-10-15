@@ -25,8 +25,6 @@ def get_cbsdk_path(root):
 
 
 def get_extras():
-    arch = "64" if "64bit" in platform.architecture() else ""
-
     # Find all the extra include files, libraries, and link arguments we need to install.
     cur = os.path.dirname(os.path.abspath(__file__))
     root = os.path.abspath(os.path.join(cur, "..", ".."))

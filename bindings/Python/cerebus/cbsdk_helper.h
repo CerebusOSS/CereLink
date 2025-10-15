@@ -10,7 +10,7 @@
 #ifndef CBHELPER_H
 #define CBHELPER_H
 
-#include "cbsdk.h"
+#include <cerelink/cbsdk.h>
 
 /* The following are already defined in cbsdk.h
  // #define cbSdk_CONTINUOUS_DATA_SAMPLES 102400 // multiple of 4096

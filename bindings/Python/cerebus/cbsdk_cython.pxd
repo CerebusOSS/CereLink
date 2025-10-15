@@ -1,11 +1,11 @@
-'''
+"""
 @date March 9, 2014
 
 @author: dashesy
 
 Purpose: Cython interface for cbsdk_small
 
-'''
+"""
 
 from libc.stdint cimport uint32_t, int32_t, uint16_t, int16_t, uint8_t
 from libcpp cimport bool
@@ -13,7 +13,7 @@ from libcpp cimport bool
 cdef extern from "stdint.h":
     ctypedef unsigned long long uint64_t
 
-cdef extern from "cbproto.h":
+cdef extern from "cerelink/cbproto.h":
     ctypedef uint64_t PROCTIME  # Will be uint32_t or uint64_t depending on CBPROTO_311, but we detect size at runtime
 
     cdef char* cbNET_UDP_ADDR_INST  "cbNET_UDP_ADDR_INST"   # Cerebus default address
@@ -204,7 +204,7 @@ cdef extern from "cbproto.h":
         uint32_t    valid                           # How many packets have come in since the last configuration
         cbPKT_SPK   spkpkt[cbPKT_SPKCACHEPKTCNT+0]  # Circular buffer of the cached spikes
 
-cdef extern from "cbsdk.h":
+cdef extern from "cerelink/cbsdk.h":
 
     cdef int cbSdk_CONTINUOUS_DATA_SAMPLES = 102400
     cdef int cbSdk_EVENT_DATA_SAMPLES = (2 * 8192)
