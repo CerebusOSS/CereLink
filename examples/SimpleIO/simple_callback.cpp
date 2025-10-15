@@ -7,7 +7,7 @@
 #define INST 0
 
 
-void handleResult(cbSdkResult res)
+void handleResult(const cbSdkResult res)
 {
     switch (res)
     {
@@ -86,18 +86,18 @@ void chaninfo_callback(uint32_t nInstance, const cbSdkPktType type, const void* 
 
 
 int main(int argc, char *argv[]) {
-    LPCSTR inst_ip = "";
+    auto inst_ip = "";
     int inst_port = cbNET_UDP_PORT_CNT;
-    LPCSTR client_ip = "";
+    auto client_ip = "";
     // Parse command line arguments.
     {
         if (argc > 1 && argv[1][0] != '-') {inst_ip = argv[1];}
-        if (argc > 2 && argv[2][0] != '-') {inst_port = strtol(argv[2], NULL, 10);}
+        if (argc > 2 && argv[2][0] != '-') {inst_port = strtol(argv[2], nullptr, 10);}
         if (argc > 3 && argv[3][0] != '-') { client_ip = argv[3]; }
     }
 
-    cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
-    cbSdkConnection con = cbSdkConnection();
+    const cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
+    auto con = cbSdkConnection();
     con.szOutIP = inst_ip;
     con.nOutPort = inst_port;
     con.szInIP = client_ip;

@@ -112,7 +112,7 @@ void handleResult(cbSdkResult res)
 }
 
 
-cbSdkVersion getVersion(void)
+cbSdkVersion getVersion()
 {
     // Library version can be read even before library open (return value is a warning)
     //  actual NSP version however needs library to be open
@@ -131,14 +131,14 @@ cbSdkVersion getVersion(void)
 
 // Author & Date:   Ehsan Azar    24 Oct 2012
 // Purpose: Test opening the library
-cbSdkResult open(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
+cbSdkResult open(const LPCSTR inst_ip, const int inst_port, const LPCSTR client_ip)
 {
     // Try to get the version. Should be a warning because we are not yet open.
     cbSdkVersion ver = getVersion();
 
     // Open the device using default connection type.
     cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
-    cbSdkConnection con = cbSdkConnection();
+    auto con = cbSdkConnection();
     con.szOutIP = inst_ip;
     con.nOutPort = inst_port;
     con.szInIP = client_ip;
@@ -160,9 +160,9 @@ cbSdkResult open(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
         //  	printf("Unable to open UDP interface to nPlay\n");
 
 
-        if (conType < 0 || conType > CBSDKCONNECTION_CLOSED)
+        if (conType > CBSDKCONNECTION_CLOSED)
             conType = CBSDKCONNECTION_COUNT;
-        if (instType < 0 || instType > CBSDKINSTRUMENT_COUNT)
+        if (instType > CBSDKINSTRUMENT_COUNT)
             instType = CBSDKINSTRUMENT_COUNT;
 
         char strConnection[CBSDKCONNECTION_COUNT + 1][8] = {"Default", "Central", "Udp", "Closed", "Unknown"};
@@ -180,9 +180,9 @@ cbSdkResult open(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
 
 // Author & Date:   Ehsan Azar    25 Oct 2012
 // Purpose: Test closing the library
-cbSdkResult close(void)
+cbSdkResult close()
 {
-    cbSdkResult res = cbSdkClose(INST);
+    const cbSdkResult res = cbSdkClose(INST);
     if (res == CBSDKRESULT_SUCCESS)
     {
         printf("Interface closed successfully\n");
@@ -207,9 +207,8 @@ int main(int argc, char *argv[])
         return 1;
     }
     if (argc > 2) {inst_ip = argv[2];}
-    if (argc > 3) {inst_port = strtol(argv[3], NULL, 10);}
-    cbSdkResult  res;
-    res = open(inst_ip, inst_port, client_ip);
+    if (argc > 3) {inst_port = strtol(argv[3], nullptr, 10);}
+    cbSdkResult res = open(inst_ip, inst_port, client_ip);
     handleResult(res);
 
     cbSdkCCF data;

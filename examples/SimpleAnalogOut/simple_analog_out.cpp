@@ -27,7 +27,7 @@
 #define INST 0
 
 
-void handleResult(cbSdkResult res)
+void handleResult(const cbSdkResult res)
 {
 	switch (res)
 	{
@@ -92,7 +92,7 @@ void handleResult(cbSdkResult res)
 }
 
 
-cbSdkVersion getVersion(void)
+cbSdkVersion getVersion()
 {
 	// Library version can be read even before library open (return value is a warning)
 	//  actual NSP version however needs library to be open
@@ -111,7 +111,7 @@ cbSdkVersion getVersion(void)
 
 // Author & Date:   Ehsan Azar    24 Oct 2012
 // Purpose: Test openning the library
-cbSdkResult open(void)
+cbSdkResult open()
 {
     // Try to get the version. Should be a warning because we are not yet open.
     cbSdkVersion ver = getVersion();
@@ -133,11 +133,10 @@ cbSdkResult open(void)
 		handleResult(res);
 		// if (instType == CBSDKINSTRUMENT_NPLAY || instType == CBSDKINSTRUMENT_REMOTENPLAY)
 		//  	printf("Unable to open UDP interface to nPlay\n");
-        
 
-        if (conType < 0 || conType > CBSDKCONNECTION_CLOSED)
+        if (conType > CBSDKCONNECTION_CLOSED)
             conType = CBSDKCONNECTION_COUNT;
-        if (instType < 0 || instType > CBSDKINSTRUMENT_COUNT)
+        if (instType > CBSDKINSTRUMENT_COUNT)
             instType = CBSDKINSTRUMENT_COUNT;
 
         char strConnection[CBSDKCONNECTION_COUNT + 1][8] = {"Default", "Central", "Udp", "Closed", "Unknown"};
@@ -154,7 +153,7 @@ cbSdkResult open(void)
 }
 
 
-void getConfig(void)
+void getConfig()
 {
 	uint32_t proc = 1;
 	uint32_t nChansInGroup;
@@ -170,7 +169,7 @@ void getConfig(void)
 	}
 }
 
-void setConfig(void)
+void setConfig()
 {
 	uint32_t bActive = false;
 	uint16_t Begchan = 0;
@@ -194,22 +193,22 @@ void setConfig(void)
 	handleResult(res);
 }
 
-void getTime(void)
+void getTime()
 {
 	PROCTIME cbtime = 0;
-	cbSdkResult res = cbSdkGetTime(INST, &cbtime);
+	const cbSdkResult res = cbSdkGetTime(INST, &cbtime);
 	if (res == CBSDKRESULT_SUCCESS)
 	{
-		printf("cbSdkGetTime returned %d\n", cbtime);
+		printf("cbSdkGetTime returned %llu\n", static_cast<uint64_t>(cbtime));
 	}
 	handleResult(res);
 }
 
-void setAnaout(uint16_t channel)
+void setAnaout(const uint16_t channel)
 {
-    cbSdkWaveformData * wf = nullptr;
-    cbSdkAoutMon mon = { channel, false, false };
-    cbSdkResult res = cbSdkSetAnalogOutput(INST, 277, wf, &mon);
+    const cbSdkWaveformData * wf = nullptr;
+    const cbSdkAoutMon mon = { channel, false, false };
+    const cbSdkResult res = cbSdkSetAnalogOutput(INST, 277, wf, &mon);
     if (res != CBSDKRESULT_SUCCESS)
     {
         printf("Unable to cbSdkSetAnalogOutput audio1 to monitor channel %d.\n", channel);
@@ -220,9 +219,9 @@ void setAnaout(uint16_t channel)
 
 // Author & Date:   Ehsan Azar    25 Oct 2012
 // Purpose: Test closing the library
-cbSdkResult close(void)
+cbSdkResult close()
 {
-    cbSdkResult res = cbSdkClose(INST);
+    const cbSdkResult res = cbSdkClose(INST);
 	if (res == CBSDKRESULT_SUCCESS)
 	{
 		printf("Interface closed successfully\n");

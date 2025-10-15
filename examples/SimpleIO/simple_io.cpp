@@ -116,12 +116,12 @@ void handleResult(cbSdkResult res)
     }
 }
 
-cbSdkVersion getVersion(void)
+cbSdkVersion getVersion()
 {
     // Library version can be read even before library open (return value is a warning)
     //  actual NSP version however needs library to be open
     cbSdkVersion ver;
-    cbSdkResult res = cbSdkGetVersion(INST, &ver);
+    const cbSdkResult res = cbSdkGetVersion(INST, &ver);
     if (res != CBSDKRESULT_SUCCESS)
     {
         printf("Unable to determine instrument version\n");
@@ -134,14 +134,14 @@ cbSdkVersion getVersion(void)
     return ver;
 }
 
-cbSdkResult open(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
+cbSdkResult open(const LPCSTR inst_ip, const int inst_port, const LPCSTR client_ip)
 {
     // Try to get the version. Should be a warning because we are not yet open.
     cbSdkVersion ver = getVersion();
 
     // Open the device using default connection type.
     cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
-    cbSdkConnection con = cbSdkConnection();
+    auto con = cbSdkConnection();
     con.szOutIP = inst_ip;
     con.nOutPort = inst_port;
     con.szInIP = client_ip;
@@ -163,9 +163,9 @@ cbSdkResult open(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
         //  	printf("Unable to open UDP interface to nPlay\n");
 
 
-        if (conType < 0 || conType > CBSDKCONNECTION_CLOSED)
+        if (conType > CBSDKCONNECTION_CLOSED)
             conType = CBSDKCONNECTION_COUNT;
-        if (instType < 0 || instType > CBSDKINSTRUMENT_COUNT)
+        if (instType > CBSDKINSTRUMENT_COUNT)
             instType = CBSDKINSTRUMENT_COUNT;
 
         char strConnection[CBSDKCONNECTION_COUNT + 1][8] = {"Default", "Central", "Udp", "Closed", "Unknown"};
@@ -183,14 +183,14 @@ cbSdkResult open(LPCSTR inst_ip, int inst_port, LPCSTR client_ip)
     return res;
 }
 
-void setConfig(bool bCont, bool bEv)
+void setConfig(const bool bCont, bool bEv)
 {
     uint32_t proc = 1;
     uint32_t nChansInGroup;
     uint16_t pGroupList[cbNUM_ANALOG_CHANS];
     for (uint32_t group_ix = 1; group_ix < 7; group_ix++)
     {
-        cbSdkResult res = cbSdkGetSampleGroupList(INST, proc, group_ix, &nChansInGroup, pGroupList);
+        const cbSdkResult res = cbSdkGetSampleGroupList(INST, proc, group_ix, &nChansInGroup, pGroupList);
         if (res == CBSDKRESULT_SUCCESS)
         {
             printf("In sampling group %d, found %d channels.\n", group_ix, nChansInGroup);
@@ -202,16 +202,15 @@ void setConfig(bool bCont, bool bEv)
         // Set sample group 3 and filter 7 on the first few channels.
         // Also disable spiking.
         cbPKT_CHANINFO ch_info;
-        cbSdkResult res;
         for (int chan_ix = 0; chan_ix < cbNUM_ANALOG_CHANS; ++chan_ix) {
-            res = cbSdkSetAinpSampling(INST, chan_ix + 1, 7, chan_ix < 2 ? 3 : 0);
+            cbSdkResult res = cbSdkSetAinpSampling(INST, chan_ix + 1, 7, chan_ix < 2 ? 3 : 0);
             res = cbSdkSetAinpSpikeOptions(INST, chan_ix + 1, 0, 2);
         }
     }
     std::this_thread::sleep_for(std::chrono::seconds(2));
 }
 
-cbSdkResult close(void)
+cbSdkResult close()
 {
     cbSdkResult res = cbSdkClose(INST);
     if (res == CBSDKRESULT_SUCCESS)
@@ -228,9 +227,9 @@ cbSdkResult close(void)
 
 int main(int argc, char *argv[])
 {
-    LPCSTR inst_ip = "";
+    auto inst_ip = "";
     int inst_port = cbNET_UDP_PORT_CNT;
-    LPCSTR client_ip = "";
+    auto client_ip = "";
     bool bCont = false;
     bool bEv = false;
     bool bComm = false;
@@ -242,8 +241,7 @@ int main(int argc, char *argv[])
         if (argc > 2 && argv[2][0] != '-') {inst_port = strtol(argv[2], NULL, 10);}
         if (argc > 3 && argv[3][0] != '-') { client_ip = argv[3]; }
 
-        size_t optind;
-        for (optind = 1; optind < argc; optind++)
+        for (size_t optind = 1; optind < argc; optind++)
         {
             if (argv[optind][0] == '-')
             {
@@ -387,13 +385,13 @@ int main(int argc, char *argv[])
                     }
                 }
                 printf("\n");
-                
-                uint16_t chan_id = trialEvent->chan[ev_ix];
+
+                const uint16_t chan_id = trialEvent->chan[ev_ix];
                 uint32_t bIsDig = false;
                 cbSdkIsChanAnyDigIn(INST, chan_id, &bIsDig);
                 if (bIsDig)
                 {
-                    uint32_t n_samples = trialEvent->num_samples[ev_ix][0];
+                    const uint32_t n_samples = trialEvent->num_samples[ev_ix][0];
                     if (n_samples > 0)
                     {
                         printf("%" PRIu64 ":", static_cast<uint64_t>(event_ts[ev_ix][0][0]));
@@ -414,7 +412,7 @@ int main(int argc, char *argv[])
         {
             for (size_t chan_ix = 0; chan_ix < trialCont->count; chan_ix++)
             {
-                uint32_t n_samples = trialCont->num_samples[chan_ix];
+                const uint32_t n_samples = trialCont->num_samples[chan_ix];
                 if (cfg.bDouble) {
                     const auto [min, max] = std::minmax_element(begin(cont_double[chan_ix]), end(cont_double[chan_ix]));
                     std::cout << "chan = " << trialCont->chan[chan_ix] << ", nsamps = " << n_samples << ", min = " << *min << ", max = " << *max << '\n';
