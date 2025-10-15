@@ -25,8 +25,11 @@ endforeach()
 # TODO: Consider refactoring to use an object library instead
 add_executable(simple_cbsdk
         SimpleCBSDK/simple_cbsdk.cpp
-        ${LIB_SOURCE} ${LIB_HEADERS_MOC}
+        ${LIB_SOURCE}
 )
+if(WIN32)
+    target_compile_definitions(simple_cbsdk PRIVATE STATIC_CBSDK_LINK)
+endif()
 target_include_directories(simple_cbsdk PRIVATE
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/src/cbhwlib
@@ -53,7 +56,7 @@ IF(WIN32)
 endif(WIN32)
 
 if(NOT CMAKE_INSTALL_RPATH)
-    set(LIBDIR "../lib64")
+    set(LIBDIR "../lib")
     foreach(test_app ${TEST_SAMPLE_LIST})
         if(APPLE)
             set_property(TARGET ${test_app} APPEND
