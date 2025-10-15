@@ -78,6 +78,7 @@ target_include_directories(continuous_data_tests PRIVATE
 target_link_libraries(continuous_data_tests
     PRIVATE
         gtest
+        cbsdk_static
 )
 
 add_test(NAME continuous_data_tests COMMAND continuous_data_tests)

@@ -137,128 +137,20 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
         const auto grp_idx = group - 1;  // Convert to 0-based index
         auto& grp = m_CD->groups[grp_idx];
 
-        // Determine if we need to allocate or resize
-        bool needs_realloc = false;
-
-        if (grp.channel_data == nullptr)
+        // Check if we need to allocate or reallocate
+        if (grp.needsReallocation(chanIds, nChans))
         {
-            // First packet for this group - need to allocate
-            needs_realloc = true;
-        }
-        else
-        {
-            // Check if channel list has changed
-            if (grp.num_channels != nChans)
+            // Use existing size if already allocated, otherwise use default
+            const uint32_t buffer_size = grp.getSize() ? grp.getSize() : m_CD->default_size;
+            if (!grp.allocate(buffer_size, nChans, chanIds, rate))
             {
-                needs_realloc = true;
-            }
-            else
-            {
-                // Same count, but check if actual channels changed
-                for (uint32_t i = 0; i < nChans; ++i)
-                {
-                    if (grp.channel_ids[i] != chanIds[i])
-                    {
-                        needs_realloc = true;
-                        break;
-                    }
-                }
+                m_lockTrial.unlock();
+                return;  // Allocation failed
             }
         }
 
-        if (needs_realloc)
-        {
-            // Determine if we need more capacity
-            if (grp.capacity < nChans)
-            {
-                // Need to expand capacity
-                if (grp.channel_data)
-                {
-                    // Clean up old allocation
-                    // Note: channel_data is [size][capacity]
-                    for (uint32_t i = 0; i < grp.size; ++i)
-                    {
-                        if (grp.channel_data[i])
-                            delete[] grp.channel_data[i];
-                    }
-                    delete[] grp.channel_data;
-                    delete[] grp.channel_ids;
-                }
-
-                // Allocate new with some headroom to reduce future reallocations
-                const uint32_t new_capacity = nChans + 4;
-
-                try {
-                    // Allocate [size][capacity] layout for memcpy-friendly writes
-                    grp.channel_data = new int16_t*[grp.size];
-                    for (uint32_t i = 0; i < grp.size; ++i)
-                    {
-                        grp.channel_data[i] = new int16_t[new_capacity];
-                        std::fill_n(grp.channel_data[i], new_capacity, 0);
-                    }
-
-                    grp.channel_ids = new uint16_t[new_capacity];
-                    grp.capacity = new_capacity;
-
-                    // Allocate timestamps if not already allocated
-                    if (!grp.timestamps)
-                    {
-                        grp.timestamps = new PROCTIME[grp.size];
-                        std::fill_n(grp.timestamps, grp.size, 0);
-                    }
-                } catch (...) {
-                    // Allocation failed - cleanup partial allocation
-                    if (grp.channel_data)
-                    {
-                        for (uint32_t i = 0; i < grp.size; ++i)
-                        {
-                            if (grp.channel_data[i])
-                                delete[] grp.channel_data[i];
-                        }
-                        delete[] grp.channel_data;
-                        grp.channel_data = nullptr;
-                    }
-                    if (grp.channel_ids)
-                    {
-                        delete[] grp.channel_ids;
-                        grp.channel_ids = nullptr;
-                    }
-                    grp.capacity = 0;
-                    m_lockTrial.unlock();
-                    return;  // Silently fail - could add error callback
-                }
-            }
-
-            // Update channel list
-            grp.num_channels = nChans;
-            memcpy(grp.channel_ids, chanIds, nChans * sizeof(uint16_t));
-
-            // Reset indices on reallocation (lose any buffered data)
-            grp.write_index = 0;
-            grp.write_start_index = 0;
-            grp.sample_rate = rate;
-        }
-
-        // Store timestamp for this sample
-        grp.timestamps[grp.write_index] = pkt->cbpkt_header.time;
-
-        // Store data for all channels in one memcpy
-        // Layout is [samples][channels], so channel_data[write_index] is a pointer to
-        // an array of channels for this sample, which perfectly matches pkt->data layout
-        memcpy(grp.channel_data[grp.write_index], pkt->data, nChans * sizeof(int16_t));
-
-        // Advance write index (circular buffer)
-        const uint32_t next_write_index = (grp.write_index + 1) % grp.size;
-
-        // Check for buffer overflow
-        if (next_write_index == grp.write_start_index)
-        {
-            // Buffer is full - overwrite oldest data
-            bOverFlow = true;
-            grp.write_start_index = (grp.write_start_index + 1) % grp.size;
-        }
-
-        grp.write_index = next_write_index;
+        // Write sample to ring buffer (returns true if overflow occurred)
+        bOverFlow = grp.writeSample(pkt->cbpkt_header.time, pkt->data, nChans);
     }
     m_lockTrial.unlock();
 
@@ -1674,21 +1566,8 @@ cbSdkResult SdkApp::SdkSetTrialConfig(const uint32_t bActive, const uint16_t beg
         try {
             m_CD = new ContinuousData;
             m_CD->default_size = uConts;
-
-            // Initialize all groups (but don't allocate buffers yet - done lazily in OnPktGroup)
-            for (auto& grp : m_CD->groups)
-            {
-                grp.size = uConts;
-                grp.sample_rate = 0;
-                grp.write_index = 0;
-                grp.write_start_index = 0;
-                grp.read_end_index = 0;
-                grp.num_channels = 0;
-                grp.capacity = 0;
-                grp.channel_ids = nullptr;
-                grp.timestamps = nullptr;
-                grp.channel_data = nullptr;
-            }
+            // Groups are initialized by their constructors
+            // Buffers are allocated lazily in OnPktGroup when first packet arrives
         } catch (...) {
             if (m_CD)
             {
@@ -1873,8 +1752,8 @@ cbSdkResult SdkApp::SdkSetTrialConfig(const uint32_t bActive, const uint16_t beg
                 m_lockTrial.lock();
                 for (auto& grp : m_CD->groups)
                 {
-                    grp.write_index = 0;
-                    grp.write_start_index = 0;
+                    grp.setWriteIndex(0);
+                    grp.setWriteStartIndex(0);
                 }
                 m_lockTrial.unlock();
             }
@@ -2065,7 +1944,7 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
         uint32_t read_end_index[cbMAXGROUPS];
         m_lockTrial.lock();
         for (uint32_t g = 0; g < cbMAXGROUPS; ++g)
-            read_end_index[g] = m_CD->groups[g].write_index;
+            read_end_index[g] = m_CD->groups[g].getWriteIndex();
         m_lockTrial.unlock();
 
         // Track where we stopped reading for each group
@@ -2095,12 +1974,13 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
             for (uint32_t g = 0; g < cbMAXGROUPS; ++g)
             {
                 const auto& grp = m_CD->groups[g];
-                if (grp.channel_data == nullptr)
+                if (!grp.isAllocated())
                     continue;  // Group not allocated
 
-                for (uint32_t i = 0; i < grp.num_channels; ++i)
+                const uint16_t* chan_ids = grp.getChannelIds();
+                for (uint32_t i = 0; i < grp.getNumChannels(); ++i)
                 {
-                    if (grp.channel_ids[i] == ch)
+                    if (chan_ids[i] == ch)
                     {
                         found_group = static_cast<int32_t>(g);
                         ch_idx_in_group = static_cast<int32_t>(i);
@@ -2121,14 +2001,14 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
             }
 
             // Found the channel - read its data
-            auto& grp = m_CD->groups[found_group];
-            trialcont->sample_rates[channel] = grp.sample_rate;
+            const auto& grp = m_CD->groups[found_group];
+            trialcont->sample_rates[channel] = grp.getSampleRate();
 
             // Calculate number of available samples
-            uint32_t read_index = grp.write_start_index;
+            uint32_t read_index = grp.getWriteStartIndex();
             auto num_samples = static_cast<int32_t>(read_end_index[found_group] - read_index);
             if (num_samples < 0)
-                num_samples += grp.size;  // Wrapped around
+                num_samples += grp.getSize();  // Wrapped around
 
             // Don't read more than allocated buffer
             num_samples = std::min(static_cast<uint32_t>(num_samples),
@@ -2138,10 +2018,11 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
             // Copy data if buffer provided
             if (void* dataptr = trialcont->samples[channel])
             {
+                const int16_t* const* channel_data = grp.getChannelData();
                 for (int i = 0; i < num_samples; ++i)
                 {
                     // Layout is [samples][channels], so index by [sample][channel]
-                    const int16_t sample_value = grp.channel_data[read_index][ch_idx_in_group];
+                    const int16_t sample_value = channel_data[read_index][ch_idx_in_group];
 
                     if (m_bTrialDouble)
                         *(static_cast<double*>(dataptr) + i) = sample_value;
@@ -2149,7 +2030,7 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
                         *(static_cast<int16_t*>(dataptr) + i) = sample_value;
 
                     read_index++;
-                    if (read_index >= grp.size)
+                    if (read_index >= grp.getSize())
                         read_index = 0;
                 }
             }
@@ -2166,7 +2047,7 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
             for (uint32_t g = 0; g < cbMAXGROUPS; ++g)
             {
                 if (group_was_read[g])
-                    m_CD->groups[g].write_start_index = final_read_index[g];
+                    m_CD->groups[g].setWriteStartIndex(final_read_index[g]);
             }
             m_lockTrial.unlock();
         }
@@ -2541,8 +2422,8 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bActive, cbSdkTrialEvent * t
             m_lockTrial.lock();
             for (uint32_t g = 0; g < cbMAXGROUPS; ++g)
             {
-                read_end_index[g] = m_CD->groups[g].write_index;
-                m_CD->groups[g].read_end_index = read_end_index[g];
+                read_end_index[g] = m_CD->groups[g].getWriteIndex();
+                m_CD->groups[g].setReadEndIndex(read_end_index[g]);
             }
             m_lockTrial.unlock();
 
@@ -2551,22 +2432,23 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bActive, cbSdkTrialEvent * t
             for (uint32_t g = 0; g < cbMAXGROUPS; ++g)
             {
                 const auto& grp = m_CD->groups[g];
-                if (grp.channel_data == nullptr)
+                if (!grp.isAllocated())
                     continue;  // Group not allocated
 
                 // Calculate available samples for this group
                 auto num_samples = static_cast<int32_t>(read_end_index[g]) -
-                                   static_cast<int32_t>(grp.write_start_index);
+                                   static_cast<int32_t>(grp.getWriteStartIndex());
                 if (num_samples < 0)
-                    num_samples += grp.size;
+                    num_samples += grp.getSize();
 
                 if (num_samples == 0)
                     continue;
 
                 // Add each channel in this group
-                for (uint32_t i = 0; i < grp.num_channels; ++i)
+                const uint16_t* chan_ids = grp.getChannelIds();
+                for (uint32_t i = 0; i < grp.getNumChannels(); ++i)
                 {
-                    const uint16_t ch = grp.channel_ids[i];  // 1-based channel ID
+                    const uint16_t ch = chan_ids[i];  // 1-based channel ID
                     if (ch == 0 || ch > cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans())
                         continue;
 
@@ -2575,7 +2457,7 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bActive, cbSdkTrialEvent * t
 
                     trialcont->chan[count] = ch;  // Actual channel number
                     trialcont->num_samples[count] = num_samples;
-                    trialcont->sample_rates[count] = grp.sample_rate;
+                    trialcont->sample_rates[count] = grp.getSampleRate();
                     count++;
 
                     if (count >= cbNUM_ANALOG_CHANS)

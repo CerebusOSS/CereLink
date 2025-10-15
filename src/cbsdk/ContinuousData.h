@@ -1,13 +1,13 @@
 //////////////////////////////////////////////////////////////////////
 /**
 * \file ContinuousData.h
-* \brief Continuous data structures for per-group allocation (internal use)
+* \brief Continuous data classes for per-group allocation (internal use)
 *
-* This header contains the refactored continuous data structures that use
+* This header contains the refactored continuous data classes that use
 * per-group allocation instead of per-channel allocation. This reduces memory
 * usage and improves cache locality.
 *
-* These structures are internal to the SDK implementation and are not part of
+* These classes are internal to the SDK implementation and are not part of
 * the public API.
 */
 
@@ -15,100 +15,98 @@
 #define CONTINUOUSDATA_H_INCLUDED
 
 #include "../../include/cerelink/cbhwlib.h"
-#include <algorithm>
-#include <cstdint>
-#include <cstring>
 
-/// Structure to store continuous data for a single sample group
-struct GroupContinuousData
+
+/// Class to store continuous data for a single sample group
+class GroupContinuousData
 {
+public:
+    /// Constructor - initializes all fields to safe defaults
+    GroupContinuousData();
+
+    /// Destructor
+    ~GroupContinuousData();
+
+    // Disable copy (to avoid accidental deep copy issues)
+    GroupContinuousData(const GroupContinuousData&) = delete;
+    GroupContinuousData& operator=(const GroupContinuousData&) = delete;
+
+    /// Check if reallocation is needed for new channel configuration
+    /// \param chan_ids Array of channel IDs from packet
+    /// \param n_chans Number of channels in packet
+    /// \return true if reallocation/update needed
+    bool needsReallocation(const uint16_t* chan_ids, uint32_t n_chans) const;
+
+    /// Allocate or reallocate buffers for this group
+    /// \param buffer_size Number of samples to buffer
+    /// \param n_chans Number of channels
+    /// \param chan_ids Array of channel IDs (1-based)
+    /// \param rate Sample rate for this group
+    /// \return true if allocation succeeded
+    bool allocate(uint32_t buffer_size, uint32_t n_chans, const uint16_t* chan_ids, uint16_t rate);
+
+    /// Write a sample to the ring buffer
+    /// \param timestamp Timestamp for this sample
+    /// \param data Pointer to channel data (nChans elements)
+    /// \param n_chans Number of channels in data
+    /// \return true if buffer overflowed (oldest data was overwritten)
+    bool writeSample(PROCTIME timestamp, const int16_t* data, uint32_t n_chans);
+
+    /// Reset ring buffer indices and zero data (preserves allocation)
+    void reset();
+
+    /// Cleanup - deallocates all memory and resets to constructor state
+    void cleanup();
+
+    // Getters for read access
+    uint32_t getSize() const { return m_size; }
+    uint16_t getSampleRate() const { return m_sample_rate; }
+    uint32_t getWriteIndex() const { return m_write_index; }
+    uint32_t getWriteStartIndex() const { return m_write_start_index; }
+    uint32_t getReadEndIndex() const { return m_read_end_index; }
+    uint32_t getNumChannels() const { return m_num_channels; }
+    uint32_t getCapacity() const { return m_capacity; }
+    const uint16_t* getChannelIds() const { return m_channel_ids; }
+    const PROCTIME* getTimestamps() const { return m_timestamps; }
+    const int16_t* const* getChannelData() const { return m_channel_data; }
+    bool isAllocated() const { return m_channel_data != nullptr; }
+
+    // Setters for write index management (used by SdkGetTrialData)
+    void setWriteStartIndex(uint32_t index) { m_write_start_index = index; }
+    void setReadEndIndex(uint32_t index) { m_read_end_index = index; }
+    void setWriteIndex(uint32_t index) { m_write_index = index; }
+
+private:
     // Buffer configuration
-    uint32_t size;                    ///< Buffer size for this group (samples)
-    uint16_t sample_rate;             ///< Sample rate for this group (Hz)
+    uint32_t m_size;                    ///< Buffer size for this group (samples)
+    uint16_t m_sample_rate;             ///< Sample rate for this group (Hz)
 
     // Ring buffer management
-    uint32_t write_index;             ///< Next write position in ring buffer
-    uint32_t write_start_index;       ///< Where reading starts (oldest unread sample)
-    uint32_t read_end_index;          ///< Last safe read position (snapshot for readers)
+    uint32_t m_write_index;             ///< Next write position in ring buffer
+    uint32_t m_write_start_index;       ///< Where reading starts (oldest unread sample)
+    uint32_t m_read_end_index;          ///< Last safe read position (snapshot for readers)
 
     // Dynamic channel management
-    uint32_t num_channels;            ///< Number of channels actually in this group
-    uint32_t capacity;                ///< Allocated capacity (may exceed num_channels for headroom)
-    uint16_t* channel_ids;            ///< Array of channel IDs (1-based, size = capacity)
+    uint32_t m_num_channels;            ///< Number of channels actually in this group
+    uint32_t m_capacity;                ///< Allocated capacity (may exceed num_channels for headroom)
+    uint16_t* m_channel_ids;            ///< Array of channel IDs (1-based, size = capacity)
 
     // Data storage (cache-friendly layout: [samples][channels])
     // This layout allows memcpy from packet data directly, as packets contain
     // all channels for a single timestamp.
-    PROCTIME* timestamps;             ///< [size] - timestamp for each sample
-    int16_t** channel_data;           ///< [size][capacity] - data indexed by [sample][channel]
-
-    /// Constructor - initializes all fields to safe defaults
-    GroupContinuousData() :
-        size(0), sample_rate(0), write_index(0), write_start_index(0),
-        read_end_index(0), num_channels(0), capacity(0),
-        channel_ids(nullptr), timestamps(nullptr), channel_data(nullptr) {}
-
-    /// Reset ring buffer indices and zero data (preserves allocation)
-    void reset()
-    {
-        if (size && timestamps)
-            std::fill_n(timestamps, size, static_cast<PROCTIME>(0));
-
-        if (channel_data)
-        {
-            // Iterate over samples (outer dimension)
-            for (uint32_t i = 0; i < size; ++i)
-            {
-                if (channel_data[i])
-                    std::fill_n(channel_data[i], capacity, static_cast<int16_t>(0));
-            }
-        }
-
-        write_index = 0;
-        write_start_index = 0;
-        read_end_index = 0;
-    }
-
-    /// Cleanup - deallocates all memory and resets to constructor state
-    void cleanup()
-    {
-        if (timestamps)
-        {
-            delete[] timestamps;
-            timestamps = nullptr;
-        }
-
-        if (channel_data)
-        {
-            // Iterate over samples (outer dimension)
-            for (uint32_t i = 0; i < size; ++i)
-            {
-                if (channel_data[i])
-                {
-                    delete[] channel_data[i];
-                    channel_data[i] = nullptr;
-                }
-            }
-            delete[] channel_data;
-            channel_data = nullptr;
-        }
-
-        if (channel_ids)
-        {
-            delete[] channel_ids;
-            channel_ids = nullptr;
-        }
-
-        num_channels = 0;
-        capacity = 0;
-    }
+    PROCTIME* m_timestamps;             ///< [size] - timestamp for each sample
+    int16_t** m_channel_data;           ///< [size][capacity] - data indexed by [sample][channel]
 };
 
-/// Structure to store all continuous data organized by sample groups
-struct ContinuousData
+
+/// Class to store all continuous data organized by sample groups
+class ContinuousData
 {
+public:
+    ContinuousData() : default_size(0) {}
+
     uint32_t default_size;                      ///< Default buffer size (cbSdk_CONTINUOUS_DATA_SAMPLES)
-    GroupContinuousData groups[cbMAXGROUPS];    ///< One struct per group (0-7)
+    GroupContinuousData groups[cbMAXGROUPS];    ///< One group per sample rate (0-7)
 
     /// Helper: Find channel index within a group
     /// \param group_idx Group index (0-7)
@@ -120,9 +118,13 @@ struct ContinuousData
             return -1;
 
         const auto& grp = groups[group_idx];
-        for (uint32_t i = 0; i < grp.num_channels; ++i)
+        const uint16_t* chan_ids = grp.getChannelIds();
+        if (!chan_ids)
+            return -1;
+
+        for (uint32_t i = 0; i < grp.getNumChannels(); ++i)
         {
-            if (grp.channel_ids[i] == channel_id)
+            if (chan_ids[i] == channel_id)
                 return static_cast<int32_t>(i);
         }
         return -1;
