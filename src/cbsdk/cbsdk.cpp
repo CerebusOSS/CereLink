@@ -1978,7 +1978,7 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
         // Take a thread-safe snapshot of the latest write indices -- that's as far as we can read.
         uint32_t read_end_index[cbNUM_ANALOG_CHANS];
         m_lockTrial.lock();
-        memcpy(read_end_index, m_CD->write_index, sizeof(read_end_index));
+        memcpy(read_end_index, m_CD->write_index, sizeof(m_CD->write_index));
         m_lockTrial.unlock();
         // We may stop reading before this write index; track how many samples we actually read.
         uint32_t final_read_index[cbNUM_ANALOG_CHANS] = {0};
@@ -2027,7 +2027,7 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
             // Update write_start_index to where we stopped reading, effectively consuming those data
             // so next call to GetTrialData will get only new data.
             m_lockTrial.lock();
-            memcpy(m_CD->write_start_index, final_read_index, sizeof(m_CD->write_start_index));
+            memcpy(m_CD->write_start_index, final_read_index, sizeof(final_read_index));
             m_lockTrial.unlock();
         }
     }
@@ -2043,10 +2043,10 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
         // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
         uint32_t read_end_index[cbMAXCHANS];
         m_lockTrialEvent.lock();
-        memcpy(read_end_index, m_ED->write_index, sizeof(read_end_index));
+        memcpy(read_end_index, m_ED->write_index, sizeof(m_ED->write_index));
         m_lockTrialEvent.unlock();
         // We may stop reading before this write index; track how many samples we actually read.
-        uint32_t final_read_index[cbNUM_ANALOG_CHANS] = {0};
+        uint32_t final_read_index[cbMAXCHANS] = {0};
 
         // copy the data from the "cache" to the user-allocated memory.
         for (uint32_t ev_ix = 0; ev_ix < trialevent->count; ev_ix++)
@@ -2133,7 +2133,7 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
         if (bActive)
         {
             m_lockTrialEvent.lock();
-            memcpy(m_ED->write_start_index, final_read_index, sizeof(m_ED->write_start_index));
+            memcpy(m_ED->write_start_index, final_read_index, sizeof(final_read_index));
             m_lockTrialEvent.unlock();
         }
     }
@@ -2204,9 +2204,9 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
         if (m_TR == nullptr)
             return CBSDKRESULT_ERRCONFIG;
         // Take a snapshot
-        memcpy(read_start_index, m_TR->write_start_index, sizeof(read_start_index));
+        memcpy(read_start_index, m_TR->write_start_index, sizeof(m_TR->write_start_index));
         m_lockTrialTracking.lock();
-        memcpy(read_end_index, m_TR->write_index, sizeof(read_end_index));
+        memcpy(read_end_index, m_TR->write_index, sizeof(m_TR->write_index));
         m_lockTrialTracking.unlock();
 
         // copy the data from the "cache" to the allocated memory.
@@ -2295,7 +2295,7 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
         if (bActive)
         {
             m_lockTrialTracking.lock();
-            memcpy(m_TR->write_start_index, read_start_index, sizeof(m_TR->write_start_index));
+            memcpy(m_TR->write_start_index, read_start_index, sizeof(read_start_index));
             m_lockTrialTracking.unlock();
         }
     }
@@ -2352,7 +2352,7 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bActive, cbSdkTrialEvent * t
             uint32_t read_end_index[cbMAXCHANS];
             // Take a snapshot of the current write pointer
             m_lockTrialEvent.lock();
-            memcpy(read_end_index, m_ED->write_index, sizeof(read_end_index));
+            memcpy(read_end_index, m_ED->write_index, sizeof(m_ED->write_index));
             m_lockTrialEvent.unlock();
             int count = 0;
             for (uint32_t channel = 0; channel < cbMAXCHANS; channel++)
@@ -2398,7 +2398,7 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bActive, cbSdkTrialEvent * t
 
             // Take a snapshot of the current write pointer as our available read pointer.
             m_lockTrial.lock();
-            memcpy(m_CD->read_end_index, m_CD->write_index, sizeof(m_CD->read_end_index));
+            memcpy(m_CD->read_end_index, m_CD->write_index, sizeof(m_CD->write_index));
             m_lockTrial.unlock();
             int count = 0;
             for (uint32_t channel = 0; channel < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); channel++)
@@ -2477,7 +2477,7 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bActive, cbSdkTrialEvent * t
 
             // Take a snapshot of the current write pointer
             m_lockTrialTracking.lock();
-            memcpy(read_end_index, m_TR->write_index, sizeof(read_end_index));
+            memcpy(read_end_index, m_TR->write_index, sizeof(m_TR->write_index));
             m_lockTrialTracking.unlock();
             int count = 0;
             for (uint16_t id = 0; id < cbMAXTRACKOBJ; ++id)
