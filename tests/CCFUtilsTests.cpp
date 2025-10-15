@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
-#include "CCFUtils.h"
-#include "cbhwlib.h"
+#include "../include/cerelink/CCFUtils.h"
+#include "../include/cerelink/cbhwlib.h"
 #include <string>
 #include <filesystem>
 #include <fstream>

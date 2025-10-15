@@ -24,8 +24,8 @@
 #
 
 
-CMAKE_MINIMUM_REQUIRED( VERSION 3.16 )
-SET(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake" ${CMAKE_MODULE_PATH})
+cmake_minimum_required( VERSION 3.16 )
+set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake" ${CMAKE_MODULE_PATH})
 include(AppleSilicon)
 # cmake_policy(SET CMP0091 NEW)
 
@@ -41,62 +41,68 @@ set(CMAKE_CXX_STANDARD_REQUIRED On)
 
 ##########################################################################################
 # Optional Targets
+include(CMakeDependentOption)
+
+# These options default to ON when building standalone, OFF when included as a subdirectory
+cmake_dependent_option(CBSDK_BUILD_CBMEX "Build Matlab wrapper" ON
+    "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
+cmake_dependent_option(CBSDK_BUILD_CBOCT "Build Octave wrapper" ON
+    "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
+cmake_dependent_option(CBSDK_BUILD_TEST "Build tests" ON
+    "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
+cmake_dependent_option(CBSDK_BUILD_SAMPLE "Build sample applications" ON
+    "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
+cmake_dependent_option(CBSDK_BUILD_HDF5 "Build HDF5" ON
+    "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
+
+# These options are always available regardless of build context
 option(CBSDK_BUILD_STATIC "Build static cbsdk library" ON)
-option(CBSDK_BUILD_CBMEX "Build Matlab wrapper" ON)
-option(CBSDK_BUILD_CBOCT "Build Octave wrapper" ON)
-option(CBSDK_BUILD_TEST "Build tests" ON)
-option(CBSDK_BUILD_SAMPLE "Build sample applications" ON)
-option(CBSDK_BUILD_HDF5 "Build HDF5" ON)
 option(CBPROTO_311 "Build for protocol 3.11" OFF)
 
 ##########################################################################################
 # Define target names
-SET( LIB_NAME cbsdk )
-SET( INSTALL_TARGET_LIST ${LIB_NAME} )
-SET( LIB_NAME_STATIC cbsdk_static )
-SET( LIB_NAME_CBMEX cbmex )
-SET( LIB_NAME_CBOCT cboct )
-SET( TEST_ANAOUT_NAME test_analog_out )
-SET( N2H5_NAME n2h5 )
-
-##########################################################################################
-# Store some platform-specific strings used to construct lib names / folder structures.
-IF ((CMAKE_SIZEOF_VOID_P EQUAL 8) AND (NOT APPLE))
-    SET( LIB_SUFFIX 64 )
-ENDIF()
+set( LIB_NAME cbsdk )
+set( INSTALL_TARGET_LIST ${LIB_NAME} )
+set( LIB_NAME_STATIC cbsdk_static )
+set( LIB_NAME_CBMEX cbmex )
+set( LIB_NAME_CBOCT cboct )
+set( TEST_ANAOUT_NAME test_analog_out )
+set( N2H5_NAME n2h5 )
 
 ##########################################################################################
 # Misc Configuration
 # -Make sure debug builds are recognized
-SET(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
+set(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
 
 # -?
-if(${CBPROTO_311})
+if(CBPROTO_311)
     add_compile_definitions(CBPROTO_311)
 endif()
-ADD_DEFINITIONS( -DCBSDK_EXPORTS )
-IF( WIN32 )
+if( WIN32 )
     # From cbhwlib/cbmex.vcproj: PreprocessorDefinitions="WIN32;_WINDOWS;NO_AFX;WINVER=0x0501;CBSDK_EXPORTS"
-    ADD_DEFINITIONS(
-        -DWIN32 -D_WINDOWS -DNO_AFX -DNOMINMAX
-        -D_CRT_SECURE_NO_WARNINGS
-        -D_WINSOCK_DEPRECATED_NO_WARNINGS  # Not necessary if -DUNICODE
+    add_compile_definitions(
+        WIN32 _WINDOWS NO_AFX NOMINMAX
+        _CRT_SECURE_NO_WARNINGS
+        _WINSOCK_DEPRECATED_NO_WARNINGS  # Not necessary if -DUNICODE
     )
-ENDIF( WIN32 )
+endif( WIN32 )
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 cmake_policy(SET CMP0063 NEW) # ENABLE CMP0063: Honor visibility properties for all target types.
 cmake_policy(SET CMP0042 NEW) # ENABLE CMP0042: MACOSX_RPATH is enabled by default.
 
 ##########################################################################################
+# Standard installation directories
+include(GNUInstallDirs)
+
+##########################################################################################
 # Third party libraries
 include(FetchContent)
-
-# Qt has been completely removed from the codebase and replaced with C++ standard library
 
 # -PugiXML
 set(PUGIXML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(PUGIXML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(PUGIXML_BUILD_SHARED_AND_STATIC OFF)
+set(PUGIXML_INSTALL OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
         pugixml
         GIT_REPOSITORY https://github.com/zeux/pugixml.git
@@ -109,210 +115,148 @@ if(TARGET pugixml AND NOT TARGET pugixml::pugixml)
     add_library(pugixml::pugixml ALIAS pugixml)
 endif()
 
-# -HDF5
-IF(${CBSDK_BUILD_HDF5})
-    FIND_PACKAGE( HDF5 COMPONENTS C HL)
-ENDIF()
-
 # Custom CCFUtils Lib
 set( CCF_SOURCE
-    ${PROJECT_SOURCE_DIR}/CCFUtils/CCFUtils.cpp
-    ${PROJECT_SOURCE_DIR}/CCFUtils/CCFUtils.h
-    ${PROJECT_SOURCE_DIR}/CCFUtils/CCFUtilsBinary.cpp
-    ${PROJECT_SOURCE_DIR}/CCFUtils/CCFUtilsBinary.h
-    ${PROJECT_SOURCE_DIR}/CCFUtils/CCFUtilsConcurrent.cpp
-    ${PROJECT_SOURCE_DIR}/CCFUtils/CCFUtilsConcurrent.h
-    ${PROJECT_SOURCE_DIR}/CCFUtils/CCFUtilsXml.cpp
-    ${PROJECT_SOURCE_DIR}/CCFUtils/CCFUtilsXml.h
-    ${PROJECT_SOURCE_DIR}/CCFUtils/CCFUtilsXmlItems.cpp
-    ${PROJECT_SOURCE_DIR}/CCFUtils/CCFUtilsXmlItems.h
-    ${PROJECT_SOURCE_DIR}/CCFUtils/CCFUtilsXmlItemsGenerate.h
-    ${PROJECT_SOURCE_DIR}/CCFUtils/CCFUtilsXmlItemsParse.h
-    ${PROJECT_SOURCE_DIR}/CCFUtils/XmlFile.cpp
-    ${PROJECT_SOURCE_DIR}/CCFUtils/XmlFile.h
-    ${PROJECT_SOURCE_DIR}/CCFUtils/XmlItem.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ccfutils/CCFUtils.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ccfutils/CCFUtilsBinary.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ccfutils/CCFUtilsConcurrent.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ccfutils/CCFUtilsXml.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ccfutils/CCFUtilsXmlItems.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ccfutils/XmlFile.cpp
 )
-add_library( CCFUtils OBJECT ${CCF_SOURCE} )
-target_link_libraries( CCFUtils PRIVATE pugixml::pugixml)
+add_library(CCFUtils OBJECT ${CCF_SOURCE})
+target_link_libraries(CCFUtils PRIVATE pugixml::pugixml)
 target_include_directories(CCFUtils
-        PRIVATE
-            ${PROJECT_SOURCE_DIR}/cbproto
         PUBLIC
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/CCFUtils>
-            $<INSTALL_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/CCFUtils>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         INTERFACE # for unit tests
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/CCFUtils>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/ccfutils>
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/cbproto
 )
 set_property(TARGET CCFUtils PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 ##########################################################################################
 # Files/folders common to multiple targets
+# (LIB_INCL_DIRS removed - now using target_include_directories)
 
-SET( LIB_INCL_DIRS
-    ${PROJECT_SOURCE_DIR}/cbproto
-    ${PROJECT_SOURCE_DIR}/cbsdk
-    ${PROJECT_SOURCE_DIR}/cbhwlib
-    ${PROJECT_SOURCE_DIR}/Central
-    ${PROJECT_SOURCE_DIR}/CentralCommon
-)
-IF( WIN32 )
-    LIST(APPEND LIB_INCL_DIRS "${PROJECT_SOURCE_DIR}/compat/")
-ENDIF( WIN32 )
-
-SET( LIB_SOURCE
-    ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/cbHwlibHi.cpp
-    ${PROJECT_SOURCE_DIR}/cbhwlib/InstNetwork.cpp
-    ${PROJECT_SOURCE_DIR}/Central/Instrument.cpp
-    ${PROJECT_SOURCE_DIR}/Central/UDPsocket.cpp
+set( LIB_SOURCE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk/cbsdk.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib/cbhwlib.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib/cbHwlibHi.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib/InstNetwork.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/central/Instrument.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/central/UDPsocket.cpp
 )
 
 
 ##########################################################################################
 # Targets
 
-
-##
 # cbsdk shared / dynamic
-ADD_LIBRARY( ${LIB_NAME} SHARED ${LIB_SOURCE} )
+add_library(${LIB_NAME} SHARED ${LIB_SOURCE} $<TARGET_OBJECTS:CCFUtils>)
 target_include_directories( ${LIB_NAME}
         PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbsdk>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbproto>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbhwlib>
-        $<INSTALL_INTERFACE:include/cbsdk>
-        $<INSTALL_INTERFACE:include/cbproto>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
         PRIVATE
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Central>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CentralCommon>
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/cbproto
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/ccfutils
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/central
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/compat
 )
-TARGET_LINK_LIBRARIES( ${LIB_NAME}
-        PUBLIC CCFUtils)
-IF( WIN32 )
-    TARGET_LINK_LIBRARIES( ${LIB_NAME} PRIVATE wsock32 ws2_32 winmm )
+target_link_libraries( ${LIB_NAME}
+        PRIVATE $<BUILD_INTERFACE:pugixml::pugixml>)
+if( WIN32 )
+    target_link_libraries( ${LIB_NAME} PRIVATE wsock32 ws2_32 winmm )
     target_include_directories(${LIB_NAME} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/compat>)
-ELSE()
-    IF(NOT APPLE)
-        TARGET_LINK_LIBRARIES(${LIB_NAME} PRIVATE rt)
+else()
+    if(NOT APPLE)
+        target_link_libraries(${LIB_NAME} PRIVATE rt)
         # Hide unexported symbols
-        SET_TARGET_PROPERTIES( ${LIB_NAME} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL" )
-    ENDIF(NOT APPLE)
-ENDIF( WIN32 )
-SET_TARGET_PROPERTIES(
+        target_link_options( ${LIB_NAME} PRIVATE "LINKER:--exclude-libs,ALL" )
+    endif(NOT APPLE)
+endif( WIN32 )
+set_target_properties(
         ${LIB_NAME}
         PROPERTIES
         SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
 )
+target_compile_definitions(${LIB_NAME} PRIVATE CBSDK_EXPORTS)
 
 
 ##
 # cbsdk_static (optional)
-IF(${CBSDK_BUILD_STATIC})
-    ADD_LIBRARY( ${LIB_NAME_STATIC} STATIC ${LIB_SOURCE} ${LIB_HEADERS_MOC} )
+if(CBSDK_BUILD_STATIC)
+    add_library( ${LIB_NAME_STATIC} STATIC ${LIB_SOURCE} $<TARGET_OBJECTS:CCFUtils> )
     target_include_directories( ${LIB_NAME_STATIC}
             PUBLIC
-                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbsdk>
-                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbhwlib>
-                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/cbproto>
-                $<INSTALL_INTERFACE:include/cbsdk>
-                $<INSTALL_INTERFACE:include/cbproto>
+                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
             PRIVATE
-                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Central>
-                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/CentralCommon>
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/cbproto
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/ccfutils
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/central
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/compat
     )
-    TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC}
-            PUBLIC CCFUtils)
-    IF( WIN32 )
-        target_include_directories(${LIB_NAME_STATIC} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/compat>)
-        TARGET_LINK_LIBRARIES( ${LIB_NAME_STATIC} PRIVATE ws2_32 winmm )
-        SET_TARGET_PROPERTIES( ${LIB_NAME_STATIC} PROPERTIES
-            COMPILE_FLAGS "-DSTATIC_CBSDK_LINK"
-            # MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
-        )
-    ELSE( WIN32 )
-        IF(NOT APPLE)
-            TARGET_LINK_LIBRARIES(${LIB_NAME_STATIC} PRIVATE rt)
-        ENDIF(NOT APPLE)
+    target_link_libraries( ${LIB_NAME_STATIC}
+            PRIVATE $<BUILD_INTERFACE:pugixml::pugixml>)
+    if( WIN32 )
+        target_link_libraries( ${LIB_NAME_STATIC} PRIVATE ws2_32 winmm )
+        target_compile_definitions( ${LIB_NAME_STATIC} PUBLIC STATIC_CBSDK_LINK )
+        # Note: If needed, set MSVC runtime library with:
+        # set_target_properties( ${LIB_NAME_STATIC} PROPERTIES
+        #     MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+        # )
+    else( WIN32 )
+        if(NOT APPLE)
+            target_link_libraries(${LIB_NAME_STATIC} PRIVATE rt)
+        endif(NOT APPLE)
         # Need relocatable static library
-        SET_TARGET_PROPERTIES( ${LIB_NAME_STATIC} PROPERTIES
-            LINK_FLAGS "-Wl,--exclude-libs,ALL"
+        target_link_options( ${LIB_NAME_STATIC} PRIVATE "LINKER:--exclude-libs,ALL" )
+        set_target_properties( ${LIB_NAME_STATIC} PROPERTIES
             POSITION_INDEPENDENT_CODE ON)
-        #SET_TARGET_PROPERTIES(${LIB_NAME_STATIC} PROPERTIES XCODE_ATTRIBUTE_GENERATE_MASTER_OBJECT_FILE "YES")
-        #SET_TARGET_PROPERTIES(${LIB_NAME_STATIC} PROPERTIES XCODE_ATTRIBUTE_STRIP_STYLE "non-global")
-        #SET_TARGET_PROPERTIES(${LIB_NAME_STATIC} PROPERTIES XCODE_ATTRIBUTE_DEPLOYMENT_POSTPROCESSING "YES")
-        #SET_TARGET_PROPERTIES(${LIB_NAME_STATIC} PROPERTIES XCODE_ATTRIBUTE_SEPARATE_STRIP "YES")
-    ENDIF( WIN32)
-    LIST(APPEND INSTALL_TARGET_LIST ${LIB_NAME_STATIC})
-ENDIF(${CBSDK_BUILD_STATIC})
+    endif( WIN32)
+    list(APPEND INSTALL_TARGET_LIST ${LIB_NAME_STATIC})
+endif(CBSDK_BUILD_STATIC)
 
 ##
-# test
-IF(${CBSDK_BUILD_TEST})
+# Tests
+# Note: We use enable_testing() instead of include(CTest) to avoid dashboard targets clutter
+#       The dashboard targets (Experimental*, Nightly*, Continuous*) are only created by include(CTest)
+if(CBSDK_BUILD_TEST)
     enable_testing()
     add_subdirectory(tests)
-ENDIF(${CBSDK_BUILD_TEST})
+endif(CBSDK_BUILD_TEST)
 
 ##
 # Very Simple Sample Applications
-IF(${CBSDK_BUILD_SAMPLE})
-    add_subdirectory(samples)
-ENDIF(${CBSDK_BUILD_SAMPLE})
+if(CBSDK_BUILD_SAMPLE)
+    add_subdirectory(examples)
+endif(CBSDK_BUILD_SAMPLE)
 
 ##
-# n2h5
-IF(${CBSDK_BUILD_HDF5} AND HDF5_FOUND )
-    SET( N2H5_SOURCE
-        ${PROJECT_SOURCE_DIR}/n2h5/main.cpp
-        ${PROJECT_SOURCE_DIR}/n2h5/n2h5.cpp
-        ${PROJECT_SOURCE_DIR}/n2h5/n2h5.h
-        ${PROJECT_SOURCE_DIR}/n2h5/NevNsx.h
-    )
-    MESSAGE ( STATUS "Add n2h5 utility build target")
-    IF( MSVC )
-        SET ( N2H5_SOURCE ${N2H5_SOURCE} ${PROJECT_SOURCE_DIR}/n2h5/res/n2h5_res.rc )
-    ENDIF( MSVC )
-    ADD_EXECUTABLE( ${N2H5_NAME} ${N2H5_SOURCE} )
-    TARGET_INCLUDE_DIRECTORIES( ${N2H5_NAME} PRIVATE ${LIB_INCL_DIRS} ${HDF5_INCLUDE_DIRS})
-    TARGET_LINK_LIBRARIES (${N2H5_NAME} ${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})
-    LIST(APPEND INSTALL_TARGET_LIST ${N2H5_NAME})
-ENDIF(${CBSDK_BUILD_HDF5} AND HDF5_FOUND )
-
-##
-# Language wrappers (MATLAB, Octave, C++/CLI, Python)
-add_subdirectory(wrappers)
-
-
-## SWIG -- not working; segfault on import
-#find_package(SWIG REQUIRED)
-#include(${SWIG_USE_FILE})
-#find_package(Python REQUIRED COMPONENTS Development)
-#set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/cbmex/cbmex.i PROPERTIES CPLUSPLUS ON)  # for C++ types like bool
-#set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/cbmex/cbmex.i PROPERTIES SWIG_FLAGS "-builtin")
-#swig_add_library(cbsdk_swig
-#        LANGUAGE python
-#        SOURCES ${CMAKE_CURRENT_LIST_DIR}/cbmex/cbmex.i
-#)
-#set_target_properties(cbsdk_swig PROPERTIES SWIG_USE_TARGET_INCLUDE_DIRECTORIES ON)
-#set_target_properties(cbsdk_swig PROPERTIES COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden")
-#swig_link_libraries(cbsdk_swig PRIVATE cbsdk Python::Python)
+# Language bindings (MATLAB, Octave, C++/CLI, Python)
+add_subdirectory(bindings)
 
 
 #########################################################################################
 # Install libraries, test executable, and headers
-INSTALL( TARGETS ${INSTALL_TARGET_LIST}
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib${LIB_SUFFIX}
-    ARCHIVE DESTINATION lib${LIB_SUFFIX}
+install( TARGETS ${INSTALL_TARGET_LIST}
+    EXPORT CBSDKTargets
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
-INSTALL(
-    FILES
-        ${PROJECT_SOURCE_DIR}/cbsdk/cbsdk.h
-        ${PROJECT_SOURCE_DIR}/cbproto/cbproto.h
-        ${PROJECT_SOURCE_DIR}/cbhwlib/cbhwlib.h
-        ${PROJECT_SOURCE_DIR}/CCFUtils/CCFUtils.h
+install(
+    DIRECTORY
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/cerelink
     DESTINATION
-        include
+        ${CMAKE_INSTALL_INCLUDEDIR}
 )
 if(WIN32)
     install(
@@ -326,6 +270,39 @@ elseif(APPLE)
         execute_process(COMMAND codesign --force --deep --sign - ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/lib${LIB_NAME}.dylib)
     ")
 endif(WIN32)
+
+#########################################################################################
+# CMake Package Config
+# Install the export set for use with find_package()
+include(CMakePackageConfigHelpers)
+
+# Install the export targets
+install(EXPORT CBSDKTargets
+    FILE CBSDKTargets.cmake
+    NAMESPACE CBSDK::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CBSDK
+)
+
+# Create a basic config file
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CBSDKConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/CBSDKConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CBSDK
+)
+
+# Create a version file
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/CBSDKConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+# Install the config and version files
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/CBSDKConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/CBSDKConfigVersion.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CBSDK
+)
 
 
 # --------- #
