@@ -44,9 +44,9 @@ def get_extras():
     if sys.platform == "darwin":
         x_link_args += ["-L{path}".format(path=os.path.join(cbsdk_path, "lib"))]
     elif "win32" in sys.platform:
-        x_link_args.append("/LIBPATH:" + str(Path(cbsdk_path) / f"lib{arch}"))
+        x_link_args.append("/LIBPATH:" + str(Path(cbsdk_path) / f"lib"))
     else:
-        x_link_args.append(f"-L{os.path.join(cbsdk_path, f'lib{arch}')}")
+        x_link_args.append(f"-L{os.path.join(cbsdk_path, 'lib')}")
 
     # pugixml for CCF
     for build_dir in [".", "build", "cmake-build-release"]:
