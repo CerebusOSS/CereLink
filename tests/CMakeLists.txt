@@ -24,6 +24,12 @@ add_executable(sync_tests
     test_main.cpp
 )
 
+# ContinuousData tests (for per-group refactoring)
+add_executable(continuous_data_tests
+    ContinuousDataTests.cpp
+    test_main.cpp
+)
+
 # Include necessary headers
 target_include_directories(ccfutils_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/CCFUtils
@@ -55,3 +61,23 @@ target_link_libraries(sync_tests
 )
 
 add_test(NAME sync_tests COMMAND sync_tests)
+
+# ContinuousData tests need cbsdk headers
+target_include_directories(continuous_data_tests PRIVATE
+    ${PROJECT_SOURCE_DIR}/CCFUtils
+    ${PROJECT_SOURCE_DIR}/cbproto
+    ${PROJECT_SOURCE_DIR}/cbsdk
+    ${PROJECT_SOURCE_DIR}/src/cbsdk
+    ${PROJECT_SOURCE_DIR}/src/cbhwlib
+    ${PROJECT_SOURCE_DIR}/cbhwlib
+    ${PROJECT_SOURCE_DIR}/Central
+    ${PROJECT_SOURCE_DIR}/CentralCommon
+    ${PROJECT_SOURCE_DIR}/compat
+)
+
+target_link_libraries(continuous_data_tests
+    PRIVATE
+        gtest
+)
+
+add_test(NAME continuous_data_tests COMMAND continuous_data_tests)
