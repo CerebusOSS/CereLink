@@ -175,7 +175,8 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
                 if (grp.channel_data)
                 {
                     // Clean up old allocation
-                    for (uint32_t i = 0; i < grp.capacity; ++i)
+                    // Note: channel_data is [size][capacity]
+                    for (uint32_t i = 0; i < grp.size; ++i)
                     {
                         if (grp.channel_data[i])
                             delete[] grp.channel_data[i];
@@ -188,11 +189,12 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
                 const uint32_t new_capacity = nChans + 4;
 
                 try {
-                    grp.channel_data = new int16_t*[new_capacity];
-                    for (uint32_t i = 0; i < new_capacity; ++i)
+                    // Allocate [size][capacity] layout for memcpy-friendly writes
+                    grp.channel_data = new int16_t*[grp.size];
+                    for (uint32_t i = 0; i < grp.size; ++i)
                     {
-                        grp.channel_data[i] = new int16_t[grp.size];
-                        std::fill_n(grp.channel_data[i], grp.size, 0);
+                        grp.channel_data[i] = new int16_t[new_capacity];
+                        std::fill_n(grp.channel_data[i], new_capacity, 0);
                     }
 
                     grp.channel_ids = new uint16_t[new_capacity];
@@ -208,7 +210,7 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
                     // Allocation failed - cleanup partial allocation
                     if (grp.channel_data)
                     {
-                        for (uint32_t i = 0; i < new_capacity; ++i)
+                        for (uint32_t i = 0; i < grp.size; ++i)
                         {
                             if (grp.channel_data[i])
                                 delete[] grp.channel_data[i];
@@ -234,40 +236,16 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
             // Reset indices on reallocation (lose any buffered data)
             grp.write_index = 0;
             grp.write_start_index = 0;
-        }
-
-        // Update sample rate if changed
-        if (grp.sample_rate != rate)
             grp.sample_rate = rate;
+        }
 
         // Store timestamp for this sample
         grp.timestamps[grp.write_index] = pkt->cbpkt_header.time;
 
-        // Store data for each channel in the packet
-        for (uint32_t i = 0; i < nChans; ++i)
-        {
-            if (chanIds[i] == 0 || chanIds[i] > cbNUM_ANALOG_CHANS)
-                continue;
-
-            // chanIds[i] is the global channel ID (1-based)
-            // We need to find its index in our group's channel_ids array
-            // Since we just set channel_ids from chanIds, index should match
-            // But verify for safety
-            int32_t ch_idx = -1;
-            for (uint32_t j = 0; j < grp.num_channels; ++j)
-            {
-                if (grp.channel_ids[j] == chanIds[i])
-                {
-                    ch_idx = static_cast<int32_t>(j);
-                    break;
-                }
-            }
-
-            if (ch_idx >= 0 && ch_idx < static_cast<int32_t>(grp.capacity))
-            {
-                grp.channel_data[ch_idx][grp.write_index] = pkt->data[i];
-            }
-        }
+        // Store data for all channels in one memcpy
+        // Layout is [samples][channels], so channel_data[write_index] is a pointer to
+        // an array of channels for this sample, which perfectly matches pkt->data layout
+        memcpy(grp.channel_data[grp.write_index], pkt->data, nChans * sizeof(int16_t));
 
         // Advance write index (circular buffer)
         const uint32_t next_write_index = (grp.write_index + 1) % grp.size;
@@ -2148,8 +2126,7 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
 
             // Calculate number of available samples
             uint32_t read_index = grp.write_start_index;
-            int32_t num_samples = static_cast<int32_t>(read_end_index[found_group]) -
-                                  static_cast<int32_t>(read_index);
+            auto num_samples = static_cast<int32_t>(read_end_index[found_group] - read_index);
             if (num_samples < 0)
                 num_samples += grp.size;  // Wrapped around
 
@@ -2163,7 +2140,8 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
             {
                 for (int i = 0; i < num_samples; ++i)
                 {
-                    const int16_t sample_value = grp.channel_data[ch_idx_in_group][read_index];
+                    // Layout is [samples][channels], so index by [sample][channel]
+                    const int16_t sample_value = grp.channel_data[read_index][ch_idx_in_group];
 
                     if (m_bTrialDouble)
                         *(static_cast<double*>(dataptr) + i) = sample_value;

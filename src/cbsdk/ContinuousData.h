@@ -36,9 +36,11 @@ struct GroupContinuousData
     uint32_t capacity;                ///< Allocated capacity (may exceed num_channels for headroom)
     uint16_t* channel_ids;            ///< Array of channel IDs (1-based, size = capacity)
 
-    // Data storage (contiguous, cache-friendly layout)
+    // Data storage (cache-friendly layout: [samples][channels])
+    // This layout allows memcpy from packet data directly, as packets contain
+    // all channels for a single timestamp.
     PROCTIME* timestamps;             ///< [size] - timestamp for each sample
-    int16_t** channel_data;           ///< [capacity][size] - data for each channel
+    int16_t** channel_data;           ///< [size][capacity] - data indexed by [sample][channel]
 
     /// Constructor - initializes all fields to safe defaults
     GroupContinuousData() :
@@ -54,10 +56,11 @@ struct GroupContinuousData
 
         if (channel_data)
         {
-            for (uint32_t i = 0; i < num_channels; ++i)
+            // Iterate over samples (outer dimension)
+            for (uint32_t i = 0; i < size; ++i)
             {
                 if (channel_data[i])
-                    std::fill_n(channel_data[i], size, static_cast<int16_t>(0));
+                    std::fill_n(channel_data[i], capacity, static_cast<int16_t>(0));
             }
         }
 
@@ -77,7 +80,8 @@ struct GroupContinuousData
 
         if (channel_data)
         {
-            for (uint32_t i = 0; i < capacity; ++i)
+            // Iterate over samples (outer dimension)
+            for (uint32_t i = 0; i < size; ++i)
             {
                 if (channel_data[i])
                 {

@@ -32,9 +32,10 @@ protected:
         group->sample_rate = 30000;
 
         group->timestamps = new PROCTIME[buffer_size];
-        group->channel_data = new int16_t*[group->capacity];
-        for (uint32_t i = 0; i < group->capacity; ++i) {
-            group->channel_data[i] = new int16_t[buffer_size];
+        // Allocate [samples][channels] layout
+        group->channel_data = new int16_t*[buffer_size];
+        for (uint32_t i = 0; i < buffer_size; ++i) {
+            group->channel_data[i] = new int16_t[group->capacity];
         }
         group->channel_ids = new uint16_t[group->capacity];
 
@@ -137,14 +138,15 @@ TEST_F(ContinuousDataTest, ContinuousDataResetResetsAllGroups) {
         grp.num_channels = 2;
         grp.capacity = 6;
         grp.timestamps = new PROCTIME[100];
-        grp.channel_data = new int16_t*[6];
-        for (uint32_t i = 0; i < 6; ++i) {
-            grp.channel_data[i] = new int16_t[100];
+        // Allocate [samples][channels] layout
+        grp.channel_data = new int16_t*[100];
+        for (uint32_t i = 0; i < 100; ++i) {
+            grp.channel_data[i] = new int16_t[6];
         }
 
         grp.write_index = 50;
         grp.timestamps[0] = 12345;
-        grp.channel_data[0][0] = 999;
+        grp.channel_data[0][0] = 999;  // [sample 0][channel 0]
     }
 
     cd->reset();
@@ -166,9 +168,10 @@ TEST_F(ContinuousDataTest, ContinuousDataCleanupCleansAllGroups) {
         grp.num_channels = 2;
         grp.capacity = 6;
         grp.timestamps = new PROCTIME[100];
-        grp.channel_data = new int16_t*[6];
-        for (uint32_t i = 0; i < 6; ++i) {
-            grp.channel_data[i] = new int16_t[100];
+        // Allocate [samples][channels] layout
+        grp.channel_data = new int16_t*[100];
+        for (uint32_t i = 0; i < 100; ++i) {
+            grp.channel_data[i] = new int16_t[6];
         }
         grp.channel_ids = new uint16_t[6];
     }
@@ -191,8 +194,9 @@ TEST_F(ContinuousDataTest, RingBufferWraparoundWorks) {
     // Fill buffer to capacity
     for (uint32_t i = 0; i < 10; ++i) {
         group->timestamps[i] = 1000 + i;
-        group->channel_data[0][i] = static_cast<int16_t>(100 + i);
-        group->channel_data[1][i] = static_cast<int16_t>(200 + i);
+        // Layout is [sample][channel]
+        group->channel_data[i][0] = static_cast<int16_t>(100 + i);
+        group->channel_data[i][1] = static_cast<int16_t>(200 + i);
         group->write_index = (group->write_index + 1) % group->size;
     }
 
@@ -200,13 +204,13 @@ TEST_F(ContinuousDataTest, RingBufferWraparoundWorks) {
 
     // Write one more sample - should overwrite oldest
     group->timestamps[group->write_index] = 1010;
-    group->channel_data[0][group->write_index] = 110;
-    group->channel_data[1][group->write_index] = 210;
+    group->channel_data[group->write_index][0] = 110;
+    group->channel_data[group->write_index][1] = 210;
     group->write_index = (group->write_index + 1) % group->size;
 
     EXPECT_EQ(group->write_index, 1u);
     EXPECT_EQ(group->timestamps[0], 1010u);
-    EXPECT_EQ(group->channel_data[0][0], 110);
+    EXPECT_EQ(group->channel_data[0][0], 110);  // [sample 0][channel 0]
 }
 
 // Test 8: Multiple groups can coexist independently
@@ -218,9 +222,10 @@ TEST_F(ContinuousDataTest, MultipleGroupsCoexistIndependently) {
     grp5.num_channels = 2;
     grp5.capacity = 6;
     grp5.timestamps = new PROCTIME[100];
-    grp5.channel_data = new int16_t*[6];
-    for (uint32_t i = 0; i < 6; ++i) {
-        grp5.channel_data[i] = new int16_t[100];
+    // Allocate [samples][channels] layout
+    grp5.channel_data = new int16_t*[100];
+    for (uint32_t i = 0; i < 100; ++i) {
+        grp5.channel_data[i] = new int16_t[6];
     }
     grp5.channel_ids = new uint16_t[6];
     grp5.channel_ids[0] = 1;
@@ -233,21 +238,22 @@ TEST_F(ContinuousDataTest, MultipleGroupsCoexistIndependently) {
     grp1.num_channels = 3;
     grp1.capacity = 7;
     grp1.timestamps = new PROCTIME[100];
-    grp1.channel_data = new int16_t*[7];
-    for (uint32_t i = 0; i < 7; ++i) {
-        grp1.channel_data[i] = new int16_t[100];
+    // Allocate [samples][channels] layout
+    grp1.channel_data = new int16_t*[100];
+    for (uint32_t i = 0; i < 100; ++i) {
+        grp1.channel_data[i] = new int16_t[7];
     }
     grp1.channel_ids = new uint16_t[7];
     grp1.channel_ids[0] = 3;
     grp1.channel_ids[1] = 4;
     grp1.channel_ids[2] = 5;
 
-    // Write data to group 5
+    // Write data to group 5 - [sample 0][channel 0]
     grp5.timestamps[0] = 1000;
     grp5.channel_data[0][0] = 100;
     grp5.write_index = 1;
 
-    // Write data to group 1
+    // Write data to group 1 - [sample 0][channel 0]
     grp1.timestamps[0] = 2000;
     grp1.channel_data[0][0] = 200;
     grp1.write_index = 1;
@@ -273,9 +279,10 @@ TEST_F(ContinuousDataTest, SameChannelInMultipleGroups) {
     grp5.channel_ids = new uint16_t[5];
     grp5.channel_ids[0] = 1;
     grp5.timestamps = new PROCTIME[100];
-    grp5.channel_data = new int16_t*[5];
-    for (uint32_t i = 0; i < 5; ++i) {
-        grp5.channel_data[i] = new int16_t[100];
+    // Allocate [samples][channels] layout
+    grp5.channel_data = new int16_t*[100];
+    for (uint32_t i = 0; i < 100; ++i) {
+        grp5.channel_data[i] = new int16_t[5];
     }
 
     // Same channel 1 in group 6
@@ -286,12 +293,13 @@ TEST_F(ContinuousDataTest, SameChannelInMultipleGroups) {
     grp6.channel_ids = new uint16_t[5];
     grp6.channel_ids[0] = 1;  // Same channel ID
     grp6.timestamps = new PROCTIME[100];
-    grp6.channel_data = new int16_t*[5];
-    for (uint32_t i = 0; i < 5; ++i) {
-        grp6.channel_data[i] = new int16_t[100];
+    // Allocate [samples][channels] layout
+    grp6.channel_data = new int16_t*[100];
+    for (uint32_t i = 0; i < 100; ++i) {
+        grp6.channel_data[i] = new int16_t[5];
     }
 
-    // Write different data to each
+    // Write different data to each - [sample 0][channel 0]
     grp5.timestamps[0] = 1000;
     grp5.channel_data[0][0] = 500;
     grp6.timestamps[0] = 2000;
@@ -315,15 +323,15 @@ TEST_F(ContinuousDataTest, LargeChannelCountsWork) {
     EXPECT_EQ(group->num_channels, num_channels);
     EXPECT_GE(group->capacity, num_channels);
 
-    // Verify all channels are accessible
+    // Verify all channels are accessible - write to [sample 0][channel i]
     for (uint32_t i = 0; i < num_channels; ++i) {
-        EXPECT_NE(group->channel_data[i], nullptr);
-        group->channel_data[i][0] = static_cast<int16_t>(i);
+        EXPECT_NE(group->channel_data[0], nullptr);
+        group->channel_data[0][i] = static_cast<int16_t>(i);
     }
 
     // Verify data was written correctly
     for (uint32_t i = 0; i < num_channels; ++i) {
-        EXPECT_EQ(group->channel_data[i][0], static_cast<int16_t>(i));
+        EXPECT_EQ(group->channel_data[0][i], static_cast<int16_t>(i));
     }
 }
 
@@ -349,22 +357,23 @@ TEST_F(ContinuousDataTest, MemoryAllocationUsesCapacity) {
     group->num_channels = num_channels;
     group->capacity = capacity;
     group->timestamps = new PROCTIME[100];
-    group->channel_data = new int16_t*[capacity];
-    for (uint32_t i = 0; i < capacity; ++i) {
-        group->channel_data[i] = new int16_t[100];
+    // Allocate [samples][channels] layout
+    group->channel_data = new int16_t*[100];
+    for (uint32_t i = 0; i < 100; ++i) {
+        group->channel_data[i] = new int16_t[capacity];
     }
     group->channel_ids = new uint16_t[capacity];
 
-    // Should be able to access all capacity slots
+    // Should be able to access all capacity slots - write to [sample 0][channel i]
     for (uint32_t i = 0; i < capacity; ++i) {
-        EXPECT_NE(group->channel_data[i], nullptr);
-        group->channel_data[i][0] = static_cast<int16_t>(i);
+        EXPECT_NE(group->channel_data[0], nullptr);
+        group->channel_data[0][i] = static_cast<int16_t>(i);
     }
 
     // Verify we can expand num_channels up to capacity without reallocation
     group->num_channels = capacity;
     for (uint32_t i = 0; i < capacity; ++i) {
-        EXPECT_EQ(group->channel_data[i][0], static_cast<int16_t>(i));
+        EXPECT_EQ(group->channel_data[0][i], static_cast<int16_t>(i));
     }
 }
 
