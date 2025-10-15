@@ -94,9 +94,9 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
     if (!m_bWithinTrial || m_CD == nullptr)
         return;
 
-    int group = pkt->cbpkt_header.type;
+    const int group = pkt->cbpkt_header.type;
 
-    if (group >= SMPGRP_RAW)
+    if (group >= SMPGRP_RAW)  // TODO: Why >= ?!
         return;
 
 #ifndef CBPROTO_311
@@ -118,12 +118,12 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
 #endif
 
     // Get information about this group...
-    uint32_t  period;
-    uint32_t  length;
-    uint16_t  list[cbNUM_ANALOG_CHANS];
-    if (cbGetSampleGroupInfo(nInstrument + 1, group, nullptr, &period, &length, m_nInstance) != cbRESULT_OK)
+    uint32_t  period;  // sampling period for the group
+    uint32_t  nChans;  // number of channels in the group
+    uint16_t  chanIds[cbNUM_ANALOG_CHANS];
+    if (cbGetSampleGroupInfo(nInstrument + 1, group, nullptr, &period, &nChans, m_nInstance) != cbRESULT_OK)
         return;
-    if (cbGetSampleGroupList(nInstrument + 1, group, &length, list, m_nInstance) != cbRESULT_OK)
+    if (cbGetSampleGroupList(nInstrument + 1, group, &nChans, chanIds, m_nInstance) != cbRESULT_OK)
         return;
 
     const uint16_t rate = static_cast<int>((cbSdk_TICKS_PER_SECOND / static_cast<double>(period)));
@@ -134,42 +134,153 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
     // double check if buffer is still valid
     if (m_CD)
     {
-        // Check whether our information for each channel is up-to-date...
-        for(uint32_t i = 0; i < length; i++)
+        const auto grp_idx = group - 1;  // Convert to 0-based index
+        auto& grp = m_CD->groups[grp_idx];
+
+        // Determine if we need to allocate or resize
+        bool needs_realloc = false;
+
+        if (grp.channel_data == nullptr)
         {
-            if (list[i] == 0 || list[i] > cbNUM_ANALOG_CHANS)
+            // First packet for this group - need to allocate
+            needs_realloc = true;
+        }
+        else
+        {
+            // Check if channel list has changed
+            if (grp.num_channels != nChans)
+            {
+                needs_realloc = true;
+            }
+            else
+            {
+                // Same count, but check if actual channels changed
+                for (uint32_t i = 0; i < nChans; ++i)
+                {
+                    if (grp.channel_ids[i] != chanIds[i])
+                    {
+                        needs_realloc = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (needs_realloc)
+        {
+            // Determine if we need more capacity
+            if (grp.capacity < nChans)
+            {
+                // Need to expand capacity
+                if (grp.channel_data)
+                {
+                    // Clean up old allocation
+                    for (uint32_t i = 0; i < grp.capacity; ++i)
+                    {
+                        if (grp.channel_data[i])
+                            delete[] grp.channel_data[i];
+                    }
+                    delete[] grp.channel_data;
+                    delete[] grp.channel_ids;
+                }
+
+                // Allocate new with some headroom to reduce future reallocations
+                const uint32_t new_capacity = nChans + 4;
+
+                try {
+                    grp.channel_data = new int16_t*[new_capacity];
+                    for (uint32_t i = 0; i < new_capacity; ++i)
+                    {
+                        grp.channel_data[i] = new int16_t[grp.size];
+                        std::fill_n(grp.channel_data[i], grp.size, 0);
+                    }
+
+                    grp.channel_ids = new uint16_t[new_capacity];
+                    grp.capacity = new_capacity;
+
+                    // Allocate timestamps if not already allocated
+                    if (!grp.timestamps)
+                    {
+                        grp.timestamps = new PROCTIME[grp.size];
+                        std::fill_n(grp.timestamps, grp.size, 0);
+                    }
+                } catch (...) {
+                    // Allocation failed - cleanup partial allocation
+                    if (grp.channel_data)
+                    {
+                        for (uint32_t i = 0; i < new_capacity; ++i)
+                        {
+                            if (grp.channel_data[i])
+                                delete[] grp.channel_data[i];
+                        }
+                        delete[] grp.channel_data;
+                        grp.channel_data = nullptr;
+                    }
+                    if (grp.channel_ids)
+                    {
+                        delete[] grp.channel_ids;
+                        grp.channel_ids = nullptr;
+                    }
+                    grp.capacity = 0;
+                    m_lockTrial.unlock();
+                    return;  // Silently fail - could add error callback
+                }
+            }
+
+            // Update channel list
+            grp.num_channels = nChans;
+            memcpy(grp.channel_ids, chanIds, nChans * sizeof(uint16_t));
+
+            // Reset indices on reallocation (lose any buffered data)
+            grp.write_index = 0;
+            grp.write_start_index = 0;
+        }
+
+        // Update sample rate if changed
+        if (grp.sample_rate != rate)
+            grp.sample_rate = rate;
+
+        // Store timestamp for this sample
+        grp.timestamps[grp.write_index] = pkt->cbpkt_header.time;
+
+        // Store data for each channel in the packet
+        for (uint32_t i = 0; i < nChans; ++i)
+        {
+            if (chanIds[i] == 0 || chanIds[i] > cbNUM_ANALOG_CHANS)
                 continue;
 
-            const auto ch = list[i] - 1 + nChanProcStart;
-
-            if (m_CD->write_index[ch] == m_CD->write_start_index[ch]) // New continuous channel
+            // chanIds[i] is the global channel ID (1-based)
+            // We need to find its index in our group's channel_ids array
+            // Since we just set channel_ids from chanIds, index should match
+            // But verify for safety
+            int32_t ch_idx = -1;
+            for (uint32_t j = 0; j < grp.num_channels; ++j)
             {
-                // Need to make sure there are no samples here yet...
-                m_CD->current_sample_rates[ch] = rate;
+                if (grp.channel_ids[j] == chanIds[i])
+                {
+                    ch_idx = static_cast<int32_t>(j);
+                    break;
+                }
             }
 
-            // Check for sample size changes...
-            if (m_CD->current_sample_rates[ch] != rate) // New rate for channel
+            if (ch_idx >= 0 && ch_idx < static_cast<int32_t>(grp.capacity))
             {
-                m_CD->current_sample_rates[ch] = rate;
-                m_CD->write_index[ch] = m_CD->write_start_index[ch];        // reset buffer to
+                grp.channel_data[ch_idx][grp.write_index] = pkt->data[i];
             }
-
-            // Add a sample...
-            // If there's room for more data...
-            uint32_t new_write_index = m_CD->write_index[ch] + 1;
-            if (new_write_index >= m_CD->size)
-                new_write_index = 0;
-
-            if (new_write_index != m_CD->write_start_index[ch])
-            {
-                // Store more data
-                m_CD->continuous_channel_data[ch][m_CD->write_index[ch]] = pkt->data[i];
-                m_CD->write_index[ch] = new_write_index;
-            }
-            else if (m_bChannelMask[ch])
-                bOverFlow = true;
         }
+
+        // Advance write index (circular buffer)
+        const uint32_t next_write_index = (grp.write_index + 1) % grp.size;
+
+        // Check for buffer overflow
+        if (next_write_index == grp.write_start_index)
+        {
+            // Buffer is full - overwrite oldest data
+            bOverFlow = true;
+            grp.write_start_index = (grp.write_start_index + 1) % grp.size;
+        }
+
+        grp.write_index = next_write_index;
     }
     m_lockTrial.unlock();
 
@@ -1282,17 +1393,12 @@ cbSdkResult SdkApp::unsetTrialConfig(const cbSdkTrialType type)
     case CBSDKTRIAL_CONTINUOUS:
         if (m_CD == nullptr)
             return CBSDKRESULT_ERRCONFIG;
-        for (uint32_t i = 0; i < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++i)
-        {
-            if (m_CD->continuous_channel_data[i])
-            {
-                delete[] m_CD->continuous_channel_data[i];
-                m_CD->continuous_channel_data[i] = nullptr;
-            }
-        }
-        m_CD->size = 0;
+        // Cleanup all groups
+        m_CD->cleanup();
+        // Delete the structure itself
         delete m_CD;
         m_CD = nullptr;
+        m_uTrialConts = 0;
         break;
     case CBSDKTRIAL_EVENTS:
         if (m_ED == nullptr)
@@ -1589,32 +1695,31 @@ cbSdkResult SdkApp::SdkSetTrialConfig(const uint32_t bActive, const uint16_t beg
         m_lockTrial.lock();
         try {
             m_CD = new ContinuousData;
-        } catch (...) {
-            m_CD = nullptr;
-        }
-        if (m_CD)
-        {
-            memset(m_CD->continuous_channel_data, 0, sizeof(m_CD->continuous_channel_data));
-            m_CD->size = uConts;
-            bool bErr = false;
-            try {
-                for (uint32_t i = 0; i < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++i)
-                {
-                    m_CD->continuous_channel_data[i] = new int16_t[m_CD->size];
-                    if (m_CD->continuous_channel_data[i] == nullptr)
-                    {
-                        bErr = true;
-                        break;
-                    }
-                }
-            } catch (...) {
-                bErr = true;
+            m_CD->default_size = uConts;
+
+            // Initialize all groups (but don't allocate buffers yet - done lazily in OnPktGroup)
+            for (auto& grp : m_CD->groups)
+            {
+                grp.size = uConts;
+                grp.sample_rate = 0;
+                grp.write_index = 0;
+                grp.write_start_index = 0;
+                grp.read_end_index = 0;
+                grp.num_channels = 0;
+                grp.capacity = 0;
+                grp.channel_ids = nullptr;
+                grp.timestamps = nullptr;
+                grp.channel_data = nullptr;
             }
-            if (bErr)
-                unsetTrialConfig(CBSDKTRIAL_CONTINUOUS);
+        } catch (...) {
+            if (m_CD)
+            {
+                delete m_CD;
+                m_CD = nullptr;
+            }
         }
-        if (m_CD) m_CD->reset();
         m_lockTrial.unlock();
+
         if (m_CD == nullptr)
             return CBSDKRESULT_ERRMEMORYTRIAL;
         m_uTrialConts = uConts;
@@ -1786,10 +1891,13 @@ cbSdkResult SdkApp::SdkSetTrialConfig(const uint32_t bActive, const uint16_t beg
 
             if (m_CD)
             {
-                // Clear continuous data array
+                // Clear continuous data indices for all groups
                 m_lockTrial.lock();
-                memset(m_CD->write_index, 0, sizeof(m_CD->write_index));
-                memset(m_CD->write_start_index, 0, sizeof(m_CD->write_start_index));
+                for (auto& grp : m_CD->groups)
+                {
+                    grp.write_index = 0;
+                    grp.write_start_index = 0;
+                }
                 m_lockTrial.unlock();
             }
 
@@ -1975,59 +2083,113 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
         // Save 'trial' start time: Either time of cbSdkSetTrialConfig or prev active cbSdkInitTrialData
         trialcont->time = prevStartTime;
 
-        // Take a thread-safe snapshot of the latest write indices -- that's as far as we can read.
-        uint32_t read_end_index[cbNUM_ANALOG_CHANS];
+        // Take a thread-safe snapshot of the latest write indices for all groups
+        uint32_t read_end_index[cbMAXGROUPS];
         m_lockTrial.lock();
-        memcpy(read_end_index, m_CD->write_index, sizeof(m_CD->write_index));
+        for (uint32_t g = 0; g < cbMAXGROUPS; ++g)
+            read_end_index[g] = m_CD->groups[g].write_index;
         m_lockTrial.unlock();
-        // We may stop reading before this write index; track how many samples we actually read.
-        uint32_t final_read_index[cbNUM_ANALOG_CHANS] = {0};
 
-        // copy the data from the "cache" to the allocated memory.
+        // Track where we stopped reading for each group
+        uint32_t final_read_index[cbMAXGROUPS] = {0};
+        bool group_was_read[cbMAXGROUPS] = {false};
+
+        // Copy data for each requested channel
         for (uint32_t channel = 0; channel < trialcont->count; channel++)
         {
-            const uint16_t ch = trialcont->chan[channel]; // channel number (index + 1 in cache)
+            const uint16_t ch = trialcont->chan[channel]; // 1-based channel number
+
             if (ch == 0 || ch > cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans())
                 return CBSDKRESULT_INVALIDCHANNEL;
-            // Ignore masked channels
+
+            // Check if channel is masked
             if (!m_bChannelMask[ch - 1])
             {
                 trialcont->num_samples[channel] = 0;
+                trialcont->sample_rates[channel] = 0;
                 continue;
             }
 
-            uint32_t read_index = m_CD->write_start_index[ch - 1];
-            auto num_samples = read_end_index[ch - 1] - read_index;
+            // Search for this channel in all groups
+            int32_t found_group = -1;
+            int32_t ch_idx_in_group = -1;
+
+            for (uint32_t g = 0; g < cbMAXGROUPS; ++g)
+            {
+                const auto& grp = m_CD->groups[g];
+                if (grp.channel_data == nullptr)
+                    continue;  // Group not allocated
+
+                for (uint32_t i = 0; i < grp.num_channels; ++i)
+                {
+                    if (grp.channel_ids[i] == ch)
+                    {
+                        found_group = static_cast<int32_t>(g);
+                        ch_idx_in_group = static_cast<int32_t>(i);
+                        break;
+                    }
+                }
+
+                if (found_group >= 0)
+                    break;  // Found it, stop searching
+            }
+
+            if (found_group < 0)
+            {
+                // Channel not found in any group (not currently sampling)
+                trialcont->num_samples[channel] = 0;
+                trialcont->sample_rates[channel] = 0;
+                continue;
+            }
+
+            // Found the channel - read its data
+            auto& grp = m_CD->groups[found_group];
+            trialcont->sample_rates[channel] = grp.sample_rate;
+
+            // Calculate number of available samples
+            uint32_t read_index = grp.write_start_index;
+            int32_t num_samples = static_cast<int32_t>(read_end_index[found_group]) -
+                                  static_cast<int32_t>(read_index);
             if (num_samples < 0)
-                num_samples += m_CD->size;
-            // Stop at lesser of 'written samples' or how many we calculated during last init, which is likely how many were allocated.
-            num_samples = std::min(num_samples, trialcont->num_samples[channel]);
-            // Store how many samples we actually read
+                num_samples += grp.size;  // Wrapped around
+
+            // Don't read more than allocated buffer
+            num_samples = std::min(static_cast<uint32_t>(num_samples),
+                                   trialcont->num_samples[channel]);
             trialcont->num_samples[channel] = num_samples;
 
-            // Null means ignore
-            if (void * dataptr = trialcont->samples[channel])
+            // Copy data if buffer provided
+            if (void* dataptr = trialcont->samples[channel])
             {
                 for (int i = 0; i < num_samples; ++i)
                 {
+                    const int16_t sample_value = grp.channel_data[ch_idx_in_group][read_index];
+
                     if (m_bTrialDouble)
-                        *(static_cast<double *>(dataptr) + i) = m_CD->continuous_channel_data[ch - 1][read_index];
+                        *(static_cast<double*>(dataptr) + i) = sample_value;
                     else
-                        *(static_cast<int16_t *>(dataptr) + i) = m_CD->continuous_channel_data[ch - 1][read_index];
+                        *(static_cast<int16_t*>(dataptr) + i) = sample_value;
 
                     read_index++;
-                    if (read_index >= m_CD->size)
+                    if (read_index >= grp.size)
                         read_index = 0;
                 }
             }
-            final_read_index[ch - 1] = read_index;
+
+            // Track final read position for this group
+            final_read_index[found_group] = read_index;
+            group_was_read[found_group] = true;
         }
+
+        // Update write_start_index if consuming data (bActive)
         if (bActive)
         {
-            // Update write_start_index to where we stopped reading, effectively consuming those data
-            // so next call to GetTrialData will get only new data.
             m_lockTrial.lock();
-            memcpy(m_CD->write_start_index, final_read_index, sizeof(final_read_index));
+            for (uint32_t g = 0; g < cbMAXGROUPS; ++g)
+            {
+                if (group_was_read[g])
+                    m_CD->groups[g].write_start_index = final_read_index[g];
+            }
             m_lockTrial.unlock();
         }
     }
@@ -2396,23 +2558,54 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bActive, cbSdkTrialEvent * t
             if (m_CD == nullptr)
                 return CBSDKRESULT_ERRCONFIG;
 
-            // Take a snapshot of the current write pointer as our available read pointer.
+            // Take a snapshot of the current write pointers for all groups as available read pointers
+            uint32_t read_end_index[cbMAXGROUPS];
             m_lockTrial.lock();
-            memcpy(m_CD->read_end_index, m_CD->write_index, sizeof(m_CD->write_index));
-            m_lockTrial.unlock();
-            int count = 0;
-            for (uint32_t channel = 0; channel < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); channel++)
+            for (uint32_t g = 0; g < cbMAXGROUPS; ++g)
             {
-                auto num_samples = m_CD->read_end_index[channel] - m_CD->write_start_index[channel];
-                if (m_CD->read_end_index[channel] < m_CD->write_start_index[channel])
-                    num_samples += m_CD->size;
-                if (num_samples && m_bChannelMask[channel])
+                read_end_index[g] = m_CD->groups[g].write_index;
+                m_CD->groups[g].read_end_index = read_end_index[g];
+            }
+            m_lockTrial.unlock();
+
+            // Iterate through all groups and their channels to build the channel list
+            int count = 0;
+            for (uint32_t g = 0; g < cbMAXGROUPS; ++g)
+            {
+                const auto& grp = m_CD->groups[g];
+                if (grp.channel_data == nullptr)
+                    continue;  // Group not allocated
+
+                // Calculate available samples for this group
+                auto num_samples = static_cast<int32_t>(read_end_index[g]) -
+                                   static_cast<int32_t>(grp.write_start_index);
+                if (num_samples < 0)
+                    num_samples += grp.size;
+
+                if (num_samples == 0)
+                    continue;
+
+                // Add each channel in this group
+                for (uint32_t i = 0; i < grp.num_channels; ++i)
                 {
-                    trialcont->chan[count] = channel + 1; // Actual channel number
+                    const uint16_t ch = grp.channel_ids[i];  // 1-based channel ID
+                    if (ch == 0 || ch > cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans())
+                        continue;
+
+                    if (!m_bChannelMask[ch - 1])
+                        continue;
+
+                    trialcont->chan[count] = ch;  // Actual channel number
                     trialcont->num_samples[count] = num_samples;
-                    trialcont->sample_rates[count] = m_CD->current_sample_rates[channel];
+                    trialcont->sample_rates[count] = grp.sample_rate;
                     count++;
+
+                    if (count >= cbNUM_ANALOG_CHANS)
+                        break;  // Safety check
                 }
+
+                if (count >= cbNUM_ANALOG_CHANS)
+                    break;  // Safety check
             }
             trialcont->count = count;
         }

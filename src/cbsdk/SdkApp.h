@@ -184,28 +184,117 @@ protected:
     /////////////////////////////////////////////////////////////////////////////
     // Declarations for the data caching structures and variables
 
-    // Structure to store all the variables associated with the continuous data
-    struct ContinuousData
+    // Structure to store continuous data for a single sample group
+    struct GroupContinuousData
     {
-        uint32_t size; // default is cbSdk_CONTINUOUS_DATA_SAMPLES
-        uint16_t current_sample_rates[cbNUM_ANALOG_CHANS];        // The continuous sample rate on each channel, in samples/s
-        int16_t * continuous_channel_data[cbNUM_ANALOG_CHANS];
-        uint32_t write_index[cbNUM_ANALOG_CHANS];                 // next index location to write data
-        uint32_t write_start_index[cbNUM_ANALOG_CHANS];           // index location that writing began
-        uint32_t read_end_index[cbNUM_ANALOG_CHANS];              // The last known safe read index. Reset to the write_index on init;
+        // Buffer configuration
+        uint32_t size;                    // Buffer size for this group (samples)
+        uint16_t sample_rate;             // Sample rate for this group (Hz)
+
+        // Ring buffer management
+        uint32_t write_index;             // Next write position
+        uint32_t write_start_index;       // Where reading starts (oldest unread sample)
+        uint32_t read_end_index;          // Last safe read position
+
+        // Dynamic channel management
+        uint32_t num_channels;            // Number of channels actually in this group
+        uint32_t capacity;                // Allocated capacity (may exceed num_channels)
+        uint16_t* channel_ids;            // Array of channel IDs (1-based, size = capacity)
+
+        // Data storage (contiguous, cache-friendly)
+        PROCTIME* timestamps;             // [size] - timestamp for each sample
+        int16_t** channel_data;           // [capacity][size] - data for each channel
+
+        // Constructor
+        GroupContinuousData() :
+            size(0), sample_rate(0), write_index(0), write_start_index(0),
+            read_end_index(0), num_channels(0), capacity(0),
+            channel_ids(nullptr), timestamps(nullptr), channel_data(nullptr) {}
 
         void reset()
         {
-            if (size)
+            if (size && timestamps)
+                std::fill_n(timestamps, size, 0);
+
+            if (channel_data)
             {
-                for (uint32_t i = 0; i < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++i)
-                    std::fill_n(continuous_channel_data[i], size, 0);
+                for (uint32_t i = 0; i < num_channels; ++i)
+                {
+                    if (channel_data[i])
+                        std::fill_n(channel_data[i], size, 0);
+                }
             }
-            memset(current_sample_rates, 0, sizeof(current_sample_rates));
-            memset(write_index, 0, sizeof(write_index));
-            memset(write_start_index, 0, sizeof(write_start_index));
+
+            write_index = 0;
+            write_start_index = 0;
+            read_end_index = 0;
         }
 
+        void cleanup()
+        {
+            if (timestamps)
+            {
+                delete[] timestamps;
+                timestamps = nullptr;
+            }
+
+            if (channel_data)
+            {
+                for (uint32_t i = 0; i < capacity; ++i)
+                {
+                    if (channel_data[i])
+                    {
+                        delete[] channel_data[i];
+                        channel_data[i] = nullptr;
+                    }
+                }
+                delete[] channel_data;
+                channel_data = nullptr;
+            }
+
+            if (channel_ids)
+            {
+                delete[] channel_ids;
+                channel_ids = nullptr;
+            }
+
+            num_channels = 0;
+            capacity = 0;
+        }
+    };
+
+    // Structure to store all the variables associated with the continuous data
+    struct ContinuousData
+    {
+        uint32_t default_size;                      // Default buffer size (cbSdk_CONTINUOUS_DATA_SAMPLES)
+        GroupContinuousData groups[cbMAXGROUPS];    // One struct per group (0-7)
+
+        // Helper: Find channel index within a group (-1 if not found)
+        int32_t findChannelInGroup(uint32_t group_idx, uint16_t channel_id) const
+        {
+            if (group_idx >= cbMAXGROUPS)
+                return -1;
+
+            const auto& grp = groups[group_idx];
+            for (uint32_t i = 0; i < grp.num_channels; ++i)
+            {
+                if (grp.channel_ids[i] == channel_id)
+                    return static_cast<int32_t>(i);
+            }
+            return -1;
+        }
+
+        void reset()
+        {
+            for (auto& grp : groups)
+                grp.reset();
+        }
+
+        void cleanup()
+        {
+            for (auto& grp : groups)
+                grp.cleanup();
+        }
     } * m_CD;
 
     // Structure to store all the variables associated with the event data
