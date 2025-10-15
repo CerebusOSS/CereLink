@@ -20,7 +20,7 @@
 #define CBMEX_H_INCLUDED
 
 #if defined(WIN32)
-#include "pstdint.h"
+#include <cerelink/pstdint.h>
 #else
 #include "stdint.h"
 #endif
