@@ -1,5 +1,4 @@
-# Enable CTest for unit tests
-include(CTest)
+# (use include(CTest) if you want CDash dashboard integration)
 if (NOT BUILD_GTEST)
     message(STATUS "Fetching GoogleTest for unit tests")
     set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
