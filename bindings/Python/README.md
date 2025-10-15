@@ -23,9 +23,9 @@ This is a Python wrapper for the CereLink (cbsdk) library to configure, pull dat
     * `python -m ensurepip`
     * `python -m pip install --upgrade pip setuptools wheel cython numpy`
 * Change to the CereLink directory.
-* Install locally: `python -m pip install wrappers/Python`
+* Install locally: `python -m pip install bindings/Python`
 * or, if you are making a wheel to bring to another machine,
     * activate an environment matching the target machine,
-    * `python -m pip wheel wrappers/Python -w wrappers/Python/dist`
-    * The wheels will be in the `wrappers/Python/dist` folder.
+    * `python -m pip wheel bindings/Python -w bindings/Python/dist`
+    * The wheels will be in the `bindings/Python/dist` folder.
     * See the [Wiki](https://github.com/CerebusOSS/CereLink/wiki/cerebus.cbpy) for more information.

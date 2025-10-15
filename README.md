@@ -4,9 +4,9 @@ Cerebus Link for Blackrock Neurotech hardware
 
 The software development kit for Blackrock Neurotech neural signal processing hardware includes:
 * c++ library (cbsdk): cross-platform library for two-way communication with hardware
-* Python wrapper (cerebus.cbpy): Python binding for cbsdk to configure, pull data, and receive callbacks
-* MATLAB/Octave wrapper (cbmex/cboct): MATLAB executable (mex) to configure and pull data using cbsdk
-* C#/CLI wrapper
+* Python binding (cerebus.cbpy): Python binding for cbsdk to configure, pull data, and receive callbacks
+* MATLAB/Octave binding (cbmex/cboct): MATLAB executable (mex) to configure and pull data using cbsdk
+* C#/CLI binding
 * File conversion utility (n2h5): Converts nsx and nev files to hdf5 format
 
 Downloads are on the [releases page](https://github.com/CerebusOSS/CereLink/releases).
@@ -40,7 +40,7 @@ If you want to test using nPlayServer on a different computer to better emulate 
 
 ### cerebus.cbpy
 
-See [wrappers/Python/README.md](./wrappers/Python/README.md) for usage and build instructions.
+See [bindings/Python/README.md](./bindings/Python/README.md) for usage and build instructions.
 
 ## Getting Help
 

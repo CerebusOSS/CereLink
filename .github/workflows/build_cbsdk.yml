@@ -35,7 +35,7 @@ jobs:
     steps:
 
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Configure CBSDK
         run: |
@@ -58,7 +58,7 @@ jobs:
           cmake --build build --target package --config Release -j
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
@@ -67,7 +67,7 @@ jobs:
 
       - name: Build wheels
         if: "!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest'"
-        run: python -m cibuildwheel wrappers/Python --output-dir wrappers/Python/dist
+        run: python -m cibuildwheel bindings/Python --output-dir bindings/Python/dist
         env:
           CIBW_BUILD: cp39-* cp310-* cp311-* cp312-*
           CIBW_SKIP: "*-musllinux_* *-win32 *-manylinux_i686"
@@ -97,7 +97,7 @@ jobs:
         if: "!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest'"
         with:
           name: python-wheels-${{ matrix.config.name }}
-          path: wrappers/Python/dist/*.whl
+          path: bindings/Python/dist/*.whl
           if-no-files-found: ignore
 
       - name: Attach to Release
@@ -106,4 +106,4 @@ jobs:
         with:
           files: |
             dist/*
-            wrappers/Python/dist/*.whl
+            bindings/Python/dist/*.whl
