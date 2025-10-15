@@ -73,6 +73,8 @@ set( N2H5_NAME n2h5 )
 # Misc Configuration
 # -Make sure debug builds are recognized
 set(CMAKE_DEBUG_POSTFIX "d" CACHE STRING "Add a postfix, usually d on windows")
+# -Force universal binary on macOS
+set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
 
 # -?
 if(CBPROTO_311)
