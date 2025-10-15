@@ -2779,7 +2779,7 @@ CBSDKAPI    cbSdkResult SdkSendPoll(const uint32_t nInstance,
 /** Send packet.
 *
 * This is used by any process that needs to send a packet using cbSdk rather
-* than directly thru the library.
+* than directly through the library.
 * @param[in]	ppckt void * packet to send
 
 * \n This function returns the error code
@@ -2996,7 +2996,7 @@ CBSDKAPI    cbSdkResult cbSdkSetSynchOutput(const uint32_t nInstance, const uint
 * Be very careful in using this mechanism,
 * if system files or firmware is overwritten, factory image is needed
 * Warning:
-* Must not shutdown NSP or communications in midst of operation
+* Must not shut down NSP or communications in midst of operation
 * @param[in]	szSrc      path to file to be uploaded to NSP
 * @param[in]	szDstDir   destination directory (should not include the file name, nor path ending)
 * @param[in]	nInstance  library instance number
