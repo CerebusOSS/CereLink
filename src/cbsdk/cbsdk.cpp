@@ -96,7 +96,7 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
 
     const int group = pkt->cbpkt_header.type;
 
-    if (group >= SMPGRP_RAW)  // TODO: Why >= ?!
+    if (group > SMPGRP_RAW)
         return;
 
 #ifndef CBPROTO_311
@@ -1935,7 +1935,7 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
         if (g >= cbMAXGROUPS)
             return CBSDKRESULT_INVALIDPARAM;
 
-        const auto& grp = m_CD->groups[g];
+        const auto& grp = m_CD->groups[g - 1];
         if (!grp.isAllocated())
         {
             // Group not allocated - return success with num_samples=0
@@ -2015,7 +2015,7 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
         {
             const uint32_t new_start = (read_start_index + num_samples) % grp.getSize();
             m_lockTrial.lock();
-            m_CD->groups[g].setWriteStartIndex(new_start);
+            m_CD->groups[g - 1].setWriteStartIndex(new_start);
             m_lockTrial.unlock();
         }
     }
@@ -2380,7 +2380,7 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bActive, cbSdkTrialEvent * t
             if (g >= cbMAXGROUPS)
                 return CBSDKRESULT_INVALIDPARAM;
 
-            const auto& grp = m_CD->groups[g];
+            auto& grp = m_CD->groups[g - 1];
             if (!grp.isAllocated())
             {
                 // Group not allocated - return success with count=0
@@ -2392,7 +2392,7 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bActive, cbSdkTrialEvent * t
             uint32_t read_end_index;
             m_lockTrial.lock();
             read_end_index = grp.getWriteIndex();
-            m_CD->groups[g].setReadEndIndex(read_end_index);
+            grp.setReadEndIndex(read_end_index);
             m_lockTrial.unlock();
 
             // Calculate available samples for this group

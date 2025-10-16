@@ -272,29 +272,35 @@ int main(int argc, char *argv[])
                               &cfg.endchan, &cfg.endmask, &cfg.endval,
                               &cfg.uWaveforms,
                               &cfg.uConts, &cfg.uEvents, &cfg.uComments, &cfg.uTrackings);
-    cfg.bActive = 1;
-    cfg.uConts = bCont ? cbSdk_CONTINUOUS_DATA_SAMPLES : 0;
-    cfg.uEvents = bEv ? cbSdk_EVENT_DATA_SAMPLES : 0;
-    res = cbSdkSetTrialConfig(INST, cfg.bActive,
-                              cfg.begchan, cfg.begmask, cfg.begval,
-                              cfg.endchan, cfg.endmask, cfg.endval,
-                              cfg.uWaveforms,
-                              cfg.uConts, cfg.uEvents, cfg.uComments, cfg.uTrackings);
+    res = cbSdkSetTrialConfig(
+        INST, 1,
+        0, 0, 0,
+        0, 0, 0,
+        cfg.uWaveforms,
+        bCont ? cbSdk_CONTINUOUS_DATA_SAMPLES : 0,
+        bEv ? cbSdk_EVENT_DATA_SAMPLES : 0,
+        cfg.uComments,
+        cfg.uTrackings
+    );
 
     auto trialEvent = std::unique_ptr<cbSdkTrialEvent>(nullptr);
     if (bEv)
         trialEvent = std::make_unique<cbSdkTrialEvent>();
     auto trialCont = std::unique_ptr<cbSdkTrialCont>(nullptr);
-    if (bCont)
+    if (bCont) {
         trialCont = std::make_unique<cbSdkTrialCont>();
+        trialCont->group = 3;
+    }
+
     auto trialComm = std::unique_ptr<cbSdkTrialComment>(nullptr);
     if (bComm)
         trialComm = std::make_unique<cbSdkTrialComment>();
 
     // We allocate a bunch of std::vectors now, and we can grow them if the number of samples to be retrieved
     //  exceeds the allocated space.
-    std::vector<int16_t> cont_short[cbMAXCHANS];
-    std::vector<double> cont_double[cbMAXCHANS];
+    // Continuous data: single contiguous buffer for all channels and samples
+    std::vector<int16_t> cont_samples;     // [num_samples * count] contiguous array
+    std::vector<PROCTIME> cont_timestamps; // [num_samples] timestamps
     std::vector<PROCTIME> event_ts[cbMAXCHANS][cbMAXUNITS + 1];
     std::vector<int16_t> event_wfs_short[cbMAXCHANS];
 
@@ -342,18 +348,30 @@ int main(int argc, char *argv[])
         if (trialCont && (trialCont->count > 0))
         {
             // Allocate memory for continuous data
-            for (int chan_ix = 0; chan_ix < trialCont->count; ++chan_ix) {
-                const uint32_t n_samples = trialCont->num_samples;
-                cont_short[chan_ix].resize(n_samples);
-                std::fill(cont_short[chan_ix].begin(), cont_short[chan_ix].end(), 0);
-                trialCont->samples = cont_short[chan_ix].data();  // Technically only needed if resize grows the vector.
-            }
+            // Data layout is [num_samples][count] - contiguous array of num_samples * count elements
+            const uint32_t n_samples = trialCont->num_samples;
+            const uint32_t n_channels = trialCont->count;
+
+            // Allocate contiguous buffer for all samples and channels
+            cont_samples.resize(n_samples * n_channels);
+            std::fill(cont_samples.begin(), cont_samples.end(), 0);
+            trialCont->samples = cont_samples.data();
+
+            // Allocate timestamps array
+            cont_timestamps.resize(n_samples);
+            std::fill(cont_timestamps.begin(), cont_timestamps.end(), 0);
+            trialCont->timestamps = cont_timestamps.data();
         }
         
         // cbSdkGetTrialData to fetch the data
-        res = cbSdkGetTrialData(INST, cfg.bActive,
-                                trialEvent.get(), trialCont.get(), trialComm.get(),
-                                0);
+        res = cbSdkGetTrialData(
+            INST,
+            1,
+            trialEvent.get(),
+            trialCont.get(),
+            trialComm.get(),
+            nullptr
+        );
 
         // Print something to do with the data.
         if (trialEvent && trialEvent->count)
@@ -388,11 +406,32 @@ int main(int argc, char *argv[])
 
         if (trialCont && trialCont->count)
         {
-            for (size_t chan_ix = 0; chan_ix < trialCont->count; chan_ix++)
+            const uint32_t n_samples = trialCont->num_samples;
+            const uint32_t n_channels = trialCont->count;
+
+            if (n_samples > 0)
             {
-                const uint32_t n_samples = trialCont->num_samples;
-                const auto [min, max] = std::minmax_element(begin(cont_short[chan_ix]), end(cont_short[chan_ix]));
-                std::cout << "chan = " << trialCont->chan[chan_ix] << ", nsamps = " << n_samples << ", min = " << *min << ", max = " << *max << '\n';
+                for (size_t chan_ix = 0; chan_ix < n_channels; chan_ix++)
+                {
+                    // Extract min/max for this channel from the contiguous [sample][channel] array
+                    // Data for channel chan_ix at sample i is at: cont_samples[i * n_channels + chan_ix]
+                    int16_t min_val = cont_samples[chan_ix];  // First sample for this channel
+                    int16_t max_val = cont_samples[chan_ix];
+
+                    for (size_t sample_ix = 0; sample_ix < n_samples; sample_ix++)
+                    {
+                        const int16_t val = cont_samples[sample_ix * n_channels + chan_ix];
+                        if (val < min_val) min_val = val;
+                        if (val > max_val) max_val = val;
+                    }
+
+                    std::cout << "chan = " << trialCont->chan[chan_ix]
+                             << ", nsamps = " << n_samples
+                             << ", min = " << min_val
+                             << ", max = " << max_val
+                             << " (t " << cont_timestamps[0] << " - " << cont_timestamps[n_samples - 1] << ")"
+                             << '\n';
+                }
             }
         }
 
