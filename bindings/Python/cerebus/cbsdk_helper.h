@@ -52,4 +52,4 @@ cbSdkResult cbsdk_get_trial_comment(uint32_t nInstance, int reset, cbSdkTrialCom
 
 cbSdkResult cbsdk_file_config(uint32_t instance,  const char * filename, const char * comment, int start, unsigned int options);
 
-#endif // include guard
+#endif // CBHELPER_H

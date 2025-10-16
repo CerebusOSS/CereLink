@@ -1,6 +1,5 @@
 #include "ContinuousData.h"
 #include <algorithm>
-#include <cstdint>
 #include <cstring>
 
 GroupContinuousData::GroupContinuousData() :

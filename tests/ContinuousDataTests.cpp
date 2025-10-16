@@ -25,15 +25,15 @@ protected:
     }
 
     // Helper: Allocate a group using the allocate() method
-    void AllocateGroup(uint32_t buffer_size, uint32_t num_channels) {
+    void AllocateGroup(const uint32_t buffer_size, const uint32_t num_channels) {
         // Create channel IDs array (1-based)
-        uint16_t* chan_ids = new uint16_t[num_channels];
+        auto* chan_ids = new uint16_t[num_channels];
         for (uint32_t i = 0; i < num_channels; ++i) {
             chan_ids[i] = static_cast<uint16_t>(i + 1);
         }
 
         // Use the allocate() method
-        bool success = group->allocate(buffer_size, num_channels, chan_ids, 30000);
+        const bool success = group->allocate(buffer_size, num_channels, chan_ids, 30000);
         ASSERT_TRUE(success);
 
         delete[] chan_ids;
@@ -42,7 +42,7 @@ protected:
 
 // Test 1: GroupContinuousData constructor initializes all fields to safe defaults
 TEST_F(ContinuousDataTest, GroupContinuousDataConstructorInitializesCorrectly) {
-    GroupContinuousData test_group;
+    const GroupContinuousData test_group;
 
     EXPECT_EQ(test_group.getSize(), 0u);
     EXPECT_EQ(test_group.getSampleRate(), 0u);
@@ -104,7 +104,7 @@ TEST_F(ContinuousDataTest, FindChannelInGroupFindsCorrectChannel) {
 
     // Set up channel IDs: 1, 10, 25
     uint16_t chan_ids[3] = {1, 10, 25};
-    test_group.allocate(100, 3, chan_ids, 30000);
+    ASSERT_TRUE(test_group.allocate(100, 3, chan_ids, 30000));
 
     // Test finding existing channels
     EXPECT_EQ(cd->findChannelInGroup(5, 1), 0);
@@ -124,7 +124,7 @@ TEST_F(ContinuousDataTest, ContinuousDataResetResetsAllGroups) {
     for (uint32_t g = 0; g < 2; ++g) {
         auto& grp = cd->groups[g];
         uint16_t chan_ids[2] = {1, 2};
-        grp.allocate(100, 2, chan_ids, 30000);
+        ASSERT_TRUE(grp.allocate(100, 2, chan_ids, 30000));
 
         grp.setWriteIndex(50);
         const_cast<PROCTIME*>(grp.getTimestamps())[0] = 12345;
@@ -147,7 +147,7 @@ TEST_F(ContinuousDataTest, ContinuousDataCleanupCleansAllGroups) {
     for (uint32_t g = 0; g < 2; ++g) {
         auto& grp = cd->groups[g];
         uint16_t chan_ids[2] = {1, 2};
-        grp.allocate(100, 2, chan_ids, 30000);
+        ASSERT_TRUE(grp.allocate(100, 2, chan_ids, 30000));
     }
 
     cd->cleanup();
@@ -167,15 +167,15 @@ TEST_F(ContinuousDataTest, RingBufferWraparoundWorks) {
 
     // Fill buffer to capacity using writeSample()
     for (uint32_t i = 0; i < 10; ++i) {
-        int16_t data[2] = {static_cast<int16_t>(100 + i), static_cast<int16_t>(200 + i)};
-        group->writeSample(1000 + i, data, 2);
+        const int16_t data[2] = {static_cast<int16_t>(100 + i), static_cast<int16_t>(200 + i)};
+        (void)group->writeSample(1000 + i, data, 2);  // Ignore overflow - just filling buffer
     }
 
     EXPECT_EQ(group->getWriteIndex(), 0u);  // Should have wrapped to 0
 
     // Write one more sample - should overwrite oldest
-    int16_t data[2] = {110, 210};
-    bool overflow = group->writeSample(1010, data, 2);
+    const int16_t data[2] = {110, 210};
+    const bool overflow = group->writeSample(1010, data, 2);
     EXPECT_TRUE(overflow);  // Buffer was full, so this should overflow
 
     EXPECT_EQ(group->getWriteIndex(), 1u);
@@ -187,21 +187,21 @@ TEST_F(ContinuousDataTest, RingBufferWraparoundWorks) {
 TEST_F(ContinuousDataTest, MultipleGroupsCoexistIndependently) {
     // Allocate group 5 (30kHz) with 2 channels
     auto& grp5 = cd->groups[5];
-    uint16_t chan_ids5[2] = {1, 2};
-    grp5.allocate(100, 2, chan_ids5, 30000);
+    const uint16_t chan_ids5[2] = {1, 2};
+    ASSERT_TRUE(grp5.allocate(100, 2, chan_ids5, 30000));
 
     // Allocate group 1 (500Hz) with 3 channels
     auto& grp1 = cd->groups[1];
-    uint16_t chan_ids1[3] = {3, 4, 5};
-    grp1.allocate(100, 3, chan_ids1, 500);
+    const uint16_t chan_ids1[3] = {3, 4, 5};
+    ASSERT_TRUE(grp1.allocate(100, 3, chan_ids1, 500));
 
     // Write data to group 5
     int16_t data5[2] = {100, 0};
-    grp5.writeSample(1000, data5, 2);
+    (void)grp5.writeSample(1000, data5, 2);  // Ignore overflow - just writing test data
 
     // Write data to group 1
-    int16_t data1[3] = {200, 0, 0};
-    grp1.writeSample(2000, data1, 3);
+    const int16_t data1[3] = {200, 0, 0};
+    (void)grp1.writeSample(2000, data1, 3);  // Ignore overflow - just writing test data
 
     // Verify groups remain independent
     EXPECT_EQ(grp5.getSampleRate(), 30000u);
@@ -218,19 +218,19 @@ TEST_F(ContinuousDataTest, MultipleGroupsCoexistIndependently) {
 TEST_F(ContinuousDataTest, SameChannelInMultipleGroups) {
     // Channel 1 in group 5
     auto& grp5 = cd->groups[5];
-    uint16_t chan_ids5[1] = {1};
-    grp5.allocate(100, 1, chan_ids5, 30000);
+    const uint16_t chan_ids5[1] = {1};
+    ASSERT_TRUE(grp5.allocate(100, 1, chan_ids5, 30000));
 
     // Same channel 1 in group 6
     auto& grp6 = cd->groups[6];
-    uint16_t chan_ids6[1] = {1};
-    grp6.allocate(100, 1, chan_ids6, 60000);
+    const uint16_t chan_ids6[1] = {1};
+    ASSERT_TRUE(grp6.allocate(100, 1, chan_ids6, 60000));
 
     // Write different data to each
-    int16_t data5[1] = {500};
-    grp5.writeSample(1000, data5, 1);
-    int16_t data6[1] = {600};
-    grp6.writeSample(2000, data6, 1);
+    const int16_t data5[1] = {500};
+    (void)grp5.writeSample(1000, data5, 1);  // Ignore overflow - just writing test data
+    const int16_t data6[1] = {600};
+    (void)grp6.writeSample(2000, data6, 1);  // Ignore overflow - just writing test data
 
     // Verify they can be found independently
     EXPECT_EQ(cd->findChannelInGroup(5, 1), 0);
@@ -287,7 +287,7 @@ TEST_F(ContinuousDataTest, MemoryAllocationUsesCapacity) {
     EXPECT_GT(group->getCapacity(), num_channels);  // Capacity should exceed num_channels
 
     // Should be able to access all capacity slots - write to [sample 0][channel i]
-    auto channel_data = const_cast<int16_t**>(group->getChannelData());
+    const auto channel_data = const_cast<int16_t**>(group->getChannelData());
     for (uint32_t i = 0; i < group->getCapacity(); ++i) {
         EXPECT_NE(channel_data[0], nullptr);
         channel_data[0][i] = static_cast<int16_t>(i);
@@ -332,10 +332,10 @@ TEST_F(ContinuousDataTest, TypicalMemoryUsageIsReasonable) {
     AllocateGroup(buffer_size, num_channels);
 
     // Calculate memory usage
-    size_t timestamp_mem = buffer_size * sizeof(PROCTIME);
-    size_t channel_data_mem = group->getCapacity() * buffer_size * sizeof(int16_t);
-    size_t channel_ids_mem = group->getCapacity() * sizeof(uint16_t);
-    size_t total_mem = timestamp_mem + channel_data_mem + channel_ids_mem;
+    const size_t timestamp_mem = buffer_size * sizeof(PROCTIME);
+    const size_t channel_data_mem = group->getCapacity() * buffer_size * sizeof(int16_t);
+    const size_t channel_ids_mem = group->getCapacity() * sizeof(uint16_t);
+    const size_t total_mem = timestamp_mem + channel_data_mem + channel_ids_mem;
 
     // For 32 channels with 102400 samples:
     // Timestamps: 102400 * 4 = 409KB
@@ -356,8 +356,8 @@ TEST_F(ContinuousDataTest, NonContiguousChannelIDsWork) {
     auto& grp = cd->groups[5];
 
     // Use non-contiguous channel IDs
-    uint16_t chan_ids[4] = {1, 5, 100, 250};
-    grp.allocate(100, 4, chan_ids, 30000);
+    const uint16_t chan_ids[4] = {1, 5, 100, 250};
+    ASSERT_TRUE(grp.allocate(100, 4, chan_ids, 30000));
 
     // Should be able to find all of them
     EXPECT_EQ(cd->findChannelInGroup(5, 1), 0);

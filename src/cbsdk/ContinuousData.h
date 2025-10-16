@@ -35,7 +35,7 @@ public:
     /// \param chan_ids Array of channel IDs from packet
     /// \param n_chans Number of channels in packet
     /// \return true if reallocation/update needed
-    bool needsReallocation(const uint16_t* chan_ids, uint32_t n_chans) const;
+    [[nodiscard]] bool needsReallocation(const uint16_t* chan_ids, uint32_t n_chans) const;
 
     /// Allocate or reallocate buffers for this group
     /// \param buffer_size Number of samples to buffer
@@ -43,14 +43,14 @@ public:
     /// \param chan_ids Array of channel IDs (1-based)
     /// \param rate Sample rate for this group
     /// \return true if allocation succeeded
-    bool allocate(uint32_t buffer_size, uint32_t n_chans, const uint16_t* chan_ids, uint16_t rate);
+    [[nodiscard]] bool allocate(uint32_t buffer_size, uint32_t n_chans, const uint16_t* chan_ids, uint16_t rate);
 
     /// Write a sample to the ring buffer
     /// \param timestamp Timestamp for this sample
     /// \param data Pointer to channel data (nChans elements)
     /// \param n_chans Number of channels in data
     /// \return true if buffer overflowed (oldest data was overwritten)
-    bool writeSample(PROCTIME timestamp, const int16_t* data, uint32_t n_chans);
+    [[nodiscard]] bool writeSample(PROCTIME timestamp, const int16_t* data, uint32_t n_chans);
 
     /// Reset ring buffer indices and zero data (preserves allocation)
     void reset();
@@ -59,22 +59,22 @@ public:
     void cleanup();
 
     // Getters for read access
-    uint32_t getSize() const { return m_size; }
-    uint16_t getSampleRate() const { return m_sample_rate; }
-    uint32_t getWriteIndex() const { return m_write_index; }
-    uint32_t getWriteStartIndex() const { return m_write_start_index; }
-    uint32_t getReadEndIndex() const { return m_read_end_index; }
-    uint32_t getNumChannels() const { return m_num_channels; }
-    uint32_t getCapacity() const { return m_capacity; }
-    const uint16_t* getChannelIds() const { return m_channel_ids; }
-    const PROCTIME* getTimestamps() const { return m_timestamps; }
-    const int16_t* const* getChannelData() const { return m_channel_data; }
-    bool isAllocated() const { return m_channel_data != nullptr; }
+    [[nodiscard]] uint32_t getSize() const { return m_size; }
+    [[nodiscard]] uint16_t getSampleRate() const { return m_sample_rate; }
+    [[nodiscard]] uint32_t getWriteIndex() const { return m_write_index; }
+    [[nodiscard]] uint32_t getWriteStartIndex() const { return m_write_start_index; }
+    [[nodiscard]] uint32_t getReadEndIndex() const { return m_read_end_index; }
+    [[nodiscard]] uint32_t getNumChannels() const { return m_num_channels; }
+    [[nodiscard]] uint32_t getCapacity() const { return m_capacity; }
+    [[nodiscard]] const uint16_t* getChannelIds() const { return m_channel_ids; }
+    [[nodiscard]] const PROCTIME* getTimestamps() const { return m_timestamps; }
+    [[nodiscard]] const int16_t* const* getChannelData() const { return m_channel_data; }
+    [[nodiscard]] bool isAllocated() const { return m_channel_data != nullptr; }
 
     // Setters for write index management (used by SdkGetTrialData)
-    void setWriteStartIndex(uint32_t index) { m_write_start_index = index; }
-    void setReadEndIndex(uint32_t index) { m_read_end_index = index; }
-    void setWriteIndex(uint32_t index) { m_write_index = index; }
+    void setWriteStartIndex(const uint32_t index) { m_write_start_index = index; }
+    void setReadEndIndex(const uint32_t index) { m_read_end_index = index; }
+    void setWriteIndex(const uint32_t index) { m_write_index = index; }
 
 private:
     // Buffer configuration
@@ -112,7 +112,7 @@ public:
     /// \param group_idx Group index (0-7)
     /// \param channel_id Channel ID to find (1-based)
     /// \return Channel index within group (0-based), or -1 if not found
-    int32_t findChannelInGroup(uint32_t group_idx, uint16_t channel_id) const
+    [[nodiscard]] int32_t findChannelInGroup(const uint32_t group_idx, const uint16_t channel_id) const
     {
         if (group_idx >= cbMAXGROUPS)
             return -1;

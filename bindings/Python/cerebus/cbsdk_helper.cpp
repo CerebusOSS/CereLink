@@ -9,9 +9,9 @@
 
 #include "cbsdk_helper.h"
 
-cbSdkResult cbsdk_get_trial_config(uint32_t nInstance, cbSdkConfigParam * pcfg_param)
+cbSdkResult cbsdk_get_trial_config(const uint32_t nInstance, cbSdkConfigParam * pcfg_param)
 {
-    cbSdkResult sdkres = cbSdkGetTrialConfig(nInstance, &pcfg_param->bActive,
+    const cbSdkResult sdk_result = cbSdkGetTrialConfig(nInstance, &pcfg_param->bActive,
             &pcfg_param->Begchan, &pcfg_param->Begmask, &pcfg_param->Begval,
             &pcfg_param->Endchan, &pcfg_param->Endmask, &pcfg_param->Endval,
             &pcfg_param->bDouble, &pcfg_param->uWaveforms,
@@ -19,12 +19,12 @@ cbSdkResult cbsdk_get_trial_config(uint32_t nInstance, cbSdkConfigParam * pcfg_p
             &pcfg_param->uTrackings,
             &pcfg_param->bAbsolute);
 
-    return sdkres;
+    return sdk_result;
 }
 
-cbSdkResult cbsdk_set_trial_config(uint32_t nInstance, const cbSdkConfigParam * pcfg_param)
+cbSdkResult cbsdk_set_trial_config(const uint32_t nInstance, const cbSdkConfigParam * pcfg_param)
 {
-    cbSdkResult sdkres = cbSdkSetTrialConfig(nInstance, pcfg_param->bActive,
+    const cbSdkResult sdk_result = cbSdkSetTrialConfig(nInstance, pcfg_param->bActive,
             pcfg_param->Begchan,pcfg_param->Begmask, pcfg_param->Begval,
             pcfg_param->Endchan, pcfg_param->Endmask, pcfg_param->Endval,
             pcfg_param->bDouble, pcfg_param->uWaveforms,
@@ -32,41 +32,41 @@ cbSdkResult cbsdk_set_trial_config(uint32_t nInstance, const cbSdkConfigParam * 
             pcfg_param->uTrackings,
             pcfg_param->bAbsolute);
 
-    return sdkres;
+    return sdk_result;
 }
 
 
-cbSdkResult cbsdk_init_trial_event(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent)
+cbSdkResult cbsdk_init_trial_event(const uint32_t nInstance, const int reset, cbSdkTrialEvent * trialevent)
 {
     memset(trialevent, 0, sizeof(*trialevent));
-    cbSdkResult sdkres = cbSdkInitTrialData(nInstance, reset, trialevent, 0, 0, 0);
+    const cbSdkResult sdk_result = cbSdkInitTrialData(nInstance, reset, trialevent, nullptr, nullptr, nullptr);
 
-    return sdkres;
+    return sdk_result;
 }
 
-cbSdkResult cbsdk_get_trial_event(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent)
+cbSdkResult cbsdk_get_trial_event(const uint32_t nInstance, const int reset, cbSdkTrialEvent * trialevent)
 {
-    cbSdkResult sdkres = cbSdkGetTrialData(nInstance, reset, trialevent, 0, 0, 0);
+    cbSdkResult sdk_result = cbSdkGetTrialData(nInstance, reset, trialevent, nullptr, nullptr, nullptr);
 
-    return sdkres;
+    return sdk_result;
 }
 
-cbSdkResult cbsdk_init_trial_cont(uint32_t nInstance, int reset, cbSdkTrialCont * trialcont)
+cbSdkResult cbsdk_init_trial_cont(const uint32_t nInstance, const int reset, cbSdkTrialCont * trialcont)
 {
     memset(trialcont, 0, sizeof(*trialcont));
-    cbSdkResult sdkres = cbSdkInitTrialData(nInstance, reset, 0, trialcont, 0, 0);
+    const cbSdkResult sdk_result = cbSdkInitTrialData(nInstance, reset, nullptr, trialcont, nullptr, nullptr);
 
-    return sdkres;
+    return sdk_result;
 }
 
-cbSdkResult cbsdk_get_trial_cont(uint32_t nInstance, int reset, cbSdkTrialCont * trialcont)
+cbSdkResult cbsdk_get_trial_cont(const uint32_t nInstance, const int reset, cbSdkTrialCont * trialcont)
 {
-    cbSdkResult sdkres = cbSdkGetTrialData(nInstance, reset, 0, trialcont, 0, 0);
+    const cbSdkResult sdk_result = cbSdkGetTrialData(nInstance, reset, nullptr, trialcont, nullptr, nullptr);
 
-    return sdkres;
+    return sdk_result;
 }
 
-cbSdkResult cbsdk_init_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
+cbSdkResult cbsdk_init_trial_data(const uint32_t nInstance, const int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
 {
     if(trialevent)
     {
@@ -80,35 +80,35 @@ cbSdkResult cbsdk_init_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent
 	{
 	    memset(trialcomm, 0, sizeof(*trialcomm));
 	}
-	cbSdkResult sdkres = cbSdkInitTrialData(nInstance, reset, trialevent, trialcont, trialcomm, 0, wait_for_comment_msec);
+	const cbSdkResult sdk_result = cbSdkInitTrialData(nInstance, reset, trialevent, trialcont, trialcomm, nullptr, wait_for_comment_msec);
 
-	return sdkres;
+	return sdk_result;
 }
 
-cbSdkResult cbsdk_get_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm)
+cbSdkResult cbsdk_get_trial_data(const uint32_t nInstance, const int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm)
 {
-	cbSdkResult sdkres = cbSdkGetTrialData(nInstance, reset, trialevent, trialcont, trialcomm, 0);
+	const cbSdkResult sdk_result = cbSdkGetTrialData(nInstance, reset, trialevent, trialcont, trialcomm, nullptr);
 
-	return sdkres;
+	return sdk_result;
 }
 
-cbSdkResult cbsdk_init_trial_comment(uint32_t nInstance, int reset, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
+cbSdkResult cbsdk_init_trial_comment(const uint32_t nInstance, const int reset, cbSdkTrialComment * trialcomm, const unsigned long wait_for_comment_msec)
 {
     memset(trialcomm, 0, sizeof(*trialcomm));
-    cbSdkResult sdkres = cbSdkInitTrialData(nInstance, reset, 0, 0, trialcomm, 0, wait_for_comment_msec);
+    const cbSdkResult sdk_result = cbSdkInitTrialData(nInstance, reset, nullptr, nullptr, trialcomm, nullptr, wait_for_comment_msec);
 
-    return sdkres;
+    return sdk_result;
 }
 
-cbSdkResult cbsdk_get_trial_comment(uint32_t nInstance, int reset, cbSdkTrialComment * trialcomm)
+cbSdkResult cbsdk_get_trial_comment(const uint32_t nInstance, const int reset, cbSdkTrialComment * trialcomm)
 {
-    cbSdkResult sdkres = cbSdkGetTrialData(nInstance, reset, 0, 0, trialcomm, 0);
+    const cbSdkResult sdk_result = cbSdkGetTrialData(nInstance, reset, nullptr, nullptr, trialcomm, nullptr);
 
-    return sdkres;
+    return sdk_result;
 }
 
-cbSdkResult cbsdk_file_config(uint32_t instance, const char * filename, const char * comment, int start, unsigned int options)
+cbSdkResult cbsdk_file_config(const uint32_t instance, const char * filename, const char * comment, const int start, const unsigned int options)
 {
-    cbSdkResult sdkres = cbSdkSetFileConfig(instance, filename == NULL ? "" : filename, comment == NULL ? "" : comment, start, options);
-    return sdkres;
+    const cbSdkResult sdk_result = cbSdkSetFileConfig(instance, filename == nullptr ? "" : filename, comment == nullptr ? "" : comment, start, options);
+    return sdk_result;
 }
