@@ -50,7 +50,6 @@ TEST_F(ContinuousDataTest, GroupContinuousDataConstructorInitializesCorrectly) {
     EXPECT_EQ(test_group.getWriteStartIndex(), 0u);
     EXPECT_EQ(test_group.getReadEndIndex(), 0u);
     EXPECT_EQ(test_group.getNumChannels(), 0u);
-    EXPECT_EQ(test_group.getCapacity(), 0u);
     EXPECT_EQ(test_group.getChannelIds(), nullptr);
     EXPECT_EQ(test_group.getTimestamps(), nullptr);
     EXPECT_EQ(test_group.getChannelData(), nullptr);
@@ -64,7 +63,8 @@ TEST_F(ContinuousDataTest, GroupResetClearsDataButPreservesStructure) {
     group->setWriteIndex(50);
     group->setWriteStartIndex(10);
     const_cast<PROCTIME*>(group->getTimestamps())[0] = 12345;
-    const_cast<int16_t**>(group->getChannelData())[0][0] = 999;
+    // Access flat array: [sample 0][channel 0] = index 0 * num_channels + 0 = 0
+    const_cast<int16_t*>(group->getChannelData())[0] = 999;
 
     // Reset should clear indices and data
     group->reset();
@@ -73,7 +73,8 @@ TEST_F(ContinuousDataTest, GroupResetClearsDataButPreservesStructure) {
     EXPECT_EQ(group->getWriteStartIndex(), 0u);
     EXPECT_EQ(group->getReadEndIndex(), 0u);
     EXPECT_EQ(group->getTimestamps()[0], 0u);
-    EXPECT_EQ(group->getChannelData()[0][0], 0);
+    // Access flat array: [sample 0][channel 0] = index 0
+    EXPECT_EQ(group->getChannelData()[0], 0);
 
     // But allocation should remain
     EXPECT_NE(group->getChannelData(), nullptr);
@@ -95,7 +96,6 @@ TEST_F(ContinuousDataTest, GroupCleanupDeallocatesMemory) {
     EXPECT_EQ(group->getTimestamps(), nullptr);
     EXPECT_EQ(group->getChannelIds(), nullptr);
     EXPECT_EQ(group->getNumChannels(), 0u);
-    EXPECT_EQ(group->getCapacity(), 0u);
 }
 
 // Test 4: ContinuousData findChannelInGroup finds correct channel
@@ -128,7 +128,8 @@ TEST_F(ContinuousDataTest, ContinuousDataResetResetsAllGroups) {
 
         grp.setWriteIndex(50);
         const_cast<PROCTIME*>(grp.getTimestamps())[0] = 12345;
-        const_cast<int16_t**>(grp.getChannelData())[0][0] = 999;  // [sample 0][channel 0]
+        // Access flat array: [sample 0][channel 0] = index 0
+        const_cast<int16_t*>(grp.getChannelData())[0] = 999;
     }
 
     cd->reset();
@@ -137,7 +138,8 @@ TEST_F(ContinuousDataTest, ContinuousDataResetResetsAllGroups) {
     for (uint32_t g = 0; g < 2; ++g) {
         EXPECT_EQ(cd->groups[g].getWriteIndex(), 0u);
         EXPECT_EQ(cd->groups[g].getTimestamps()[0], 0u);
-        EXPECT_EQ(cd->groups[g].getChannelData()[0][0], 0);
+        // Access flat array: [sample 0][channel 0] = index 0
+        EXPECT_EQ(cd->groups[g].getChannelData()[0], 0);
     }
 }
 
@@ -180,7 +182,8 @@ TEST_F(ContinuousDataTest, RingBufferWraparoundWorks) {
 
     EXPECT_EQ(group->getWriteIndex(), 1u);
     EXPECT_EQ(group->getTimestamps()[0], 1010u);
-    EXPECT_EQ(group->getChannelData()[0][0], 110);  // [sample 0][channel 0]
+    // Access flat array: [sample 0][channel 0] = index 0 * 2 + 0 = 0
+    EXPECT_EQ(group->getChannelData()[0], 110);
 }
 
 // Test 8: Multiple groups can coexist independently
@@ -210,8 +213,9 @@ TEST_F(ContinuousDataTest, MultipleGroupsCoexistIndependently) {
     EXPECT_EQ(grp1.getNumChannels(), 3u);
     EXPECT_EQ(grp5.getTimestamps()[0], 1000u);
     EXPECT_EQ(grp1.getTimestamps()[0], 2000u);
-    EXPECT_EQ(grp5.getChannelData()[0][0], 100);
-    EXPECT_EQ(grp1.getChannelData()[0][0], 200);
+    // Access flat array: [sample 0][channel 0] = index 0 * num_channels + 0 = 0
+    EXPECT_EQ(grp5.getChannelData()[0], 100);
+    EXPECT_EQ(grp1.getChannelData()[0], 200);
 }
 
 // Test 9: Same channel can exist in multiple groups
@@ -237,8 +241,9 @@ TEST_F(ContinuousDataTest, SameChannelInMultipleGroups) {
     EXPECT_EQ(cd->findChannelInGroup(6, 1), 0);
 
     // Verify they maintain separate data
-    EXPECT_EQ(grp5.getChannelData()[0][0], 500);
-    EXPECT_EQ(grp6.getChannelData()[0][0], 600);
+    // Access flat array: [sample 0][channel 0] = index 0 * 1 + 0 = 0
+    EXPECT_EQ(grp5.getChannelData()[0], 500);
+    EXPECT_EQ(grp6.getChannelData()[0], 600);
 }
 
 // Test 10: Large channel counts work correctly
@@ -248,18 +253,19 @@ TEST_F(ContinuousDataTest, LargeChannelCountsWork) {
     AllocateGroup(1000, num_channels);
 
     EXPECT_EQ(group->getNumChannels(), num_channels);
-    EXPECT_GE(group->getCapacity(), num_channels);
 
     // Verify all channels are accessible - write to [sample 0][channel i]
-    auto channel_data = const_cast<int16_t**>(group->getChannelData());
+    // Flat array layout: data[sample_idx * num_channels + channel_idx]
+    auto channel_data = const_cast<int16_t*>(group->getChannelData());
     for (uint32_t i = 0; i < num_channels; ++i) {
-        EXPECT_NE(channel_data[0], nullptr);
-        channel_data[0][i] = static_cast<int16_t>(i);
+        // For sample 0, channel i: index = 0 * num_channels + i = i
+        channel_data[i] = static_cast<int16_t>(i);
     }
 
     // Verify data was written correctly
     for (uint32_t i = 0; i < num_channels; ++i) {
-        EXPECT_EQ(group->getChannelData()[0][i], static_cast<int16_t>(i));
+        // For sample 0, channel i: index = i
+        EXPECT_EQ(group->getChannelData()[i], static_cast<int16_t>(i));
     }
 }
 
@@ -276,26 +282,28 @@ TEST_F(ContinuousDataTest, EmptyGroupSafeToCleanup) {
     EXPECT_EQ(empty_group.getTimestamps(), nullptr);
 }
 
-// Test 12: Memory allocation adds headroom beyond num_channels
-TEST_F(ContinuousDataTest, MemoryAllocationUsesCapacity) {
+// Test 12: Memory allocation works correctly for specified channel count
+TEST_F(ContinuousDataTest, MemoryAllocationWorks) {
     const uint32_t num_channels = 10;
+    const uint32_t buffer_size = 100;
 
-    // Allocate with 10 channels - capacity should be larger (10 + 4 headroom)
-    AllocateGroup(100, num_channels);
+    // Allocate with 10 channels
+    AllocateGroup(buffer_size, num_channels);
 
     EXPECT_EQ(group->getNumChannels(), num_channels);
-    EXPECT_GT(group->getCapacity(), num_channels);  // Capacity should exceed num_channels
+    EXPECT_EQ(group->getSize(), buffer_size);
 
-    // Should be able to access all capacity slots - write to [sample 0][channel i]
-    const auto channel_data = const_cast<int16_t**>(group->getChannelData());
-    for (uint32_t i = 0; i < group->getCapacity(); ++i) {
-        EXPECT_NE(channel_data[0], nullptr);
-        channel_data[0][i] = static_cast<int16_t>(i);
+    // Should be able to access all channel slots for sample 0
+    // Flat array layout: data[sample_idx * num_channels + channel_idx]
+    auto channel_data = const_cast<int16_t*>(group->getChannelData());
+    for (uint32_t i = 0; i < num_channels; ++i) {
+        // For sample 0, channel i: index = 0 * num_channels + i = i
+        channel_data[i] = static_cast<int16_t>(i);
     }
 
     // Verify data was written correctly
-    for (uint32_t i = 0; i < group->getCapacity(); ++i) {
-        EXPECT_EQ(group->getChannelData()[0][i], static_cast<int16_t>(i));
+    for (uint32_t i = 0; i < num_channels; ++i) {
+        EXPECT_EQ(group->getChannelData()[i], static_cast<int16_t>(i));
     }
 }
 
@@ -333,15 +341,15 @@ TEST_F(ContinuousDataTest, TypicalMemoryUsageIsReasonable) {
 
     // Calculate memory usage
     const size_t timestamp_mem = buffer_size * sizeof(PROCTIME);
-    const size_t channel_data_mem = group->getCapacity() * buffer_size * sizeof(int16_t);
-    const size_t channel_ids_mem = group->getCapacity() * sizeof(uint16_t);
+    const size_t channel_data_mem = num_channels * buffer_size * sizeof(int16_t);
+    const size_t channel_ids_mem = num_channels * sizeof(uint16_t);
     const size_t total_mem = timestamp_mem + channel_data_mem + channel_ids_mem;
 
     // For 32 channels with 102400 samples:
-    // Timestamps: 102400 * 4 = 409KB
-    // Data: 36 * 102400 * 2 = 7.2MB (capacity = 32 + 4 = 36)
-    // IDs: 36 * 2 = 72 bytes
-    // Total: ~7.6MB per group
+    // Timestamps: 102400 * 4 = 409KB (or 8 bytes for 64-bit PROCTIME)
+    // Data: 32 * 102400 * 2 = 6.4MB
+    // IDs: 32 * 2 = 64 bytes
+    // Total: ~6.8MB per group
 
     // This is much better than old system: 256 * 102400 * 2 = 52MB per group!
     EXPECT_LT(total_mem, 10 * 1024 * 1024);  // Less than 10MB
