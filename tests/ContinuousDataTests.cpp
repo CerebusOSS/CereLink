@@ -100,7 +100,7 @@ TEST_F(ContinuousDataTest, GroupCleanupDeallocatesMemory) {
 
 // Test 4: ContinuousData findChannelInGroup finds correct channel
 TEST_F(ContinuousDataTest, FindChannelInGroupFindsCorrectChannel) {
-    auto& test_group = cd->groups[5];  // Use group 5 (30kHz)
+    GroupContinuousData& test_group = cd->groups[5];
 
     // Set up channel IDs: 1, 10, 25
     uint16_t chan_ids[3] = {1, 10, 25};
@@ -122,7 +122,7 @@ TEST_F(ContinuousDataTest, FindChannelInGroupFindsCorrectChannel) {
 TEST_F(ContinuousDataTest, ContinuousDataResetResetsAllGroups) {
     // Allocate and populate two groups
     for (uint32_t g = 0; g < 2; ++g) {
-        auto& grp = cd->groups[g];
+        GroupContinuousData& grp = cd->groups[g];
         uint16_t chan_ids[2] = {1, 2};
         ASSERT_TRUE(grp.allocate(100, 2, chan_ids, 30000));
 
@@ -147,7 +147,7 @@ TEST_F(ContinuousDataTest, ContinuousDataResetResetsAllGroups) {
 TEST_F(ContinuousDataTest, ContinuousDataCleanupCleansAllGroups) {
     // Allocate two groups
     for (uint32_t g = 0; g < 2; ++g) {
-        auto& grp = cd->groups[g];
+        GroupContinuousData& grp = cd->groups[g];
         uint16_t chan_ids[2] = {1, 2};
         ASSERT_TRUE(grp.allocate(100, 2, chan_ids, 30000));
     }
@@ -189,22 +189,22 @@ TEST_F(ContinuousDataTest, RingBufferWraparoundWorks) {
 // Test 8: Multiple groups can coexist independently
 TEST_F(ContinuousDataTest, MultipleGroupsCoexistIndependently) {
     // Allocate group 5 (30kHz) with 2 channels
-    auto& grp5 = cd->groups[5];
+    GroupContinuousData& grp5 = cd->groups[5];
     const uint16_t chan_ids5[2] = {1, 2};
     ASSERT_TRUE(grp5.allocate(100, 2, chan_ids5, 30000));
 
     // Allocate group 1 (500Hz) with 3 channels
-    auto& grp1 = cd->groups[1];
+    GroupContinuousData& grp1 = cd->groups[1];
     const uint16_t chan_ids1[3] = {3, 4, 5};
     ASSERT_TRUE(grp1.allocate(100, 3, chan_ids1, 500));
 
     // Write data to group 5
     int16_t data5[2] = {100, 0};
-    (void)grp5.writeSample(1000, data5, 2);  // Ignore overflow - just writing test data
+    (void)grp5.writeSample(1000, data5, 2);
 
     // Write data to group 1
     const int16_t data1[3] = {200, 0, 0};
-    (void)grp1.writeSample(2000, data1, 3);  // Ignore overflow - just writing test data
+    (void)grp1.writeSample(2000, data1, 3);
 
     // Verify groups remain independent
     EXPECT_EQ(grp5.getSampleRate(), 30000u);
@@ -221,20 +221,20 @@ TEST_F(ContinuousDataTest, MultipleGroupsCoexistIndependently) {
 // Test 9: Same channel can exist in multiple groups
 TEST_F(ContinuousDataTest, SameChannelInMultipleGroups) {
     // Channel 1 in group 5
-    auto& grp5 = cd->groups[5];
+    GroupContinuousData& grp5 = cd->groups[5];
     const uint16_t chan_ids5[1] = {1};
     ASSERT_TRUE(grp5.allocate(100, 1, chan_ids5, 30000));
 
     // Same channel 1 in group 6
-    auto& grp6 = cd->groups[6];
+    GroupContinuousData& grp6 = cd->groups[6];
     const uint16_t chan_ids6[1] = {1};
     ASSERT_TRUE(grp6.allocate(100, 1, chan_ids6, 60000));
 
     // Write different data to each
     const int16_t data5[1] = {500};
-    (void)grp5.writeSample(1000, data5, 1);  // Ignore overflow - just writing test data
+    (void)grp5.writeSample(1000, data5, 1);
     const int16_t data6[1] = {600};
-    (void)grp6.writeSample(2000, data6, 1);  // Ignore overflow - just writing test data
+    (void)grp6.writeSample(2000, data6, 1);
 
     // Verify they can be found independently
     EXPECT_EQ(cd->findChannelInGroup(5, 1), 0);
@@ -361,7 +361,7 @@ TEST_F(ContinuousDataTest, TypicalMemoryUsageIsReasonable) {
 
 // Test 15: Channel IDs can be non-contiguous
 TEST_F(ContinuousDataTest, NonContiguousChannelIDsWork) {
-    auto& grp = cd->groups[5];
+    GroupContinuousData& grp = cd->groups[5];
 
     // Use non-contiguous channel IDs
     const uint16_t chan_ids[4] = {1, 5, 100, 250};
