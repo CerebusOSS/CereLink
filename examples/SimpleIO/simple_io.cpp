@@ -212,7 +212,7 @@ void setConfig(const bool bCont, bool bEv)
 
 cbSdkResult close()
 {
-    cbSdkResult res = cbSdkClose(INST);
+    const cbSdkResult res = cbSdkClose(INST);
     if (res == CBSDKRESULT_SUCCESS)
     {
         printf("Interface closed successfully\n");
@@ -270,26 +270,24 @@ int main(int argc, char *argv[])
     res = cbSdkGetTrialConfig(INST, &cfg.bActive,
                               &cfg.begchan, &cfg.begmask, &cfg.begval,
                               &cfg.endchan, &cfg.endmask, &cfg.endval,
-                              &cfg.bDouble, &cfg.uWaveforms,
-                              &cfg.uConts, &cfg.uEvents, &cfg.uComments, &cfg.uTrackings,
-                              &cfg.bAbsolute);
+                              &cfg.uWaveforms,
+                              &cfg.uConts, &cfg.uEvents, &cfg.uComments, &cfg.uTrackings);
     cfg.bActive = 1;
     cfg.uConts = bCont ? cbSdk_CONTINUOUS_DATA_SAMPLES : 0;
     cfg.uEvents = bEv ? cbSdk_EVENT_DATA_SAMPLES : 0;
     res = cbSdkSetTrialConfig(INST, cfg.bActive,
                               cfg.begchan, cfg.begmask, cfg.begval,
                               cfg.endchan, cfg.endmask, cfg.endval,
-                              cfg.bDouble, cfg.uWaveforms,
-                              cfg.uConts, cfg.uEvents, cfg.uComments, cfg.uTrackings,
-                              cfg.bAbsolute);
+                              cfg.uWaveforms,
+                              cfg.uConts, cfg.uEvents, cfg.uComments, cfg.uTrackings);
 
-    std::unique_ptr<cbSdkTrialEvent> trialEvent = std::unique_ptr<cbSdkTrialEvent>(nullptr);
+    auto trialEvent = std::unique_ptr<cbSdkTrialEvent>(nullptr);
     if (bEv)
         trialEvent = std::make_unique<cbSdkTrialEvent>();
-    std::unique_ptr<cbSdkTrialCont> trialCont = std::unique_ptr<cbSdkTrialCont>(nullptr);
+    auto trialCont = std::unique_ptr<cbSdkTrialCont>(nullptr);
     if (bCont)
         trialCont = std::make_unique<cbSdkTrialCont>();
-    std::unique_ptr<cbSdkTrialComment> trialComm = std::unique_ptr<cbSdkTrialComment>(nullptr);
+    auto trialComm = std::unique_ptr<cbSdkTrialComment>(nullptr);
     if (bComm)
         trialComm = std::make_unique<cbSdkTrialComment>();
 
@@ -299,7 +297,6 @@ int main(int argc, char *argv[])
     std::vector<double> cont_double[cbMAXCHANS];
     std::vector<PROCTIME> event_ts[cbMAXCHANS][cbMAXUNITS + 1];
     std::vector<int16_t> event_wfs_short[cbMAXCHANS];
-    std::vector<double> event_wfs_double[cbMAXCHANS];
 
     PROCTIME start_time;
     PROCTIME elapsed_time = 0;
@@ -334,17 +331,10 @@ int main(int argc, char *argv[])
                 if (bIsDig)
                 {
                     // alloc waveform data
-                    uint32_t n_samples = trialEvent->num_samples[ev_ix][0];
-                    if (cfg.bDouble)
-                    {
-                        event_wfs_short[ev_ix].resize(n_samples);
-                        std::fill(event_wfs_short[ev_ix].begin(), event_wfs_short[ev_ix].end(), 0);
-                        trialEvent->waveforms[ev_ix] = event_wfs_short[ev_ix].data();
-                    } else {
-                        event_wfs_double[ev_ix].resize(n_samples);
-                        std::fill(event_wfs_double[ev_ix].begin(), event_wfs_double[ev_ix].end(), 0);
-                        trialEvent->waveforms[ev_ix] = event_wfs_double[ev_ix].data();
-                    }
+                    const uint32_t n_samples = trialEvent->num_samples[ev_ix][0];
+                    event_wfs_short[ev_ix].resize(n_samples);
+                    std::fill(event_wfs_short[ev_ix].begin(), event_wfs_short[ev_ix].end(), 0);
+                    trialEvent->waveforms[ev_ix] = event_wfs_short[ev_ix].data();
                 }
             }
         }
@@ -353,17 +343,10 @@ int main(int argc, char *argv[])
         {
             // Allocate memory for continuous data
             for (int chan_ix = 0; chan_ix < trialCont->count; ++chan_ix) {
-                uint32_t n_samples = trialCont->num_samples[chan_ix];
-                if (cfg.bDouble)
-                {
-                    cont_double[chan_ix].resize(n_samples);
-                    std::fill(cont_double[chan_ix].begin(), cont_double[chan_ix].end(), 0);
-                    trialCont->samples[chan_ix] = cont_double[chan_ix].data();  // Technically only needed if resize grows the vector.
-                } else {
-                    cont_short[chan_ix].resize(n_samples);
-                    std::fill(cont_short[chan_ix].begin(), cont_short[chan_ix].end(), 0);
-                    trialCont->samples[chan_ix] = cont_short[chan_ix].data();  // Technically only needed if resize grows the vector.
-                }
+                const uint32_t n_samples = trialCont->num_samples;
+                cont_short[chan_ix].resize(n_samples);
+                std::fill(cont_short[chan_ix].begin(), cont_short[chan_ix].end(), 0);
+                trialCont->samples = cont_short[chan_ix].data();  // Technically only needed if resize grows the vector.
             }
         }
         
@@ -396,13 +379,8 @@ int main(int argc, char *argv[])
                     {
                         printf("%" PRIu64 ":", static_cast<uint64_t>(event_ts[ev_ix][0][0]));
                     }
-                    if (cfg.bDouble) {
-                        for (uint32_t sample_ix = 0; sample_ix < n_samples; sample_ix++)
-                            printf(" %f", event_wfs_double[ev_ix][sample_ix]);
-                    } else {
-                        for (uint32_t sample_ix = 0; sample_ix < n_samples; sample_ix++)
-                            printf(" %" PRIu16, event_wfs_short[ev_ix][sample_ix]);
-                    }
+                    for (uint32_t sample_ix = 0; sample_ix < n_samples; sample_ix++)
+                        printf(" %" PRIu16, event_wfs_short[ev_ix][sample_ix]);
                     if (n_samples > 0) printf("\n");
                 }
             }
@@ -412,14 +390,9 @@ int main(int argc, char *argv[])
         {
             for (size_t chan_ix = 0; chan_ix < trialCont->count; chan_ix++)
             {
-                const uint32_t n_samples = trialCont->num_samples[chan_ix];
-                if (cfg.bDouble) {
-                    const auto [min, max] = std::minmax_element(begin(cont_double[chan_ix]), end(cont_double[chan_ix]));
-                    std::cout << "chan = " << trialCont->chan[chan_ix] << ", nsamps = " << n_samples << ", min = " << *min << ", max = " << *max << '\n';
-                } else {
-                    const auto [min, max] = std::minmax_element(begin(cont_short[chan_ix]), end(cont_short[chan_ix]));
-                    std::cout << "chan = " << trialCont->chan[chan_ix] << ", nsamps = " << n_samples << ", min = " << *min << ", max = " << *max << '\n';
-                }
+                const uint32_t n_samples = trialCont->num_samples;
+                const auto [min, max] = std::minmax_element(begin(cont_short[chan_ix]), end(cont_short[chan_ix]));
+                std::cout << "chan = " << trialCont->chan[chan_ix] << ", nsamps = " << n_samples << ", min = " << *min << ", max = " << *max << '\n';
             }
         }
 

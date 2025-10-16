@@ -161,7 +161,7 @@ void getConfig()
 	uint16_t pGroupList[cbNUM_ANALOG_CHANS];
 	for (uint32_t group_ix = 1; group_ix < 7; group_ix++)
 	{
-		cbSdkResult res = cbSdkGetSampleGroupList(INST, proc, group_ix, &nChansInGroup, pGroupList);
+		const cbSdkResult res = cbSdkGetSampleGroupList(INST, proc, group_ix, &nChansInGroup, pGroupList);
 		if (res == CBSDKRESULT_SUCCESS)
 		{
 			printf("In sampling group %d, found %d channels.\n", group_ix, nChansInGroup);
@@ -179,25 +179,23 @@ void testSetConfig()
 	uint16_t Endchan = 0;
 	uint32_t Endmask = 0;
 	uint32_t Endval = 0;
-	bool bDouble = false;
 	uint32_t uWaveforms = 0;
 	uint32_t uConts = 0;
 	uint32_t uEvents = 0;
 	uint32_t uComments = 0;
 	uint32_t uTrackings = 0;
-	bool bAbsolute = false;
 	cbSdkResult res = cbSdkGetTrialConfig(INST, &bActive, &Begchan, &Begmask, &Begval, &Endchan, &Endmask, &Endval,
-		&bDouble, &uWaveforms, &uConts, &uEvents, &uComments, &uTrackings, &bAbsolute);
+		&uWaveforms, &uConts, &uEvents, &uComments, &uTrackings);
 	handleResult(res);
 
-	res = cbSdkSetTrialConfig(INST, 1, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 100, 0, false);
+	res = cbSdkSetTrialConfig(INST, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0);
 	handleResult(res);
 }
 
 void getTime()
 {
 	PROCTIME cbtime = 0;
-	cbSdkResult res = cbSdkGetTime(INST, &cbtime);
+	const cbSdkResult res = cbSdkGetTime(INST, &cbtime);
 	if (res == CBSDKRESULT_SUCCESS)
 	{
 		printf("cbSdkGetTime returned %llu\n", static_cast<uint64_t>(cbtime));
@@ -208,7 +206,7 @@ void getTime()
 void getComment()
 {
 	constexpr uint32_t bActive = true;
-	cbSdkTrialComment trialcomment = { 0, nullptr, nullptr, nullptr, nullptr };
+	cbSdkTrialComment trialcomment = { 0, 0, nullptr, nullptr, nullptr, nullptr };
 	//printf("cbSdkInitTrialData\n");
 	//getTime();
 	cbSdkResult res = cbSdkInitTrialData(INST, bActive, nullptr, nullptr, &trialcomment, nullptr, 0);
@@ -216,22 +214,14 @@ void getComment()
 
 	if (trialcomment.num_samples > 0)
 	{
-		// Allocate memory for trialcomment
-		/*
-		uint16_t num_samples; ///< Number of comments
-		uint8_t * charsets;   ///< Buffer to hold character sets
-		uint32_t * rgbas;     ///< Buffer to hold rgba values
-		uint8_t * * comments; ///< Pointer to comments
-		void * timestamps;  ///< Buffer to hold time stamps
-		*/
-		std::vector<uint8_t> charsets = std::vector<uint8_t>(trialcomment.num_samples);
-		std::vector<uint32_t> rgbas = std::vector<uint32_t>(trialcomment.num_samples);
-		std::vector<uint32_t> timestamps = std::vector<uint32_t>(trialcomment.num_samples);
+		auto charsets = std::vector<uint8_t>(trialcomment.num_samples);
+		auto rgbas = std::vector<uint32_t>(trialcomment.num_samples);
+		auto timestamps = std::vector<uint32_t>(trialcomment.num_samples);
 		trialcomment.charsets = charsets.data();
 		trialcomment.rgbas = rgbas.data();
 		trialcomment.timestamps = static_cast<void *>(timestamps.data());
 
-		std::vector<uint8_t *> comments = std::vector<uint8_t *>(trialcomment.num_samples);
+		auto comments = std::vector<uint8_t *>(trialcomment.num_samples);
 		trialcomment.comments = comments.data();
 		for (size_t comm_ix = 0; comm_ix < trialcomment.num_samples; comm_ix++)
 		{

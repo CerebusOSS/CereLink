@@ -178,18 +178,16 @@ void setConfig()
 	uint16_t Endchan = 0;
 	uint32_t Endmask = 0;
 	uint32_t Endval = 0;
-	bool bDouble = false;
 	uint32_t uWaveforms = 0;
 	uint32_t uConts = 0;
 	uint32_t uEvents = 0;
 	uint32_t uComments = 0;
 	uint32_t uTrackings = 0;
-	bool bAbsolute = false;
 	cbSdkResult res = cbSdkGetTrialConfig(INST, &bActive, &Begchan, &Begmask, &Begval, &Endchan, &Endmask, &Endval,
-		&bDouble, &uWaveforms, &uConts, &uEvents, &uComments, &uTrackings, &bAbsolute);
+		&uWaveforms, &uConts, &uEvents, &uComments, &uTrackings);
 	handleResult(res);
 
-	res = cbSdkSetTrialConfig(INST, 1, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 100, 0, false);
+	res = cbSdkSetTrialConfig(INST, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0);
 	handleResult(res);
 }
 

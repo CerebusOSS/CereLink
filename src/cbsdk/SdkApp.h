@@ -69,13 +69,12 @@ public:
     cbSdkResult SdkGetTime(PROCTIME * cbtime) const;
     cbSdkResult SdkGetSpkCache(uint16_t channel, cbSPKCACHE **cache) const;
     cbSdkResult SdkGetTrialConfig(uint32_t * pbActive, uint16_t * pBegchan, uint32_t * pBegmask, uint32_t * pBegval,
-                                  uint16_t * pEndchan, uint32_t * pEndmask, uint32_t * pEndval, bool * pbDouble,
+                                  uint16_t * pEndchan, uint32_t * pEndmask, uint32_t * pEndval,
                                   uint32_t * puWaveforms, uint32_t * puConts, uint32_t * puEvents,
-                                  uint32_t * puComments, uint32_t * puTrackings, bool * pbAbsolute) const;
+                                  uint32_t * puComments, uint32_t * puTrackings) const;
     cbSdkResult SdkSetTrialConfig(uint32_t bActive, uint16_t begchan, uint32_t begmask, uint32_t begval,
-                                  uint16_t endchan, uint32_t endmask, uint32_t endval, bool bDouble,
-                                  uint32_t uWaveforms, uint32_t uConts, uint32_t uEvents, uint32_t uComments, uint32_t uTrackings,
-                                  bool bAbsolute);
+                                  uint16_t endchan, uint32_t endmask, uint32_t endval,
+                                  uint32_t uWaveforms, uint32_t uConts, uint32_t uEvents, uint32_t uComments, uint32_t uTrackings);
     cbSdkResult SdkGetChannelLabel(uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position) const;
     cbSdkResult SdkSetChannelLabel(uint16_t channel, const char * label, uint32_t userflags, int32_t * position) const;
     cbSdkResult SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
@@ -167,8 +166,6 @@ protected:
     uint16_t m_uTrialEndChannel;    // Channel ID that is watched for the trial end notification
     uint32_t m_uTrialEndMask;       // Mask ANDed with channel data to check for trial end
     uint32_t m_uTrialEndValue;      // Value the masked data is compared to identify trial end
-    bool   m_bTrialDouble;        // If data storage (spike or continuous) is double
-    bool   m_bTrialAbsolute;      // Absolute trial timing all events
     uint32_t m_uTrialWaveforms;     // If spike waveform should be stored and returned
     uint32_t m_uTrialConts;         // Number of continuous data to buffer
     uint32_t m_uTrialEvents;        // Number of events to buffer

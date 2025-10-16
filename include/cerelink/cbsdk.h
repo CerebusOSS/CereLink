@@ -262,6 +262,7 @@ typedef void (* cbSdkCallback)(uint32_t nInstance, const cbSdkPktType type, cons
 /// Trial spike events
 typedef struct _cbSdkTrialEvent
 {
+    PROCTIME trial_start_time;  ///< Trial start time (device timestamp when trial started)
     // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
     uint16_t count; ///< Number of valid channels in this trial (up to cbNUM_ANALOG_CHANS+2)
     uint16_t chan[cbMAXCHANS]; ///< channel numbers (1-based)
@@ -297,17 +298,20 @@ typedef struct _cbSdkConnection
 /// Trial continuous data
 typedef struct _cbSdkTrialCont
 {
-    uint16_t count; ///< Number of valid channels in this trial (up to cbNUM_ANALOG_CHANS)
-    uint16_t chan[cbNUM_ANALOG_CHANS]; ///< Channel numbers (1-based)
-    uint16_t sample_rates[cbNUM_ANALOG_CHANS]; ///< Current sample rate (samples per second)
-    uint32_t num_samples[cbNUM_ANALOG_CHANS]; ///< Number of samples
-    PROCTIME time;  ///< Start time for trial continuous data
-    void * samples[cbNUM_ANALOG_CHANS]; ///< Buffer to hold sample vectors
+    PROCTIME trial_start_time;         ///< Trial start time (device timestamp when trial started)
+    uint8_t  group;                    ///< Sample group to retrieve (0-7, set by user before Init)
+    uint16_t count;                    ///< Number of valid channels in this group (output from Init)
+    uint16_t chan[cbNUM_ANALOG_CHANS]; ///< Channel numbers (1-based, output from Init)
+    uint16_t sample_rate;              ///< Sample rate for this group (Hz, output from Init)
+    uint32_t num_samples;              ///< Number of samples: input = max to read, output = actual read
+    void * samples;                    ///< Pointer to contiguous [num_samples][count] array
+    PROCTIME * timestamps;             ///< Pointer to array of [num_samples] timestamps
 } cbSdkTrialCont;
 
 /// Trial comment data
 typedef struct _cbSdkTrialComment
 {
+    PROCTIME trial_start_time; ///< Trial start time (device timestamp when trial started)
     uint16_t num_samples; ///< Number of comments
     uint8_t * charsets;   ///< Buffer to hold character sets
     uint32_t * rgbas;     ///< Buffer to hold rgba values (actually tbgr)
@@ -318,6 +322,7 @@ typedef struct _cbSdkTrialComment
 /// Trial video tracking data
 typedef struct _cbSdkTrialTracking
 {
+    PROCTIME trial_start_time;                  ///< Trial start time (device timestamp when trial started)
     uint16_t count;								///< Number of valid trackable objects (up to cbMAXTRACKOBJ)
     uint16_t ids[cbMAXTRACKOBJ];					///< Node IDs (holds count elements)
     uint16_t max_point_counts[cbMAXTRACKOBJ];		///< Maximum point counts (holds count elements)
@@ -540,20 +545,18 @@ CBSDKAPI    cbSdkResult cbSdkGetSpkCache(uint32_t nInstance, uint16_t channel, c
  * @param pEndchan Pointer to receive trial end channel (optional)
  * @param pEndmask Pointer to receive trial end mask (optional)
  * @param pEndval Pointer to receive trial end value (optional)
- * @param pbDouble Pointer to receive double trial flag (optional)
  * @param puWaveforms Pointer to receive waveform count (optional)
  * @param puConts Pointer to receive continuous sample count (optional)
  * @param puEvents Pointer to receive event sample count (optional)
  * @param puComments Pointer to receive comment sample count (optional)
  * @param puTrackings Pointer to receive tracking sample count (optional)
- * @param pbAbsolute Pointer to receive absolute time flag (optional)
  * @return cbSdkResult error code
  */
 CBSDKAPI    cbSdkResult cbSdkGetTrialConfig(uint32_t nInstance,
                                          uint32_t * pbActive, uint16_t * pBegchan = nullptr, uint32_t * pBegmask = nullptr, uint32_t * pBegval = nullptr,
-                                         uint16_t * pEndchan = nullptr, uint32_t * pEndmask = nullptr, uint32_t * pEndval = nullptr, bool * pbDouble = nullptr,
+                                         uint16_t * pEndchan = nullptr, uint32_t * pEndmask = nullptr, uint32_t * pEndval = nullptr,
                                          uint32_t * puWaveforms = nullptr, uint32_t * puConts = nullptr, uint32_t * puEvents = nullptr,
-                                         uint32_t * puComments = nullptr, uint32_t * puTrackings = nullptr, bool * pbAbsolute = nullptr);
+                                         uint32_t * puComments = nullptr, uint32_t * puTrackings = nullptr);
 
 /**
  * @brief Set the trial setup configuration for data collection.
@@ -561,6 +564,7 @@ CBSDKAPI    cbSdkResult cbSdkGetTrialConfig(uint32_t nInstance,
  * A 'trial' is a time period during which data is collected and stored in memory buffers for later retrieval.
  * It can be started and stopped based on specific channel events or manually.
  * Each data type (continuous, event, comment, tracking) can be enabled or disabled independently.
+ * All timestamps are stored in absolute device time.
  *
  * @param nInstance SDK instance number
  * @param bActive Enable or disable trial.
@@ -573,21 +577,18 @@ CBSDKAPI    cbSdkResult cbSdkGetTrialConfig(uint32_t nInstance,
  * @param endchan Channel ID that is watched for the trial end notification (1-based, 0 for all)
  * @param endmask Mask ANDed with channel data to check for trial end
  * @param endval Value the masked data is compared to identify trial end
- * @param bDouble If data storage (spike or continuous) is double
- *      IMO this does not work well and should be avoided.
  * @param uWaveforms Number of waveforms
  * @param uConts Number of continuous samples
  * @param uEvents Number of event samples
  * @param uComments Number of comment samples
  * @param uTrackings Number of tracking samples
- * @param bAbsolute Use absolute time
  * @return cbSdkResult error code
  */
 CBSDKAPI    cbSdkResult cbSdkSetTrialConfig(uint32_t nInstance,
                                          uint32_t bActive, uint16_t begchan = 0, uint32_t begmask = 0, uint32_t begval = 0,
-                                         uint16_t endchan = 0, uint32_t endmask = 0, uint32_t endval = 0, bool bDouble = false,
+                                         uint16_t endchan = 0, uint32_t endmask = 0, uint32_t endval = 0,
                                          uint32_t uWaveforms = 0, uint32_t uConts = cbSdk_CONTINUOUS_DATA_SAMPLES, uint32_t uEvents = cbSdk_EVENT_DATA_SAMPLES,
-                                         uint32_t uComments = 0, uint32_t uTrackings = 0, bool bAbsolute = false);
+                                         uint32_t uComments = 0, uint32_t uTrackings = 0);
 
 /**
  * @brief Close the given trial if configured.
@@ -670,10 +671,13 @@ CBSDKAPI    cbSdkResult cbSdkIsChanSerial(uint32_t nInstance, uint16_t channel, 
  *   out: trialevent->timestamps	timestamps for events
  *   out: trialevent->waveforms		waveform or digital data
  * @param trialcont Pointer to cbSdkTrialCont (or nullptr to skip continuous retrieval)
- *   in: trialcont->num_samples		requested number of continuous samples
- *   out: trialcont->num_samples	retrieved number of continuous samples
- *   out: trialcont->time			start time for trial -- user must keep track of number of samples since init.
- *   out: trialcont->samples		continuous samples
+ *   in: trialcont->group           sample group to retrieve (0-7, must match Init call)
+ *   in: trialcont->num_samples     max number of samples to read
+ *   in: trialcont->samples         pointer to pre-allocated [num_samples][count] array
+ *   in: trialcont->timestamps      pointer to pre-allocated [num_samples] timestamp array
+ *   out: trialcont->num_samples    actual number of samples retrieved
+ *   out: trialcont->samples        continuous samples in [sample][channel] layout
+ *   out: trialcont->timestamps     timestamp for each sample
  * @param trialcomment Pointer to cbSdkTrialComment (or nullptr to skip comment retrieval)
  *   in: trialcomment->num_samples  requested number of comment samples
  *   out: trialcomment->num_samples	retrieved number of comments samples

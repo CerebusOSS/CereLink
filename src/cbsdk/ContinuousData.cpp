@@ -4,7 +4,7 @@
 
 GroupContinuousData::GroupContinuousData() :
     m_size(0), m_sample_rate(0), m_write_index(0), m_write_start_index(0),
-    m_read_end_index(0), m_num_channels(0), m_capacity(0),
+    m_read_end_index(0), m_num_channels(0),
     m_channel_ids(nullptr), m_timestamps(nullptr), m_channel_data(nullptr)
 {
 }
@@ -34,52 +34,43 @@ bool GroupContinuousData::needsReallocation(const uint16_t* chan_ids, uint32_t n
 
 bool GroupContinuousData::allocate(uint32_t buffer_size, uint32_t n_chans, const uint16_t* chan_ids, uint16_t rate)
 {
-    // Determine if we need more capacity
-    const uint32_t needed_capacity = n_chans + 4;  // Add headroom to reduce reallocations
-
-    if (m_capacity < n_chans)
+    if (m_num_channels != n_chans || m_size != buffer_size)
     {
-        // Need to expand capacity - clean up old allocation
+        // Channel count or buffer size changed - need to reallocate
+        // Clean up old allocation
         if (m_channel_data)
         {
-            for (uint32_t i = 0; i < m_size; ++i)
-            {
-                if (m_channel_data[i])
-                    delete[] m_channel_data[i];
-            }
             delete[] m_channel_data;
+            m_channel_data = nullptr;
+        }
+        if (m_channel_ids)
+        {
             delete[] m_channel_ids;
+            m_channel_ids = nullptr;
+        }
+        if (m_timestamps)
+        {
+            delete[] m_timestamps;
+            m_timestamps = nullptr;
         }
 
-        // Allocate new with headroom
+        // Allocate new arrays with exact size needed
         try {
-            // Allocate [size][capacity] layout for memcpy-friendly writes
-            m_channel_data = new int16_t*[buffer_size];
-            for (uint32_t i = 0; i < buffer_size; ++i)
-            {
-                m_channel_data[i] = new int16_t[needed_capacity];
-                std::fill_n(m_channel_data[i], needed_capacity, 0);
-            }
+            // Single contiguous allocation: [buffer_size * n_chans]
+            m_channel_data = new int16_t[buffer_size * n_chans];
+            std::fill_n(m_channel_data, buffer_size * n_chans, static_cast<int16_t>(0));
 
-            m_channel_ids = new uint16_t[needed_capacity];
-            m_capacity = needed_capacity;
+            m_channel_ids = new uint16_t[n_chans];
+
+            m_timestamps = new PROCTIME[buffer_size];
+            std::fill_n(m_timestamps, buffer_size, static_cast<PROCTIME>(0));
+
+            m_num_channels = n_chans;
             m_size = buffer_size;
-
-            // Allocate timestamps if not already allocated
-            if (!m_timestamps)
-            {
-                m_timestamps = new PROCTIME[buffer_size];
-                std::fill_n(m_timestamps, buffer_size, 0);
-            }
         } catch (...) {
             // Allocation failed - cleanup partial allocation
             if (m_channel_data)
             {
-                for (uint32_t i = 0; i < buffer_size; ++i)
-                {
-                    if (m_channel_data[i])
-                        delete[] m_channel_data[i];
-                }
                 delete[] m_channel_data;
                 m_channel_data = nullptr;
             }
@@ -88,18 +79,23 @@ bool GroupContinuousData::allocate(uint32_t buffer_size, uint32_t n_chans, const
                 delete[] m_channel_ids;
                 m_channel_ids = nullptr;
             }
-            m_capacity = 0;
+            if (m_timestamps)
+            {
+                delete[] m_timestamps;
+                m_timestamps = nullptr;
+            }
+            m_num_channels = 0;
+            m_size = 0;
             return false;
         }
+
+        // Reset indices on reallocation (lose any buffered data)
+        m_write_index = 0;
+        m_write_start_index = 0;
     }
 
-    // Update channel list
-    m_num_channels = n_chans;
+    // Update channel list and sample rate
     memcpy(m_channel_ids, chan_ids, n_chans * sizeof(uint16_t));
-
-    // Reset indices on reallocation (lose any buffered data)
-    m_write_index = 0;
-    m_write_start_index = 0;
     m_sample_rate = rate;
 
     return true;
@@ -114,9 +110,8 @@ bool GroupContinuousData::writeSample(PROCTIME timestamp, const int16_t* data, u
     m_timestamps[m_write_index] = timestamp;
 
     // Store data for all channels in one memcpy
-    // Layout is [samples][channels], so channel_data[write_index] is a pointer to
-    // an array of channels for this sample, which perfectly matches packet data layout
-    memcpy(m_channel_data[m_write_index], data, n_chans * sizeof(int16_t));
+    // Contiguous layout: data for sample at write_index starts at [write_index * num_channels]
+    memcpy(&m_channel_data[m_write_index * m_num_channels], data, n_chans * sizeof(int16_t));
 
     // Advance write index (circular buffer)
     const uint32_t next_write_index = (m_write_index + 1) % m_size;
@@ -139,14 +134,10 @@ void GroupContinuousData::reset()
     if (m_size && m_timestamps)
         std::fill_n(m_timestamps, m_size, static_cast<PROCTIME>(0));
 
-    if (m_channel_data)
+    if (m_channel_data && m_size && m_num_channels)
     {
-        // Iterate over samples (outer dimension)
-        for (uint32_t i = 0; i < m_size; ++i)
-        {
-            if (m_channel_data[i])
-                std::fill_n(m_channel_data[i], m_capacity, static_cast<int16_t>(0));
-        }
+        // Fill entire contiguous block
+        std::fill_n(m_channel_data, m_size * m_num_channels, static_cast<int16_t>(0));
     }
 
     m_write_index = 0;
@@ -164,15 +155,6 @@ void GroupContinuousData::cleanup()
 
     if (m_channel_data)
     {
-        // Iterate over samples (outer dimension)
-        for (uint32_t i = 0; i < m_size; ++i)
-        {
-            if (m_channel_data[i])
-            {
-                delete[] m_channel_data[i];
-                m_channel_data[i] = nullptr;
-            }
-        }
         delete[] m_channel_data;
         m_channel_data = nullptr;
     }
@@ -184,5 +166,5 @@ void GroupContinuousData::cleanup()
     }
 
     m_num_channels = 0;
-    m_capacity = 0;
+    m_size = 0;
 }

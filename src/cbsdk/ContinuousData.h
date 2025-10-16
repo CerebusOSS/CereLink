@@ -65,10 +65,9 @@ public:
     [[nodiscard]] uint32_t getWriteStartIndex() const { return m_write_start_index; }
     [[nodiscard]] uint32_t getReadEndIndex() const { return m_read_end_index; }
     [[nodiscard]] uint32_t getNumChannels() const { return m_num_channels; }
-    [[nodiscard]] uint32_t getCapacity() const { return m_capacity; }
     [[nodiscard]] const uint16_t* getChannelIds() const { return m_channel_ids; }
     [[nodiscard]] const PROCTIME* getTimestamps() const { return m_timestamps; }
-    [[nodiscard]] const int16_t* const* getChannelData() const { return m_channel_data; }
+    [[nodiscard]] const int16_t* getChannelData() const { return m_channel_data; }
     [[nodiscard]] bool isAllocated() const { return m_channel_data != nullptr; }
 
     // Setters for write index management (used by SdkGetTrialData)
@@ -87,15 +86,14 @@ private:
     uint32_t m_read_end_index;          ///< Last safe read position (snapshot for readers)
 
     // Dynamic channel management
-    uint32_t m_num_channels;            ///< Number of channels actually in this group
-    uint32_t m_capacity;                ///< Allocated capacity (may exceed num_channels for headroom)
-    uint16_t* m_channel_ids;            ///< Array of channel IDs (1-based, size = capacity)
+    uint32_t m_num_channels;            ///< Number of channels in this group
+    uint16_t* m_channel_ids;            ///< Array of channel IDs (1-based, size = num_channels)
 
-    // Data storage (cache-friendly layout: [samples][channels])
-    // This layout allows memcpy from packet data directly, as packets contain
-    // all channels for a single timestamp.
+    // Data storage (contiguous layout: [samples * channels])
+    // Single contiguous allocation for [size][num_channels] layout enables bulk memcpy.
+    // Access: m_channel_data[sample_idx * m_num_channels + channel_idx]
     PROCTIME* m_timestamps;             ///< [size] - timestamp for each sample
-    int16_t** m_channel_data;           ///< [size][capacity] - data indexed by [sample][channel]
+    int16_t* m_channel_data;            ///< [size * num_channels] - contiguous data block
 };
 
 
