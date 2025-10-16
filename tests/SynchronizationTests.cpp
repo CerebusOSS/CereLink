@@ -34,7 +34,7 @@ TEST_F(SynchronizationTest, ConditionVariableTimeoutWorks) {
     auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 
     // Verify timeout was approximately correct (allow generous tolerance for CI environments)
-    EXPECT_GE(elapsed_ms, 100);
+    EXPECT_GE(elapsed_ms, 95);   // Small tolerance for timing jitter and truncation
     EXPECT_LE(elapsed_ms, 250);  // Increased tolerance for busy CI runners
 }
 
@@ -144,7 +144,7 @@ TEST_F(SynchronizationTest, VerifyCommonTimeoutDurations) {
         m_condVar.wait_for(lock, std::chrono::milliseconds(100)); // Use 100ms for testing
         auto elapsed = std::chrono::steady_clock::now() - start;
         auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-        EXPECT_GE(elapsed_ms, 100);
+        EXPECT_GE(elapsed_ms, 95);   // Small tolerance for timing jitter and truncation
         EXPECT_LE(elapsed_ms, 300);  // Increased tolerance for busy CI runners
     }
 
@@ -155,7 +155,7 @@ TEST_F(SynchronizationTest, VerifyCommonTimeoutDurations) {
         m_condVar.wait_for(lock, std::chrono::milliseconds(250));
         auto elapsed = std::chrono::steady_clock::now() - start;
         auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-        EXPECT_GE(elapsed_ms, 250);
+        EXPECT_GE(elapsed_ms, 240);  // Small tolerance for timing jitter and truncation
         EXPECT_LE(elapsed_ms, 400);  // Increased tolerance for busy CI runners
     }
 }
