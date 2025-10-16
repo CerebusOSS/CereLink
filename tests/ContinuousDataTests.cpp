@@ -189,33 +189,33 @@ TEST_F(ContinuousDataTest, RingBufferWraparoundWorks) {
 // Test 8: Multiple groups can coexist independently
 TEST_F(ContinuousDataTest, MultipleGroupsCoexistIndependently) {
     // Allocate group 5 (30kHz) with 2 channels
-    GroupContinuousData& grp5 = cd->groups[5];
+    GroupContinuousData& cont_grp5 = cd->groups[5];
     const uint16_t chan_ids5[2] = {1, 2};
-    ASSERT_TRUE(grp5.allocate(100, 2, chan_ids5, 30000));
+    ASSERT_TRUE(cont_grp5.allocate(100, 2, chan_ids5, 30000));
 
     // Allocate group 1 (500Hz) with 3 channels
-    GroupContinuousData& grp1 = cd->groups[1];
+    GroupContinuousData& cont_grp1 = cd->groups[1];
     const uint16_t chan_ids1[3] = {3, 4, 5};
-    ASSERT_TRUE(grp1.allocate(100, 3, chan_ids1, 500));
+    ASSERT_TRUE(cont_grp1.allocate(100, 3, chan_ids1, 500));
 
     // Write data to group 5
     int16_t data5[2] = {100, 0};
-    (void)grp5.writeSample(1000, data5, 2);
+    (void)cont_grp5.writeSample(1000, data5, 2);
 
     // Write data to group 1
     const int16_t data1[3] = {200, 0, 0};
-    (void)grp1.writeSample(2000, data1, 3);
+    (void)cont_grp1.writeSample(2000, data1, 3);
 
     // Verify groups remain independent
-    EXPECT_EQ(grp5.getSampleRate(), 30000u);
-    EXPECT_EQ(grp1.getSampleRate(), 500u);
-    EXPECT_EQ(grp5.getNumChannels(), 2u);
-    EXPECT_EQ(grp1.getNumChannels(), 3u);
-    EXPECT_EQ(grp5.getTimestamps()[0], 1000u);
-    EXPECT_EQ(grp1.getTimestamps()[0], 2000u);
+    EXPECT_EQ(cont_grp5.getSampleRate(), 30000u);
+    EXPECT_EQ(cont_grp1.getSampleRate(), 500u);
+    EXPECT_EQ(cont_grp5.getNumChannels(), 2u);
+    EXPECT_EQ(cont_grp1.getNumChannels(), 3u);
+    EXPECT_EQ(cont_grp5.getTimestamps()[0], 1000u);
+    EXPECT_EQ(cont_grp1.getTimestamps()[0], 2000u);
     // Access flat array: [sample 0][channel 0] = index 0 * num_channels + 0 = 0
-    EXPECT_EQ(grp5.getChannelData()[0], 100);
-    EXPECT_EQ(grp1.getChannelData()[0], 200);
+    EXPECT_EQ(cont_grp5.getChannelData()[0], 100);
+    EXPECT_EQ(cont_grp1.getChannelData()[0], 200);
 }
 
 // Test 9: Same channel can exist in multiple groups
