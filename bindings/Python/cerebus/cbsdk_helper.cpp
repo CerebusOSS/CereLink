@@ -14,10 +14,9 @@ cbSdkResult cbsdk_get_trial_config(const uint32_t nInstance, cbSdkConfigParam * 
     const cbSdkResult sdk_result = cbSdkGetTrialConfig(nInstance, &pcfg_param->bActive,
             &pcfg_param->Begchan, &pcfg_param->Begmask, &pcfg_param->Begval,
             &pcfg_param->Endchan, &pcfg_param->Endmask, &pcfg_param->Endval,
-            &pcfg_param->bDouble, &pcfg_param->uWaveforms,
+            &pcfg_param->uWaveforms,
             &pcfg_param->uConts, &pcfg_param->uEvents, &pcfg_param->uComments,
-            &pcfg_param->uTrackings,
-            &pcfg_param->bAbsolute);
+            &pcfg_param->uTrackings);
 
     return sdk_result;
 }
@@ -27,10 +26,9 @@ cbSdkResult cbsdk_set_trial_config(const uint32_t nInstance, const cbSdkConfigPa
     const cbSdkResult sdk_result = cbSdkSetTrialConfig(nInstance, pcfg_param->bActive,
             pcfg_param->Begchan,pcfg_param->Begmask, pcfg_param->Begval,
             pcfg_param->Endchan, pcfg_param->Endmask, pcfg_param->Endval,
-            pcfg_param->bDouble, pcfg_param->uWaveforms,
+            pcfg_param->uWaveforms,
             pcfg_param->uConts, pcfg_param->uEvents, pcfg_param->uComments,
-            pcfg_param->uTrackings,
-            pcfg_param->bAbsolute);
+            pcfg_param->uTrackings);
 
     return sdk_result;
 }

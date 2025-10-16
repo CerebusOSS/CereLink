@@ -32,7 +32,6 @@ typedef struct _cbSdkConfigParam {
     uint32_t uEvents;
     uint32_t uComments;
     uint32_t uTrackings;
-    bool bAbsolute;
 } cbSdkConfigParam;
 
 cbSdkResult cbsdk_get_trial_config(uint32_t nInstance, cbSdkConfigParam * pcfg_param);
