@@ -126,12 +126,10 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
     if (cbGetSampleGroupList(nInstrument + 1, group, &nChans, chanIds, m_nInstance) != cbRESULT_OK)
         return;
 
-    const uint16_t rate = static_cast<int>((cbSdk_TICKS_PER_SECOND / static_cast<double>(period)));
-
     // Write sample using thread-safe method (handles allocation and locking internally)
     const auto grp_idx = group - 1;  // Convert to 0-based index
     const bool bOverFlow = m_CD->writeSampleThreadSafe(grp_idx, pkt->cbpkt_header.time,
-                                                        pkt->data, nChans, chanIds, rate);
+                                                        pkt->data, nChans, chanIds);
 
     if (bOverFlow)
     {
@@ -2273,7 +2271,6 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bActive, cbSdkTrialEvent * t
     {
         trialcont->count = 0;
         trialcont->num_samples = 0;
-        trialcont->sample_rate = 0;
 
         if (m_instInfo == 0)
         {
@@ -2304,7 +2301,6 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bActive, cbSdkTrialEvent * t
 
             // Populate trial structure with group info from snapshot
             trialcont->count = snapshot.num_channels;
-            trialcont->sample_rate = snapshot.sample_rate;
             trialcont->num_samples = snapshot.num_samples;
 
             // Copy channel IDs from the group (thread-safe through ContinuousData::m_mutex)

@@ -36,7 +36,7 @@ protected:
         }
 
         // Use the allocate() method
-        const bool success = group->allocate(buffer_size, num_channels, chan_ids, 30000);
+        const bool success = group->allocate(buffer_size, num_channels, chan_ids);
         ASSERT_TRUE(success);
 
         delete[] chan_ids;
@@ -48,7 +48,6 @@ TEST_F(ContinuousDataTest, GroupContinuousDataConstructorInitializesCorrectly) {
     const GroupContinuousData test_group;
 
     EXPECT_EQ(test_group.getSize(), 0u);
-    EXPECT_EQ(test_group.getSampleRate(), 0u);
     EXPECT_EQ(test_group.getWriteIndex(), 0u);
     EXPECT_EQ(test_group.getWriteStartIndex(), 0u);
     EXPECT_EQ(test_group.getReadEndIndex(), 0u);
@@ -107,7 +106,7 @@ TEST_F(ContinuousDataTest, FindChannelInGroupFindsCorrectChannel) {
 
     // Set up channel IDs: 1, 10, 25
     uint16_t chan_ids[3] = {1, 10, 25};
-    ASSERT_TRUE(test_group.allocate(100, 3, chan_ids, 30000));
+    ASSERT_TRUE(test_group.allocate(100, 3, chan_ids));
 
     // Test finding existing channels
     EXPECT_EQ(cd->findChannelInGroup(5, 1), 0);
@@ -127,7 +126,7 @@ TEST_F(ContinuousDataTest, ContinuousDataResetResetsAllGroups) {
     for (uint32_t g = 0; g < 2; ++g) {
         GroupContinuousData& grp = cd->groups[g];
         uint16_t chan_ids[2] = {1, 2};
-        ASSERT_TRUE(grp.allocate(100, 2, chan_ids, 30000));
+        ASSERT_TRUE(grp.allocate(100, 2, chan_ids));
 
         grp.setWriteIndex(50);
         const_cast<PROCTIME*>(grp.getTimestamps())[0] = 12345;
@@ -152,7 +151,7 @@ TEST_F(ContinuousDataTest, ContinuousDataCleanupCleansAllGroups) {
     for (uint32_t g = 0; g < 2; ++g) {
         GroupContinuousData& grp = cd->groups[g];
         uint16_t chan_ids[2] = {1, 2};
-        ASSERT_TRUE(grp.allocate(100, 2, chan_ids, 30000));
+        ASSERT_TRUE(grp.allocate(100, 2, chan_ids));
     }
 
     cd->cleanup();
@@ -191,15 +190,15 @@ TEST_F(ContinuousDataTest, RingBufferWraparoundWorks) {
 
 // Test 8: Multiple groups can coexist independently
 TEST_F(ContinuousDataTest, MultipleGroupsCoexistIndependently) {
-    // Allocate group 5 (30kHz) with 2 channels
+    // Allocate group 5 with 2 channels
     GroupContinuousData& cont_grp5 = cd->groups[5];
     const uint16_t chan_ids5[2] = {1, 2};
-    ASSERT_TRUE(cont_grp5.allocate(100, 2, chan_ids5, 30000));
+    ASSERT_TRUE(cont_grp5.allocate(100, 2, chan_ids5));
 
-    // Allocate group 1 (500Hz) with 3 channels
+    // Allocate group 1 with 3 channels
     GroupContinuousData& cont_grp1 = cd->groups[1];
     const uint16_t chan_ids1[3] = {3, 4, 5};
-    ASSERT_TRUE(cont_grp1.allocate(100, 3, chan_ids1, 500));
+    ASSERT_TRUE(cont_grp1.allocate(100, 3, chan_ids1));
 
     // Write data to group 5
     int16_t data5[2] = {100, 0};
@@ -210,8 +209,6 @@ TEST_F(ContinuousDataTest, MultipleGroupsCoexistIndependently) {
     (void)cont_grp1.writeSample(2000, data1, 3);
 
     // Verify groups remain independent
-    EXPECT_EQ(cont_grp5.getSampleRate(), 30000u);
-    EXPECT_EQ(cont_grp1.getSampleRate(), 500u);
     EXPECT_EQ(cont_grp5.getNumChannels(), 2u);
     EXPECT_EQ(cont_grp1.getNumChannels(), 3u);
     EXPECT_EQ(cont_grp5.getTimestamps()[0], 1000u);
@@ -226,12 +223,12 @@ TEST_F(ContinuousDataTest, SameChannelInMultipleGroups) {
     // Channel 1 in group 5
     GroupContinuousData& grp5 = cd->groups[5];
     const uint16_t chan_ids5[1] = {1};
-    ASSERT_TRUE(grp5.allocate(100, 1, chan_ids5, 30000));
+    ASSERT_TRUE(grp5.allocate(100, 1, chan_ids5));
 
     // Same channel 1 in group 6
     GroupContinuousData& grp6 = cd->groups[6];
     const uint16_t chan_ids6[1] = {1};
-    ASSERT_TRUE(grp6.allocate(100, 1, chan_ids6, 60000));
+    ASSERT_TRUE(grp6.allocate(100, 1, chan_ids6));
 
     // Write different data to each
     const int16_t data5[1] = {500};
@@ -368,7 +365,7 @@ TEST_F(ContinuousDataTest, NonContiguousChannelIDsWork) {
 
     // Use non-contiguous channel IDs
     const uint16_t chan_ids[4] = {1, 5, 100, 250};
-    ASSERT_TRUE(grp.allocate(100, 4, chan_ids, 30000));
+    ASSERT_TRUE(grp.allocate(100, 4, chan_ids));
 
     // Should be able to find all of them
     EXPECT_EQ(cd->findChannelInGroup(5, 1), 0);
@@ -405,7 +402,7 @@ TEST_F(ContinuousDataTest, ParallelWritesToSameGroup) {
                 };
 
                 // Write to group 0 (group index 0)
-                const bool overflow = cd->writeSampleThreadSafe(0, timestamp, data, NUM_CHANNELS, chan_ids, 30000);
+                const bool overflow = cd->writeSampleThreadSafe(0, timestamp, data, NUM_CHANNELS, chan_ids);
                 if (!overflow)
                     successful_writes++;
             }
@@ -450,7 +447,7 @@ TEST_F(ContinuousDataTest, ParallelWritesToDifferentGroups) {
                     static_cast<int16_t>(t * 200 + i)
                 };
 
-                cd->writeSampleThreadSafe(group_idx, timestamp, data, 2, chan_ids, 30000);
+                cd->writeSampleThreadSafe(group_idx, timestamp, data, 2, chan_ids);
             }
         });
     }
@@ -481,7 +478,7 @@ TEST_F(ContinuousDataTest, ParallelReadsFromSameGroup) {
             static_cast<int16_t>(i),
             static_cast<int16_t>(i * 2)
         };
-        cd->writeSampleThreadSafe(0, i, data, NUM_CHANNELS, chan_ids, 30000);
+        cd->writeSampleThreadSafe(0, i, data, NUM_CHANNELS, chan_ids);
     }
 
     // Take a snapshot for reading
@@ -539,7 +536,7 @@ TEST_F(ContinuousDataTest, ConcurrentReadsAndWrites) {
                     static_cast<int16_t>(t * 200 + i)
                 };
 
-                cd->writeSampleThreadSafe(0, timestamp, data, NUM_CHANNELS, chan_ids, 30000);
+                cd->writeSampleThreadSafe(0, timestamp, data, NUM_CHANNELS, chan_ids);
                 std::this_thread::sleep_for(std::chrono::microseconds(10));
             }
         });
@@ -592,7 +589,7 @@ TEST_F(ContinuousDataTest, SnapshotConsistencyUnderWrites) {
                     static_cast<int16_t>(t * 200 + i)
                 };
 
-                cd->writeSampleThreadSafe(0, timestamp, data, NUM_CHANNELS, chan_ids, 30000);
+                cd->writeSampleThreadSafe(0, timestamp, data, NUM_CHANNELS, chan_ids);
                 std::this_thread::sleep_for(std::chrono::microseconds(100));
             }
         });
@@ -638,7 +635,7 @@ TEST_F(ContinuousDataTest, ReadWithSeekVsWithoutSeek) {
             static_cast<int16_t>(i),
             static_cast<int16_t>(i * 2)
         };
-        cd->writeSampleThreadSafe(0, i, data, NUM_CHANNELS, chan_ids, 30000);
+        cd->writeSampleThreadSafe(0, i, data, NUM_CHANNELS, chan_ids);
     }
 
     // Read without seeking (peek)

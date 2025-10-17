@@ -42,9 +42,8 @@ public:
     /// \param buffer_size Number of samples to buffer
     /// \param n_chans Number of channels
     /// \param chan_ids Array of channel IDs (1-based)
-    /// \param rate Sample rate for this group
     /// \return true if allocation succeeded
-    [[nodiscard]] bool allocate(uint32_t buffer_size, uint32_t n_chans, const uint16_t* chan_ids, uint16_t rate);
+    [[nodiscard]] bool allocate(uint32_t buffer_size, uint32_t n_chans, const uint16_t* chan_ids);
 
     /// Write a sample to the ring buffer
     /// \param timestamp Timestamp for this sample
@@ -61,7 +60,6 @@ public:
 
     // Getters for read access
     [[nodiscard]] uint32_t getSize() const { return m_size; }
-    [[nodiscard]] uint16_t getSampleRate() const { return m_sample_rate; }
     [[nodiscard]] uint32_t getWriteIndex() const { return m_write_index; }
     [[nodiscard]] uint32_t getWriteStartIndex() const { return m_write_start_index; }
     [[nodiscard]] uint32_t getReadEndIndex() const { return m_read_end_index; }
@@ -79,7 +77,6 @@ public:
 private:
     // Buffer configuration
     uint32_t m_size;                    ///< Buffer size for this group (samples)
-    uint16_t m_sample_rate;             ///< Sample rate for this group (Hz)
 
     // Ring buffer management
     uint32_t m_write_index;             ///< Next write position in ring buffer
@@ -106,7 +103,6 @@ struct GroupSnapshot
     uint32_t num_samples;         ///< Number of samples available
     uint32_t num_channels;        ///< Number of channels in group
     uint32_t buffer_size;         ///< Total buffer size
-    uint16_t sample_rate;         ///< Sample rate for this group
     bool is_allocated;            ///< Whether group is allocated
 };
 
@@ -125,11 +121,10 @@ public:
     /// \param data Pointer to channel data
     /// \param n_chans Number of channels in data
     /// \param chan_ids Array of channel IDs (1-based)
-    /// \param rate Sample rate for this group
     /// \return true if buffer overflowed (oldest data was overwritten)
     [[nodiscard]] bool writeSampleThreadSafe(uint32_t group_idx, PROCTIME timestamp,
                                               const int16_t* data, uint32_t n_chans,
-                                              const uint16_t* chan_ids, uint16_t rate);
+                                              const uint16_t* chan_ids);
 
     /// Thread-safe snapshot of group state for reading
     /// \param group_idx Group index (0-based, 0-7)

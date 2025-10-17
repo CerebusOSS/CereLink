@@ -4,7 +4,7 @@
 #include <mutex>
 
 GroupContinuousData::GroupContinuousData() :
-    m_size(0), m_sample_rate(0), m_write_index(0), m_write_start_index(0),
+    m_size(0), m_write_index(0), m_write_start_index(0),
     m_read_end_index(0), m_num_channels(0),
     m_channel_ids(nullptr), m_timestamps(nullptr), m_channel_data(nullptr)
 {
@@ -33,7 +33,7 @@ bool GroupContinuousData::needsReallocation(const uint16_t* chan_ids, uint32_t n
     return false;  // No change needed
 }
 
-bool GroupContinuousData::allocate(uint32_t buffer_size, uint32_t n_chans, const uint16_t* chan_ids, uint16_t rate)
+bool GroupContinuousData::allocate(uint32_t buffer_size, uint32_t n_chans, const uint16_t* chan_ids)
 {
     if (m_num_channels != n_chans || m_size != buffer_size)
     {
@@ -95,9 +95,8 @@ bool GroupContinuousData::allocate(uint32_t buffer_size, uint32_t n_chans, const
         m_write_start_index = 0;
     }
 
-    // Update channel list and sample rate
+    // Update channel list
     memcpy(m_channel_ids, chan_ids, n_chans * sizeof(uint16_t));
-    m_sample_rate = rate;
 
     return true;
 }
@@ -174,7 +173,7 @@ void GroupContinuousData::cleanup()
 
 bool ContinuousData::writeSampleThreadSafe(uint32_t group_idx, PROCTIME timestamp,
                                             const int16_t* data, uint32_t n_chans,
-                                            const uint16_t* chan_ids, uint16_t rate)
+                                            const uint16_t* chan_ids)
 {
     if (group_idx >= cbMAXGROUPS)
         return false;
@@ -188,7 +187,7 @@ bool ContinuousData::writeSampleThreadSafe(uint32_t group_idx, PROCTIME timestam
     {
         // Use existing size if already allocated, otherwise use default
         const uint32_t buffer_size = grp.getSize() ? grp.getSize() : default_size;
-        if (!grp.allocate(buffer_size, n_chans, chan_ids, rate))
+        if (!grp.allocate(buffer_size, n_chans, chan_ids))
         {
             return false;  // Allocation failed
         }
@@ -213,7 +212,6 @@ bool ContinuousData::snapshotForReading(uint32_t group_idx, GroupSnapshot& snaps
         snapshot.num_samples = 0;
         snapshot.num_channels = 0;
         snapshot.buffer_size = 0;
-        snapshot.sample_rate = 0;
         snapshot.read_start_index = 0;
         snapshot.read_end_index = 0;
         return true;  // Success, but no data
@@ -224,7 +222,6 @@ bool ContinuousData::snapshotForReading(uint32_t group_idx, GroupSnapshot& snaps
     snapshot.read_start_index = grp.getWriteStartIndex();
     snapshot.num_channels = grp.getNumChannels();
     snapshot.buffer_size = grp.getSize();
-    snapshot.sample_rate = grp.getSampleRate();
 
     // Calculate available samples
     auto num_avail = static_cast<int32_t>(snapshot.read_end_index - snapshot.read_start_index);
