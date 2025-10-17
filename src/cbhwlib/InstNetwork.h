@@ -21,10 +21,10 @@
 #ifndef INSTNETWORK_H_INCLUDED
 #define INSTNETWORK_H_INCLUDED
 
-#include "debugmacs.h"
+#include "../cbproto/debugmacs.h"
 #include "../include/cerelink/cbhwlib.h"
 #include "cbHwlibHi.h"
-#include "Instrument.h"
+#include "../central/Instrument.h"
 #include "cki_common.h"
 #include <vector>
 #include <string>
