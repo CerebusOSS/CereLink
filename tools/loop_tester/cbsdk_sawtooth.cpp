@@ -13,6 +13,7 @@
 #include <cerelink/cbsdk.h>
 #include <iostream>
 #include <vector>
+#include <string>
 #include <chrono>
 #include <thread>
 #include <csignal>

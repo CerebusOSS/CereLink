@@ -11,6 +11,7 @@
 #include <cerelink/cbsdk.h>
 #include <iostream>
 #include <atomic>
+#include <string>
 #include <csignal>
 #include <chrono>
 #include <thread>
