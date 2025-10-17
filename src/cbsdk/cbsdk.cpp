@@ -128,31 +128,10 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
 
     const uint16_t rate = static_cast<int>((cbSdk_TICKS_PER_SECOND / static_cast<double>(period)));
 
-    bool bOverFlow = false;
-
-    m_lockTrial.lock();
-    // double check if buffer is still valid
-    if (m_CD)
-    {
-        const auto grp_idx = group - 1;  // Convert to 0-based index
-        auto& grp = m_CD->groups[grp_idx];
-
-        // Check if we need to allocate or reallocate
-        if (grp.needsReallocation(chanIds, nChans))
-        {
-            // Use existing size if already allocated, otherwise use default
-            const uint32_t buffer_size = grp.getSize() ? grp.getSize() : m_CD->default_size;
-            if (!grp.allocate(buffer_size, nChans, chanIds, rate))
-            {
-                m_lockTrial.unlock();
-                return;  // Allocation failed
-            }
-        }
-
-        // Write sample to ring buffer (returns true if overflow occurred)
-        bOverFlow = grp.writeSample(pkt->cbpkt_header.time, pkt->data, nChans);
-    }
-    m_lockTrial.unlock();
+    // Write sample using thread-safe method (handles allocation and locking internally)
+    const auto grp_idx = group - 1;  // Convert to 0-based index
+    const bool bOverFlow = m_CD->writeSampleThreadSafe(grp_idx, pkt->cbpkt_header.time,
+                                                        pkt->data, nChans, chanIds, rate);
 
     if (bOverFlow)
     {
@@ -1914,7 +1893,7 @@ bool IsChanAudioOut(uint32_t dwChan, uint32_t nInstance = 0);             // TRU
 /** Retrieve data of a configured trial.
 See cbSdkGetTrialData docstring in cbsdk.h for more information.
 */
-cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
+cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bSeek, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                       cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking)
 {
     if (m_instInfo == 0)
@@ -1935,89 +1914,18 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
         if (g >= cbMAXGROUPS)
             return CBSDKRESULT_INVALIDPARAM;
 
-        const auto& grp = m_CD->groups[g - 1];
-        if (!grp.isAllocated())
-        {
-            // Group not allocated - return success with num_samples=0
-            trialcont->num_samples = 0;
-            return CBSDKRESULT_SUCCESS;
-        }
+        // Use thread-safe read method (handles locking internally)
+        uint32_t num_samples = trialcont->num_samples;
+        const bool success = m_CD->readSamples(g - 1,
+                                               static_cast<int16_t*>(trialcont->samples),
+                                               trialcont->timestamps,
+                                               num_samples,
+                                               bSeek != 0);
 
-        // Take a thread-safe snapshot of write indices for this group
-        m_lockTrial.lock();
-        const uint32_t read_end_index = grp.getWriteIndex();
-        const uint32_t read_start_index = grp.getWriteStartIndex();
-        m_lockTrial.unlock();
+        if (!success)
+            return CBSDKRESULT_ERRCONFIG;
 
-        // Calculate available samples
-        auto num_avail = static_cast<int32_t>(read_end_index - read_start_index);
-        if (num_avail < 0)
-            num_avail += static_cast<int32_t>(grp.getSize());  // Wrapped around
-
-        // Don't read more than requested
-        const uint32_t num_samples = std::min(static_cast<uint32_t>(num_avail), trialcont->num_samples);
         trialcont->num_samples = num_samples;
-
-        // Copy data if buffers provided and there are samples
-        if (num_samples > 0 && trialcont->samples && trialcont->timestamps)
-        {
-            const int16_t* channel_data = grp.getChannelData();
-            const PROCTIME* timestamps = grp.getTimestamps();
-            const uint32_t num_channels = grp.getNumChannels();
-            const uint32_t buffer_size = grp.getSize();
-
-            auto* output_samples = static_cast<int16_t*>(trialcont->samples);
-
-            // Check if we wrap around the ring buffer
-            if (const bool wraps = (read_start_index + num_samples) > buffer_size; !wraps)
-            {
-                // No wraparound - copy everything in bulk
-                // Copy timestamps
-                memcpy(trialcont->timestamps,
-                       &timestamps[read_start_index],
-                       num_samples * sizeof(PROCTIME));
-
-                // Copy sample data (entire contiguous block)
-                memcpy(output_samples,
-                       &channel_data[read_start_index * num_channels],
-                       num_samples * num_channels * sizeof(int16_t));
-            }
-            else
-            {
-                // Wraparound case - copy in two chunks
-                const uint32_t first_chunk_size = buffer_size - read_start_index;
-                const uint32_t second_chunk_size = num_samples - first_chunk_size;
-
-                // Copy first chunk of timestamps (from read_start to end of buffer)
-                memcpy(trialcont->timestamps,
-                       &timestamps[read_start_index],
-                       first_chunk_size * sizeof(PROCTIME));
-
-                // Copy second chunk of timestamps (from start of buffer)
-                memcpy(&trialcont->timestamps[first_chunk_size],
-                       timestamps,
-                       second_chunk_size * sizeof(PROCTIME));
-
-                // Copy first chunk of sample data (from read_start to end of buffer)
-                memcpy(output_samples,
-                       &channel_data[read_start_index * num_channels],
-                       first_chunk_size * num_channels * sizeof(int16_t));
-
-                // Copy second chunk of sample data (from start of buffer)
-                memcpy(&output_samples[first_chunk_size * num_channels],
-                       channel_data,
-                       second_chunk_size * num_channels * sizeof(int16_t));
-            }
-        }
-
-        // Update write_start_index if consuming data (bActive)
-        if (bActive && num_samples > 0)
-        {
-            const uint32_t new_start = (read_start_index + num_samples) % grp.getSize();
-            m_lockTrial.lock();
-            m_CD->groups[g - 1].setWriteStartIndex(new_start);
-            m_lockTrial.unlock();
-        }
     }
 
     if (trialevent)
@@ -2112,7 +2020,7 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
             // Store where we actually finished reading.
             final_read_index[ch - 1] = read_index;
         }
-        if (bActive)
+        if (bSeek)
         {
             m_lockTrialEvent.lock();
             memcpy(m_ED->write_start_index, final_read_index, sizeof(final_read_index));
@@ -2168,7 +2076,7 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
             if (read_index >= m_CMT->size)
                 read_index = 0;
         }
-        if (bActive)
+        if (bSeek)
         {
             read_start_index = read_index;
             m_lockTrialComment.lock();
@@ -2266,11 +2174,11 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
                     read_index = 0;
            }
             // Flush the buffer and start a new 'trial'...
-            if (bActive)
+            if (bSeek)
                 read_start_index[id] = read_index;
         }
 
-        if (bActive)
+        if (bSeek)
         {
             m_lockTrialTracking.lock();
             memcpy(m_TR->write_start_index, read_start_index, sizeof(read_start_index));
@@ -2290,6 +2198,8 @@ CBSDKAPI    cbSdkResult cbSdkGetTrialData(const uint32_t nInstance,
     if (g_app[nInstance] == nullptr)
         return CBSDKRESULT_CLOSED;
 
+    // Note: bActive is now interpreted as bSeek for consistency
+    // bActive=1 means advance read pointer (seek), bActive=0 means just peek
     return g_app[nInstance]->SdkGetTrialData(bActive, trialevent, trialcont, trialcomment, trialtracking);
 }
 
@@ -2380,35 +2290,27 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bActive, cbSdkTrialEvent * t
             if (g >= cbMAXGROUPS)
                 return CBSDKRESULT_INVALIDPARAM;
 
-            auto& grp = m_CD->groups[g - 1];
-            if (!grp.isAllocated())
+            // Take a thread-safe snapshot of the group state
+            GroupSnapshot snapshot;
+            if (!m_CD->snapshotForReading(g - 1, snapshot))
+                return CBSDKRESULT_INVALIDPARAM;
+
+            if (!snapshot.is_allocated)
             {
                 // Group not allocated - return success with count=0
                 memset(trialcont->chan, 0, sizeof(trialcont->chan));
                 return CBSDKRESULT_SUCCESS;
             }
 
-            // Take a snapshot of the current write pointer for this group
-            uint32_t read_end_index;
-            m_lockTrial.lock();
-            read_end_index = grp.getWriteIndex();
-            grp.setReadEndIndex(read_end_index);
-            m_lockTrial.unlock();
+            // Populate trial structure with group info from snapshot
+            trialcont->count = snapshot.num_channels;
+            trialcont->sample_rate = snapshot.sample_rate;
+            trialcont->num_samples = snapshot.num_samples;
 
-            // Calculate available samples for this group
-            auto num_samples = static_cast<int32_t>(read_end_index) -
-                               static_cast<int32_t>(grp.getWriteStartIndex());
-            if (num_samples < 0)
-                num_samples += grp.getSize();
-
-            // Populate trial structure with group info
-            trialcont->count = grp.getNumChannels();
-            trialcont->sample_rate = grp.getSampleRate();
-            trialcont->num_samples = num_samples;
-
-            // Copy channel IDs
+            // Copy channel IDs from the group (thread-safe through ContinuousData::m_mutex)
+            const auto& grp = m_CD->groups[g - 1];
             const uint16_t* chan_ids = grp.getChannelIds();
-            memcpy(trialcont->chan, chan_ids, grp.getNumChannels() * sizeof(uint16_t));
+            memcpy(trialcont->chan, chan_ids, snapshot.num_channels * sizeof(uint16_t));
         }
     }
     if (trialcomment)

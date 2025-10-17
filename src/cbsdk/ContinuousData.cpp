@@ -1,6 +1,7 @@
 #include "ContinuousData.h"
 #include <algorithm>
 #include <cstring>
+#include <mutex>
 
 GroupContinuousData::GroupContinuousData() :
     m_size(0), m_sample_rate(0), m_write_index(0), m_write_start_index(0),
@@ -167,4 +168,165 @@ void GroupContinuousData::cleanup()
 
     m_num_channels = 0;
     m_size = 0;
+}
+
+// ContinuousData methods implementation
+
+bool ContinuousData::writeSampleThreadSafe(uint32_t group_idx, PROCTIME timestamp,
+                                            const int16_t* data, uint32_t n_chans,
+                                            const uint16_t* chan_ids, uint16_t rate)
+{
+    if (group_idx >= cbMAXGROUPS)
+        return false;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    auto& grp = groups[group_idx];
+
+    // Check if we need to allocate or reallocate
+    if (grp.needsReallocation(chan_ids, n_chans))
+    {
+        // Use existing size if already allocated, otherwise use default
+        const uint32_t buffer_size = grp.getSize() ? grp.getSize() : default_size;
+        if (!grp.allocate(buffer_size, n_chans, chan_ids, rate))
+        {
+            return false;  // Allocation failed
+        }
+    }
+
+    // Write sample to ring buffer (returns true if overflow occurred)
+    return grp.writeSample(timestamp, data, n_chans);
+}
+
+bool ContinuousData::snapshotForReading(uint32_t group_idx, GroupSnapshot& snapshot)
+{
+    if (group_idx >= cbMAXGROUPS)
+        return false;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    auto& grp = groups[group_idx];
+
+    snapshot.is_allocated = grp.isAllocated();
+    if (!snapshot.is_allocated)
+    {
+        snapshot.num_samples = 0;
+        snapshot.num_channels = 0;
+        snapshot.buffer_size = 0;
+        snapshot.sample_rate = 0;
+        snapshot.read_start_index = 0;
+        snapshot.read_end_index = 0;
+        return true;  // Success, but no data
+    }
+
+    // Take snapshot of current state
+    snapshot.read_end_index = grp.getWriteIndex();
+    snapshot.read_start_index = grp.getWriteStartIndex();
+    snapshot.num_channels = grp.getNumChannels();
+    snapshot.buffer_size = grp.getSize();
+    snapshot.sample_rate = grp.getSampleRate();
+
+    // Calculate available samples
+    auto num_avail = static_cast<int32_t>(snapshot.read_end_index - snapshot.read_start_index);
+    if (num_avail < 0)
+        num_avail += static_cast<int32_t>(snapshot.buffer_size);  // Wrapped around
+
+    snapshot.num_samples = static_cast<uint32_t>(num_avail);
+
+    // Update the read_end_index in the group (this is the snapshot point)
+    grp.setReadEndIndex(snapshot.read_end_index);
+
+    return true;
+}
+
+bool ContinuousData::readSamples(uint32_t group_idx, int16_t* output_samples,
+                                  PROCTIME* output_timestamps, uint32_t& num_samples,
+                                  bool bSeek)
+{
+    if (group_idx >= cbMAXGROUPS)
+        return false;
+
+    if (!output_samples || !output_timestamps)
+        return false;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    auto& grp = groups[group_idx];
+
+    if (!grp.isAllocated())
+    {
+        num_samples = 0;
+        return true;  // Success, but no data
+    }
+
+    // Get current read pointers
+    const uint32_t read_start_index = grp.getWriteStartIndex();
+    const uint32_t read_end_index = grp.getWriteIndex();
+
+    // Calculate available samples
+    auto num_avail = static_cast<int32_t>(read_end_index - read_start_index);
+    if (num_avail < 0)
+        num_avail += static_cast<int32_t>(grp.getSize());  // Wrapped around
+
+    // Don't read more than requested or available
+    num_samples = std::min(static_cast<uint32_t>(num_avail), num_samples);
+
+    if (num_samples == 0)
+        return true;  // Success, but no data to read
+
+    // Get pointers to internal data
+    const int16_t* channel_data = grp.getChannelData();
+    const PROCTIME* timestamps = grp.getTimestamps();
+    const uint32_t num_channels = grp.getNumChannels();
+    const uint32_t buffer_size = grp.getSize();
+
+    // Check if we wrap around the ring buffer
+    const bool wraps = (read_start_index + num_samples) > buffer_size;
+
+    if (!wraps)
+    {
+        // No wraparound - copy everything in bulk
+        memcpy(output_timestamps,
+               &timestamps[read_start_index],
+               num_samples * sizeof(PROCTIME));
+
+        memcpy(output_samples,
+               &channel_data[read_start_index * num_channels],
+               num_samples * num_channels * sizeof(int16_t));
+    }
+    else
+    {
+        // Wraparound case - copy in two chunks
+        const uint32_t first_chunk_size = buffer_size - read_start_index;
+        const uint32_t second_chunk_size = num_samples - first_chunk_size;
+
+        // First chunk of timestamps
+        memcpy(output_timestamps,
+               &timestamps[read_start_index],
+               first_chunk_size * sizeof(PROCTIME));
+
+        // Second chunk of timestamps
+        memcpy(&output_timestamps[first_chunk_size],
+               timestamps,
+               second_chunk_size * sizeof(PROCTIME));
+
+        // First chunk of sample data
+        memcpy(output_samples,
+               &channel_data[read_start_index * num_channels],
+               first_chunk_size * num_channels * sizeof(int16_t));
+
+        // Second chunk of sample data
+        memcpy(&output_samples[first_chunk_size * num_channels],
+               channel_data,
+               second_chunk_size * num_channels * sizeof(int16_t));
+    }
+
+    // Update write_start_index if consuming data (bSeek)
+    if (bSeek)
+    {
+        const uint32_t new_start = (read_start_index + num_samples) % grp.getSize();
+        grp.setWriteStartIndex(new_start);
+    }
+
+    return true;
 }

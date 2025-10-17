@@ -15,6 +15,7 @@
 #define CONTINUOUSDATA_H_INCLUDED
 
 #include "../../include/cerelink/cbhwlib.h"
+#include <mutex>
 
 
 /// Class to store continuous data for a single sample group
@@ -97,6 +98,18 @@ private:
 };
 
 
+/// Structure to hold snapshot of group state for reading
+struct GroupSnapshot
+{
+    uint32_t read_start_index;    ///< Start of available data
+    uint32_t read_end_index;      ///< End of available data
+    uint32_t num_samples;         ///< Number of samples available
+    uint32_t num_channels;        ///< Number of channels in group
+    uint32_t buffer_size;         ///< Total buffer size
+    uint16_t sample_rate;         ///< Sample rate for this group
+    bool is_allocated;            ///< Whether group is allocated
+};
+
 /// Class to store all continuous data organized by sample groups
 class ContinuousData
 {
@@ -105,6 +118,35 @@ public:
 
     uint32_t default_size;                      ///< Default buffer size (cbSdk_CONTINUOUS_DATA_SAMPLES)
     GroupContinuousData groups[cbMAXGROUPS];    ///< One group per sample rate (0-7)
+
+    /// Thread-safe write of a sample to a group with automatic reallocation
+    /// \param group_idx Group index (0-based, 0-7)
+    /// \param timestamp Timestamp for this sample
+    /// \param data Pointer to channel data
+    /// \param n_chans Number of channels in data
+    /// \param chan_ids Array of channel IDs (1-based)
+    /// \param rate Sample rate for this group
+    /// \return true if buffer overflowed (oldest data was overwritten)
+    [[nodiscard]] bool writeSampleThreadSafe(uint32_t group_idx, PROCTIME timestamp,
+                                              const int16_t* data, uint32_t n_chans,
+                                              const uint16_t* chan_ids, uint16_t rate);
+
+    /// Thread-safe snapshot of group state for reading
+    /// \param group_idx Group index (0-based, 0-7)
+    /// \param snapshot Output structure to fill with snapshot data
+    /// \return true if successful, false if group_idx invalid
+    [[nodiscard]] bool snapshotForReading(uint32_t group_idx, GroupSnapshot& snapshot);
+
+    /// Thread-safe read of samples from a group
+    /// \param group_idx Group index (0-based, 0-7)
+    /// \param output_samples Output buffer for sample data [num_samples * num_channels]
+    /// \param output_timestamps Output buffer for timestamps [num_samples]
+    /// \param num_samples Number of samples to read (in/out - updated with actual read count)
+    /// \param bSeek If true, advance read pointer; if false, just peek at data
+    /// \return true if successful, false if group not allocated or invalid parameters
+    [[nodiscard]] bool readSamples(uint32_t group_idx, int16_t* output_samples,
+                                    PROCTIME* output_timestamps, uint32_t& num_samples,
+                                    bool bSeek);
 
     /// Helper: Find channel index within a group
     /// \param group_idx Group index (0-7)
@@ -131,6 +173,7 @@ public:
     /// Reset all groups (preserves allocations)
     void reset()
     {
+        std::lock_guard<std::mutex> lock(m_mutex);
         for (auto& grp : groups)
             grp.reset();
     }
@@ -138,9 +181,13 @@ public:
     /// Cleanup all groups (deallocates all memory)
     void cleanup()
     {
+        std::lock_guard<std::mutex> lock(m_mutex);
         for (auto& grp : groups)
             grp.cleanup();
     }
+
+private:
+    mutable std::mutex m_mutex;    ///< Mutex for thread-safe access
 };
 
 #endif // CONTINUOUSDATA_H_INCLUDED

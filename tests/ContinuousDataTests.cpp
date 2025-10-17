@@ -1,6 +1,9 @@
 #include <gtest/gtest.h>
 #include "../src/cbsdk/ContinuousData.h"
 #include <cstring>
+#include <thread>
+#include <vector>
+#include <atomic>
 
 // This test file covers the refactored ContinuousData structure that uses
 // per-group allocation instead of per-channel allocation.
@@ -376,4 +379,300 @@ TEST_F(ContinuousDataTest, NonContiguousChannelIDsWork) {
     // Should not find channels in between
     EXPECT_EQ(cd->findChannelInGroup(5, 2), -1);
     EXPECT_EQ(cd->findChannelInGroup(5, 10), -1);
+}
+
+// Test 16: Parallel writes to same group from multiple threads
+TEST_F(ContinuousDataTest, ParallelWritesToSameGroup) {
+    constexpr int NUM_THREADS = 4;
+    constexpr int WRITES_PER_THREAD = 100;
+    constexpr int NUM_CHANNELS = 2;
+
+    cd->default_size = 1000;
+
+    std::vector<std::thread> threads;
+    std::atomic<int> successful_writes(0);
+
+    // Channel IDs for this test
+    const uint16_t chan_ids[NUM_CHANNELS] = {1, 2};
+
+    for (int t = 0; t < NUM_THREADS; ++t) {
+        threads.emplace_back([this, t, &successful_writes, &chan_ids]() {
+            for (int i = 0; i < WRITES_PER_THREAD; ++i) {
+                const PROCTIME timestamp = t * 1000 + i;
+                const int16_t data[NUM_CHANNELS] = {
+                    static_cast<int16_t>(t * 100 + i),
+                    static_cast<int16_t>(t * 200 + i)
+                };
+
+                // Write to group 0 (group index 0)
+                const bool overflow = cd->writeSampleThreadSafe(0, timestamp, data, NUM_CHANNELS, chan_ids, 30000);
+                if (!overflow)
+                    successful_writes++;
+            }
+        });
+    }
+
+    // Wait for all threads to complete
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    // Verify the group was allocated
+    EXPECT_TRUE(cd->groups[0].isAllocated());
+    EXPECT_EQ(cd->groups[0].getNumChannels(), NUM_CHANNELS);
+
+    // Total writes should equal NUM_THREADS * WRITES_PER_THREAD
+    // Some may have caused overflow, but that's expected behavior
+    EXPECT_GT(successful_writes.load(), 0);
+}
+
+// Test 17: Parallel writes to different groups
+TEST_F(ContinuousDataTest, ParallelWritesToDifferentGroups) {
+    constexpr int NUM_THREADS = 4;
+    constexpr int WRITES_PER_THREAD = 50;
+
+    cd->default_size = 500;
+
+    std::vector<std::thread> threads;
+
+    for (int t = 0; t < NUM_THREADS; ++t) {
+        threads.emplace_back([this, t]() {
+            const uint32_t group_idx = t % cbMAXGROUPS;  // Use different groups
+            const uint16_t chan_ids[2] = {
+                static_cast<uint16_t>(t * 10 + 1),
+                static_cast<uint16_t>(t * 10 + 2)
+            };
+
+            for (int i = 0; i < WRITES_PER_THREAD; ++i) {
+                const PROCTIME timestamp = t * 1000 + i;
+                const int16_t data[2] = {
+                    static_cast<int16_t>(t * 100 + i),
+                    static_cast<int16_t>(t * 200 + i)
+                };
+
+                cd->writeSampleThreadSafe(group_idx, timestamp, data, 2, chan_ids, 30000);
+            }
+        });
+    }
+
+    // Wait for all threads to complete
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    // Verify each used group was allocated
+    for (int t = 0; t < NUM_THREADS; ++t) {
+        const uint32_t group_idx = t % cbMAXGROUPS;
+        EXPECT_TRUE(cd->groups[group_idx].isAllocated());
+    }
+}
+
+// Test 18: Parallel reads from same group
+TEST_F(ContinuousDataTest, ParallelReadsFromSameGroup) {
+    constexpr int NUM_CHANNELS = 2;
+    constexpr int NUM_SAMPLES = 100;
+
+    cd->default_size = 1000;
+
+    // Pre-populate group 0 with data
+    const uint16_t chan_ids[NUM_CHANNELS] = {1, 2};
+    for (int i = 0; i < NUM_SAMPLES; ++i) {
+        const int16_t data[NUM_CHANNELS] = {
+            static_cast<int16_t>(i),
+            static_cast<int16_t>(i * 2)
+        };
+        cd->writeSampleThreadSafe(0, i, data, NUM_CHANNELS, chan_ids, 30000);
+    }
+
+    // Take a snapshot for reading
+    GroupSnapshot snapshot;
+    ASSERT_TRUE(cd->snapshotForReading(0, snapshot));
+    EXPECT_EQ(snapshot.num_samples, NUM_SAMPLES);
+
+    // Parallel reads (without seeking - just peeking)
+    constexpr int NUM_THREADS = 4;
+    std::vector<std::thread> threads;
+    std::atomic<int> successful_reads(0);
+
+    for (int t = 0; t < NUM_THREADS; ++t) {
+        threads.emplace_back([this, &successful_reads, NUM_CHANNELS]() {
+            int16_t samples[10 * NUM_CHANNELS];
+            PROCTIME timestamps[10];
+            uint32_t num_samples = 10;
+
+            // Read without seeking (bSeek = false)
+            if (cd->readSamples(0, samples, timestamps, num_samples, false)) {
+                successful_reads++;
+            }
+        });
+    }
+
+    // Wait for all threads to complete
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    // All reads should succeed
+    EXPECT_EQ(successful_reads.load(), NUM_THREADS);
+}
+
+// Test 19: Concurrent reads and writes
+TEST_F(ContinuousDataTest, ConcurrentReadsAndWrites) {
+    constexpr int NUM_CHANNELS = 2;
+    constexpr int NUM_WRITER_THREADS = 2;
+    constexpr int NUM_READER_THREADS = 2;
+    constexpr int OPERATIONS_PER_THREAD = 50;
+
+    cd->default_size = 1000;
+
+    std::vector<std::thread> threads;
+    std::atomic<bool> stop_flag(false);
+
+    // Writer threads
+    for (int t = 0; t < NUM_WRITER_THREADS; ++t) {
+        threads.emplace_back([this, t, &stop_flag]() {
+            const uint16_t chan_ids[NUM_CHANNELS] = {1, 2};
+            for (int i = 0; i < OPERATIONS_PER_THREAD && !stop_flag; ++i) {
+                const PROCTIME timestamp = t * 1000 + i;
+                const int16_t data[NUM_CHANNELS] = {
+                    static_cast<int16_t>(t * 100 + i),
+                    static_cast<int16_t>(t * 200 + i)
+                };
+
+                cd->writeSampleThreadSafe(0, timestamp, data, NUM_CHANNELS, chan_ids, 30000);
+                std::this_thread::sleep_for(std::chrono::microseconds(10));
+            }
+        });
+    }
+
+    // Reader threads
+    for (int t = 0; t < NUM_READER_THREADS; ++t) {
+        threads.emplace_back([this, &stop_flag, NUM_CHANNELS]() {
+            for (int i = 0; i < OPERATIONS_PER_THREAD && !stop_flag; ++i) {
+                int16_t samples[10 * NUM_CHANNELS];
+                PROCTIME timestamps[10];
+                uint32_t num_samples = 10;
+
+                // Try to read (may get 0 samples if buffer is empty, which is ok)
+                cd->readSamples(0, samples, timestamps, num_samples, false);
+                std::this_thread::sleep_for(std::chrono::microseconds(10));
+            }
+        });
+    }
+
+    // Wait for all threads to complete
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    // Should complete without deadlock or crash
+    EXPECT_TRUE(cd->groups[0].isAllocated());
+}
+
+// Test 20: Snapshot consistency under concurrent writes
+TEST_F(ContinuousDataTest, SnapshotConsistencyUnderWrites) {
+    constexpr int NUM_CHANNELS = 2;
+    constexpr int NUM_WRITER_THREADS = 2;
+    constexpr int NUM_SNAPSHOT_THREADS = 2;
+    constexpr int OPERATIONS_PER_THREAD = 30;
+
+    cd->default_size = 500;
+
+    std::vector<std::thread> threads;
+    std::atomic<int> successful_snapshots(0);
+
+    // Writer threads
+    for (int t = 0; t < NUM_WRITER_THREADS; ++t) {
+        threads.emplace_back([this, t]() {
+            const uint16_t chan_ids[NUM_CHANNELS] = {1, 2};
+            for (int i = 0; i < OPERATIONS_PER_THREAD; ++i) {
+                const PROCTIME timestamp = t * 1000 + i;
+                const int16_t data[NUM_CHANNELS] = {
+                    static_cast<int16_t>(t * 100 + i),
+                    static_cast<int16_t>(t * 200 + i)
+                };
+
+                cd->writeSampleThreadSafe(0, timestamp, data, NUM_CHANNELS, chan_ids, 30000);
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
+            }
+        });
+    }
+
+    // Snapshot threads
+    for (int t = 0; t < NUM_SNAPSHOT_THREADS; ++t) {
+        threads.emplace_back([this, &successful_snapshots]() {
+            for (int i = 0; i < OPERATIONS_PER_THREAD; ++i) {
+                GroupSnapshot snapshot;
+                if (cd->snapshotForReading(0, snapshot)) {
+                    // Snapshot should be internally consistent
+                    if (snapshot.is_allocated) {
+                        EXPECT_LE(snapshot.num_samples, snapshot.buffer_size);
+                    }
+                    successful_snapshots++;
+                }
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
+            }
+        });
+    }
+
+    // Wait for all threads to complete
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    // All snapshots should succeed
+    EXPECT_EQ(successful_snapshots.load(), NUM_SNAPSHOT_THREADS * OPERATIONS_PER_THREAD);
+}
+
+// Test 21: Read with seek vs without seek
+TEST_F(ContinuousDataTest, ReadWithSeekVsWithoutSeek) {
+    constexpr int NUM_CHANNELS = 2;
+    constexpr int NUM_SAMPLES = 20;
+
+    cd->default_size = 100;
+
+    // Write some data
+    const uint16_t chan_ids[NUM_CHANNELS] = {1, 2};
+    for (int i = 0; i < NUM_SAMPLES; ++i) {
+        const int16_t data[NUM_CHANNELS] = {
+            static_cast<int16_t>(i),
+            static_cast<int16_t>(i * 2)
+        };
+        cd->writeSampleThreadSafe(0, i, data, NUM_CHANNELS, chan_ids, 30000);
+    }
+
+    // Read without seeking (peek)
+    int16_t samples1[10 * NUM_CHANNELS];
+    PROCTIME timestamps1[10];
+    uint32_t num_samples1 = 10;
+    ASSERT_TRUE(cd->readSamples(0, samples1, timestamps1, num_samples1, false));
+    EXPECT_EQ(num_samples1, 10u);
+
+    // Read again without seeking - should get same data
+    int16_t samples2[10 * NUM_CHANNELS];
+    PROCTIME timestamps2[10];
+    uint32_t num_samples2 = 10;
+    ASSERT_TRUE(cd->readSamples(0, samples2, timestamps2, num_samples2, false));
+    EXPECT_EQ(num_samples2, 10u);
+
+    // Verify we got the same data
+    EXPECT_EQ(memcmp(samples1, samples2, 10 * NUM_CHANNELS * sizeof(int16_t)), 0);
+    EXPECT_EQ(memcmp(timestamps1, timestamps2, 10 * sizeof(PROCTIME)), 0);
+
+    // Now read with seeking - should advance pointer
+    int16_t samples3[10 * NUM_CHANNELS];
+    PROCTIME timestamps3[10];
+    uint32_t num_samples3 = 10;
+    ASSERT_TRUE(cd->readSamples(0, samples3, timestamps3, num_samples3, true));
+    EXPECT_EQ(num_samples3, 10u);
+
+    // Next read should get different data (next 10 samples)
+    int16_t samples4[10 * NUM_CHANNELS];
+    PROCTIME timestamps4[10];
+    uint32_t num_samples4 = 10;
+    ASSERT_TRUE(cd->readSamples(0, samples4, timestamps4, num_samples4, false));
+    EXPECT_EQ(num_samples4, 10u);
+
+    // These should be different from samples3
+    EXPECT_NE(timestamps3[0], timestamps4[0]);
 }
