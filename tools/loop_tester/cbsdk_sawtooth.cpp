@@ -176,6 +176,7 @@ int main(int argc, char* argv[]) {
     int64_t read_count = 0;
     PROCTIME last_timestamp = 0;
     int16_t last_sample_ch0 = 0;
+    int16_t last_sample_ch1 = 0;
     bool first_read = true;
 
     // For sawtooth phase tracking using timestamps
@@ -246,52 +247,43 @@ int main(int argc, char* argv[]) {
                             std::cerr << "  Current sample ch0: " << samples[samp * trialCont.count] << std::endl;
                         }
                     }
+
+                    int16_t expected_ch0 = (last_sample_ch0 + 1) % UNIQUE_VALUES;
+                    if (samples[samp * trialCont.count + 0] != expected_ch0) {
+                        // Sawtooth channel 0 should increment by 1 each sample
+                        sawtooth_errors++;
+                        if (sawtooth_errors <= 5) {
+                            std::cerr << "SAWTOOTH ERROR #" << sawtooth_errors << " on channel 0:" << std::endl;
+                            std::cerr << "  Sample index: " << samp << " of " << trialCont.num_samples << std::endl;
+                            std::cerr << "  Last sample ch0: " << last_sample_ch0 << std::endl;
+                            std::cerr << "  Current sample ch0: " << samples[samp * trialCont.count + 0] << std::endl;
+                            std::cerr << "  Expected: " << expected_ch0 << std::endl;
+                        }
+                    }
+                    int16_t expected_ch1 = (last_sample_ch1 - 1) % UNIQUE_VALUES;
+                    if (samples[samp * trialCont.count + 1] != expected_ch1) {
+                        // Sawtooth channel 1 should decrement by 1 each sample
+                        sawtooth_errors++;
+                        if (sawtooth_errors <= 5) {
+                            std::cerr << "SAWTOOTH ERROR #" << sawtooth_errors << " on channel 1:" << std::endl;
+                            std::cerr << "  Sample index: " << samp << " of " << trialCont.num_samples << std::endl;
+                            std::cerr << "  Last sample ch1: " << last_sample_ch1 << std::endl;
+                            std::cerr << "  Current sample ch1: " << samples[samp * trialCont.count + 1] << std::endl;
+                            std::cerr << "  Expected: " << expected_ch1 << std::endl;
+                        }
+                    }
                 }
                 last_timestamp = current_timestamp;
                 last_sample_ch0 = samples[samp * trialCont.count + 0];
+                last_sample_ch1 = samples[samp * trialCont.count + 1];
                 first_read = false;
 
-                // // Calculate timestamp offset on first sample
-                // if (timestamp_offset == -1) {
-                //     const auto ch0 = samples[samp * trialCont.count + 0];
-                //     const auto ch1 = samples[samp * trialCont.count + 1];
-                //     const int64_t phase_from_ch0 = (ch0 - SAWTOOTH_MIN) % UNIQUE_VALUES;
-                //     const int64_t phase_from_ch1 = (SAWTOOTH_MAX - ch1) % UNIQUE_VALUES;
-                //
-                //     if (phase_from_ch0 != phase_from_ch1) {
-                //         std::cerr << "Warning: Sawtooth channels 1-2 out of sync at first sample!" << std::endl;
-                //         std::cerr << "  Ch0 phase: " << phase_from_ch0 << ", Ch1 phase: " << phase_from_ch1 << std::endl;
-                //         continue;
-                //     }
-                //
-                //     // Calculate offset: offset = timestamp - phase
-                //     timestamp_offset = static_cast<int64_t>(current_timestamp) - phase_from_ch0;
-                //     std::cout << "Initialized timestamp offset: " << timestamp_offset
-                //               << " (timestamp=" << current_timestamp << ", phase=" << phase_from_ch0 << ")" << std::endl;
-                // }
-
-                // // Calculate expected phase from timestamp: phase = (timestamp - offset) % UNIQUE_VALUES
-                // const int64_t expected_phase = (static_cast<int64_t>(current_timestamp) - timestamp_offset) % UNIQUE_VALUES;
-                //
-                // // Validate each channel
-                // for (uint32_t ch = 0; ch < trialCont.count; ch++) {
-                //     const int16_t value = samples[samp * trialCont.count + ch];
-                //     const uint16_t chan_id = trialCont.chan[ch];
-                //
-                //     if (ch < 2) {
-                //         // Channel 0: ramps up, Channel 1: ramps down
-                //         const auto expected_value = static_cast<int16_t>(
-                //             ch == 0 ? SAWTOOTH_MIN + expected_phase : SAWTOOTH_MAX - expected_phase
-                //         );
-                //
-                //         if (std::abs(static_cast<int64_t>(value) - expected_value) > SAWTOOTH_TOLERANCE) {
-                //             sawtooth_errors++;
-                //         }
-                //     } else if (value != static_cast<int16_t>(chan_id * 100)) {
-                //         // Channels 3+: Validate constant value
-                //         constant_errors++;
-                //     }
-                // }
+                // Validate constant channels
+                for (uint32_t ch = 2; ch < trialCont.count; ch++) {
+                    if (samples[samp * trialCont.count + ch] != static_cast<int16_t>(trialCont.chan[ch] * 100)) {
+                        constant_errors++;
+                    }
+                }
             }
             total_samples_received += trialCont.num_samples;
         }
