@@ -44,9 +44,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED On)
 include(CMakeDependentOption)
 
 # These options default to ON when building standalone, OFF when included as a subdirectory
-cmake_dependent_option(CBSDK_BUILD_CBMEX "Build Matlab wrapper" ON
+cmake_dependent_option(CBSDK_BUILD_CBMEX "Build Matlab wrapper" OFF
     "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
-cmake_dependent_option(CBSDK_BUILD_CBOCT "Build Octave wrapper" ON
+cmake_dependent_option(CBSDK_BUILD_CBOCT "Build Octave wrapper" OFF
     "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
 cmake_dependent_option(CBSDK_BUILD_TEST "Build tests" ON
     "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
