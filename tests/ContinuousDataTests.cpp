@@ -393,16 +393,17 @@ TEST_F(ContinuousDataTest, ParallelWritesToSameGroup) {
     const uint16_t chan_ids[NUM_CHANNELS] = {1, 2};
 
     for (int t = 0; t < NUM_THREADS; ++t) {
-        threads.emplace_back([this, t, &successful_writes, &chan_ids]() {
+        threads.emplace_back([this, t, &successful_writes, &chan_ids, WRITES_PER_THREAD]() {
+            // Hardcode array size for MSVC compatibility (NUM_CHANNELS is 2)
             for (int i = 0; i < WRITES_PER_THREAD; ++i) {
                 const PROCTIME timestamp = t * 1000 + i;
-                const int16_t data[NUM_CHANNELS] = {
+                const int16_t data[2] = {
                     static_cast<int16_t>(t * 100 + i),
                     static_cast<int16_t>(t * 200 + i)
                 };
 
                 // Write to group 0 (group index 0)
-                const bool overflow = cd->writeSampleThreadSafe(0, timestamp, data, NUM_CHANNELS, chan_ids);
+                const bool overflow = cd->writeSampleThreadSafe(0, timestamp, data, 2, chan_ids);
                 if (!overflow)
                     successful_writes++;
             }
@@ -433,7 +434,7 @@ TEST_F(ContinuousDataTest, ParallelWritesToDifferentGroups) {
     std::vector<std::thread> threads;
 
     for (int t = 0; t < NUM_THREADS; ++t) {
-        threads.emplace_back([this, t]() {
+        threads.emplace_back([this, t, WRITES_PER_THREAD]() {
             const uint32_t group_idx = t % cbMAXGROUPS;  // Use different groups
             const uint16_t chan_ids[2] = {
                 static_cast<uint16_t>(t * 10 + 1),
@@ -447,7 +448,7 @@ TEST_F(ContinuousDataTest, ParallelWritesToDifferentGroups) {
                     static_cast<int16_t>(t * 200 + i)
                 };
 
-                cd->writeSampleThreadSafe(group_idx, timestamp, data, 2, chan_ids);
+                (void)cd->writeSampleThreadSafe(group_idx, timestamp, data, 2, chan_ids);
             }
         });
     }
@@ -478,7 +479,7 @@ TEST_F(ContinuousDataTest, ParallelReadsFromSameGroup) {
             static_cast<int16_t>(i),
             static_cast<int16_t>(i * 2)
         };
-        cd->writeSampleThreadSafe(0, i, data, NUM_CHANNELS, chan_ids);
+        (void)cd->writeSampleThreadSafe(0, i, data, NUM_CHANNELS, chan_ids);
     }
 
     // Take a snapshot for reading
@@ -492,8 +493,9 @@ TEST_F(ContinuousDataTest, ParallelReadsFromSameGroup) {
     std::atomic<int> successful_reads(0);
 
     for (int t = 0; t < NUM_THREADS; ++t) {
-        threads.emplace_back([this, &successful_reads, NUM_CHANNELS]() {
-            int16_t samples[10 * NUM_CHANNELS];
+        threads.emplace_back([this, &successful_reads]() {
+            // Use hardcoded size for MSVC compatibility (NUM_CHANNELS is 2)
+            int16_t samples[10 * 2];
             PROCTIME timestamps[10];
             uint32_t num_samples = 10;
 
@@ -527,16 +529,17 @@ TEST_F(ContinuousDataTest, ConcurrentReadsAndWrites) {
 
     // Writer threads
     for (int t = 0; t < NUM_WRITER_THREADS; ++t) {
-        threads.emplace_back([this, t, &stop_flag]() {
-            const uint16_t chan_ids[NUM_CHANNELS] = {1, 2};
+        threads.emplace_back([this, t, &stop_flag, OPERATIONS_PER_THREAD]() {
+            // Hardcode array sizes for MSVC compatibility (NUM_CHANNELS is 2)
+            const uint16_t chan_ids[2] = {1, 2};
             for (int i = 0; i < OPERATIONS_PER_THREAD && !stop_flag; ++i) {
                 const PROCTIME timestamp = t * 1000 + i;
-                const int16_t data[NUM_CHANNELS] = {
+                const int16_t data[2] = {
                     static_cast<int16_t>(t * 100 + i),
                     static_cast<int16_t>(t * 200 + i)
                 };
 
-                cd->writeSampleThreadSafe(0, timestamp, data, NUM_CHANNELS, chan_ids);
+                (void)cd->writeSampleThreadSafe(0, timestamp, data, 2, chan_ids);
                 std::this_thread::sleep_for(std::chrono::microseconds(10));
             }
         });
@@ -544,14 +547,15 @@ TEST_F(ContinuousDataTest, ConcurrentReadsAndWrites) {
 
     // Reader threads
     for (int t = 0; t < NUM_READER_THREADS; ++t) {
-        threads.emplace_back([this, &stop_flag, NUM_CHANNELS]() {
+        threads.emplace_back([this, &stop_flag, OPERATIONS_PER_THREAD]() {
+            // Use hardcoded size for MSVC compatibility (NUM_CHANNELS is 2)
             for (int i = 0; i < OPERATIONS_PER_THREAD && !stop_flag; ++i) {
-                int16_t samples[10 * NUM_CHANNELS];
+                int16_t samples[10 * 2];
                 PROCTIME timestamps[10];
                 uint32_t num_samples = 10;
 
                 // Try to read (may get 0 samples if buffer is empty, which is ok)
-                cd->readSamples(0, samples, timestamps, num_samples, false);
+                (void)cd->readSamples(0, samples, timestamps, num_samples, false);
                 std::this_thread::sleep_for(std::chrono::microseconds(10));
             }
         });
@@ -580,16 +584,17 @@ TEST_F(ContinuousDataTest, SnapshotConsistencyUnderWrites) {
 
     // Writer threads
     for (int t = 0; t < NUM_WRITER_THREADS; ++t) {
-        threads.emplace_back([this, t]() {
-            const uint16_t chan_ids[NUM_CHANNELS] = {1, 2};
+        threads.emplace_back([this, t, OPERATIONS_PER_THREAD]() {
+            // Hardcode array sizes for MSVC compatibility (NUM_CHANNELS is 2)
+            const uint16_t chan_ids[2] = {1, 2};
             for (int i = 0; i < OPERATIONS_PER_THREAD; ++i) {
                 const PROCTIME timestamp = t * 1000 + i;
-                const int16_t data[NUM_CHANNELS] = {
+                const int16_t data[2] = {
                     static_cast<int16_t>(t * 100 + i),
                     static_cast<int16_t>(t * 200 + i)
                 };
 
-                cd->writeSampleThreadSafe(0, timestamp, data, NUM_CHANNELS, chan_ids);
+                (void)cd->writeSampleThreadSafe(0, timestamp, data, 2, chan_ids);
                 std::this_thread::sleep_for(std::chrono::microseconds(100));
             }
         });
@@ -597,7 +602,7 @@ TEST_F(ContinuousDataTest, SnapshotConsistencyUnderWrites) {
 
     // Snapshot threads
     for (int t = 0; t < NUM_SNAPSHOT_THREADS; ++t) {
-        threads.emplace_back([this, &successful_snapshots]() {
+        threads.emplace_back([this, &successful_snapshots, OPERATIONS_PER_THREAD]() {
             for (int i = 0; i < OPERATIONS_PER_THREAD; ++i) {
                 GroupSnapshot snapshot;
                 if (cd->snapshotForReading(0, snapshot)) {
@@ -635,7 +640,7 @@ TEST_F(ContinuousDataTest, ReadWithSeekVsWithoutSeek) {
             static_cast<int16_t>(i),
             static_cast<int16_t>(i * 2)
         };
-        cd->writeSampleThreadSafe(0, i, data, NUM_CHANNELS, chan_ids);
+        (void)cd->writeSampleThreadSafe(0, i, data, NUM_CHANNELS, chan_ids);
     }
 
     // Read without seeking (peek)
