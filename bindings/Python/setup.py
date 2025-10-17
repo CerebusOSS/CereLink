@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 import sys
-import platform
 
 import numpy
 from setuptools import setup, Extension
@@ -90,8 +89,8 @@ extra_includes, extra_libs, extra_link_args, extra_compile_args = get_extras()
 setup(
     ext_modules=[
         Extension(
-            "cerebus.cbpy",
-            sources=["cerebus/cbpy.pyx", "cerebus/cbsdk_helper.cpp"],
+            "cerelink.cbpy",
+            sources=["cerelink/cbpy.pyx", "cerelink/cbsdk_helper.cpp"],
             libraries=["cbsdk_static"] + extra_libs,
             extra_compile_args=extra_compile_args,
             extra_link_args=extra_link_args,

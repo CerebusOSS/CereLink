@@ -103,7 +103,7 @@ def open(int instance=0, connection='default', parameter={}):
         Same as "get_connection_type" command output
 
     Test with:
-from cerebus import cbpy
+from cerelink import cbpy
 cbpy.open(parameter=cbpy.defaultConParams())
     """
     

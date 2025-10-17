@@ -3,20 +3,23 @@ requires = ["setuptools", "wheel", "cython", "oldest-supported-numpy", "setuptoo
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cerebus"  # as it would appear on PyPI
+name = "cerelink"  # as it would appear on PyPI
 dynamic = ["version", "readme"]
 authors = [
     {name = "Chadwick Boulay", email = "chadwick.boulay@gmail.com"},
     {name = "Ehsan Azar"}
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.23.0",
+]
 urls = {homepage = "https://github.com/CerebusOSS/CereLink"}
 
 [tool.setuptools.packages.find]
-include = ["cerebus*"]  # package names should match these glob patterns (["*"] by default)
+include = ["cerelink*"]  # package names should match these glob patterns (["*"] by default)
 
 [tool.setuptools.package-data]
-cerebus = ["*.dll"]
+cerelink = ["*.dll"]
 
 [tool.setuptools.dynamic]
 readme = {file = ["README.md"]}
@@ -24,6 +27,6 @@ readme = {file = ["README.md"]}
 [tool.setuptools_scm]
 # Get version from git tags, looking in the root of the repository (not bindings/Python)
 root = "../.."
-version_file = "cerebus/__version__.py"
+version_file = "cerelink/__version__.py"
 # Strip 'v' prefix from tags (v7.6.4 -> 7.6.4)
 tag_regex = "^(?P<prefix>v)?(?P<version>[^\\+]+)(?P<suffix>.*)?$"

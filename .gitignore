@@ -43,8 +43,8 @@ Release/
 .settings/
 .metadata/
 
-cerebus/cbpy.so
-cerebus/cbpy.cpp
-cerebus/cbpyw.cpp
-cerebus/*.dll
-cerebus/__version__.py
+**/cerelink/cbpy.so
+**/cerelink/cbpy.cpp
+**/cerelink/cbpyw.cpp
+**/cerelink/*.dll
+**/cerelink/__version__.py
