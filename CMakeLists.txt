@@ -27,12 +27,16 @@
 cmake_minimum_required( VERSION 3.16 )
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake" ${CMAKE_MODULE_PATH})
 include(AppleSilicon)
+include(GetVersionFromGit)
 # cmake_policy(SET CMP0091 NEW)
+
+# Get version from git tags
+get_version_from_git()
 
 project(CBSDK
         DESCRIPTION "Blackrock Neurotech CereBus Software Development Kit"
         LANGUAGES C CXX
-        VERSION 7.6.2
+        VERSION ${GIT_VERSION_FULL}
         )
 
 # Common Configuration
