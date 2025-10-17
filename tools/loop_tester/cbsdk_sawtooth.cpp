@@ -184,12 +184,19 @@ int main(int argc, char* argv[]) {
 
     auto start_time = std::chrono::steady_clock::now();
     auto last_stats_time = start_time;
+    constexpr auto max_runtime = std::chrono::seconds(20);  // 20 second timeout
 
-    std::cout << "\nStarting validation loop..." << std::endl;
-    std::cout << "Press Ctrl+C to stop." << std::endl;
+    std::cout << "\nStarting validation loop (will run for 20 seconds)..." << std::endl;
+    std::cout << "Press Ctrl+C to stop early." << std::endl;
     std::cout << std::endl;
 
     while (keep_running) {
+        // Check if we've exceeded the runtime limit
+        auto elapsed = std::chrono::steady_clock::now() - start_time;
+        if (elapsed >= max_runtime) {
+            std::cout << "\nReached 20 second timeout, exiting..." << std::endl;
+            break;
+        }
         // Initialize trial to get available sample count
         trialCont.num_samples = BUFFER_SIZE;
         res = cbSdkInitTrialData(INST, 0, nullptr, &trialCont, nullptr, nullptr);

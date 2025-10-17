@@ -17,13 +17,19 @@ add_executable(lsl_sawtooth lsl_sawtooth.cpp)
 target_link_libraries(lsl_sawtooth PRIVATE lsl)
 target_compile_features(lsl_sawtooth PRIVATE cxx_std_17)
 
-# Second application -- cbsdk sawtooth validator
+# Second application -- cbsdk sawtooth validator (trial buffer version)
 # Connects to nPlayServer and validates the received sawtooth signal
 add_executable(cbsdk_sawtooth cbsdk_sawtooth.cpp)
 target_link_libraries(cbsdk_sawtooth PRIVATE cbsdk_static)
 target_compile_features(cbsdk_sawtooth PRIVATE cxx_std_17)
 
-# Install both executables
-install(TARGETS lsl_sawtooth cbsdk_sawtooth
+# Third application -- cbsdk sawtooth validator (callback version)
+# Uses cbSdkRegisterCallback to bypass trial buffer system
+add_executable(cbsdk_sawtooth_callback cbsdk_sawtooth_callback.cpp)
+target_link_libraries(cbsdk_sawtooth_callback PRIVATE cbsdk_static)
+target_compile_features(cbsdk_sawtooth_callback PRIVATE cxx_std_17)
+
+# Install all executables
+install(TARGETS lsl_sawtooth cbsdk_sawtooth cbsdk_sawtooth_callback
     RUNTIME DESTINATION bin
 )
