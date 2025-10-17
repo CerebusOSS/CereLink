@@ -25,6 +25,9 @@ public:
     /// Constructor - initializes all fields to safe defaults
     GroupContinuousData();
 
+    // Allow ContinuousData to access private mutex for multi-group operations
+    friend class ContinuousData;
+
     /// Destructor
     ~GroupContinuousData();
 
@@ -92,6 +95,8 @@ private:
     // Access: m_channel_data[sample_idx * m_num_channels + channel_idx]
     PROCTIME* m_timestamps;             ///< [size] - timestamp for each sample
     int16_t* m_channel_data;            ///< [size * num_channels] - contiguous data block
+
+    mutable std::mutex m_mutex;         ///< Mutex for thread-safe access to this group
 };
 
 
@@ -168,21 +173,22 @@ public:
     /// Reset all groups (preserves allocations)
     void reset()
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
         for (auto& grp : groups)
+        {
+            std::lock_guard<std::mutex> lock(grp.m_mutex);
             grp.reset();
+        }
     }
 
     /// Cleanup all groups (deallocates all memory)
     void cleanup()
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
         for (auto& grp : groups)
+        {
+            std::lock_guard<std::mutex> lock(grp.m_mutex);
             grp.cleanup();
+        }
     }
-
-private:
-    mutable std::mutex m_mutex;    ///< Mutex for thread-safe access
 };
 
 #endif // CONTINUOUSDATA_H_INCLUDED

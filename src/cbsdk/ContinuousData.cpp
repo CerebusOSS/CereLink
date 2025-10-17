@@ -178,9 +178,8 @@ bool ContinuousData::writeSampleThreadSafe(uint32_t group_idx, PROCTIME timestam
     if (group_idx >= cbMAXGROUPS)
         return false;
 
-    std::lock_guard<std::mutex> lock(m_mutex);
-
     auto& grp = groups[group_idx];
+    std::lock_guard<std::mutex> lock(grp.m_mutex);
 
     // Check if we need to allocate or reallocate
     if (grp.needsReallocation(chan_ids, n_chans))
@@ -202,9 +201,8 @@ bool ContinuousData::snapshotForReading(uint32_t group_idx, GroupSnapshot& snaps
     if (group_idx >= cbMAXGROUPS)
         return false;
 
-    std::lock_guard<std::mutex> lock(m_mutex);
-
     auto& grp = groups[group_idx];
+    std::lock_guard<std::mutex> lock(grp.m_mutex);
 
     snapshot.is_allocated = grp.isAllocated();
     if (!snapshot.is_allocated)
@@ -246,9 +244,8 @@ bool ContinuousData::readSamples(uint32_t group_idx, int16_t* output_samples,
     if (!output_samples || !output_timestamps)
         return false;
 
-    std::lock_guard<std::mutex> lock(m_mutex);
-
     auto& grp = groups[group_idx];
+    std::lock_guard<std::mutex> lock(grp.m_mutex);
 
     if (!grp.isAllocated())
     {
