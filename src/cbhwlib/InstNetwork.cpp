@@ -618,31 +618,18 @@ void InstNetwork::processTimerTick()
     // Process 1024 remaining packets
     while (burstcount < 1024)
     {
-        bool bLoopbackPacket = false;
         burstcount++;
         recv_returned = m_icInstrument.Recv(&(cb_rec_buffer_ptr[m_nIdx]->buffer[cb_rec_buffer_ptr[m_nIdx]->headindex]));
         if (recv_returned <= 0)
-        {
-            // If the real instrument doesn't work, then try the fake one
-            recv_returned = m_icInstrument.Recv(&(cb_rec_buffer_ptr[m_nIdx]->buffer[cb_rec_buffer_ptr[m_nIdx]->headindex]));
-            if (recv_returned <= 0)
-                break; // No data returned
-            bLoopbackPacket = true;
-        }
+            break;
 
         // get pointer to the first packet in received data block
         auto *pktptr = (cbPKT_GENERIC*) &(cb_rec_buffer_ptr[m_nIdx]->buffer[cb_rec_buffer_ptr[m_nIdx]->headindex]);
 
         uint32_t bytes_to_process = recv_returned;
         do {
-            if (bLoopbackPacket)
-            {
-                // Put fake packets in-order
-                pktptr->cbpkt_header.time = cb_rec_buffer_ptr[m_nIdx]->lasttime;
-            } else {
-                ++m_nRecentPacketCount; // only count the "real" packets, not loopback ones
-                m_icInstrument.TestForReply(pktptr); // loopbacks won't need a "reply"...they are never sent
-            }
+            ++m_nRecentPacketCount; // only count the "real" packets, not loopback ones
+            m_icInstrument.TestForReply(pktptr); // loopbacks won't need a "reply"...they are never sent
 
             // make sure that the next packet in the data block that we are processing fits.
             uint32_t quadlettotal = (pktptr->cbpkt_header.dlen) + cbPKT_HEADER_32SIZE;
