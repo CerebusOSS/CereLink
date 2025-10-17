@@ -47,3 +47,4 @@ cerebus/cbpy.so
 cerebus/cbpy.cpp
 cerebus/cbpyw.cpp
 cerebus/*.dll
+cerebus/__version__.py

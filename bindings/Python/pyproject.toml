@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel", "cython", "oldest-supported-numpy"]
+requires = ["setuptools", "wheel", "cython", "oldest-supported-numpy", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -19,5 +19,11 @@ include = ["cerebus*"]  # package names should match these glob patterns (["*"] 
 cerebus = ["*.dll"]
 
 [tool.setuptools.dynamic]
-version = {attr = "cerebus.__version__"}
 readme = {file = ["README.md"]}
+
+[tool.setuptools_scm]
+# Get version from git tags, looking in the root of the repository (not bindings/Python)
+root = "../.."
+version_file = "cerebus/__version__.py"
+# Strip 'v' prefix from tags (v7.6.4 -> 7.6.4)
+tag_regex = "^(?P<prefix>v)?(?P<version>[^\\+]+)(?P<suffix>.*)?$"
