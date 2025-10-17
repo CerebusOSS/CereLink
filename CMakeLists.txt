@@ -52,7 +52,7 @@ cmake_dependent_option(CBSDK_BUILD_TEST "Build tests" ON
     "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
 cmake_dependent_option(CBSDK_BUILD_SAMPLE "Build sample applications" ON
     "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
-cmake_dependent_option(CBSDK_BUILD_HDF5 "Build HDF5" ON
+cmake_dependent_option(CBSDK_BUILD_TOOLS "Build tools" ON
     "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
 
 # These options are always available regardless of build context
@@ -66,8 +66,6 @@ set( INSTALL_TARGET_LIST ${LIB_NAME} )
 set( LIB_NAME_STATIC cbsdk_static )
 set( LIB_NAME_CBMEX cbmex )
 set( LIB_NAME_CBOCT cboct )
-set( TEST_ANAOUT_NAME test_analog_out )
-set( N2H5_NAME n2h5 )
 
 ##########################################################################################
 # Misc Configuration
@@ -245,6 +243,9 @@ endif(CBSDK_BUILD_SAMPLE)
 ##
 # Language bindings (MATLAB, Octave, C++/CLI, Python)
 add_subdirectory(bindings)
+
+## Misc Tools
+add_subdirectory(tools)
 
 
 #########################################################################################
