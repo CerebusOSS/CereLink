@@ -128,7 +128,7 @@ jobs:
           CIBW_ARCHS: ${{ matrix.config.arch }}
 
       - name: Linux - Prefix package with release name
-        if: startswith(matrix.config.os, 'ubuntu-') && !matrix.config.container
+        if: startswith(matrix.config.os, 'ubuntu-') && !matrix.config.container && matrix.config.arch != 'aarch64'
         run: |
           pushd dist
           temp="$(lsb_release -cs)"
