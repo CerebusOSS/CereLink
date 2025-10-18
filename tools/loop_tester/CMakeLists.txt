@@ -13,12 +13,18 @@ FetchContent_MakeAvailable(lsl)
 
 # First application -- LSL sawtooth stream source
 # Generates a 30 kHz sawtooth signal in first 2 channels and constant values in remaining channels
-add_executable(lsl_sawtooth lsl_sawtooth.cpp)
-target_link_libraries(lsl_sawtooth PRIVATE lsl)
-target_compile_features(lsl_sawtooth PRIVATE cxx_std_17)
 add_executable(sawtooth_lsl sawtooth_lsl.cpp)
 target_link_libraries(sawtooth_lsl PRIVATE lsl)
 target_compile_features(sawtooth_lsl PRIVATE cxx_std_17)
+
+# Set RPATH for macOS to find lsl.framework
+if(APPLE)
+    set_target_properties(sawtooth_lsl PROPERTIES
+        INSTALL_RPATH "@executable_path/../lib;@executable_path/../Frameworks"
+        BUILD_WITH_INSTALL_RPATH FALSE
+        MACOSX_RPATH TRUE
+    )
+endif()
 
 # Second application -- cbsdk sawtooth validator (trial buffer version)
 # Connects to nPlayServer and validates the received sawtooth signal
