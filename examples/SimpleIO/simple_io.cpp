@@ -238,7 +238,7 @@ int main(int argc, char *argv[])
     // Parse command line arguments.
     {
         if (argc > 1 && argv[1][0] != '-') {inst_ip = argv[1];}
-        if (argc > 2 && argv[2][0] != '-') {inst_port = strtol(argv[2], NULL, 10);}
+        if (argc > 2 && argv[2][0] != '-') {inst_port = strtol(argv[2], nullptr, 10);}
         if (argc > 3 && argv[3][0] != '-') { client_ip = argv[3]; }
 
         for (size_t optind = 1; optind < argc; optind++)
@@ -249,6 +249,7 @@ int main(int argc, char *argv[])
                     case 'c': bCont = true; break;
                     case 'e': bEv = true; break;
                     case 'r': runtime = 30000 * (argv[optind][2] - '0'); break;
+                    default: ;  // TODO: Raise error
                 }
             }
         }
@@ -301,8 +302,9 @@ int main(int argc, char *argv[])
     // Continuous data: single contiguous buffer for all channels and samples
     std::vector<int16_t> cont_samples;     // [num_samples * count] contiguous array
     std::vector<PROCTIME> cont_timestamps; // [num_samples] timestamps
-    std::vector<PROCTIME> event_ts[cbMAXCHANS][cbMAXUNITS + 1];
-    std::vector<int16_t> event_wfs_short[cbMAXCHANS];
+    // Event data
+    std::vector<std::vector<std::vector<PROCTIME>>> event_ts;  // [count][cbMAXUNITS+1][samples]
+    std::vector<std::vector<int16_t>> event_wfs_short;         // [count][samples]
 
     PROCTIME start_time;
     PROCTIME elapsed_time = 0;
@@ -321,14 +323,18 @@ int main(int argc, char *argv[])
         // allocate memory
         if (trialEvent && trialEvent->count)
         {
+            // Resize outer vectors to actual count
+            event_ts.resize(trialEvent->count);
+            event_wfs_short.resize(trialEvent->count);
+
             for (size_t ev_ix = 0; ev_ix < trialEvent->count; ev_ix++)
             {
                 // Every event channel, regardless of type (spike, digital, serial), gets an array of timestamps.
                 for (size_t un_ix = 0; un_ix < cbMAXUNITS + 1; un_ix++)
                 {
                     const uint32_t n_samples = trialEvent->num_samples[ev_ix][un_ix];
-                    event_ts[ev_ix][un_ix].resize(n_samples);
-                    std::fill(event_ts[ev_ix][un_ix].begin(), event_ts[ev_ix][un_ix].end(), 0);
+                    event_ts[ev_ix][un_ix].assign(n_samples, 0);
+                    // Assign pointer into trialEvent structure
                     trialEvent->timestamps[ev_ix][un_ix] = event_ts[ev_ix][un_ix].data();
                 }
 
@@ -338,8 +344,7 @@ int main(int argc, char *argv[])
                 {
                     // alloc waveform data
                     const uint32_t n_samples = trialEvent->num_samples[ev_ix][0];
-                    event_wfs_short[ev_ix].resize(n_samples);
-                    std::fill(event_wfs_short[ev_ix].begin(), event_wfs_short[ev_ix].end(), 0);
+                    event_wfs_short[ev_ix].assign(n_samples, 0);
                     trialEvent->waveforms[ev_ix] = event_wfs_short[ev_ix].data();
                 }
             }
