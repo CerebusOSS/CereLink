@@ -102,7 +102,10 @@ jobs:
       - name: Build and Package
         run: |
           cmake --build build --target install --config Release -j
-          cmake --build build --target package --config Release -j
+          # Skip CPack for ARM64 due to missing shlibdeps support
+          if [ "${{ matrix.config.arch }}" != "aarch64" ]; then
+            cmake --build build --target package --config Release -j
+          fi
 
       - name: Set up Python
         if: "!matrix.config.container"
