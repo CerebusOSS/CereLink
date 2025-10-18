@@ -1,7 +1,6 @@
 #include "ContinuousData.h"
 #include <algorithm>
 #include <cstring>
-#include <cstdio>
 #include <mutex>
 
 GroupContinuousData::GroupContinuousData() :
@@ -109,30 +108,6 @@ bool GroupContinuousData::writeSample(PROCTIME timestamp, const int16_t* data, u
 
     // Store timestamp for this sample
     m_timestamps[m_write_index] = timestamp;
-
-    // DEBUG: Log write operations
-    static PROCTIME last_written_ts = 0;
-    static uint32_t write_log_count = 0;
-
-    if (timestamp != 0) {
-        // Log first 200 writes
-        if (write_log_count < 200) {
-            fprintf(stderr, "[writeSample #%u] write_index=%u, ts=%llu, data[0]=%d, n_chans=%u\n",
-                    write_log_count, m_write_index, (unsigned long long)timestamp, data[0], n_chans);
-            write_log_count++;
-        }
-
-        // Always check for duplicates and jumps
-        if (last_written_ts != 0 && timestamp == last_written_ts) {
-            fprintf(stderr, "[WRITE] DUPLICATE! write_index=%u, timestamp=%llu, data[0]=%d (prev_ts=%llu)\n",
-                    m_write_index, (unsigned long long)timestamp, data[0], (unsigned long long)last_written_ts);
-        } else if (last_written_ts != 0 && timestamp != last_written_ts + 1) {
-            fprintf(stderr, "[WRITE] JUMP! write_index=%u, timestamp=%llu, delta=%lld, data[0]=%d\n",
-                    m_write_index, (unsigned long long)timestamp,
-                    (long long)(timestamp - last_written_ts), data[0]);
-        }
-        last_written_ts = timestamp;
-    }
 
     // Store data for all channels in one memcpy
     // Contiguous layout: data for sample at write_index starts at [write_index * num_channels]
@@ -338,21 +313,6 @@ bool ContinuousData::readSamples(uint32_t group_idx, int16_t* output_samples,
         memcpy(&output_samples[first_chunk_size * num_channels],
                channel_data,
                second_chunk_size * num_channels * sizeof(int16_t));
-    }
-
-    // DEBUG: Always check for duplicate timestamps in reads
-    static uint32_t read_call_count = 0;
-    if (num_samples > 0) {
-        // Check ALL samples in this read for duplicates
-        for (uint32_t i = 1; i < num_samples; i++) {
-            if (output_timestamps[i] == output_timestamps[i-1]) {
-                fprintf(stderr, "[READ] DUPLICATE in call #%u at index %u/%u: ts=%llu (data[%u]=%d, data[%u]=%d)\n",
-                        read_call_count, i, num_samples, (unsigned long long)output_timestamps[i],
-                        (i-1)*num_channels, static_cast<int16_t*>(output_samples)[(i-1)*num_channels],
-                        i*num_channels, static_cast<int16_t*>(output_samples)[i*num_channels]);
-            }
-        }
-        read_call_count++;
     }
 
     // Update write_start_index if consuming data (bSeek)
