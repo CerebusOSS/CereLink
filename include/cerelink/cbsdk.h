@@ -304,7 +304,7 @@ typedef struct _cbSdkTrialCont
     uint16_t chan[cbNUM_ANALOG_CHANS]; ///< Channel numbers (1-based, output from Init)
     uint16_t sample_rate;              ///< Sample rate for this group (Hz, output from Init)
     uint32_t num_samples;              ///< Number of samples: input = max to read, output = actual read
-    void * samples;                    ///< Pointer to contiguous [num_samples][count] array
+    int16_t * samples;                    ///< Pointer to contiguous [num_samples][count] array
     PROCTIME * timestamps;             ///< Pointer to array of [num_samples] timestamps
 } cbSdkTrialCont;
 

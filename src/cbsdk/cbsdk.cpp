@@ -1915,7 +1915,7 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bSeek, cbSdkTrialEvent * tria
         // Use thread-safe read method (handles locking internally)
         uint32_t num_samples = trialcont->num_samples;
         const bool success = m_CD->readSamples(g - 1,
-                                               static_cast<int16_t*>(trialcont->samples),
+                                               trialcont->samples,
                                                trialcont->timestamps,
                                                num_samples,
                                                bSeek != 0);
