@@ -1,28 +1,6 @@
 # CBSDK CMake Build System
 # Author: griffin.milsap@gmail.com
 #         chadwick.boulay@gmail.com
-# Version 1.1 Jan. 2017
-#   Build information for
-#       cbsdk Library
-#       -shared, -static (optional), -matlab (optional), -octave (optional)
-#       -testcbsdk Test Binary (optional)
-#   See "Optional Targets" below for options to disable specific targets.
-#
-# MATLAB:
-#    First ../Matlab  is looked.
-#    If mex.h is not found then FindMatlab.cmake looks at usual places.
-#    Use -DMatlab_ROOT_DIR if installed in unknown location (or copy to ../Matlab).
-#    e.g., Matlab R2016a on Mac OS: -DMatlab_ROOT_DIR=/Applications/MATLAB_R2016a.app/
-#    -DCBMEX_INSTALL_PREFIX can be used to install cbmex to given directory
-#
-# General Windows:
-#    - If you are using MSVC and not logged-in as an administrator then you will not be
-#    able to build the INSTALL target, as by default it tries to install to C:\Program Files.
-#    Change the install target using CMAKE_INSTALL_PREFIX. See example CMAKE command below.
-#    - If you would like to build the C# libraries and examples then add -DBUILD_CLI=ON
-# NOTE: Qt dependency has been completely removed (replaced with C++ standard library)
-#
-
 
 cmake_minimum_required( VERSION 3.16 )
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake" ${CMAKE_MODULE_PATH})
