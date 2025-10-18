@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel", "cython", "oldest-supported-numpy", "setuptools-scm"]
+requires = ["setuptools", "wheel", "cython", "numpy>=2.0.0", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -11,7 +11,7 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "numpy>=1.23.0",
+    "numpy>=2.0.0",
 ]
 urls = {homepage = "https://github.com/CerebusOSS/CereLink"}
 

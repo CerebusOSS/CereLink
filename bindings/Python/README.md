@@ -30,18 +30,20 @@ This is a Python wrapper for the CereLink (cbsdk) library to configure, pull dat
     * The wheels will be in the `bindings/Python/dist` folder.
     * See the [Wiki](https://github.com/CerebusOSS/CereLink/wiki/cerelink) for more information.
 
-## Warning about NumPy ABI compatibility
+## NumPy Compatibility
 
-This project is built against NumPy's C-API 1.7. If this becomes incompatible with newer version of NumPy 2.x at some point, then the following change to the pyproject.toml file may be required:
+This project is built against **NumPy 2.x**. Users must have NumPy 2.0 or later installed.
+If you are having trouble, try to run the following command and report your results:
+`python -c "import numpy; print(f'NumPy: {numpy.__version__}'); from cerelink import cbpy; print('Success!')"`
+
+If you need to support older NumPy 1.x versions, you can build wheels with:
 
 ```toml
 [build-system]
-requires = ["setuptools", "wheel", "cython", "numpy>=2.0.0rc1", "setuptools-scm"]
+requires = ["setuptools", "wheel", "cython", "oldest-supported-numpy", "setuptools-scm"]
 
 [project]
 dependencies = [
-  "numpy>=2.0.0",
+  "numpy>=1.23.0,<2.0",
 ]
 ```
-
-Until then, users may have to limit themselves to Python < 2.0

@@ -23,6 +23,10 @@ cimport cython
 # Initialize numpy C API
 cnp.import_array()
 
+# NumPy array flags for ownership
+cdef extern from "numpy/arrayobject.h":
+    cdef int NPY_ARRAY_OWNDATA
+
 
 # Determine the correct numpy dtype for PROCTIME based on its size
 cdef object _proctime_dtype():
@@ -1147,7 +1151,7 @@ cdef class SpikeCache:
             for samp_ix in range(self.n_samples):
                 np_waveforms[wf_ix, samp_ix] = self.p_cache.spkpkt[pkt_ix].wave[samp_ix]
         #unit_ids_out = [<int>unit_ids[wf_ix] for wf_ix in range(n_new)]
-        PyArray_ENABLEFLAGS(np_waveforms, cnp.NPY_OWNDATA)
+        PyArray_ENABLEFLAGS(np_waveforms, NPY_ARRAY_OWNDATA)
         self.last_valid = new_valid
         return np_waveforms, np_unit_ids
 
