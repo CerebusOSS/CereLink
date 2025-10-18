@@ -6,13 +6,13 @@
 //  This extends testcbsdk with explicit testing of data io.
 //  This is incomplete and only includes tests that were relevant to debugging specific problems.
 //
-//  Call with -c to enable continuous data (not tested), -e to enable events (works ok),
-//  and -r <int> to specify a fixed runtime (?not working).
-//  while running, press Esc key to stop.
+//  Call with -c to enable continuous data, -e to enable events,
+//  and -r <int> to specify a fixed runtime.
+//  While running, press Ctrl+C to stop.
 //
 //  Note:
 //   Make sure only the SDK is used here, and not cbhwlib directly
-//    this will ensure SDK is capable of whatever test suite can do
+//    this will ensure SDK is capable of whatever test suite can do.
 //   Do not throw exceptions, catch possible exceptions and handle them the earliest possible in this library
 //
 
@@ -21,20 +21,30 @@
 #include <string>
 #include <vector>
 #include <algorithm>
-#include <stdio.h>
 #include <iostream>
-#include <thread>         // std::this_thread::sleep_for
-#ifdef WIN32
-#include <conio.h>
-#endif //win32
-#include <memory>
-#include <inttypes.h>
+#include <thread>
+#include <csignal>
+#include <atomic>
+#include <cinttypes>
 
 #include <cerelink/cbsdk.h>
 
 #define INST 0
 
-typedef struct _cbsdk_config {
+// Global flag to signal shutdown
+static std::atomic<bool> g_bShutdown(false);
+
+// Signal handler for Ctrl+C
+void signal_handler(const int signal)
+{
+    if (signal == SIGINT)
+    {
+        g_bShutdown = true;
+        printf("\nShutdown requested...\n");
+    }
+}
+
+typedef struct cbsdk_config {
     uint32_t nInstance;
     uint32_t bActive;
     uint16_t begchan;
@@ -52,7 +62,7 @@ typedef struct _cbsdk_config {
     bool bAbsolute;
 } cbsdk_config;
 
-void handleResult(cbSdkResult res)
+void handleResult(const cbSdkResult res)
 {
     switch (res)
     {
@@ -137,7 +147,7 @@ cbSdkVersion getVersion()
 cbSdkResult open(const LPCSTR inst_ip, const int inst_port, const LPCSTR client_ip)
 {
     // Try to get the version. Should be a warning because we are not yet open.
-    cbSdkVersion ver = getVersion();
+    getVersion();
 
     // Open the device using default connection type.
     cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
@@ -162,7 +172,6 @@ cbSdkResult open(const LPCSTR inst_ip, const int inst_port, const LPCSTR client_
         // if (instType == CBSDKINSTRUMENT_NPLAY || instType == CBSDKINSTRUMENT_REMOTENPLAY)
         //  	printf("Unable to open UDP interface to nPlay\n");
 
-
         if (conType > CBSDKCONNECTION_CLOSED)
             conType = CBSDKCONNECTION_COUNT;
         if (instType > CBSDKINSTRUMENT_COUNT)
@@ -172,14 +181,13 @@ cbSdkResult open(const LPCSTR inst_ip, const int inst_port, const LPCSTR client_
         char strInstrument[CBSDKINSTRUMENT_COUNT + 1][13] = {"NSP", "nPlay", "Local NSP", "Remote nPlay", "Unknown"};
 
         // Now that we are open, get the version again.
-        ver = getVersion();
+        const cbSdkVersion ver = getVersion();
 
         // Summary results.
         printf("%s real-time interface to %s (%d.%02d.%02d.%02d) successfully initialized\n",
                strConnection[conType], strInstrument[instType],
                ver.nspmajor, ver.nspminor, ver.nsprelease, ver.nspbeta);
     }
-
     return res;
 }
 
@@ -201,10 +209,10 @@ void setConfig(const bool bCont, bool bEv)
     {
         // Set sample group 3 and filter 7 on the first few channels.
         // Also disable spiking.
-        cbPKT_CHANINFO ch_info;
-        for (int chan_ix = 0; chan_ix < cbNUM_ANALOG_CHANS; ++chan_ix) {
-            cbSdkResult res = cbSdkSetAinpSampling(INST, chan_ix + 1, 7, chan_ix < 2 ? 3 : 0);
-            res = cbSdkSetAinpSpikeOptions(INST, chan_ix + 1, 0, 2);
+        for (int chan_ix = 0; chan_ix < cbNUM_ANALOG_CHANS; ++chan_ix)
+        {
+            cbSdkSetAinpSampling(INST, chan_ix + 1, 7, chan_ix < 2 ? 3 : 0);
+            cbSdkSetAinpSpikeOptions(INST, chan_ix + 1, 0, 2);
         }
     }
     std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -225,7 +233,7 @@ cbSdkResult close()
     return res;
 }
 
-int main(int argc, char *argv[])
+int main(const int argc, char *argv[])
 {
     auto inst_ip = "";
     int inst_port = cbNET_UDP_PORT_CNT;
@@ -238,22 +246,48 @@ int main(int argc, char *argv[])
     // Parse command line arguments.
     {
         if (argc > 1 && argv[1][0] != '-') {inst_ip = argv[1];}
-        if (argc > 2 && argv[2][0] != '-') {inst_port = strtol(argv[2], nullptr, 10);}
+        if (argc > 2 && argv[2][0] != '-') {
+            try {
+                inst_port = std::stoi(argv[2]);
+            } catch (const std::exception&) {
+                printf("Error: Invalid port number '%s'\n", argv[2]);
+                return 1;
+            }
+        }
         if (argc > 3 && argv[3][0] != '-') { client_ip = argv[3]; }
 
         for (size_t optind = 1; optind < argc; optind++)
         {
             if (argv[optind][0] == '-')
             {
-                switch (argv[optind][1]) {
+                switch (const char option = argv[optind][1]) {
                     case 'c': bCont = true; break;
                     case 'e': bEv = true; break;
+                    case 'i': bComm = true; break;
                     case 'r': runtime = 30000 * (argv[optind][2] - '0'); break;
-                    default: ;  // TODO: Raise error
+                    case '\0':
+                        printf("Error: Invalid option '-' without a flag character\n");
+                        printf("Usage: %s [inst_ip] [inst_port] [client_ip] [-c] [-e] [-i] [-rN]\n", argv[0]);
+                        printf("  -c: Enable continuous data\n");
+                        printf("  -e: Enable event data\n");
+                        printf("  -i: Enable comment data\n");
+                        printf("  -rN: Set runtime (N * 30000 ticks)\n");
+                        return 1;
+                    default:
+                        printf("Error: Unrecognized option '-%c'\n", option);
+                        printf("Usage: %s [inst_ip] [inst_port] [client_ip] [-c] [-e] [-i] [-rN]\n", argv[0]);
+                        printf("  -c: Enable continuous data\n");
+                        printf("  -e: Enable event data\n");
+                        printf("  -i: Enable comment data\n");
+                        printf("  -rN: Set runtime (N * 30000 ticks)\n");
+                        return 1;
                 }
             }
         }
     }
+
+    // Install signal handler for Ctrl+C
+    std::signal(SIGINT, signal_handler);
 
     // Connect to the device.
     cbSdkResult res = open(inst_ip, inst_port, client_ip);
@@ -262,19 +296,25 @@ int main(int argc, char *argv[])
         printf("open failed (%d)!\n", res);
         return -1;
     }
-    else
-        printf("open succeeded\n");
-    
+    printf("open succeeded\n");
+
     setConfig(bCont, bEv);
 
     cbsdk_config cfg;
-    res = cbSdkGetTrialConfig(INST, &cfg.bActive,
-                              &cfg.begchan, &cfg.begmask, &cfg.begval,
-                              &cfg.endchan, &cfg.endmask, &cfg.endval,
-                              &cfg.uWaveforms,
-                              &cfg.uConts, &cfg.uEvents, &cfg.uComments, &cfg.uTrackings);
-    res = cbSdkSetTrialConfig(
-        INST, 1,
+    cbSdkGetTrialConfig(
+        INST,
+        &cfg.bActive,
+        &cfg.begchan, &cfg.begmask, &cfg.begval,
+        &cfg.endchan, &cfg.endmask, &cfg.endval,
+        &cfg.uWaveforms,
+        &cfg.uConts,
+        &cfg.uEvents,
+        &cfg.uComments,
+        &cfg.uTrackings
+    );
+    cbSdkSetTrialConfig(
+        INST,
+        1,
         0, 0, 0,
         0, 0, 0,
         cfg.uWaveforms,
@@ -292,13 +332,10 @@ int main(int argc, char *argv[])
         trialCont = std::make_unique<cbSdkTrialCont>();
         trialCont->group = 3;
     }
-
     auto trialComm = std::unique_ptr<cbSdkTrialComment>(nullptr);
     if (bComm)
         trialComm = std::make_unique<cbSdkTrialComment>();
 
-    // We allocate a bunch of std::vectors now, and we can grow them if the number of samples to be retrieved
-    //  exceeds the allocated space.
     // Continuous data: single contiguous buffer for all channels and samples
     std::vector<int16_t> cont_samples;     // [num_samples * count] contiguous array
     std::vector<PROCTIME> cont_timestamps; // [num_samples] timestamps
@@ -308,17 +345,21 @@ int main(int argc, char *argv[])
 
     PROCTIME start_time;
     PROCTIME elapsed_time = 0;
-    res = cbSdkGetTime(INST, &start_time);
-    char kb_ch = '1';  // Will monitor for Esc key.
-    while ((kb_ch != 27) && ((runtime == 0) || (elapsed_time < runtime)))
+    cbSdkGetTime(INST, &start_time);
+    while (!g_bShutdown && ((runtime == 0) || (elapsed_time < runtime)))
     {
-        res = cbSdkGetTime(INST, &elapsed_time);
+        cbSdkGetTime(INST, &elapsed_time);
         elapsed_time -= start_time;
 
         // cbSdkInitTrialData to determine how many samples are available
-        res = cbSdkInitTrialData(INST, 0,
-                                 trialEvent.get(), trialCont.get(), trialComm.get(),
-                                 nullptr);
+        cbSdkInitTrialData(
+            INST,
+            0,
+            trialEvent.get(),
+            trialCont.get(),
+            trialComm.get(),
+            nullptr
+        );
 
         // allocate memory
         if (trialEvent && trialEvent->count)
@@ -329,6 +370,9 @@ int main(int argc, char *argv[])
 
             for (size_t ev_ix = 0; ev_ix < trialEvent->count; ev_ix++)
             {
+                // Resize the inner unit dimension
+                event_ts[ev_ix].resize(cbMAXUNITS + 1);
+
                 // Every event channel, regardless of type (spike, digital, serial), gets an array of timestamps.
                 for (size_t un_ix = 0; un_ix < cbMAXUNITS + 1; un_ix++)
                 {
@@ -352,24 +396,24 @@ int main(int argc, char *argv[])
 
         if (trialCont && (trialCont->count > 0))
         {
-            // Allocate memory for continuous data
+            // Allocate memory for continuous data.
             // Data layout is [num_samples][count] - contiguous array of num_samples * count elements
             const uint32_t n_samples = trialCont->num_samples;
             const uint32_t n_channels = trialCont->count;
 
             // Allocate contiguous buffer for all samples and channels
-            cont_samples.resize(n_samples * n_channels);
-            std::fill(cont_samples.begin(), cont_samples.end(), 0);
+            cont_samples.assign(n_samples * n_channels, 0);
             trialCont->samples = cont_samples.data();
 
             // Allocate timestamps array
-            cont_timestamps.resize(n_samples);
-            std::fill(cont_timestamps.begin(), cont_timestamps.end(), 0);
+            cont_timestamps.assign(n_samples, 0);
             trialCont->timestamps = cont_timestamps.data();
         }
-        
+
+        // TODO: Allocate memory for comment data
+
         // cbSdkGetTrialData to fetch the data
-        res = cbSdkGetTrialData(
+        cbSdkGetTrialData(
             INST,
             1,
             trialEvent.get(),
@@ -378,7 +422,7 @@ int main(int argc, char *argv[])
             nullptr
         );
 
-        // Print something to do with the data.
+        // Do something with the data.
         if (trialEvent && trialEvent->count)
         {
             for (size_t ev_ix = 0; ev_ix < trialEvent->count; ev_ix++)
@@ -386,9 +430,7 @@ int main(int argc, char *argv[])
                 for (size_t un_ix = 0; un_ix < cbMAXUNITS + 1; un_ix++)
                 {
                     if (trialEvent->num_samples[ev_ix][un_ix])
-                    {
                         printf("%" PRIu64, static_cast<uint64_t>(event_ts[ev_ix][un_ix][0]));
-                    }
                 }
                 printf("\n");
 
@@ -399,21 +441,18 @@ int main(int argc, char *argv[])
                 {
                     const uint32_t n_samples = trialEvent->num_samples[ev_ix][0];
                     if (n_samples > 0)
-                    {
                         printf("%" PRIu64 ":", static_cast<uint64_t>(event_ts[ev_ix][0][0]));
-                    }
                     for (uint32_t sample_ix = 0; sample_ix < n_samples; sample_ix++)
                         printf(" %" PRIu16, event_wfs_short[ev_ix][sample_ix]);
-                    if (n_samples > 0) printf("\n");
+                    if (n_samples > 0)
+                        printf("\n");
                 }
             }
         }
-
         if (trialCont && trialCont->count)
         {
             const uint32_t n_samples = trialCont->num_samples;
             const uint32_t n_channels = trialCont->count;
-
             if (n_samples > 0)
             {
                 for (size_t chan_ix = 0; chan_ix < n_channels; chan_ix++)
@@ -422,14 +461,12 @@ int main(int argc, char *argv[])
                     // Data for channel chan_ix at sample i is at: cont_samples[i * n_channels + chan_ix]
                     int16_t min_val = cont_samples[chan_ix];  // First sample for this channel
                     int16_t max_val = cont_samples[chan_ix];
-
                     for (size_t sample_ix = 0; sample_ix < n_samples; sample_ix++)
                     {
                         const int16_t val = cont_samples[sample_ix * n_channels + chan_ix];
                         if (val < min_val) min_val = val;
                         if (val > max_val) max_val = val;
                     }
-
                     std::cout << "chan = " << trialCont->chan[chan_ix]
                              << ", nsamps = " << n_samples
                              << ", min = " << min_val
@@ -439,15 +476,9 @@ int main(int argc, char *argv[])
                 }
             }
         }
-
-#ifdef WIN32
-        if (_kbhit())
-        {
-            kb_ch = _getch();
-        }
-#endif
     }
 
+    printf("Shutting down...\n");
     res = close();
     if (res < 0)
         printf("close failed (%d)!\n", res);

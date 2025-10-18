@@ -13,14 +13,12 @@
 //
 //  Note:
 //   Make sure only the SDK is used here, and not cbhwlib directly
-//    this will ensure SDK is capable of whatever test suite can do
+//    this will ensure SDK is capable of whatever test suite can do.
 //   Do not throw exceptions, catch possible exceptions and handle them the earliest possible in this library
 //
 
 #include <map>
-#include <string>
 #include <vector>
-#include <stdio.h>
 
 #include <cerelink/cbsdk.h>
 
@@ -97,7 +95,7 @@ cbSdkVersion getVersion()
 	// Library version can be read even before library open (return value is a warning)
 	//  actual NSP version however needs library to be open
 	cbSdkVersion ver;
-	cbSdkResult res = cbSdkGetVersion(INST, &ver);
+	const cbSdkResult res = cbSdkGetVersion(INST, &ver);
 	if (res != CBSDKRESULT_SUCCESS)
 	{
 		printf("Unable to determine instrument version\n");
@@ -110,11 +108,11 @@ cbSdkVersion getVersion()
 }
 
 // Author & Date:   Ehsan Azar    24 Oct 2012
-// Purpose: Test openning the library
+// Purpose: Test opening the library
 cbSdkResult open()
 {
     // Try to get the version. Should be a warning because we are not yet open.
-    cbSdkVersion ver = getVersion();
+    getVersion();
 
 	// Open the device using default connection type.
 	cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
@@ -143,7 +141,7 @@ cbSdkResult open()
         char strInstrument[CBSDKINSTRUMENT_COUNT + 1][13] = {"NSP", "nPlay", "Local NSP", "Remote nPlay", "Unknown"};
 
 		// Now that we are open, get the version again.
-		ver = getVersion();
+		const cbSdkVersion ver = getVersion();
 
 		// Summary results.
         printf("%s real-time interface to %s (%d.%02d.%02d.%02d) successfully initialized\n", strConnection[conType], strInstrument[instType], ver.nspmajor, ver.nspminor, ver.nsprelease, ver.nspbeta);
@@ -160,7 +158,7 @@ void getConfig()
 	uint16_t pGroupList[cbNUM_ANALOG_CHANS];
 	for (uint32_t group_ix = 1; group_ix < 7; group_ix++)
 	{
-		cbSdkResult res = cbSdkGetSampleGroupList(INST, proc, group_ix, &nChansInGroup, pGroupList);
+		const cbSdkResult res = cbSdkGetSampleGroupList(INST, proc, group_ix, &nChansInGroup, pGroupList);
 		if (res == CBSDKRESULT_SUCCESS)
 		{
 			printf("In sampling group %d, found %d channels.\n", group_ix, nChansInGroup);
@@ -183,11 +181,30 @@ void setConfig()
 	uint32_t uEvents = 0;
 	uint32_t uComments = 0;
 	uint32_t uTrackings = 0;
-	cbSdkResult res = cbSdkGetTrialConfig(INST, &bActive, &Begchan, &Begmask, &Begval, &Endchan, &Endmask, &Endval,
-		&uWaveforms, &uConts, &uEvents, &uComments, &uTrackings);
+	cbSdkResult res = cbSdkGetTrialConfig(
+		INST,
+		&bActive,
+		&Begchan, &Begmask, &Begval,
+		&Endchan, &Endmask, &Endval,
+		&uWaveforms,
+		&uConts,
+		&uEvents,
+		&uComments,
+		&uTrackings
+	);
 	handleResult(res);
 
-	res = cbSdkSetTrialConfig(INST, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0);
+	res = cbSdkSetTrialConfig(
+		INST,
+		1,
+		0, 0, 0,
+		0, 0, 0,
+		0,
+		0,
+		0,
+		100,
+		0
+	);
 	handleResult(res);
 }
 
@@ -233,7 +250,7 @@ cbSdkResult close()
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// The test suit main entry
+// The test suite main entry
 int main(int argc, char *argv[])
 {
     cbSdkResult res = open();
@@ -246,7 +263,7 @@ int main(int argc, char *argv[])
 
 	setConfig();
 
-	for (uint16_t chan_ix = 1; chan_ix < (1 + 128 + 16); chan_ix++)
+	for (uint16_t chan_ix = 1; chan_ix < static_cast<uint16_t>(1 + 128 + 16); chan_ix++)
 	{
 		setAnaout(chan_ix);
 	}
