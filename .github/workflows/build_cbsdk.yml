@@ -57,9 +57,33 @@ jobs:
             python3 python3-pip python3-venv \
             file lsb-release dpkg-dev
 
+      - name: Install ARM64 cross-compilation tools
+        if: matrix.config.arch == 'aarch64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Create CMake toolchain file for ARM64
+        if: matrix.config.arch == 'aarch64'
+        run: |
+          cat > arm64-toolchain.cmake << 'EOF'
+          set(CMAKE_SYSTEM_NAME Linux)
+          set(CMAKE_SYSTEM_PROCESSOR aarch64)
+          set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)
+          set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
+          set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+          set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+          EOF
+
       - name: Configure CBSDK
         run: |
           cmake --version
+          TOOLCHAIN_ARG=""
+          if [ "${{ matrix.config.arch }}" = "aarch64" ]; then
+            TOOLCHAIN_ARG="-DCMAKE_TOOLCHAIN_FILE=arm64-toolchain.cmake"
+          fi
           cmake -B build -S . \
           -DCBSDK_BUILD_CBMEX=OFF \
           -DCBSDK_BUILD_CBOCT=OFF \
@@ -70,6 +94,7 @@ jobs:
           -DCMAKE_INSTALL_PREFIX=${PWD}/install \
           -DCPACK_PACKAGE_DIRECTORY=${PWD}/dist \
           -DCPACK_DEBIAN_PACKAGE_SHLIBDEPS=ON \
+          $TOOLCHAIN_ARG \
           ${{ matrix.config.cmake_extra }}
 
       - name: Build and Package
