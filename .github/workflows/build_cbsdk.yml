@@ -124,7 +124,7 @@ jobs:
           CIBW_BUILD: cp311-* cp312-* cp313-*
           CIBW_SKIP: "*-musllinux_* *-win32 *-manylinux_i686"
           CIBW_BUILD_VERBOSITY: 1
-          CIBW_ENVIRONMENT: CBSDK_INSTALL_PATH="${{ github.workspace }}/install"
+          CIBW_ENVIRONMENT: CBSDK_INSTALL_PATH="${{ github.workspace }}/install" PIP_ONLY_BINARY=":all:"
           CIBW_ARCHS: ${{ matrix.config.arch }}
 
       - name: Linux - Prefix package with release name
