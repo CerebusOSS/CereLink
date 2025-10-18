@@ -216,10 +216,10 @@ void getComment()
 	{
 		auto charsets = std::vector<uint8_t>(trialcomment.num_samples);
 		auto rgbas = std::vector<uint32_t>(trialcomment.num_samples);
-		auto timestamps = std::vector<uint32_t>(trialcomment.num_samples);
+		auto timestamps = std::vector<PROCTIME>(trialcomment.num_samples);
 		trialcomment.charsets = charsets.data();
 		trialcomment.rgbas = rgbas.data();
-		trialcomment.timestamps = static_cast<void *>(timestamps.data());
+		trialcomment.timestamps = timestamps.data();
 
 		auto comments = std::vector<uint8_t *>(trialcomment.num_samples);
 		trialcomment.comments = comments.data();

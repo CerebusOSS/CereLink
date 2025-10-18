@@ -289,7 +289,7 @@ def trial_event(int instance=0, bool reset=False, bool reset_clock=False):
             ts = []
             if num_samples:
                 mxa_proctime = np.zeros(num_samples, dtype=_PROCTIME_DTYPE)
-                trialevent.timestamps[ev_ix][u] = <void *>cnp.PyArray_DATA(mxa_proctime)
+                trialevent.timestamps[ev_ix][u] = <PROCTIME *>cnp.PyArray_DATA(mxa_proctime)
                 ts = mxa_proctime
             timestamps.append(ts)
 
@@ -555,7 +555,7 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False,
                 ts = []
                 if num_samples > 0:
                     mxa_proctime = np.zeros(num_samples, dtype=_PROCTIME_DTYPE)
-                    trialevent.timestamps[channel][u] = <void *>cnp.PyArray_DATA(mxa_proctime)
+                    trialevent.timestamps[channel][u] = <PROCTIME *>cnp.PyArray_DATA(mxa_proctime)
                     ts = mxa_proctime
                 ev_timestamps.append(ts)
 
@@ -638,7 +638,7 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False,
         my_rgbas = np.asarray(mxa_u32)
         # For timestamps
         mxa_proctime = np.zeros(trialcomm.num_samples, dtype=_PROCTIME_DTYPE)
-        trialcomm.timestamps = <void *>cnp.PyArray_DATA(mxa_proctime)
+        trialcomm.timestamps = <PROCTIME *>cnp.PyArray_DATA(mxa_proctime)
         my_timestamps = mxa_proctime
         # For comments
         trialcomm.comments = <uint8_t **>malloc(trialcomm.num_samples * sizeof(uint8_t*))
@@ -713,7 +713,7 @@ def trial_comment(int instance=0, bool reset=False, unsigned long wait_for_comme
 
     # For timestamps
     mxa_proctime = np.zeros(trialcomm.num_samples, dtype=_PROCTIME_DTYPE)
-    trialcomm.timestamps = <void *>cnp.PyArray_DATA(mxa_proctime)
+    trialcomm.timestamps = <PROCTIME *>cnp.PyArray_DATA(mxa_proctime)
     my_timestamps = mxa_proctime
 
     trial = []

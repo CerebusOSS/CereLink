@@ -1999,18 +1999,15 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bSeek, cbSdkTrialEvent * tria
                     if (num_samples_unit[unit] < trialevent->num_samples[ev_ix][unit])
                     {
                         // Null means ignore
-                        if (void * dataptr = trialevent->timestamps[ev_ix][unit])
-                        {
-                            auto ts = m_ED->timestamps[ch - 1][read_index];
-                            *(static_cast<PROCTIME *>(dataptr) + num_samples_unit[unit]) = ts;
-                        }
+                        if (PROCTIME * p_ts = trialevent->timestamps[ev_ix][unit])
+                            *(p_ts + num_samples_unit[unit]) = m_ED->timestamps[ch - 1][read_index];
                         num_samples_unit[unit]++;
-                        
+
                         // Increment the read index.
                         read_index++;
                         if (read_index >= m_ED->size)
                             read_index = 0;
-                    } 
+                    }
                 }
             }
             // retrieved number of samples
@@ -2052,19 +2049,13 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bSeek, cbSdkTrialEvent * tria
 
         for (int i = 0; i < num_samples; ++i)
         {
-            void * dataptr = trialcomment->timestamps;
             // Null means ignore
-            if (dataptr)
-            {
-                auto ts = m_CMT->timestamps[read_index];
-                *(static_cast<PROCTIME *>(dataptr) + i) = ts;
-            }
-            dataptr = trialcomment->rgbas;
-            if (dataptr)
-                *(static_cast<uint32_t *>(dataptr) + i) = m_CMT->rgba[read_index];
-            dataptr = trialcomment->charsets;
-            if (dataptr)
-                *(static_cast<uint8_t *>(dataptr) + i) = m_CMT->charset[read_index];
+            if (PROCTIME * p_ts = trialcomment->timestamps)
+                *(p_ts + i) = m_CMT->timestamps[read_index];
+            if (uint32_t * p_rgba = trialcomment->rgbas)
+                *(p_rgba + i) = m_CMT->rgba[read_index];
+            if (uint8_t * p_charset = trialcomment->charsets)
+                *(p_charset + i) = m_CMT->charset[read_index];
 
             // Must take a copy because it might get overridden
             if (trialcomment->comments != nullptr && trialcomment->comments[i] != nullptr)
@@ -2134,25 +2125,19 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bSeek, cbSdkTrialEvent * tria
             for (int i = 0; i < num_samples; ++i)
             {
                 {
-                    if (void * dataptr = trialtracking->timestamps[id])
-                    {
-                        auto ts = m_TR->timestamps[id][read_index];
-                        *(static_cast<PROCTIME *>(dataptr) + i) = ts;
-                    }
+                    if (PROCTIME * p_ts = trialtracking->timestamps[id])
+                        *(p_ts + i) = m_TR->timestamps[id][read_index];
                 }
                 {
-                    uint32_t * dataptr = trialtracking->synch_timestamps[id];
-                    if (dataptr)
-                        *(dataptr + i) = m_TR->synch_timestamps[id][read_index];
-                    dataptr = trialtracking->synch_frame_numbers[id];
-                    if (dataptr)
-                        *(dataptr + i) = m_TR->synch_frame_numbers[id][read_index];
+                    if (uint32_t * p_synch_ts = trialtracking->synch_timestamps[id])
+                        *(p_synch_ts + i) = m_TR->synch_timestamps[id][read_index];
+                    if (uint32_t * p_synch_fn = trialtracking->synch_frame_numbers[id])
+                        *(p_synch_fn + i) = m_TR->synch_frame_numbers[id][read_index];
                 }
                 {
-                    uint16_t * dataptr = trialtracking->point_counts[id];
-                    uint16_t pointCount = std::min(m_TR->point_counts[id][read_index], m_TR->max_point_counts[id]);
-                    if (dataptr)
-                        *(dataptr + i) = pointCount;
+                    const uint16_t pointCount = std::min(m_TR->point_counts[id][read_index], m_TR->max_point_counts[id]);
+                    if (uint16_t * p_points = trialtracking->point_counts[id])
+                        *(p_points + i) = pointCount;
                     if (trialtracking->coords[id])
                     {
                         if (bWordData)

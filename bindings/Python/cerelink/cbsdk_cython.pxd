@@ -315,7 +315,7 @@ cdef extern from "cerelink/cbsdk.h":
         uint16_t count
         uint16_t chan[cbNUM_ANALOG_CHANS + 2]
         uint32_t num_samples[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1]
-        void * timestamps[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1]
+        PROCTIME * timestamps[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1]
         void * waveforms[cbNUM_ANALOG_CHANS + 2]
 
     ctypedef struct cbSdkConnection:
@@ -343,7 +343,7 @@ cdef extern from "cerelink/cbsdk.h":
         uint8_t * charsets         # Buffer to hold character sets
         uint32_t * rgbas           # Buffer to hold rgba values
         uint8_t * * comments       # Pointer to comments
-        void * timestamps          # Buffer to hold time stamps
+        PROCTIME * timestamps      # Buffer to hold time stamps
         
     # Trial video tracking data
     ctypedef struct cbSdkTrialTracking:
@@ -358,7 +358,7 @@ cdef extern from "cerelink/cbsdk.h":
         void * *    coords[cbMAXTRACKOBJ+0]                 # Buffer to hold tracking points (holds count*num_samples tarackables, each of max_point_counts points
         uint32_t *  synch_frame_numbers[cbMAXTRACKOBJ+0]    # Buffer to hold synch frame numbers (holds count*num_samples elements)
         uint32_t *  synch_timestamps[cbMAXTRACKOBJ+0]       # Buffer to hold synchronized tracking time stamps (in milliseconds) (holds count*num_samples elements)
-        void *      timestamps[cbMAXTRACKOBJ+0]             # Buffer to hold tracking time stamps (holds count*num_samples elements)
+        PROCTIME *  timestamps[cbMAXTRACKOBJ+0]             # Buffer to hold tracking time stamps (holds count*num_samples elements)
 
     ctypedef struct cbSdkAoutMon:
         uint16_t chan   # (1-based) channel to monitor

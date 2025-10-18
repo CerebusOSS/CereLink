@@ -267,7 +267,7 @@ typedef struct _cbSdkTrialEvent
     uint16_t count; ///< Number of valid channels in this trial (up to cbNUM_ANALOG_CHANS+2)
     uint16_t chan[cbMAXCHANS]; ///< channel numbers (1-based)
     uint32_t num_samples[cbMAXCHANS][cbMAXUNITS + 1]; ///< number of samples
-    void * timestamps[cbMAXCHANS][cbMAXUNITS + 1];   ///< Buffer to hold time stamps
+    PROCTIME * timestamps[cbMAXCHANS][cbMAXUNITS + 1];   ///< Buffer to hold time stamps
     void * waveforms[cbMAXCHANS]; ///< Buffer to hold waveforms or digital values
 } cbSdkTrialEvent;
 
@@ -316,7 +316,7 @@ typedef struct _cbSdkTrialComment
     uint8_t * charsets;   ///< Buffer to hold character sets
     uint32_t * rgbas;     ///< Buffer to hold rgba values (actually tbgr)
     uint8_t * * comments; ///< Pointer to comments
-    void * timestamps;  ///< Buffer to hold time stamps
+    PROCTIME * timestamps;  ///< Buffer to hold time stamps
 } cbSdkTrialComment;
 
 /// Trial video tracking data
@@ -333,7 +333,7 @@ typedef struct _cbSdkTrialTracking
     void * * coords[cbMAXTRACKOBJ] ;			///< Buffer to hold tracking points (holds count*num_samples tarackables, each of max_point_counts points
     uint32_t * synch_frame_numbers[cbMAXTRACKOBJ];///< Buffer to hold synch frame numbers (holds count*num_samples elements)
     uint32_t * synch_timestamps[cbMAXTRACKOBJ];   ///< Buffer to hold synchronized tracking time stamps (in milliseconds) (holds count*num_samples elements)
-    void  * timestamps[cbMAXTRACKOBJ];          ///< Buffer to hold tracking time stamps (holds count*num_samples elements)
+    PROCTIME * timestamps[cbMAXTRACKOBJ];          ///< Buffer to hold tracking time stamps (holds count*num_samples elements)
 } cbSdkTrialTracking;
 
 /// Output waveform type
