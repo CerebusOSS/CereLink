@@ -27,15 +27,35 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - {name: "windows-x64", os: "windows-latest", cmake_extra: "-T v142,host=x86"}
-          - { name: "macOS-latest", os: "macOS-latest"}
-          - { name: "jammy", os: "ubuntu-22.04"}
-          - { name: "ubuntu-latest", os: "ubuntu-latest"}
+          - {name: "windows-x64", os: "windows-latest", cmake_extra: "-T v142,host=x86", arch: "x86_64"}
+          - {name: "windows-arm64", os: "windows-latest", cmake_extra: "-A ARM64", arch: "arm64"}
+          - {name: "macOS-latest", os: "macOS-latest", arch: "universal"}
+          - {name: "jammy", os: "ubuntu-22.04", arch: "x86_64"}
+          - {name: "ubuntu-latest", os: "ubuntu-latest", arch: "x86_64"}
+          - {name: "bookworm-x64", os: "ubuntu-latest", container: "debian:bookworm", arch: "x86_64"}
+          - {name: "linux-arm64", os: "ubuntu-latest", arch: "aarch64"}
+
+    container: ${{ matrix.config.container }}
 
     steps:
 
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up QEMU for ARM emulation
+        if: matrix.config.arch == 'aarch64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Install build dependencies (Debian container)
+        if: matrix.config.container
+        run: |
+          apt-get update
+          apt-get install -y \
+            cmake g++ make git \
+            python3 python3-pip python3-venv \
+            file lsb-release dpkg-dev
 
       - name: Configure CBSDK
         run: |
@@ -66,22 +86,33 @@ jobs:
         run: python -m pip install cibuildwheel==2.16.5
 
       - name: Build wheels
-        if: "!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest'"
+        if: "(!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest' || matrix.config.name == 'linux-arm64') && !matrix.config.container"
         run: python -m cibuildwheel bindings/Python --output-dir bindings/Python/dist
         env:
           CIBW_BUILD: cp311-* cp312-* cp313-*
           CIBW_SKIP: "*-musllinux_* *-win32 *-manylinux_i686"
           CIBW_BUILD_VERBOSITY: 1
           CIBW_ENVIRONMENT: CBSDK_INSTALL_PATH="${{ github.workspace }}/install"
+          CIBW_ARCHS: ${{ matrix.config.arch }}
 
-      - name: Ubuntu - Prefix package with release name
-        if: startswith(matrix.config.os, 'ubuntu-')
+      - name: Linux - Prefix package with release name
+        if: startswith(matrix.config.os, 'ubuntu-') && !matrix.config.container
         run: |
           pushd dist
           temp="$(lsb_release -cs)"
           for name in *
           do
             mv "$name" "$(echo $temp)-$name"
+          done
+          popd
+
+      - name: Debian - Prefix package with release name
+        if: matrix.config.container
+        run: |
+          pushd dist
+          for name in *
+          do
+            mv "$name" "bookworm-$name"
           done
           popd
 
@@ -94,7 +125,7 @@ jobs:
 
       - name: Upload Python Wheels
         uses: actions/upload-artifact@v4
-        if: "!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest'"
+        if: "(!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest' || matrix.config.name == 'linux-arm64') && !matrix.config.container"
         with:
           name: python-wheels-${{ matrix.config.name }}
           path: bindings/Python/dist/*.whl
