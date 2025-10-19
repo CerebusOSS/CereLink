@@ -192,3 +192,148 @@ void EventData::setWriteIndex(const uint16_t channel, const uint32_t index)
     if (channel > 0 && channel <= cbMAXCHANS)
         m_write_index[channel - 1] = index;
 }
+
+uint32_t EventData::getAvailableSamples(uint16_t channel) const
+{
+    if (channel == 0 || channel > cbMAXCHANS)
+        return 0;
+
+    const uint32_t ch_idx = channel - 1;
+
+    if (!m_timestamps[ch_idx])
+        return 0;  // Not allocated
+
+    const uint32_t write_idx = m_write_index[ch_idx];
+    const uint32_t start_idx = m_write_start_index[ch_idx];
+
+    // Calculate available samples accounting for ring buffer
+    int32_t num_samples = write_idx - start_idx;
+    if (num_samples < 0)
+        num_samples += m_size;
+
+    return static_cast<uint32_t>(num_samples);
+}
+
+void EventData::countSamplesPerUnit(uint16_t channel,
+                                    uint32_t num_samples_per_unit[cbMAXUNITS + 1],
+                                    bool is_digital_or_serial) const
+{
+    // Initialize output
+    std::fill_n(num_samples_per_unit, cbMAXUNITS + 1, 0u);
+
+    if (channel == 0 || channel > cbMAXCHANS)
+        return;  // Invalid channel
+
+    const uint32_t ch_idx = channel - 1;
+
+    if (!m_timestamps[ch_idx])
+        return;  // Not allocated
+
+    const uint32_t available = getAvailableSamples(channel);
+    if (available == 0)
+        return;
+
+    // Count samples per unit
+    uint32_t read_index = m_write_start_index[ch_idx];
+    const uint32_t write_idx = m_write_index[ch_idx];
+
+    while (read_index != write_idx)
+    {
+        uint16_t unit = m_units[ch_idx][read_index];
+
+        // For digital/serial, all events count as unit 0
+        if (is_digital_or_serial || unit > cbMAXUNITS)
+            unit = 0;
+
+        num_samples_per_unit[unit]++;
+
+        // Advance (ring buffer)
+        read_index++;
+        if (read_index >= m_size)
+            read_index = 0;
+    }
+}
+
+void EventData::readChannelEvents(uint16_t channel,
+                                  const uint32_t max_samples_per_unit[cbMAXUNITS + 1],
+                                  PROCTIME* timestamps[cbMAXUNITS + 1],
+                                  uint16_t* digital_data,
+                                  uint32_t num_samples_per_unit[cbMAXUNITS + 1],
+                                  bool is_digital_or_serial,
+                                  bool bSeek,
+                                  uint32_t& final_read_index)
+{
+    // Initialize output
+    std::fill_n(num_samples_per_unit, cbMAXUNITS + 1, 0u);
+
+    if (channel == 0 || channel > cbMAXCHANS)
+        return;  // Invalid channel
+
+    const uint32_t ch_idx = channel - 1;
+
+    if (!m_timestamps[ch_idx])
+        return;  // Not allocated
+
+    // Get available samples
+    const uint32_t available = getAvailableSamples(channel);
+    if (available == 0)
+    {
+        final_read_index = m_write_start_index[ch_idx];
+        return;
+    }
+
+    // Calculate total max samples we can read
+    uint32_t total_max = 0;
+    for (int unit_ix = 0; unit_ix < (cbMAXUNITS + 1); ++unit_ix)
+        total_max += max_samples_per_unit[unit_ix];
+
+    const uint32_t num_samples = std::min(available, total_max);
+
+    // Read samples from ring buffer
+    uint32_t read_index = m_write_start_index[ch_idx];
+
+    for (uint32_t sample_ix = 0; sample_ix < num_samples; ++sample_ix)
+    {
+        uint16_t unit = m_units[ch_idx][read_index];
+
+        // For digital or serial data, 'unit' holds data, not unit number
+        if (is_digital_or_serial)
+        {
+            // Copy digital data if requested
+            if (digital_data && num_samples_per_unit[0] < max_samples_per_unit[0])
+            {
+                digital_data[num_samples_per_unit[0]] = unit;
+            }
+            unit = 0;  // Treat all digital/serial events as unit 0
+        }
+
+        // Copy timestamp if unit is valid and there's space
+        if (unit <= cbMAXUNITS && num_samples_per_unit[unit] < max_samples_per_unit[unit])
+        {
+            // Copy timestamp if output pointer is provided
+            if (timestamps[unit])
+            {
+                timestamps[unit][num_samples_per_unit[unit]] = m_timestamps[ch_idx][read_index];
+            }
+            num_samples_per_unit[unit]++;
+
+            // Advance read index (ring buffer)
+            read_index++;
+            if (read_index >= m_size)
+                read_index = 0;
+        }
+        else
+        {
+            // No space for this unit, stop reading
+            break;
+        }
+    }
+
+    final_read_index = read_index;
+
+    // Update read position if seeking
+    if (bSeek)
+    {
+        m_write_start_index[ch_idx] = read_index;
+    }
+}

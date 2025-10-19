@@ -1890,24 +1890,19 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bSeek, cbSdkTrialEvent * tria
         // Set trial start time
         trialevent->trial_start_time = m_uTrialStartTime;
 
-        // Determine how many samples to copy on this iteration.
-        // We will copy the minimum among (write_index-write_start_index) and
-        // trialevent->num_samples which should correspond to the number of allocated samples.
-        // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
-        uint32_t read_end_index[cbMAXCHANS];
+        // Lock for reading
         m_lockTrialEvent.lock();
-        for (uint32_t i = 0; i < cbMAXCHANS; ++i)
-            read_end_index[i] = m_ED->getWriteIndex(i + 1);
-        m_lockTrialEvent.unlock();
-        // We may stop reading before this write index; track how many samples we actually read.
-        uint32_t final_read_index[cbMAXCHANS] = {0};
 
-        // copy the data from the "cache" to the user-allocated memory.
+        // Copy the data from the cache to the user-allocated memory
         for (uint32_t ev_ix = 0; ev_ix < trialevent->count; ev_ix++)
         {
             const uint16_t ch = trialevent->chan[ev_ix]; // channel number, 1-based
             if (ch == 0 || (ch > cb_pc_status_buffer_ptr[0]->cbGetNumTotalChans()))
+            {
+                m_lockTrialEvent.unlock();
                 return CBSDKRESULT_INVALIDCHANNEL;
+            }
+
             // Ignore masked channels
             if (!m_bChannelMask[ch - 1])
             {
@@ -1915,70 +1910,26 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bSeek, cbSdkTrialEvent * tria
                 continue;
             }
 
-            uint32_t read_index = m_ED->getWriteStartIndex(ch);
-            auto num_samples = read_end_index[ch - 1] - read_index;
-            if (num_samples < 0)
-                num_samples += m_ED->getSize();
+            // Prepare output pointers for digital data and timestamps
+            uint16_t* digital_data = nullptr;
+            if (trialevent->waveforms[ev_ix])
+                digital_data = static_cast<uint16_t*>(trialevent->waveforms[ev_ix]);
 
-            // We don't know for sure how many samples were allocated,
-            // but this is what the client application was told to allocate.
-            uint32_t num_allocated = 0;
-            for (int unit_ix = 0; unit_ix < (cbMAXUNITS + 1); unit_ix++)
-            {
-                num_allocated += trialevent->num_samples[ev_ix][unit_ix];
-            }
-            num_samples = std::min(static_cast<uint32_t>(num_samples), num_allocated);
-
-            uint32_t num_samples_unit[cbMAXUNITS + 1] = {};  // To keep track of how many samples are copied per unit.
-
-            for (int sample_ix = 0; sample_ix < num_samples; ++sample_ix)
-            {
-                uint16_t unit = m_ED->getUnits(ch)[read_index];  // pktType for anain, or the first data value for dig/serial.
-
-                // For digital or serial data, 'unit' holds data, and is not indicating the unit number.
-                // So here we copy the data to trialevent->waveforms, then set unit to 0.
-                if (IsChanDigin(ch) || IsChanSerial(ch))
-                {
-                    if (num_samples_unit[0] < trialevent->num_samples[ev_ix][0])
-                    {
-                        // Null means ignore
-                        if (void * dataptr = trialevent->waveforms[ev_ix])
-                        {
-                            *(static_cast<uint16_t *>(dataptr) + num_samples_unit[0]) = unit;
-                        }
-                    }
-                    unit = 0;
-                }
-
-                // Timestamps
-                if (unit <= cbMAXUNITS + 1)     // remove noise unit. why?
-                {
-                    if (num_samples_unit[unit] < trialevent->num_samples[ev_ix][unit])
-                    {
-                        // Null means ignore
-                        if (PROCTIME * p_ts = trialevent->timestamps[ev_ix][unit])
-                            *(p_ts + num_samples_unit[unit]) = m_ED->getTimestamps(ch)[read_index];
-                        num_samples_unit[unit]++;
-
-                        // Increment the read index.
-                        read_index++;
-                        if (read_index >= m_ED->getSize())
-                            read_index = 0;
-                    }
-                }
-            }
-            // retrieved number of samples
-            memcpy(trialevent->num_samples[ev_ix], num_samples_unit, sizeof(num_samples_unit));
-            // Store where we actually finished reading.
-            final_read_index[ch - 1] = read_index;
+            // Use the new EventData method to read events for this channel
+            uint32_t final_read_index = 0;
+            m_ED->readChannelEvents(
+                ch,
+                trialevent->num_samples[ev_ix],  // max samples per unit
+                trialevent->timestamps[ev_ix],    // output timestamps per unit
+                digital_data,                     // digital/serial data
+                trialevent->num_samples[ev_ix],   // output: actual samples per unit
+                IsChanDigin(ch) || IsChanSerial(ch),  // is digital/serial?
+                bSeek,                            // update read position?
+                final_read_index                  // final read position
+            );
         }
-        if (bSeek)
-        {
-            m_lockTrialEvent.lock();
-            for (uint32_t i = 0; i < cbMAXCHANS; ++i)
-                m_ED->setWriteStartIndex(i + 1, final_read_index[i]);
-            m_lockTrialEvent.unlock();
-        }
+
+        m_lockTrialEvent.unlock();
     }
 
     if (trialcomment)
@@ -2175,38 +2126,34 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bResetClock, cbSdkTrialEvent
         m_bPacketsEvent = true;
         m_lockGetPacketsEvent.unlock();
 
-        // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
-        uint32_t read_end_index[cbMAXCHANS];
-        // Take a snapshot of the current write pointer
+        // Lock for reading
         m_lockTrialEvent.lock();
-        for (uint32_t i = 0; i < cbMAXCHANS; ++i)
-            read_end_index[i] = m_ED->getWriteIndex(i + 1);
-        m_lockTrialEvent.unlock();
+
+        // Count available samples per channel and unit
         int count = 0;
         for (uint32_t channel = 0; channel < cbMAXCHANS; channel++)
         {
-            uint32_t i = m_ED->getWriteStartIndex(channel + 1);
-            auto num_samples = read_end_index[channel] - i;
-            if (num_samples < 0)
-                num_samples += m_ED->getSize();
-            if (num_samples == 0)
+            const uint16_t ch = channel + 1;  // Convert to 1-based
+
+            // Check if channel has data and is not masked
+            if (m_ED->getAvailableSamples(ch) == 0 || !m_bChannelMask[channel])
                 continue;
-            if (!m_bChannelMask[channel])
-                continue;
-            trialevent->chan[count] = channel + 1;
-            // Count sample numbers for each unit seperately
-            while (i != read_end_index[channel])
-            {
-                uint16_t unit = m_ED->getUnits(channel + 1)[i];
-                if (unit > cbMAXUNITS || IsChanDigin(channel + 1) || IsChanSerial(channel + 1))
-                    unit = 0;
-                trialevent->num_samples[count][unit]++;
-                if (++i >= m_ED->getSize())
-                    i = 0;
-            }
+
+            // Record channel ID
+            trialevent->chan[count] = ch;
+
+            // Count samples per unit for this channel
+            m_ED->countSamplesPerUnit(
+                ch,
+                trialevent->num_samples[count],
+                IsChanDigin(ch) || IsChanSerial(ch)
+            );
+
             count++;
         }
         trialevent->count = count;
+
+        m_lockTrialEvent.unlock();
     }
     if (trialcont)
     {

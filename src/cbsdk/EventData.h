@@ -63,6 +63,38 @@ public:
     void setWriteStartIndex(uint16_t channel, uint32_t index);
     void setWriteIndex(uint16_t channel, uint32_t index);
 
+    // Reading methods
+    /// Get number of events available to read for a channel
+    /// \param channel Channel number (1-based)
+    /// \return Number of available events, or 0 if invalid/not allocated
+    [[nodiscard]] uint32_t getAvailableSamples(uint16_t channel) const;
+
+    /// Count number of samples per unit for a channel (without reading)
+    /// \param channel Channel number (1-based)
+    /// \param num_samples_per_unit Output: count of samples per unit
+    /// \param is_digital_or_serial True if channel is digital or serial
+    void countSamplesPerUnit(uint16_t channel,
+                            uint32_t num_samples_per_unit[cbMAXUNITS + 1],
+                            bool is_digital_or_serial) const;
+
+    /// Read events from a channel, separating by unit classification
+    /// \param channel Channel number (1-based)
+    /// \param max_samples_per_unit Array of max samples to read per unit
+    /// \param timestamps Array of output timestamp pointers (per unit), can be nullptr
+    /// \param digital_data Output for digital/serial data, can be nullptr
+    /// \param num_samples_per_unit Output: actual samples read per unit
+    /// \param is_digital_or_serial True if channel is digital or serial
+    /// \param bSeek If true, advance read position
+    /// \param final_read_index Output: final read position after reading
+    void readChannelEvents(uint16_t channel,
+                          const uint32_t max_samples_per_unit[cbMAXUNITS + 1],
+                          PROCTIME* timestamps[cbMAXUNITS + 1],
+                          uint16_t* digital_data,
+                          uint32_t num_samples_per_unit[cbMAXUNITS + 1],
+                          bool is_digital_or_serial,
+                          bool bSeek,
+                          uint32_t& final_read_index);
+
     // Public member for external access control
     mutable std::mutex m_mutex;  ///< Mutex for thread-safe access
 
@@ -75,7 +107,7 @@ private:
     // simply so we can index into these arrays using the channel number (-1).
     // The alternative is to map between channel number and array index, but
     // this is problematic with the recent change to 2-NSP support.
-    // Later we may add a m_ChIdxInType or m_ChIdxInBuff for such a map.
+    // Later we may add an m_ChIdxInType or m_ChIdxInBuff for such a map.
 
     // Per-channel data storage
     PROCTIME* m_timestamps[cbMAXCHANS];  ///< [cbMAXCHANS][size] - timestamps per channel
