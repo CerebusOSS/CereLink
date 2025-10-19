@@ -59,7 +59,7 @@
 /**
 * \brief Library version information.
 */
-typedef struct _cbSdkVersion
+typedef struct cbSdkVersion
 {
     // Library version
     uint32_t major;
@@ -80,7 +80,7 @@ typedef struct _cbSdkVersion
 } cbSdkVersion;
 
 /// cbSdk return values
-typedef enum _cbSdkResult
+typedef enum cbSdkResult
 {
     CBSDKRESULT_WARNCONVERT            =     3, ///< If file conversion is needed
     CBSDKRESULT_WARNCLOSED             =     2, ///< Library is already closed
@@ -121,7 +121,7 @@ typedef enum _cbSdkResult
 } cbSdkResult;
 
 /// cbSdk Connection Type (Central, UDP, other)
-typedef enum _cbSdkConnectionType
+typedef enum cbSdkConnectionType
 {
     CBSDKCONNECTION_DEFAULT = 0, ///< Try Central then UDP
     CBSDKCONNECTION_CENTRAL,     ///< Use Central
@@ -131,7 +131,7 @@ typedef enum _cbSdkConnectionType
 } cbSdkConnectionType;
 
 /// Instrument Type
-typedef enum _cbSdkInstrumentType
+typedef enum cbSdkInstrumentType
 {
     CBSDKINSTRUMENT_NSP = 0,       ///< NSP
     CBSDKINSTRUMENT_NPLAY,         ///< Local nPlay
@@ -141,7 +141,7 @@ typedef enum _cbSdkInstrumentType
 } cbSdkInstrumentType;
 
 /// CCF operation progress and status
-typedef struct _cbSdkCCFEvent
+typedef struct cbSdkCCFEvent
 {
     cbStateCCF state;           ///< CCF state
     cbSdkResult result;         ///< Last result
@@ -150,7 +150,7 @@ typedef struct _cbSdkCCFEvent
 } cbSdkCCFEvent;
 
 /// Reason for packet loss
-typedef enum _cbSdkPktLostEventType
+typedef enum cbSdkPktLostEventType
 {
     CBSDKPKTLOSTEVENT_UNKNOWN = 0,       ///< Unknown packet lost
     CBSDKPKTLOSTEVENT_LINKFAILURE,       ///< Link failure
@@ -159,19 +159,19 @@ typedef enum _cbSdkPktLostEventType
 } cbSdkPktLostEventType;
 
 /// Packet lost event
-typedef struct _cbSdkPktLostEvent
+typedef struct cbSdkPktLostEvent
 {
     cbSdkPktLostEventType type;     ///< packet lost event type
 } cbSdkPktLostEvent;
 
 /// Instrument information
-typedef struct _cbSdkInstInfo
+typedef struct cbSdkInstInfo
 {
     uint32_t instInfo;     ///< bitfield of cbINSTINFO_* (0 means closed)
 } cbSdkInstInfo;
 
 /// Packet type information
-typedef enum _cbSdkPktType
+typedef enum cbSdkPktType
 {
     cbSdkPkt_PACKETLOST = 0, ///< will be received only by the first registered callback
                              ///< data points to cbSdkPktLostEvent
@@ -196,7 +196,7 @@ typedef enum _cbSdkPktType
 } cbSdkPktType;
 
 /// Type of events to monitor
-typedef enum _cbSdkCallbackType
+typedef enum cbSdkCallbackType
 {
     CBSDKCALLBACK_ALL = 0,      ///< Monitor all events
     CBSDKCALLBACK_INSTINFO,     ///< Monitor instrument connection information
@@ -220,7 +220,7 @@ typedef enum _cbSdkCallbackType
 } cbSdkCallbackType;
 
 /// Trial type
-typedef enum _cbSdkTrialType
+typedef enum cbSdkTrialType
 {
     CBSDKTRIAL_CONTINUOUS,
     CBSDKTRIAL_EVENTS,
@@ -229,7 +229,7 @@ typedef enum _cbSdkTrialType
 } cbSdkTrialType;
 
 // Central uses them for their file name extensions (ns1, ns2, ..., ns5)
-typedef enum _DefaultSampleGroup {
+typedef enum DefaultSampleGroup {
     SDK_SMPGRP_NONE = 0,
     SDK_SMPGRP_RATE_500 = 1,
     SDK_SMPGRP_RATE_1K = 2,
@@ -260,7 +260,7 @@ typedef void (* cbSdkCallback)(uint32_t nInstance, const cbSdkPktType type, cons
 #define cbSdk_SECONDS_PER_TICK  (1.0 / cbSdk_TICKS_PER_SECOND)
 
 /// Trial spike events
-typedef struct _cbSdkTrialEvent
+typedef struct cbSdkTrialEvent
 {
     PROCTIME trial_start_time;  ///< Trial start time (device timestamp when trial started)
     // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
@@ -272,9 +272,9 @@ typedef struct _cbSdkTrialEvent
 } cbSdkTrialEvent;
 
 /// Connection information
-typedef struct _cbSdkConnection
+typedef struct cbSdkConnection
 {
-    _cbSdkConnection()
+    cbSdkConnection()
     {
         nInPort = cbNET_UDP_PORT_BCAST;
         nOutPort = cbNET_UDP_PORT_CNT;
@@ -296,7 +296,7 @@ typedef struct _cbSdkConnection
 } cbSdkConnection;
 
 /// Trial continuous data
-typedef struct _cbSdkTrialCont
+typedef struct cbSdkTrialCont
 {
     PROCTIME trial_start_time;         ///< Trial start time (device timestamp when trial started)
     uint8_t  group;                    ///< Sample group to retrieve (0-7, set by user before Init)
@@ -309,7 +309,7 @@ typedef struct _cbSdkTrialCont
 } cbSdkTrialCont;
 
 /// Trial comment data
-typedef struct _cbSdkTrialComment
+typedef struct cbSdkTrialComment
 {
     PROCTIME trial_start_time; ///< Trial start time (device timestamp when trial started)
     uint16_t num_samples; ///< Number of comments
@@ -320,7 +320,7 @@ typedef struct _cbSdkTrialComment
 } cbSdkTrialComment;
 
 /// Trial video tracking data
-typedef struct _cbSdkTrialTracking
+typedef struct cbSdkTrialTracking
 {
     PROCTIME trial_start_time;                  ///< Trial start time (device timestamp when trial started)
     uint16_t count;								///< Number of valid trackable objects (up to cbMAXTRACKOBJ)
@@ -337,7 +337,7 @@ typedef struct _cbSdkTrialTracking
 } cbSdkTrialTracking;
 
 /// Output waveform type
-typedef enum _cbSdkWaveformType
+typedef enum cbSdkWaveformType
 {
     cbSdkWaveform_NONE = 0,
     cbSdkWaveform_PARAMETERS,     ///< Parameters
@@ -346,7 +346,7 @@ typedef enum _cbSdkWaveformType
 } cbSdkWaveformType;
 
 /// Trigger type
-typedef enum _cbSdkWaveformTriggerType
+typedef enum cbSdkWaveformTriggerType
 {
     cbSdkWaveformTrigger_NONE = 0, ///< Instant software trigger
     cbSdkWaveformTrigger_DINPREG,      ///< Digital input rising edge trigger
@@ -359,7 +359,7 @@ typedef enum _cbSdkWaveformTriggerType
 } cbSdkWaveformTriggerType;
 
 /// Extended pointer-form of cbWaveformData
-typedef struct _cbSdkWaveformData
+typedef struct cbSdkWaveformData
 {
     cbSdkWaveformType type;
     uint32_t  repeats;
@@ -382,7 +382,7 @@ typedef struct _cbSdkWaveformData
 } cbSdkWaveformData;
 
 /// Analog output monitor
-typedef struct _cbSdkAoutMon
+typedef struct cbSdkAoutMon
 {
     uint16_t  chan; ///< (1-based) channel to monitor
     bool bTrack; ///< If true then monitor last tracked channel
@@ -390,13 +390,13 @@ typedef struct _cbSdkAoutMon
 } cbSdkAoutMon;
 
 /// CCF data
-typedef struct _cbSdkCCF
+typedef struct cbSdkCCF
 {
     int ccfver; ///< CCF internal version
     cbCCF data;
 } cbSdkCCF;
 
-typedef enum _cbSdkSystemType
+typedef enum cbSdkSystemType
 {
     cbSdkSystem_RESET = 0,
     cbSdkSystem_SHUTDOWN,
@@ -404,7 +404,7 @@ typedef enum _cbSdkSystemType
 } cbSdkSystemType;
 
 /// Extension command type
-typedef enum _cbSdkExtCmdType
+typedef enum cbSdkExtCmdType
 {
     cbSdkExtCmd_RPC = 0,    // RPC command
     cbSdkExtCmd_UPLOAD,     // Upload the file
@@ -416,7 +416,7 @@ typedef enum _cbSdkExtCmdType
 } cbSdkExtCmdType;
 
 /// Extension command
-typedef struct _cbSdkExtCmd
+typedef struct cbSdkExtCmd
 {
     cbSdkExtCmdType cmd;
     char szCmd[cbMAX_LOG];
@@ -1005,8 +1005,6 @@ CBSDKAPI    cbSdkResult cbSdkCallbackStatus(uint32_t nInstance, cbSdkCallbackTyp
  */
 CBSDKAPI    cbSdkResult cbSdkAnalogToDigital(uint32_t nInstance, uint16_t channel, const char * szVoltsUnitString, int32_t * digital);
 
-}
-
 /**
  * @brief Send a poll packet (cbPKT_POLL) to the NSP.
  * Useful for synchronizing or identifying external client applications.
@@ -1015,5 +1013,7 @@ CBSDKAPI    cbSdkResult cbSdkAnalogToDigital(uint32_t nInstance, uint16_t channe
  * @return cbSdkResult error code
  */
 CBSDKAPI    cbSdkResult cbSdkSendPoll(uint32_t nInstance, void * ppckt);
+
+}
 
 #endif /* CBSDK_H_INCLUDED */
