@@ -8,6 +8,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/sccn/liblsl.git
     GIT_TAG cboulay/apple_framework
     GIT_SHALLOW TRUE
+    EXCLUDE_FROM_ALL
 )
 FetchContent_MakeAvailable(lsl)
 

@@ -395,10 +395,10 @@ cdef extern from "cerelink/cbsdk.h":
     cbSdkResult cbSdkIsChanSerial(uint32_t nInstance, uint16_t channel, uint32_t * bResult);
     # Retrieve data of a trial (NULL means ignore), user should allocate enough buffers beforehand, and trial should not be closed during this call
     cbSdkResult cbSdkGetTrialData(  uint32_t nInstance,
-                                    uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
+                                    uint32_t seek, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                     cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking)
     # Initialize the structures (and fill with information about active channels, comment pointers and samples in the buffer)
-    cbSdkResult cbSdkInitTrialData( uint32_t nInstance, uint32_t bActive,
+    cbSdkResult cbSdkInitTrialData( uint32_t nInstance, uint32_t resetClock,
                                     cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                     cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking, unsigned long wait_for_comment_msec)
     cbSdkResult cbSdkSetFileConfig(uint32_t nInstance, const char * filename, const char * comment, uint32_t start, uint32_t options)  # Also see cbsdk_file_config in helper
@@ -443,16 +443,16 @@ cdef extern from "cbsdk_helper.h":
     cbSdkResult cbsdk_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param)
     cbSdkResult cbsdk_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
 
-    cbSdkResult cbsdk_init_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
-    cbSdkResult cbsdk_get_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
+    cbSdkResult cbsdk_init_trial_event(int nInstance, int clock_reset, cbSdkTrialEvent * trialevent)
+    cbSdkResult cbsdk_get_trial_event(int nInstance, int seek, cbSdkTrialEvent * trialevent)
 
-    cbSdkResult cbsdk_init_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
-    cbSdkResult cbsdk_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
+    cbSdkResult cbsdk_init_trial_cont(int nInstance, int clock_reset, cbSdkTrialCont * trialcont)
+    cbSdkResult cbsdk_get_trial_cont(int nInstance, int seek, cbSdkTrialCont * trialcont)
 
-    cbSdkResult cbsdk_init_trial_data(int nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
-    cbSdkResult cbsdk_get_trial_data(int nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm)
+    cbSdkResult cbsdk_init_trial_data(int nInstance, int clock_reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
+    cbSdkResult cbsdk_get_trial_data(int nInstance, int seek, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm)
 
-    cbSdkResult cbsdk_init_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
-    cbSdkResult cbsdk_get_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm)
+    cbSdkResult cbsdk_init_trial_comment(int nInstance, int clock_reset, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
+    cbSdkResult cbsdk_get_trial_comment(int nInstance, int seek, cbSdkTrialComment * trialcomm)
 
     cbSdkResult cbsdk_file_config(int instance, const char * filename, const char * comment, int start, unsigned int options)

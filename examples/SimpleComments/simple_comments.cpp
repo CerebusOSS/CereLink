@@ -172,6 +172,7 @@ void getConfig()
 
 void testSetConfig()
 {
+	// TODO: We completely ignore the current config so we can probably skip this
 	uint32_t bActive = false;
 	uint16_t Begchan = 0;
 	uint32_t Begmask = 0;
@@ -205,11 +206,10 @@ void getTime()
 
 void getComment()
 {
-	constexpr uint32_t bActive = true;
 	cbSdkTrialComment trialcomment = { 0, 0, nullptr, nullptr, nullptr, nullptr };
 	//printf("cbSdkInitTrialData\n");
 	//getTime();
-	cbSdkResult res = cbSdkInitTrialData(INST, bActive, nullptr, nullptr, &trialcomment, nullptr, 0);
+	cbSdkResult res = cbSdkInitTrialData(INST, 0, nullptr, nullptr, &trialcomment, nullptr, 0);
 	//getTime();
 
 	if (trialcomment.num_samples > 0)
@@ -227,11 +227,10 @@ void getComment()
 		{
 			trialcomment.comments[comm_ix] = new uint8_t[cbMAX_COMMENT];
 		}
-		
-		
+
 		printf("cbSdkGetTrialData - For %d comments\n", trialcomment.num_samples);
 		getTime();
-		res = cbSdkGetTrialData(INST, bActive, nullptr, nullptr, &trialcomment, nullptr);
+		res = cbSdkGetTrialData(INST, 1, nullptr, nullptr, &trialcomment, nullptr);
 		getTime();
 
 		// TODO: Print comments.
@@ -241,7 +240,6 @@ void getComment()
 			trialcomment.comments[comm_ix] = nullptr;
 		}
 	}
-
 }
 
 // Author & Date:   Ehsan Azar    25 Oct 2012

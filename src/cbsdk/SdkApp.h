@@ -77,9 +77,9 @@ public:
                                   uint32_t uWaveforms, uint32_t uConts, uint32_t uEvents, uint32_t uComments, uint32_t uTrackings);
     cbSdkResult SdkGetChannelLabel(uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position) const;
     cbSdkResult SdkSetChannelLabel(uint16_t channel, const char * label, uint32_t userflags, int32_t * position) const;
-    cbSdkResult SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
+    cbSdkResult SdkGetTrialData(uint32_t bSeek, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                 cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
-    cbSdkResult SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent* trialevent, cbSdkTrialCont * trialcont,
+    cbSdkResult SdkInitTrialData(uint32_t bResetClock, cbSdkTrialEvent* trialevent, cbSdkTrialCont * trialcont,
                                  cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking, unsigned long wait_for_comment_msec = 250);
     cbSdkResult SdkSetFileConfig(const char * filename, const char * comment, uint32_t bStart, uint32_t options);
     cbSdkResult SdkGetFileConfig(char * filename, char * username, bool * pbRecording) const;
@@ -171,13 +171,10 @@ protected:
     uint32_t m_uTrialEvents;        // Number of events to buffer
     uint32_t m_uTrialComments;      // Number of comments to buffer
     uint32_t m_uTrialTrackings;     // Number of tracking data to buffer
-
     uint32_t m_bWithinTrial;        // True is we are within a trial, False if not within a trial
-
-    PROCTIME m_uTrialStartTime;     // Holds theCerebus timestamp of the trial start time
-    PROCTIME m_uPrevTrialStartTime{};
-
-    PROCTIME m_uCbsdkTime;            // Holds the Cerebus timestamp of the last packet received
+    PROCTIME m_uTrialStartTime;     // Holds the Cerebus timestamp of the trial start time
+    PROCTIME m_uCbsdkTime;          // Holds the Cerebus timestamp of the last packet received
+    PROCTIME m_nextTrialStartTime;  // TrialStartTime will be updated to this after GetData if InitData has bResetClock=true
 
     /////////////////////////////////////////////////////////////////////////////
     // Declarations for the data caching structures and variables

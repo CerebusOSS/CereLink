@@ -664,7 +664,7 @@ CBSDKAPI    cbSdkResult cbSdkIsChanSerial(uint32_t nInstance, uint16_t channel, 
  * Thread-safety: Do not change trial configuration concurrently. Internally the library synchronizes access across
  * producer threads, but external synchronization is recommended for multi-threaded consumers.
  * @param nInstance SDK instance index
- * @param bActive Non-zero to advance (consume) read indices; zero to leave indices unchanged
+ * @param bSeek Non-zero to advance (consume) read indices; zero to peek only and leave indices unchanged
  * @param trialevent Pointer to cbSdkTrialEvent (or nullptr to skip spike/event retrieval)
  *   in: trialevent->num_samples    requested number of event samples
  *   out: trialevent->num_samples	retrieved number of events
@@ -695,7 +695,7 @@ CBSDKAPI    cbSdkResult cbSdkIsChanSerial(uint32_t nInstance, uint16_t channel, 
  * @return cbSdkResult Success or error (CBSDKRESULT_ERRCONFIG if trial not configured, CBSDKRESULT_INVALIDPARAM on bad pointers)
  */
 CBSDKAPI    cbSdkResult cbSdkGetTrialData(uint32_t nInstance,
-                                          uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
+                                          uint32_t bSeek, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                           cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
 
 /**
@@ -707,7 +707,7 @@ CBSDKAPI    cbSdkResult cbSdkGetTrialData(uint32_t nInstance,
  * Call before data retrieval (cbSdkGetTrialData) to fill sample counts.
  * Note: No allocation is performed here, buffer pointers must be set to appropriate allocated buffers after a call to this function.
  * @param nInstance SDK instance index
- * @param bActive Non-zero to reset internal trial start time to 'now'.
+ * @param bResetClock Non-zero to reset internal trial start time to 'now'.
  *      Internal trial start time serves 2 functions:
  *      1) If we are waiting for a comment, it is the time after which we will accept a comment to trigger the end of the wait.
  *      2) Its previous value is used as the zero-time reference for relative timestamps if absolute time is not configured.
@@ -718,7 +718,7 @@ CBSDKAPI    cbSdkResult cbSdkGetTrialData(uint32_t nInstance,
  * @param wait_for_comment_msec Milliseconds to wait for a first comment (default 250)
  * @return cbSdkResult Success or error code
  */
-CBSDKAPI    cbSdkResult cbSdkInitTrialData(uint32_t nInstance, uint32_t bActive,
+CBSDKAPI    cbSdkResult cbSdkInitTrialData(uint32_t nInstance, uint32_t bResetClock,
                                            cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                            cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking, unsigned long wait_for_comment_msec = 250);
 

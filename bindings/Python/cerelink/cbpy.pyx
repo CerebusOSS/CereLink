@@ -241,12 +241,12 @@ def trial_config(
     handle_result(res)
 
 
-def trial_event(int instance=0, bool reset=False, bool reset_clock=False):
+def trial_event(int instance=0, bool seek=False, bool reset_clock=False):
     """ Trial spike and event data.
     Inputs:
        instance - (optional) library instance number
-       reset - (optional) boolean
-               set False (default) to leave buffer intact.
+       seek - (optional) boolean
+               set False (default) to leave buffer intact -- peek only.
                set True to clear all the data after it has been retrieved.
        reset_clock - (optional) boolean
                 set False (default) to leave the trial clock alone.
@@ -310,7 +310,7 @@ def trial_event(int instance=0, bool reset=False, bool reset_clock=False):
         trial.append([ch, {'timestamps':timestamps, 'events':dig_events}])
 
     # get the trial
-    res = cbsdk_get_trial_event(<uint32_t>instance, <int>reset, &trialevent)
+    res = cbsdk_get_trial_event(<uint32_t>instance, <int>seek, &trialevent)
     handle_result(res)
 
     return <int>res, trial
@@ -455,14 +455,14 @@ def trial_continuous(
     }
 
 
-def trial_data(int instance=0, bool reset=False, bool reset_clock=False,
+def trial_data(int instance=0, bool seek=False, bool reset_clock=False,
                bool do_event=True, bool do_cont=True, bool do_comment=False, unsigned long wait_for_comment_msec=250):
     """
 
     :param instance: (optional) library instance number
-    :param reset: (optional) boolean
-               set False (default) to leave buffer intact.
-               set True to clear all the data and reset the trial time to the current time.
+    :param seek: (optional) boolean
+               set False (default) to peek only and leave buffer intact.
+               set True to advance the data pointer after retrieval.
     :param reset_clock - (optional) boolean
                 set False (default) to leave the trial clock alone.
                 set True to update the _next_ trial time to the current time.
@@ -651,7 +651,7 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False,
     # Note: continuous data was already fetched per-group above
     try:
         if do_event or do_comment:
-            res = cbsdk_get_trial_data(<uint32_t>instance, <int>reset,
+            res = cbsdk_get_trial_data(<uint32_t>instance, <int>seek,
                                        &trialevent if do_event else NULL,
                                        NULL,  # continuous handled per-group above
                                        &trialcomm if do_comment else NULL)
@@ -664,12 +664,15 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False,
     return <int>res, trial_event, trial_cont, tzero, trial_comment
 
 
-def trial_comment(int instance=0, bool reset=False, unsigned long wait_for_comment_msec=250):
+def trial_comment(int instance=0, bool seek=False, bool clock_reset=False, unsigned long wait_for_comment_msec=250):
     """ Trial comment data.
     Inputs:
-       reset - (optional) boolean
-               set False (default) to leave buffer intact.
-               set True to clear all the data and reset the trial time to the current time.
+       seek - (optional) boolean
+               set False (default) to peek only and leave buffer intact.
+               set True to clear all the data and advance the data pointer.
+       clock_reset - (optional) boolean
+                set False (default) to leave the trial clock alone.
+                set True to update the _next_ trial time to the current time.
        instance - (optional) library instance number
     Outputs:
        list of lists the form [timestamp, comment_str, rgba]
@@ -682,7 +685,7 @@ def trial_comment(int instance=0, bool reset=False, unsigned long wait_for_comme
     cdef cbSdkTrialComment trialcomm
 
     # get how many comments are available
-    res = cbsdk_init_trial_comment(<uint32_t>instance, <int>reset, &trialcomm, wait_for_comment_msec)
+    res = cbsdk_init_trial_comment(<uint32_t>instance, <int>clock_reset, &trialcomm, wait_for_comment_msec)
     handle_result(res)
 
     if trialcomm.num_samples == 0:
@@ -718,7 +721,7 @@ def trial_comment(int instance=0, bool reset=False, unsigned long wait_for_comme
 
     trial = []
     try:
-        res = cbsdk_get_trial_comment(<int>instance, <int>reset, &trialcomm)
+        res = cbsdk_get_trial_comment(<int>instance, <int>seek, &trialcomm)
         handle_result(res)
         for comm_ix in range(trialcomm.num_samples):
             # this_enc = 'utf-16' if my_charsets[comm_ix]==1 else locale.getpreferredencoding()

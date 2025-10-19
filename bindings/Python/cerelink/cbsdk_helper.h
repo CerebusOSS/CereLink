@@ -37,17 +37,17 @@ typedef struct _cbSdkConfigParam {
 cbSdkResult cbsdk_get_trial_config(uint32_t nInstance, cbSdkConfigParam * pcfg_param);
 cbSdkResult cbsdk_set_trial_config(uint32_t nInstance, const cbSdkConfigParam * pcfg_param);
 
-cbSdkResult cbsdk_init_trial_event(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent);
-cbSdkResult cbsdk_get_trial_event(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent);
+cbSdkResult cbsdk_init_trial_event(uint32_t nInstance, int clock_reset, cbSdkTrialEvent * trialevent);
+cbSdkResult cbsdk_get_trial_event(uint32_t nInstance, int seek, cbSdkTrialEvent * trialevent);
 
-cbSdkResult cbsdk_init_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec = 250);
-cbSdkResult cbsdk_get_trial_data(uint32_t nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm);
+cbSdkResult cbsdk_init_trial_data(uint32_t nInstance, int clock_reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec = 250);
+cbSdkResult cbsdk_get_trial_data(uint32_t nInstance, int seek, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm);
 
-cbSdkResult cbsdk_init_trial_cont(uint32_t nInstance, int reset, cbSdkTrialCont * trialcont);
-cbSdkResult cbsdk_get_trial_cont(uint32_t nInstance, int reset, cbSdkTrialCont * trialcont);
+cbSdkResult cbsdk_init_trial_cont(uint32_t nInstance, int clock_reset, cbSdkTrialCont * trialcont);
+cbSdkResult cbsdk_get_trial_cont(uint32_t nInstance, int seek, cbSdkTrialCont * trialcont);
 
-cbSdkResult cbsdk_init_trial_comment(uint32_t nInstance, int reset, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec = 250);
-cbSdkResult cbsdk_get_trial_comment(uint32_t nInstance, int reset, cbSdkTrialComment * trialcomm);
+cbSdkResult cbsdk_init_trial_comment(uint32_t nInstance, int clock_reset, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec = 250);
+cbSdkResult cbsdk_get_trial_comment(uint32_t nInstance, int seek, cbSdkTrialComment * trialcomm);
 
 cbSdkResult cbsdk_file_config(uint32_t instance,  const char * filename, const char * comment, int start, unsigned int options);
 
