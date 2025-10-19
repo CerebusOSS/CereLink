@@ -2646,7 +2646,7 @@ cbRESULT cbSetAoutScaling(uint32_t chan, cbSCALING *scalout, uint32_t nInstance)
 
 // Purpose: Analog Output Inquiry and Configuration Functions
 //
-cbRESULT cbGetAoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, uint32_t *value, uint32_t nInstance)
+cbRESULT cbGetAoutOptions(const uint32_t chan, uint32_t *options, uint32_t *monchan, int32_t *value, const uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
 
@@ -2672,7 +2672,7 @@ cbRESULT cbGetAoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, u
 
 // Purpose: Analog Output Inquiry and Configuration Functions
 //
-cbRESULT cbSetAoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uint32_t value, uint32_t nInstance)
+cbRESULT cbSetAoutOptions(uint32_t chan, const uint32_t options, const uint32_t monchan, const int32_t value, const uint32_t nInstance)
 {
     cbRESULT nResult = cbRESULT_OK;
     uint32_t nIdx = cb_library_index[nInstance];

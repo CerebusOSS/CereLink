@@ -211,9 +211,9 @@ cbRESULT cbGetDoutCaps(uint32_t chan, uint32_t *doutcaps, uint32_t nInstance = 0
 //          cbRESULT_NOLIBRARY if the library was not properly initialized.
 
 
-cbRESULT cbGetDoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, uint32_t *doutval,
-                          uint8_t *triggertype = NULL, uint16_t *trigchan = NULL, uint16_t *trigval = NULL, uint32_t nInstance = 0);
-cbRESULT cbSetDoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uint32_t doutval,
+cbRESULT cbGetDoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, int32_t *doutval,
+                          uint8_t *triggertype = nullptr, uint16_t *trigchan = nullptr, uint16_t *trigval = nullptr, uint32_t nInstance = 0);
+cbRESULT cbSetDoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, int32_t doutval,
                           uint8_t triggertype = cbDOUT_TRIGGER_NONE, uint16_t trigchan = 0, uint16_t trigval = 0, uint32_t nInstance = 0);
 // Get/Set the Digital Output Port options for the specified channel.
 //
@@ -391,9 +391,9 @@ cbRESULT cbSetAoutScaling(uint32_t chan, cbSCALING *scaling, uint32_t nInstance 
 //          cbRESULT_NOLIBRARY if the library was not properly initialized.
 
 
-cbRESULT cbGetAoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, uint32_t *value, uint32_t nInstance = 0);
-cbRESULT cbSetAoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uint32_t value, uint32_t nInstance = 0);
-// Get/Set the Monitored channel for a Analog Output Port.  Setting zero for the monitored channel
+cbRESULT cbGetAoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, int32_t *value, uint32_t nInstance = 0);
+cbRESULT cbSetAoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, int32_t value, uint32_t nInstance = 0);
+// Get/Set the Monitored channel for an Analog Output Port.  Setting zero for the monitored channel
 // stops the monitoring and frees any instrument monitor resources.  The factor ranges
 //
 // Returns: cbRESULT_OK if data successfully retreived or packet successfully queued to be sent.
