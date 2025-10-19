@@ -262,56 +262,36 @@ def trial_event(int instance=0, bool seek=False, bool reset_clock=False):
 
     cdef cbSdkResult res
     cdef cbSdkTrialEvent trialevent
-    cdef uint32_t b_dig_in
-    cdef uint32_t b_serial
-
-    trial = []
 
     # get how many samples are available
     res = cbsdk_init_trial_event(<uint32_t>instance, <int>reset_clock, &trialevent)
     handle_result(res)
 
-    if trialevent.count == 0:
-        return res, trial
+    if trialevent.num_events == 0:
+        return res, {'timestamps': np.array([], dtype=_PROCTIME_DTYPE),
+                     'channels': np.array([], dtype=np.uint16),
+                     'units': np.array([], dtype=np.uint16)}
 
-    cdef cnp.ndarray mxa_proctime
-    cdef cnp.uint16_t[:] mxa_u16
+    # Allocate flat arrays for event data
+    cdef cnp.ndarray timestamps = np.zeros(trialevent.num_events, dtype=_PROCTIME_DTYPE)
+    cdef cnp.ndarray channels = np.zeros(trialevent.num_events, dtype=np.uint16)
+    cdef cnp.ndarray units = np.zeros(trialevent.num_events, dtype=np.uint16)
 
-    # allocate memory
-    for ev_ix in range(trialevent.count):
-        ch = trialevent.chan[ev_ix] # Actual channel number
-
-        timestamps = []
-        # Fill timestamps for non-empty events
-        for u in range(cbMAXUNITS+1):
-            trialevent.timestamps[ev_ix][u] = NULL
-            num_samples = trialevent.num_samples[ev_ix][u]
-            ts = []
-            if num_samples:
-                mxa_proctime = np.zeros(num_samples, dtype=_PROCTIME_DTYPE)
-                trialevent.timestamps[ev_ix][u] = <PROCTIME *>cnp.PyArray_DATA(mxa_proctime)
-                ts = mxa_proctime
-            timestamps.append(ts)
-
-        trialevent.waveforms[ev_ix] = NULL
-        dig_events = []
-        res = cbSdkIsChanAnyDigIn(<uint32_t> instance, ch, &b_dig_in)
-        res = cbSdkIsChanSerial(<uint32_t> instance, ch, &b_serial)
-
-        handle_result(res)
-        # Fill values for non-empty digital or serial channels
-        if b_dig_in or b_serial:
-            num_samples = trialevent.num_samples[ev_ix][0]
-            if num_samples:
-                mxa_u16 = np.zeros(num_samples, dtype=np.uint16)
-                trialevent.waveforms[ev_ix] = <void *>&mxa_u16[0]
-                dig_events = np.asarray(mxa_u16)
-
-        trial.append([ch, {'timestamps':timestamps, 'events':dig_events}])
+    # Point C structure to our numpy arrays
+    trialevent.timestamps = <PROCTIME *>cnp.PyArray_DATA(timestamps)
+    trialevent.channels = <uint16_t *>cnp.PyArray_DATA(channels)
+    trialevent.units = <uint16_t *>cnp.PyArray_DATA(units)
+    trialevent.waveforms = NULL  # TODO: Add waveform support if needed
 
     # get the trial
     res = cbsdk_get_trial_event(<uint32_t>instance, <int>seek, &trialevent)
     handle_result(res)
+
+    trial = {
+        'timestamps': timestamps,
+        'channels': channels,
+        'units': units
+    }
 
     return <int>res, trial
 
@@ -537,45 +517,30 @@ def trial_data(int instance=0, bool seek=False, bool reset_clock=False,
 
     # Early return if none of the requested data are available.
     # For continuous, we'll check per-group below
-    if (not do_event or (trialevent.count == 0)) \
+    if (not do_event or (trialevent.num_events == 0)) \
             and (not do_comment or (trialcomm.num_samples == 0)) \
             and (not do_cont):
         return res, trial_event, trial_cont, tzero, trial_comment
 
     # Events #
     # ------ #
-    if do_event:
-        # allocate memory and prepare outputs.
-        for channel in range(trialevent.count):
-            # First the spike timestamps.
-            ev_timestamps = []
-            for u in range(cbMAXUNITS+1):
-                trialevent.timestamps[channel][u] = NULL
-                num_samples = trialevent.num_samples[channel][u]
-                ts = []
-                if num_samples > 0:
-                    mxa_proctime = np.zeros(num_samples, dtype=_PROCTIME_DTYPE)
-                    trialevent.timestamps[channel][u] = <PROCTIME *>cnp.PyArray_DATA(mxa_proctime)
-                    ts = mxa_proctime
-                ev_timestamps.append(ts)
+    if do_event and trialevent.num_events > 0:
+        # Allocate flat arrays for event data
+        timestamps = np.zeros(trialevent.num_events, dtype=_PROCTIME_DTYPE)
+        channels = np.zeros(trialevent.num_events, dtype=np.uint16)
+        units = np.zeros(trialevent.num_events, dtype=np.uint16)
 
-            ch = trialevent.chan[channel] # Actual channel number
-            trialevent.waveforms[channel] = NULL
-            dig_events = []
+        # Point C structure to our numpy arrays
+        trialevent.timestamps = <PROCTIME *>cnp.PyArray_DATA(timestamps)
+        trialevent.channels = <uint16_t *>cnp.PyArray_DATA(channels)
+        trialevent.units = <uint16_t *>cnp.PyArray_DATA(units)
+        trialevent.waveforms = NULL  # TODO: Add waveform support if needed
 
-            res = cbSdkIsChanAnyDigIn(<uint32_t>instance, ch, &b_dig_in)
-            res = cbSdkIsChanSerial(<uint32_t> instance, ch, &b_serial)
-
-            handle_result(res)
-            # Fill values for non-empty digital or serial channels
-            if b_dig_in or b_serial:
-                num_samples = trialevent.num_samples[channel][0]
-                if num_samples > 0:
-                    mxa_u16 = np.zeros(num_samples, dtype=np.uint16)
-                    trialevent.waveforms[channel] = <void *>&mxa_u16[0]
-                    dig_events = np.asarray(mxa_u16)
-
-            trial_event.append([ch, {'timestamps':ev_timestamps, 'events':dig_events}])
+        trial_event = {
+            'timestamps': timestamps,
+            'channels': channels,
+            'units': units
+        }
 
     # Continuous #
     # ---------- #

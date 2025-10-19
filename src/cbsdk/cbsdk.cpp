@@ -1893,41 +1893,16 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bSeek, cbSdkTrialEvent * tria
         // Lock for reading
         m_lockTrialEvent.lock();
 
-        // Copy the data from the cache to the user-allocated memory
-        for (uint32_t ev_ix = 0; ev_ix < trialevent->count; ev_ix++)
-        {
-            const uint16_t ch = trialevent->chan[ev_ix]; // channel number, 1-based
-            if (ch == 0 || (ch > cb_pc_status_buffer_ptr[0]->cbGetNumTotalChans()))
-            {
-                m_lockTrialEvent.unlock();
-                return CBSDKRESULT_INVALIDCHANNEL;
-            }
+        // Read all events from the buffer - much simpler with flat layout!
+        const uint32_t num_read = m_ED->readEvents(
+            trialevent->timestamps,
+            trialevent->channels,
+            trialevent->units,
+            trialevent->num_events,  // max events to read
+            bSeek                     // update read position?
+        );
 
-            // Ignore masked channels
-            if (!m_bChannelMask[ch - 1])
-            {
-                memset(trialevent->num_samples[ev_ix], 0, sizeof(trialevent->num_samples[ev_ix]));
-                continue;
-            }
-
-            // Prepare output pointers for digital data and timestamps
-            uint16_t* digital_data = nullptr;
-            if (trialevent->waveforms[ev_ix])
-                digital_data = static_cast<uint16_t*>(trialevent->waveforms[ev_ix]);
-
-            // Use the new EventData method to read events for this channel
-            uint32_t final_read_index = 0;
-            m_ED->readChannelEvents(
-                ch,
-                trialevent->num_samples[ev_ix],  // max samples per unit
-                trialevent->timestamps[ev_ix],    // output timestamps per unit
-                digital_data,                     // digital/serial data
-                trialevent->num_samples[ev_ix],   // output: actual samples per unit
-                IsChanDigin(ch) || IsChanSerial(ch),  // is digital/serial?
-                bSeek,                            // update read position?
-                final_read_index                  // final read position
-            );
-        }
+        trialevent->num_events = num_read;  // Update with actual count
 
         m_lockTrialEvent.unlock();
     }
@@ -2112,15 +2087,12 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bResetClock, cbSdkTrialEvent
 
     if (trialevent)
     {
-        trialevent->count = 0;
-        memset(trialevent->num_samples, 0, sizeof(trialevent->num_samples));
+        trialevent->num_events = 0;
         if (m_instInfo == 0)
-        {
-            memset(trialevent->chan, 0, sizeof(trialevent->chan));
             return CBSDKRESULT_WARNCLOSED;
-        }
         if (m_ED == nullptr)
             return CBSDKRESULT_ERRCONFIG;
+
         // Wait for packets to come in
         m_lockGetPacketsEvent.lock();
         m_bPacketsEvent = true;
@@ -2129,29 +2101,8 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bResetClock, cbSdkTrialEvent
         // Lock for reading
         m_lockTrialEvent.lock();
 
-        // Count available samples per channel and unit
-        int count = 0;
-        for (uint32_t channel = 0; channel < cbMAXCHANS; channel++)
-        {
-            const uint16_t ch = channel + 1;  // Convert to 1-based
-
-            // Check if channel has data and is not masked
-            if (m_ED->getAvailableSamples(ch) == 0 || !m_bChannelMask[channel])
-                continue;
-
-            // Record channel ID
-            trialevent->chan[count] = ch;
-
-            // Count samples per unit for this channel
-            m_ED->countSamplesPerUnit(
-                ch,
-                trialevent->num_samples[count],
-                IsChanDigin(ch) || IsChanSerial(ch)
-            );
-
-            count++;
-        }
-        trialevent->count = count;
+        // With flat layout, just report total number of events available
+        trialevent->num_events = m_ED->getNumEvents();
 
         m_lockTrialEvent.unlock();
     }

@@ -5,7 +5,7 @@
 #include <atomic>
 
 // This test file covers the refactored EventData class that manages
-// per-channel ring buffers for spike and digital input event data.
+// a flat time-series ring buffer for spike and digital input event data.
 
 // Test fixture for EventData tests
 class EventDataTest : public ::testing::Test {
@@ -29,14 +29,11 @@ TEST_F(EventDataTest, ConstructorInitializesCorrectly) {
     EXPECT_EQ(test_ed.getSize(), 0u);
     EXPECT_FALSE(test_ed.isAllocated());
     EXPECT_EQ(test_ed.getWaveformData(), nullptr);
-
-    // Check that all channel pointers are null
-    for (uint16_t ch = 1; ch <= cbMAXCHANS; ++ch) {
-        EXPECT_EQ(test_ed.getTimestamps(ch), nullptr);
-        EXPECT_EQ(test_ed.getUnits(ch), nullptr);
-        EXPECT_EQ(test_ed.getWriteIndex(ch), 0u);
-        EXPECT_EQ(test_ed.getWriteStartIndex(ch), 0u);
-    }
+    EXPECT_EQ(test_ed.getTimestamps(), nullptr);
+    EXPECT_EQ(test_ed.getChannels(), nullptr);
+    EXPECT_EQ(test_ed.getUnits(), nullptr);
+    EXPECT_EQ(test_ed.getWriteIndex(), 0u);
+    EXPECT_EQ(test_ed.getWriteStartIndex(), 0u);
 }
 
 // Test 2: allocate() allocates memory correctly
@@ -47,14 +44,11 @@ TEST_F(EventDataTest, AllocateAllocatesMemoryCorrectly) {
 
     EXPECT_EQ(ed->getSize(), buffer_size);
     EXPECT_TRUE(ed->isAllocated());
-
-    // Check that all channels have allocated arrays
-    for (uint16_t ch = 1; ch <= cbMAXCHANS; ++ch) {
-        EXPECT_NE(ed->getTimestamps(ch), nullptr);
-        EXPECT_NE(ed->getUnits(ch), nullptr);
-        EXPECT_EQ(ed->getWriteIndex(ch), 0u);
-        EXPECT_EQ(ed->getWriteStartIndex(ch), 0u);
-    }
+    EXPECT_NE(ed->getTimestamps(), nullptr);
+    EXPECT_NE(ed->getChannels(), nullptr);
+    EXPECT_NE(ed->getUnits(), nullptr);
+    EXPECT_EQ(ed->getWriteIndex(), 0u);
+    EXPECT_EQ(ed->getWriteStartIndex(), 0u);
 }
 
 // Test 3: allocate() with same size reuses allocation
@@ -65,13 +59,13 @@ TEST_F(EventDataTest, AllocateWithSameSizeReusesAllocation) {
 
     // Write some data
     ed->writeEvent(1, 12345, 1);
-    EXPECT_EQ(ed->getWriteIndex(1), 1u);
+    EXPECT_EQ(ed->getWriteIndex(), 1u);
 
     // Allocate again with same size - should reset but keep allocation
     ASSERT_TRUE(ed->allocate(buffer_size));
 
     EXPECT_EQ(ed->getSize(), buffer_size);
-    EXPECT_EQ(ed->getWriteIndex(1), 0u);  // Reset
+    EXPECT_EQ(ed->getWriteIndex(), 0u);  // Reset
     EXPECT_TRUE(ed->isAllocated());
 }
 
@@ -96,21 +90,20 @@ TEST_F(EventDataTest, WriteEventStoresDataCorrectly) {
     bool overflow = ed->writeEvent(channel, timestamp, unit);
 
     EXPECT_FALSE(overflow);
-    EXPECT_EQ(ed->getWriteIndex(channel), 1u);
-    EXPECT_EQ(ed->getTimestamps(channel)[0], timestamp);
-    EXPECT_EQ(ed->getUnits(channel)[0], unit);
+    EXPECT_EQ(ed->getWriteIndex(), 1u);
+    EXPECT_EQ(ed->getTimestamps()[0], timestamp);
+    EXPECT_EQ(ed->getChannels()[0], channel);
+    EXPECT_EQ(ed->getUnits()[0], unit);
 }
 
 // Test 6: writeEvent() advances write index
 TEST_F(EventDataTest, WriteEventAdvancesWriteIndex) {
     ASSERT_TRUE(ed->allocate(100));
 
-    const uint16_t channel = 10;
-
     for (uint32_t i = 0; i < 5; ++i) {
-        bool overflow = ed->writeEvent(channel, 1000 + i, 1);
+        bool overflow = ed->writeEvent(10, 1000 + i, 1);
         EXPECT_FALSE(overflow);
-        EXPECT_EQ(ed->getWriteIndex(channel), i + 1);
+        EXPECT_EQ(ed->getWriteIndex(), i + 1);
     }
 }
 
@@ -119,12 +112,10 @@ TEST_F(EventDataTest, WriteEventDetectsOverflow) {
     const uint32_t buffer_size = 10;
     ASSERT_TRUE(ed->allocate(buffer_size));
 
-    const uint16_t channel = 1;
-
     // Fill buffer to capacity - the last write (10th) will detect overflow
     bool overflow = false;
     for (uint32_t i = 0; i < buffer_size; ++i) {
-        overflow = ed->writeEvent(channel, i, 0);
+        overflow = ed->writeEvent(1, i, 0);
         if (i < buffer_size - 1) {
             EXPECT_FALSE(overflow);
         }
@@ -132,16 +123,16 @@ TEST_F(EventDataTest, WriteEventDetectsOverflow) {
 
     // The 10th write should have detected overflow
     EXPECT_TRUE(overflow);
-    EXPECT_EQ(ed->getWriteIndex(channel), 0u);  // Wrapped around
-    EXPECT_EQ(ed->getWriteStartIndex(channel), 1u);  // Advanced
+    EXPECT_EQ(ed->getWriteIndex(), 0u);  // Wrapped around
+    EXPECT_EQ(ed->getWriteStartIndex(), 1u);  // Advanced
 
     // Next write should also overflow
-    overflow = ed->writeEvent(channel, 999, 0);
+    overflow = ed->writeEvent(1, 999, 0);
     EXPECT_TRUE(overflow);
 
     // Write start index should have advanced again
-    EXPECT_EQ(ed->getWriteIndex(channel), 1u);
-    EXPECT_EQ(ed->getWriteStartIndex(channel), 2u);
+    EXPECT_EQ(ed->getWriteIndex(), 1u);
+    EXPECT_EQ(ed->getWriteStartIndex(), 2u);
 }
 
 // Test 8: writeEvent() wraps around correctly
@@ -149,26 +140,24 @@ TEST_F(EventDataTest, WriteEventWrapsAroundCorrectly) {
     const uint32_t buffer_size = 5;
     ASSERT_TRUE(ed->allocate(buffer_size));
 
-    const uint16_t channel = 3;
-
     // Fill buffer and wrap around (8 writes total)
     for (uint32_t i = 0; i < buffer_size + 3; ++i) {
-        ed->writeEvent(channel, 1000 + i, static_cast<uint16_t>(i % 6));
+        ed->writeEvent(3, 1000 + i, static_cast<uint16_t>(i % 6));
     }
 
     // After 8 writes into a buffer of 5:
     // - write_index should be at 3 (next write position)
     // - write_start_index should be at 4 (oldest valid data)
-    EXPECT_EQ(ed->getWriteIndex(channel), 3u);
-    EXPECT_EQ(ed->getWriteStartIndex(channel), 4u);
+    EXPECT_EQ(ed->getWriteIndex(), 3u);
+    EXPECT_EQ(ed->getWriteStartIndex(), 4u);
 
     // Buffer contains data from writes 3-7 (the last 5 writes)
     // At indices: [5, 6, 7, 3, 4] -> timestamps [1005, 1006, 1007, 1003, 1004]
-    EXPECT_EQ(ed->getTimestamps(channel)[0], 1005u);  // From write i=5
-    EXPECT_EQ(ed->getTimestamps(channel)[1], 1006u);  // From write i=6
-    EXPECT_EQ(ed->getTimestamps(channel)[2], 1007u);  // From write i=7
-    EXPECT_EQ(ed->getTimestamps(channel)[3], 1003u);  // From write i=3
-    EXPECT_EQ(ed->getTimestamps(channel)[4], 1004u);  // From write i=4
+    EXPECT_EQ(ed->getTimestamps()[0], 1005u);  // From write i=5
+    EXPECT_EQ(ed->getTimestamps()[1], 1006u);  // From write i=6
+    EXPECT_EQ(ed->getTimestamps()[2], 1007u);  // From write i=7
+    EXPECT_EQ(ed->getTimestamps()[3], 1003u);  // From write i=3
+    EXPECT_EQ(ed->getTimestamps()[4], 1004u);  // From write i=4
 }
 
 // Test 9: writeEvent() with invalid channel returns false
@@ -188,29 +177,23 @@ TEST_F(EventDataTest, WriteEventWithInvalidChannelReturnsFalse) {
 TEST_F(EventDataTest, ResetClearsDataButPreservesAllocation) {
     ASSERT_TRUE(ed->allocate(100));
 
-    // Write some data to multiple channels
+    // Write some data from multiple channels
     ed->writeEvent(1, 1000, 1);
     ed->writeEvent(5, 2000, 2);
     ed->writeEvent(10, 3000, 3);
 
-    EXPECT_NE(ed->getWriteIndex(1), 0u);
-    EXPECT_NE(ed->getWriteIndex(5), 0u);
-    EXPECT_NE(ed->getWriteIndex(10), 0u);
+    EXPECT_NE(ed->getWriteIndex(), 0u);
 
     ed->reset();
 
     // Indices should be cleared
-    EXPECT_EQ(ed->getWriteIndex(1), 0u);
-    EXPECT_EQ(ed->getWriteIndex(5), 0u);
-    EXPECT_EQ(ed->getWriteIndex(10), 0u);
-    EXPECT_EQ(ed->getWriteStartIndex(1), 0u);
-    EXPECT_EQ(ed->getWriteStartIndex(5), 0u);
-    EXPECT_EQ(ed->getWriteStartIndex(10), 0u);
+    EXPECT_EQ(ed->getWriteIndex(), 0u);
+    EXPECT_EQ(ed->getWriteStartIndex(), 0u);
 
     // Data should be zeroed
-    EXPECT_EQ(ed->getTimestamps(1)[0], 0u);
-    EXPECT_EQ(ed->getTimestamps(5)[0], 0u);
-    EXPECT_EQ(ed->getTimestamps(10)[0], 0u);
+    EXPECT_EQ(ed->getTimestamps()[0], 0u);
+    EXPECT_EQ(ed->getChannels()[0], 0u);
+    EXPECT_EQ(ed->getUnits()[0], 0u);
 
     // Allocation should remain
     EXPECT_TRUE(ed->isAllocated());
@@ -227,12 +210,9 @@ TEST_F(EventDataTest, CleanupDeallocatesMemory) {
 
     EXPECT_FALSE(ed->isAllocated());
     EXPECT_EQ(ed->getSize(), 0u);
-
-    // Check that all channel pointers are null
-    for (uint16_t ch = 1; ch <= cbMAXCHANS; ++ch) {
-        EXPECT_EQ(ed->getTimestamps(ch), nullptr);
-        EXPECT_EQ(ed->getUnits(ch), nullptr);
-    }
+    EXPECT_EQ(ed->getTimestamps(), nullptr);
+    EXPECT_EQ(ed->getChannels(), nullptr);
+    EXPECT_EQ(ed->getUnits(), nullptr);
 }
 
 // Test 12: cleanup() is safe on unallocated EventData
@@ -249,14 +229,12 @@ TEST_F(EventDataTest, CleanupSafeOnUnallocated) {
 TEST_F(EventDataTest, GetTimestampsReturnsCorrectPointer) {
     ASSERT_TRUE(ed->allocate(100));
 
-    const uint16_t channel = 7;
-
-    // Write some events
+    // Write some events from different channels
     for (uint32_t i = 0; i < 5; ++i) {
-        ed->writeEvent(channel, 1000 + i, 0);
+        ed->writeEvent(7 + (i % 3), 1000 + i, 0);
     }
 
-    const PROCTIME* timestamps = ed->getTimestamps(channel);
+    const PROCTIME* timestamps = ed->getTimestamps();
     ASSERT_NE(timestamps, nullptr);
 
     for (uint32_t i = 0; i < 5; ++i) {
@@ -264,26 +242,35 @@ TEST_F(EventDataTest, GetTimestampsReturnsCorrectPointer) {
     }
 }
 
-// Test 14: getTimestamps() returns nullptr for invalid channel
-TEST_F(EventDataTest, GetTimestampsReturnsNullForInvalidChannel) {
+// Test 14: getChannels() returns correct pointer
+TEST_F(EventDataTest, GetChannelsReturnsCorrectPointer) {
     ASSERT_TRUE(ed->allocate(100));
 
-    EXPECT_EQ(ed->getTimestamps(0), nullptr);
-    EXPECT_EQ(ed->getTimestamps(cbMAXCHANS + 1), nullptr);
+    const uint16_t channels[] = {1, 5, 10, 15, 20};
+
+    // Write events from different channels
+    for (uint32_t i = 0; i < 5; ++i) {
+        ed->writeEvent(channels[i], 1000, 0);
+    }
+
+    const uint16_t* channel_array = ed->getChannels();
+    ASSERT_NE(channel_array, nullptr);
+
+    for (uint32_t i = 0; i < 5; ++i) {
+        EXPECT_EQ(channel_array[i], channels[i]);
+    }
 }
 
 // Test 15: getUnits() returns correct pointer
 TEST_F(EventDataTest, GetUnitsReturnsCorrectPointer) {
     ASSERT_TRUE(ed->allocate(100));
 
-    const uint16_t channel = 15;
-
     // Write events with different units
     for (uint16_t i = 0; i < 5; ++i) {
-        ed->writeEvent(channel, 1000, i);
+        ed->writeEvent(15, 1000, i);
     }
 
-    const uint16_t* units = ed->getUnits(channel);
+    const uint16_t* units = ed->getUnits();
     ASSERT_NE(units, nullptr);
 
     for (uint16_t i = 0; i < 5; ++i) {
@@ -291,70 +278,57 @@ TEST_F(EventDataTest, GetUnitsReturnsCorrectPointer) {
     }
 }
 
-// Test 16: getUnits() returns nullptr for invalid channel
-TEST_F(EventDataTest, GetUnitsReturnsNullForInvalidChannel) {
-    ASSERT_TRUE(ed->allocate(100));
-
-    EXPECT_EQ(ed->getUnits(0), nullptr);
-    EXPECT_EQ(ed->getUnits(cbMAXCHANS + 1), nullptr);
-}
-
-// Test 17: setWriteIndex() and setWriteStartIndex() work correctly
+// Test 16: setWriteIndex() and setWriteStartIndex() work correctly
 TEST_F(EventDataTest, SettersWorkCorrectly) {
     ASSERT_TRUE(ed->allocate(100));
 
-    const uint16_t channel = 20;
+    ed->setWriteIndex(50);
+    ed->setWriteStartIndex(10);
 
-    ed->setWriteIndex(channel, 50);
-    ed->setWriteStartIndex(channel, 10);
-
-    EXPECT_EQ(ed->getWriteIndex(channel), 50u);
-    EXPECT_EQ(ed->getWriteStartIndex(channel), 10u);
+    EXPECT_EQ(ed->getWriteIndex(), 50u);
+    EXPECT_EQ(ed->getWriteStartIndex(), 10u);
 }
 
-// Test 18: setters ignore invalid channels
-TEST_F(EventDataTest, SettersIgnoreInvalidChannels) {
+// Test 17: Events from multiple channels are stored in time order
+TEST_F(EventDataTest, EventsFromMultipleChannelsStoredInTimeOrder) {
     ASSERT_TRUE(ed->allocate(100));
 
-    // Should not crash
-    EXPECT_NO_THROW(ed->setWriteIndex(0, 10));
-    EXPECT_NO_THROW(ed->setWriteIndex(cbMAXCHANS + 1, 10));
-    EXPECT_NO_THROW(ed->setWriteStartIndex(0, 10));
-    EXPECT_NO_THROW(ed->setWriteStartIndex(cbMAXCHANS + 1, 10));
-}
-
-// Test 19: Multiple channels maintain independent state
-TEST_F(EventDataTest, MultipleChannelsMaintainIndependentState) {
-    ASSERT_TRUE(ed->allocate(100));
-
-    // Write to different channels
+    // Write to different channels in specific order
     ed->writeEvent(1, 1000, 1);
-    ed->writeEvent(1, 1001, 1);
+    ed->writeEvent(5, 1001, 2);
+    ed->writeEvent(1, 1002, 1);
+    ed->writeEvent(10, 1003, 3);
+    ed->writeEvent(5, 1004, 2);
 
-    ed->writeEvent(5, 2000, 2);
+    // Verify time-ordered storage
+    const PROCTIME* timestamps = ed->getTimestamps();
+    const uint16_t* channels = ed->getChannels();
+    const uint16_t* units = ed->getUnits();
 
-    ed->writeEvent(10, 3000, 3);
-    ed->writeEvent(10, 3001, 3);
-    ed->writeEvent(10, 3002, 3);
+    EXPECT_EQ(timestamps[0], 1000u);
+    EXPECT_EQ(channels[0], 1u);
+    EXPECT_EQ(units[0], 1u);
 
-    // Verify independent indices
-    EXPECT_EQ(ed->getWriteIndex(1), 2u);
-    EXPECT_EQ(ed->getWriteIndex(5), 1u);
-    EXPECT_EQ(ed->getWriteIndex(10), 3u);
+    EXPECT_EQ(timestamps[1], 1001u);
+    EXPECT_EQ(channels[1], 5u);
+    EXPECT_EQ(units[1], 2u);
 
-    // Verify independent data
-    EXPECT_EQ(ed->getTimestamps(1)[0], 1000u);
-    EXPECT_EQ(ed->getTimestamps(5)[0], 2000u);
-    EXPECT_EQ(ed->getTimestamps(10)[0], 3000u);
+    EXPECT_EQ(timestamps[2], 1002u);
+    EXPECT_EQ(channels[2], 1u);
+    EXPECT_EQ(units[2], 1u);
 
-    EXPECT_EQ(ed->getUnits(1)[0], 1u);
-    EXPECT_EQ(ed->getUnits(5)[0], 2u);
-    EXPECT_EQ(ed->getUnits(10)[0], 3u);
+    EXPECT_EQ(timestamps[3], 1003u);
+    EXPECT_EQ(channels[3], 10u);
+    EXPECT_EQ(units[3], 3u);
+
+    EXPECT_EQ(timestamps[4], 1004u);
+    EXPECT_EQ(channels[4], 5u);
+    EXPECT_EQ(units[4], 2u);
 }
 
-// Test 20: All cbMAXCHANS channels are accessible
-TEST_F(EventDataTest, AllChannelsAccessible) {
-    ASSERT_TRUE(ed->allocate(10));
+// Test 18: All valid channels can write events
+TEST_F(EventDataTest, AllChannelsCanWriteEvents) {
+    ASSERT_TRUE(ed->allocate(cbMAXCHANS + 100));
 
     // Write to all channels
     for (uint16_t ch = 1; ch <= cbMAXCHANS; ++ch) {
@@ -362,15 +336,16 @@ TEST_F(EventDataTest, AllChannelsAccessible) {
         EXPECT_FALSE(overflow);
     }
 
-    // Verify all channels
+    // Verify all channels wrote events
+    EXPECT_EQ(ed->getWriteIndex(), cbMAXCHANS);
+
+    const uint16_t* channels = ed->getChannels();
     for (uint16_t ch = 1; ch <= cbMAXCHANS; ++ch) {
-        EXPECT_EQ(ed->getWriteIndex(ch), 1u);
-        EXPECT_EQ(ed->getTimestamps(ch)[0], ch * 100u);
-        EXPECT_EQ(ed->getUnits(ch)[0], ch % 6);
+        EXPECT_EQ(channels[ch - 1], ch);
     }
 }
 
-// Test 21: Parallel writes to same channel
+// Test 19: Parallel writes to same channel
 TEST_F(EventDataTest, ParallelWritesToSameChannel) {
     constexpr int NUM_THREADS = 4;
     constexpr int WRITES_PER_THREAD = 100;
@@ -403,7 +378,7 @@ TEST_F(EventDataTest, ParallelWritesToSameChannel) {
     EXPECT_EQ(successful_writes.load(), NUM_THREADS * WRITES_PER_THREAD);
 }
 
-// Test 22: Parallel writes to different channels
+// Test 20: Parallel writes to different channels
 TEST_F(EventDataTest, ParallelWritesToDifferentChannels) {
     constexpr int NUM_THREADS = 4;
     constexpr int WRITES_PER_THREAD = 50;
@@ -431,19 +406,15 @@ TEST_F(EventDataTest, ParallelWritesToDifferentChannels) {
         thread.join();
     }
 
-    // Verify each channel has the expected number of writes
-    for (int t = 0; t < NUM_THREADS; ++t) {
-        const uint16_t channel = t + 1;
-        EXPECT_EQ(ed->getWriteIndex(channel), WRITES_PER_THREAD);
-    }
+    // Verify total number of writes
+    EXPECT_EQ(ed->getWriteIndex(), NUM_THREADS * WRITES_PER_THREAD);
 }
 
-// Test 23: Concurrent reads and writes with mutex
+// Test 21: Concurrent reads and writes with mutex
 TEST_F(EventDataTest, ConcurrentReadsAndWritesWithMutex) {
     constexpr int NUM_WRITER_THREADS = 2;
     constexpr int NUM_READER_THREADS = 2;
     constexpr int OPERATIONS_PER_THREAD = 50;
-    constexpr uint16_t CHANNEL = 1;
 
     ASSERT_TRUE(ed->allocate(500));
 
@@ -455,7 +426,7 @@ TEST_F(EventDataTest, ConcurrentReadsAndWritesWithMutex) {
         threads.emplace_back([this, t]() {
             for (int i = 0; i < OPERATIONS_PER_THREAD; ++i) {
                 std::lock_guard<std::mutex> lock(ed->m_mutex);
-                ed->writeEvent(CHANNEL, t * 1000 + i, t % 6);
+                ed->writeEvent(1, t * 1000 + i, t % 6);
                 std::this_thread::sleep_for(std::chrono::microseconds(10));
             }
         });
@@ -466,11 +437,11 @@ TEST_F(EventDataTest, ConcurrentReadsAndWritesWithMutex) {
         threads.emplace_back([this, &read_successes]() {
             for (int i = 0; i < OPERATIONS_PER_THREAD; ++i) {
                 std::lock_guard<std::mutex> lock(ed->m_mutex);
-                const PROCTIME* timestamps = ed->getTimestamps(CHANNEL);
-                const uint16_t* units = ed->getUnits(CHANNEL);
-                const uint32_t write_idx = ed->getWriteIndex(CHANNEL);
+                const PROCTIME* timestamps = ed->getTimestamps();
+                const uint16_t* channels = ed->getChannels();
+                const uint32_t write_idx = ed->getWriteIndex();
 
-                if (timestamps && units && write_idx > 0) {
+                if (timestamps && channels && write_idx > 0) {
                     read_successes++;
                 }
                 std::this_thread::sleep_for(std::chrono::microseconds(10));
@@ -487,28 +458,26 @@ TEST_F(EventDataTest, ConcurrentReadsAndWritesWithMutex) {
     EXPECT_GT(read_successes.load(), 0);
 }
 
-// Test 24: Unit classification values
+// Test 22: Unit classification values
 TEST_F(EventDataTest, UnitClassificationValues) {
     ASSERT_TRUE(ed->allocate(100));
-
-    const uint16_t channel = 1;
 
     // Test different unit values (0-5 for sorted units, 255 for noise)
     const uint16_t units[] = {0, 1, 2, 3, 4, 5, 255};
 
     for (uint16_t unit : units) {
-        ed->writeEvent(channel, 1000, unit);
+        ed->writeEvent(1, 1000, unit);
     }
 
-    const uint16_t* unit_array = ed->getUnits(channel);
+    const uint16_t* unit_array = ed->getUnits();
     for (size_t i = 0; i < sizeof(units) / sizeof(units[0]); ++i) {
         EXPECT_EQ(unit_array[i], units[i]);
     }
 }
 
-// Test 25: Large buffer allocation
+// Test 23: Large buffer allocation
 TEST_F(EventDataTest, LargeBufferAllocation) {
-    const uint32_t large_size = 100000;  // 100k events per channel
+    const uint32_t large_size = 100000;  // 100k total events
 
     ASSERT_TRUE(ed->allocate(large_size));
     EXPECT_EQ(ed->getSize(), large_size);
@@ -516,289 +485,265 @@ TEST_F(EventDataTest, LargeBufferAllocation) {
     // Write to a few channels to verify allocation works
     for (uint16_t ch = 1; ch <= 10; ++ch) {
         ed->writeEvent(ch, 1000, 1);
-        EXPECT_EQ(ed->getWriteIndex(ch), 1u);
     }
+    EXPECT_EQ(ed->getWriteIndex(), 10u);
 }
 
-// Test 26: Memory usage is reasonable
+// Test 24: Memory usage is reasonable
 TEST_F(EventDataTest, MemoryUsageIsReasonable) {
     const uint32_t buffer_size = 10000;  // Typical event buffer size
 
     ASSERT_TRUE(ed->allocate(buffer_size));
 
-    // Calculate memory usage per channel
+    // Calculate memory usage for flat layout
     const size_t timestamp_mem = buffer_size * sizeof(PROCTIME);
+    const size_t channel_mem = buffer_size * sizeof(uint16_t);
     const size_t unit_mem = buffer_size * sizeof(uint16_t);
-    const size_t per_channel_mem = timestamp_mem + unit_mem;
+    const size_t total_mem = timestamp_mem + channel_mem + unit_mem;
 
-    // Total for all channels
-    const size_t total_mem = per_channel_mem * cbMAXCHANS;
+    // For 10000 events (assuming 64-bit PROCTIME):
+    // Timestamps: 10000 * 8 = 80KB
+    // Channels: 10000 * 2 = 20KB
+    // Units: 10000 * 2 = 20KB
+    // Total: ~120KB (much less than old per-channel layout!)
 
-    // For 10000 events per channel with cbMAXCHANS channels:
-    // Timestamps: 10000 * 8 bytes * cbMAXCHANS (assuming 64-bit PROCTIME)
-    // Units: 10000 * 2 bytes * cbMAXCHANS
-    // With cbMAXCHANS=512: ~51MB total
-
-    // Verify it's less than 100MB total (reasonable for event buffering)
-    EXPECT_LT(total_mem, 100 * 1024 * 1024);
+    // Verify it's less than 1MB total (very reasonable)
+    EXPECT_LT(total_mem, 1 * 1024 * 1024);
 }
 
-// Test 27: getAvailableSamples() returns correct count
-TEST_F(EventDataTest, GetAvailableSamplesReturnsCorrectCount) {
+// Test 25: getNumEvents() returns correct count
+TEST_F(EventDataTest, GetNumEventsReturnsCorrectCount) {
     ASSERT_TRUE(ed->allocate(100));
 
-    const uint16_t channel = 5;
+    // Initially no events
+    EXPECT_EQ(ed->getNumEvents(), 0u);
 
-    // Initially no samples
-    EXPECT_EQ(ed->getAvailableSamples(channel), 0u);
-
-    // Write 10 events
+    // Write 10 events from various channels
     for (uint32_t i = 0; i < 10; ++i) {
-        ed->writeEvent(channel, 1000 + i, 1);
+        ed->writeEvent((i % 5) + 1, 1000 + i, 1);
     }
 
-    EXPECT_EQ(ed->getAvailableSamples(channel), 10u);
+    EXPECT_EQ(ed->getNumEvents(), 10u);
 
     // Write 5 more
     for (uint32_t i = 0; i < 5; ++i) {
-        ed->writeEvent(channel, 2000 + i, 2);
+        ed->writeEvent(2, 2000 + i, 2);
     }
 
-    EXPECT_EQ(ed->getAvailableSamples(channel), 15u);
+    EXPECT_EQ(ed->getNumEvents(), 15u);
 }
 
-// Test 28: getAvailableSamples() handles ring buffer wraparound
-TEST_F(EventDataTest, GetAvailableSamplesHandlesWraparound) {
+// Test 26: getNumEvents() handles ring buffer wraparound
+TEST_F(EventDataTest, GetNumEventsHandlesWraparound) {
     const uint32_t buffer_size = 10;
     ASSERT_TRUE(ed->allocate(buffer_size));
 
-    const uint16_t channel = 3;
-
-    // Fill buffer (the 10th write will detect overflow since next_write_index wraps to write_start_index)
+    // Fill buffer (the 10th write will detect overflow)
     for (uint32_t i = 0; i < buffer_size; ++i) {
-        ed->writeEvent(channel, i, 0);
+        ed->writeEvent(3, i, 0);
     }
 
-    // After buffer_size writes, we have buffer_size-1 samples available
-    // (the ring buffer needs one empty slot to distinguish full from empty)
-    EXPECT_EQ(ed->getAvailableSamples(channel), buffer_size - 1);
+    // After buffer_size writes, we have buffer_size-1 events available
+    EXPECT_EQ(ed->getNumEvents(), buffer_size - 1);
 
     // Write more (will continue to overflow)
     for (uint32_t i = 0; i < 5; ++i) {
-        ed->writeEvent(channel, 100 + i, 0);
+        ed->writeEvent(3, 100 + i, 0);
     }
 
-    // Should still report buffer_size-1 samples (oldest were overwritten)
-    EXPECT_EQ(ed->getAvailableSamples(channel), buffer_size - 1);
+    // Should still report buffer_size-1 events (oldest were overwritten)
+    EXPECT_EQ(ed->getNumEvents(), buffer_size - 1);
 }
 
-// Test 29: countSamplesPerUnit() counts correctly
-TEST_F(EventDataTest, CountSamplesPerUnitCountsCorrectly) {
+// Test 27: readEvents() reads flat arrays correctly
+TEST_F(EventDataTest, ReadEventsReadsCorrectly) {
     ASSERT_TRUE(ed->allocate(100));
 
-    const uint16_t channel = 7;
+    // Write events from multiple channels
+    ed->writeEvent(1, 1000, 0);
+    ed->writeEvent(5, 1001, 1);
+    ed->writeEvent(1, 1002, 0);
+    ed->writeEvent(10, 1003, 2);
+    ed->writeEvent(5, 1004, 1);
 
-    // Write events with different units
-    ed->writeEvent(channel, 1000, 0);  // unit 0
-    ed->writeEvent(channel, 1001, 0);  // unit 0
-    ed->writeEvent(channel, 1002, 1);  // unit 1
-    ed->writeEvent(channel, 1003, 1);  // unit 1
-    ed->writeEvent(channel, 1004, 1);  // unit 1
-    ed->writeEvent(channel, 1005, 2);  // unit 2
-    ed->writeEvent(channel, 1006, 3);  // unit 3
+    // Read all events
+    PROCTIME timestamps[10] = {};
+    uint16_t channels[10] = {};
+    uint16_t units[10] = {};
 
-    uint32_t counts[cbMAXUNITS + 1] = {};
-    ed->countSamplesPerUnit(channel, counts, false);
+    const uint32_t num_read = ed->readEvents(timestamps, channels, units, 10, false);
 
-    EXPECT_EQ(counts[0], 2u);
-    EXPECT_EQ(counts[1], 3u);
-    EXPECT_EQ(counts[2], 1u);
-    EXPECT_EQ(counts[3], 1u);
-    EXPECT_EQ(counts[4], 0u);
+    EXPECT_EQ(num_read, 5u);
+
+    // Verify data
+    EXPECT_EQ(timestamps[0], 1000u);
+    EXPECT_EQ(channels[0], 1u);
+    EXPECT_EQ(units[0], 0u);
+
+    EXPECT_EQ(timestamps[1], 1001u);
+    EXPECT_EQ(channels[1], 5u);
+    EXPECT_EQ(units[1], 1u);
+
+    EXPECT_EQ(timestamps[2], 1002u);
+    EXPECT_EQ(channels[2], 1u);
+    EXPECT_EQ(units[2], 0u);
+
+    EXPECT_EQ(timestamps[3], 1003u);
+    EXPECT_EQ(channels[3], 10u);
+    EXPECT_EQ(units[3], 2u);
+
+    EXPECT_EQ(timestamps[4], 1004u);
+    EXPECT_EQ(channels[4], 5u);
+    EXPECT_EQ(units[4], 1u);
 }
 
-// Test 30: countSamplesPerUnit() handles digital/serial channels
-TEST_F(EventDataTest, CountSamplesPerUnitHandlesDigitalSerial) {
+// Test 28: readEvents() with partial read
+TEST_F(EventDataTest, ReadEventsPartialRead) {
     ASSERT_TRUE(ed->allocate(100));
 
-    const uint16_t channel = 10;
-
-    // Write events with different "units" (which are actually data values)
-    ed->writeEvent(channel, 1000, 0x0001);
-    ed->writeEvent(channel, 1001, 0x0002);
-    ed->writeEvent(channel, 1002, 0x0004);
-    ed->writeEvent(channel, 1003, 0x0008);
-
-    uint32_t counts[cbMAXUNITS + 1] = {};
-    ed->countSamplesPerUnit(channel, counts, true);  // is_digital_or_serial = true
-
-    // All should be counted as unit 0
-    EXPECT_EQ(counts[0], 4u);
-    for (uint32_t i = 1; i <= cbMAXUNITS; ++i) {
-        EXPECT_EQ(counts[i], 0u);
-    }
-}
-
-// Test 31: readChannelEvents() reads and separates by unit
-TEST_F(EventDataTest, ReadChannelEventsReadsAndSeparatesByUnit) {
-    ASSERT_TRUE(ed->allocate(100));
-
-    const uint16_t channel = 5;
-
-    // Write mixed units
-    ed->writeEvent(channel, 1000, 0);
-    ed->writeEvent(channel, 1001, 1);
-    ed->writeEvent(channel, 1002, 0);
-    ed->writeEvent(channel, 1003, 1);
-    ed->writeEvent(channel, 1004, 2);
-
-    // Prepare output arrays
-    PROCTIME timestamps_unit0[10] = {};
-    PROCTIME timestamps_unit1[10] = {};
-    PROCTIME timestamps_unit2[10] = {};
-    PROCTIME* timestamps[cbMAXUNITS + 1] = {};
-    timestamps[0] = timestamps_unit0;
-    timestamps[1] = timestamps_unit1;
-    timestamps[2] = timestamps_unit2;
-
-    uint32_t max_samples[cbMAXUNITS + 1] = {};
-    std::fill_n(max_samples, cbMAXUNITS + 1, 10u);
-
-    uint32_t actual_samples[cbMAXUNITS + 1] = {};
-    uint32_t final_read_index = 0;
-
-    ed->readChannelEvents(channel, max_samples, timestamps, nullptr,
-                         actual_samples, false, false, final_read_index);
-
-    // Check counts
-    EXPECT_EQ(actual_samples[0], 2u);
-    EXPECT_EQ(actual_samples[1], 2u);
-    EXPECT_EQ(actual_samples[2], 1u);
-
-    // Check timestamps
-    EXPECT_EQ(timestamps_unit0[0], 1000u);
-    EXPECT_EQ(timestamps_unit0[1], 1002u);
-    EXPECT_EQ(timestamps_unit1[0], 1001u);
-    EXPECT_EQ(timestamps_unit1[1], 1003u);
-    EXPECT_EQ(timestamps_unit2[0], 1004u);
-}
-
-// Test 32: readChannelEvents() handles digital data
-TEST_F(EventDataTest, ReadChannelEventsHandlesDigitalData) {
-    ASSERT_TRUE(ed->allocate(100));
-
-    const uint16_t channel = 8;
-
-    // Write digital events (data in unit field)
-    ed->writeEvent(channel, 1000, 0x0001);
-    ed->writeEvent(channel, 1001, 0x0002);
-    ed->writeEvent(channel, 1002, 0x0004);
-
-    // Prepare output arrays
-    PROCTIME timestamps_unit0[10] = {};
-    PROCTIME* timestamps[cbMAXUNITS + 1] = {};
-    timestamps[0] = timestamps_unit0;
-
-    uint16_t digital_data[10] = {};
-
-    uint32_t max_samples[cbMAXUNITS + 1] = {};
-    std::fill_n(max_samples, cbMAXUNITS + 1, 10u);
-
-    uint32_t actual_samples[cbMAXUNITS + 1] = {};
-    uint32_t final_read_index = 0;
-
-    ed->readChannelEvents(channel, max_samples, timestamps, digital_data,
-                         actual_samples, true, false, final_read_index);
-
-    // All should be unit 0
-    EXPECT_EQ(actual_samples[0], 3u);
-
-    // Check digital data
-    EXPECT_EQ(digital_data[0], 0x0001);
-    EXPECT_EQ(digital_data[1], 0x0002);
-    EXPECT_EQ(digital_data[2], 0x0004);
-
-    // Check timestamps
-    EXPECT_EQ(timestamps_unit0[0], 1000u);
-    EXPECT_EQ(timestamps_unit0[1], 1001u);
-    EXPECT_EQ(timestamps_unit0[2], 1002u);
-}
-
-// Test 33: readChannelEvents() with bSeek updates read position
-TEST_F(EventDataTest, ReadChannelEventsWithSeekUpdatesPosition) {
-    ASSERT_TRUE(ed->allocate(100));
-
-    const uint16_t channel = 6;
-
-    // Write events
+    // Write 10 events
     for (uint32_t i = 0; i < 10; ++i) {
-        ed->writeEvent(channel, 1000 + i, 0);
+        ed->writeEvent(1, 1000 + i, 0);
     }
 
-    EXPECT_EQ(ed->getWriteStartIndex(channel), 0u);
+    // Read only 5
+    PROCTIME timestamps[5] = {};
+    uint16_t channels[5] = {};
+    uint16_t units[5] = {};
+
+    const uint32_t num_read = ed->readEvents(timestamps, channels, units, 5, false);
+
+    EXPECT_EQ(num_read, 5u);
+
+    for (uint32_t i = 0; i < 5; ++i) {
+        EXPECT_EQ(timestamps[i], 1000u + i);
+    }
+}
+
+// Test 29: readEvents() with bSeek updates read position
+TEST_F(EventDataTest, ReadEventsWithSeekUpdatesPosition) {
+    ASSERT_TRUE(ed->allocate(100));
+
+    // Write 10 events
+    for (uint32_t i = 0; i < 10; ++i) {
+        ed->writeEvent(1, 1000 + i, 0);
+    }
+
+    EXPECT_EQ(ed->getWriteStartIndex(), 0u);
 
     // Read 5 events with bSeek=true
-    PROCTIME timestamps_unit0[10] = {};
-    PROCTIME* timestamps[cbMAXUNITS + 1] = {};
-    timestamps[0] = timestamps_unit0;
+    PROCTIME timestamps[10] = {};
+    uint16_t channels[10] = {};
+    uint16_t units[10] = {};
 
-    uint32_t max_samples[cbMAXUNITS + 1] = {};
-    max_samples[0] = 5;  // Read only 5
+    uint32_t num_read = ed->readEvents(timestamps, channels, units, 5, true);
 
-    uint32_t actual_samples[cbMAXUNITS + 1] = {};
-    uint32_t final_read_index = 0;
-
-    ed->readChannelEvents(channel, max_samples, timestamps, nullptr,
-                         actual_samples, false, true, final_read_index);
-
-    EXPECT_EQ(actual_samples[0], 5u);
-    EXPECT_EQ(ed->getWriteStartIndex(channel), 5u);  // Should have advanced
+    EXPECT_EQ(num_read, 5u);
+    EXPECT_EQ(ed->getWriteStartIndex(), 5u);  // Should have advanced
 
     // Read remaining 5
-    max_samples[0] = 10;
-    actual_samples[0] = 0;
-    ed->readChannelEvents(channel, max_samples, timestamps, nullptr,
-                         actual_samples, false, true, final_read_index);
+    num_read = ed->readEvents(timestamps, channels, units, 10, true);
 
-    EXPECT_EQ(actual_samples[0], 5u);  // Should read remaining 5
-    EXPECT_EQ(ed->getWriteStartIndex(channel), 10u);
+    EXPECT_EQ(num_read, 5u);  // Should read remaining 5
+    EXPECT_EQ(ed->getWriteStartIndex(), 10u);
 }
 
-// Test 34: readChannelEvents() without bSeek doesn't update position
-TEST_F(EventDataTest, ReadChannelEventsWithoutSeekDoesntUpdatePosition) {
+// Test 30: readEvents() without bSeek doesn't update position
+TEST_F(EventDataTest, ReadEventsWithoutSeekDoesntUpdatePosition) {
     ASSERT_TRUE(ed->allocate(100));
 
-    const uint16_t channel = 9;
-
-    // Write events
+    // Write 5 events
     for (uint32_t i = 0; i < 5; ++i) {
-        ed->writeEvent(channel, 1000 + i, 0);
+        ed->writeEvent(1, 1000 + i, 0);
     }
 
-    EXPECT_EQ(ed->getWriteStartIndex(channel), 0u);
+    EXPECT_EQ(ed->getWriteStartIndex(), 0u);
 
     // Read with bSeek=false
-    PROCTIME timestamps_unit0[10] = {};
-    PROCTIME* timestamps[cbMAXUNITS + 1] = {};
-    timestamps[0] = timestamps_unit0;
+    PROCTIME timestamps[10] = {};
+    uint16_t channels[10] = {};
+    uint16_t units[10] = {};
 
-    uint32_t max_samples[cbMAXUNITS + 1] = {};
-    std::fill_n(max_samples, cbMAXUNITS + 1, 10u);
+    uint32_t num_read = ed->readEvents(timestamps, channels, units, 10, false);
 
-    uint32_t actual_samples[cbMAXUNITS + 1] = {};
-    uint32_t final_read_index = 0;
-
-    ed->readChannelEvents(channel, max_samples, timestamps, nullptr,
-                         actual_samples, false, false, final_read_index);
-
-    EXPECT_EQ(actual_samples[0], 5u);
-    EXPECT_EQ(ed->getWriteStartIndex(channel), 0u);  // Should not have changed
+    EXPECT_EQ(num_read, 5u);
+    EXPECT_EQ(ed->getWriteStartIndex(), 0u);  // Should not have changed
 
     // Read again - should get same data
-    actual_samples[0] = 0;
-    ed->readChannelEvents(channel, max_samples, timestamps, nullptr,
-                         actual_samples, false, false, final_read_index);
+    num_read = ed->readEvents(timestamps, channels, units, 10, false);
 
-    EXPECT_EQ(actual_samples[0], 5u);  // Same data again
-    EXPECT_EQ(timestamps_unit0[0], 1000u);  // Same timestamps
+    EXPECT_EQ(num_read, 5u);  // Same data again
+    EXPECT_EQ(timestamps[0], 1000u);  // Same timestamps
+}
+
+// Test 31: readEvents() handles ring buffer wraparound
+TEST_F(EventDataTest, ReadEventsHandlesWraparound) {
+    const uint32_t buffer_size = 5;
+    ASSERT_TRUE(ed->allocate(buffer_size));
+
+    // Fill buffer and wrap around (8 writes total)
+    for (uint32_t i = 0; i < 8; ++i) {
+        ed->writeEvent(1, 1000 + i, 0);
+    }
+
+    // Read all available events (should be buffer_size - 1 = 4)
+    PROCTIME timestamps[10] = {};
+    uint16_t channels[10] = {};
+    uint16_t units[10] = {};
+
+    const uint32_t num_read = ed->readEvents(timestamps, channels, units, 10, false);
+
+    EXPECT_EQ(num_read, 4u);
+
+    // Should read events 4-7 (the last 4 writes before overflow)
+    EXPECT_EQ(timestamps[0], 1004u);
+    EXPECT_EQ(timestamps[1], 1005u);
+    EXPECT_EQ(timestamps[2], 1006u);
+    EXPECT_EQ(timestamps[3], 1007u);
+}
+
+// Test 32: readEvents() with null pointers for unwanted data
+TEST_F(EventDataTest, ReadEventsWithNullPointers) {
+    ASSERT_TRUE(ed->allocate(100));
+
+    ed->writeEvent(1, 1000, 0);
+    ed->writeEvent(5, 1001, 1);
+    ed->writeEvent(10, 1002, 2);
+
+    // Read only timestamps
+    PROCTIME timestamps[10] = {};
+    uint32_t num_read = ed->readEvents(timestamps, nullptr, nullptr, 10, false);
+
+    EXPECT_EQ(num_read, 3u);
+    EXPECT_EQ(timestamps[0], 1000u);
+    EXPECT_EQ(timestamps[1], 1001u);
+    EXPECT_EQ(timestamps[2], 1002u);
+}
+
+// Test 33: Digital/serial data stored in unit field
+TEST_F(EventDataTest, DigitalSerialDataInUnitField) {
+    ASSERT_TRUE(ed->allocate(100));
+
+    // Write digital events (data in unit field)
+    ed->writeEvent(10, 1000, 0x0001);
+    ed->writeEvent(10, 1001, 0x0002);
+    ed->writeEvent(10, 1002, 0x0004);
+
+    PROCTIME timestamps[10] = {};
+    uint16_t channels[10] = {};
+    uint16_t units[10] = {};
+
+    const uint32_t num_read = ed->readEvents(timestamps, channels, units, 10, false);
+
+    EXPECT_EQ(num_read, 3u);
+
+    // Check digital data in unit field
+    EXPECT_EQ(units[0], 0x0001);
+    EXPECT_EQ(units[1], 0x0002);
+    EXPECT_EQ(units[2], 0x0004);
+
+    // Check timestamps
+    EXPECT_EQ(timestamps[0], 1000u);
+    EXPECT_EQ(timestamps[1], 1001u);
+    EXPECT_EQ(timestamps[2], 1002u);
 }

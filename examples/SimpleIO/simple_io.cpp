@@ -340,8 +340,9 @@ int main(const int argc, char *argv[])
     std::vector<int16_t> cont_samples;     // [num_samples * count] contiguous array
     std::vector<PROCTIME> cont_timestamps; // [num_samples] timestamps
     // Event data
-    std::vector<std::vector<std::vector<PROCTIME>>> event_ts;  // [count][cbMAXUNITS+1][samples]
-    std::vector<std::vector<int16_t>> event_wfs_short;         // [count][samples]
+    std::vector<PROCTIME> event_ts;       // [num_events] flat timestamp array
+    std::vector<uint16_t> event_channels; // [num_events] flat channel array
+    std::vector<uint16_t> event_units;    // [num_events] flat unit array
 
     PROCTIME start_time;
     PROCTIME elapsed_time = 0;
@@ -361,37 +362,19 @@ int main(const int argc, char *argv[])
             nullptr
         );
 
-        // allocate memory
-        if (trialEvent && trialEvent->count)
+        // allocate memory for flat event arrays
+        if (trialEvent && trialEvent->num_events)
         {
-            // Resize outer vectors to actual count
-            event_ts.resize(trialEvent->count);
-            event_wfs_short.resize(trialEvent->count);
+            // Allocate flat arrays for all events
+            event_ts.resize(trialEvent->num_events);
+            event_channels.resize(trialEvent->num_events);
+            event_units.resize(trialEvent->num_events);
 
-            for (size_t ev_ix = 0; ev_ix < trialEvent->count; ev_ix++)
-            {
-                // Resize the inner unit dimension
-                event_ts[ev_ix].resize(cbMAXUNITS + 1);
-
-                // Every event channel, regardless of type (spike, digital, serial), gets an array of timestamps.
-                for (size_t un_ix = 0; un_ix < cbMAXUNITS + 1; un_ix++)
-                {
-                    const uint32_t n_samples = trialEvent->num_samples[ev_ix][un_ix];
-                    event_ts[ev_ix][un_ix].assign(n_samples, 0);
-                    // Assign pointer into trialEvent structure
-                    trialEvent->timestamps[ev_ix][un_ix] = event_ts[ev_ix][un_ix].data();
-                }
-
-                uint32_t bIsDig = false;
-                cbSdkIsChanAnyDigIn(INST, trialEvent->chan[ev_ix], &bIsDig);
-                if (bIsDig)
-                {
-                    // alloc waveform data
-                    const uint32_t n_samples = trialEvent->num_samples[ev_ix][0];
-                    event_wfs_short[ev_ix].assign(n_samples, 0);
-                    trialEvent->waveforms[ev_ix] = event_wfs_short[ev_ix].data();
-                }
-            }
+            // Assign pointers to trialEvent structure
+            trialEvent->timestamps = event_ts.data();
+            trialEvent->channels = event_channels.data();
+            trialEvent->units = event_units.data();
+            trialEvent->waveforms = nullptr;  // Not using waveforms in this example
         }
 
         if (trialCont && (trialCont->count > 0))
@@ -423,31 +406,20 @@ int main(const int argc, char *argv[])
         );
 
         // Do something with the data.
-        if (trialEvent && trialEvent->count)
+        if (trialEvent && trialEvent->num_events)
         {
-            for (size_t ev_ix = 0; ev_ix < trialEvent->count; ev_ix++)
+            // Print first few events as example
+            const size_t n_to_print = std::min(static_cast<size_t>(10), static_cast<size_t>(trialEvent->num_events));
+            for (size_t ev_ix = 0; ev_ix < n_to_print; ev_ix++)
             {
-                for (size_t un_ix = 0; un_ix < cbMAXUNITS + 1; un_ix++)
-                {
-                    if (trialEvent->num_samples[ev_ix][un_ix])
-                        printf("%" PRIu64, static_cast<uint64_t>(event_ts[ev_ix][un_ix][0]));
-                }
-                printf("\n");
-
-                const uint16_t chan_id = trialEvent->chan[ev_ix];
-                uint32_t bIsDig = false;
-                cbSdkIsChanAnyDigIn(INST, chan_id, &bIsDig);
-                if (bIsDig)
-                {
-                    const uint32_t n_samples = trialEvent->num_samples[ev_ix][0];
-                    if (n_samples > 0)
-                        printf("%" PRIu64 ":", static_cast<uint64_t>(event_ts[ev_ix][0][0]));
-                    for (uint32_t sample_ix = 0; sample_ix < n_samples; sample_ix++)
-                        printf(" %" PRIu16, event_wfs_short[ev_ix][sample_ix]);
-                    if (n_samples > 0)
-                        printf("\n");
-                }
+                printf("Event %zu: ch=%u unit=%u ts=%" PRIu64 "\n",
+                       ev_ix,
+                       event_channels[ev_ix],
+                       event_units[ev_ix],
+                       static_cast<uint64_t>(event_ts[ev_ix]));
             }
+            if (trialEvent->num_events > n_to_print)
+                printf("... and %u more events\n", trialEvent->num_events - static_cast<uint32_t>(n_to_print));
         }
         if (trialCont && trialCont->count)
         {

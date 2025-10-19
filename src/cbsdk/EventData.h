@@ -4,7 +4,7 @@
 * \brief Event data class for spike/event storage (internal use)
 *
 * This header contains the refactored event data class that stores
-* spike and digital input event data with per-channel ring buffers.
+* spike and digital input event data as a flat time-series of events.
 *
 * This class is internal to the SDK implementation and is not part of
 * the public API.
@@ -17,7 +17,7 @@
 #include <mutex>
 
 
-/// Class to store event data (spikes, digital inputs) for all channels
+/// Class to store event data (spikes, digital inputs) as a time-series
 class EventData
 {
 public:
@@ -32,14 +32,14 @@ public:
     EventData& operator=(const EventData&) = delete;
 
     /// Allocate or reallocate buffers for event storage
-    /// \param buffer_size Number of events to buffer per channel
+    /// \param buffer_size Total number of events to buffer (across all channels)
     /// \return true if allocation succeeded
     [[nodiscard]] bool allocate(uint32_t buffer_size);
 
-    /// Write an event to the ring buffer for a specific channel
+    /// Write an event to the ring buffer
     /// \param channel Channel number (1-based)
     /// \param timestamp Timestamp for this event
-    /// \param unit Unit classification (0-5 for units, 255 for noise, etc.)
+    /// \param unit Unit classification (0-5 for units, 255 for noise) or digital data
     /// \return true if buffer overflowed (oldest data was overwritten)
     [[nodiscard]] bool writeEvent(uint16_t channel, PROCTIME timestamp, uint16_t unit);
 
@@ -51,74 +51,53 @@ public:
 
     // Getters for read access
     [[nodiscard]] uint32_t getSize() const { return m_size; }
-    [[nodiscard]] const PROCTIME* getTimestamps(uint16_t channel) const;
-    [[nodiscard]] const uint16_t* getUnits(uint16_t channel) const;
-    [[nodiscard]] uint32_t getWriteIndex(uint16_t channel) const;
-    [[nodiscard]] uint32_t getWriteStartIndex(uint16_t channel) const;
+    [[nodiscard]] uint32_t getWriteIndex() const { return m_write_index; }
+    [[nodiscard]] uint32_t getWriteStartIndex() const { return m_write_start_index; }
+    [[nodiscard]] uint32_t getNumEvents() const;  // Number of events currently in buffer
+
+    [[nodiscard]] const PROCTIME* getTimestamps() const { return m_timestamps; }
+    [[nodiscard]] const uint16_t* getChannels() const { return m_channels; }
+    [[nodiscard]] const uint16_t* getUnits() const { return m_units; }
+
     [[nodiscard]] int16_t* getWaveformData() { return m_waveform_data; }
     [[nodiscard]] const int16_t* getWaveformData() const { return m_waveform_data; }
-    [[nodiscard]] bool isAllocated() const { return m_timestamps[0] != nullptr; }
+    [[nodiscard]] bool isAllocated() const { return m_timestamps != nullptr; }
 
-    // Setters for write index management (used by SdkGetTrialData)
-    void setWriteStartIndex(uint16_t channel, uint32_t index);
-    void setWriteIndex(uint16_t channel, uint32_t index);
+    // Setters for write index management
+    void setWriteStartIndex(uint32_t index);
+    void setWriteIndex(uint32_t index);
 
-    // Reading methods
-    /// Get number of events available to read for a channel
-    /// \param channel Channel number (1-based)
-    /// \return Number of available events, or 0 if invalid/not allocated
-    [[nodiscard]] uint32_t getAvailableSamples(uint16_t channel) const;
-
-    /// Count number of samples per unit for a channel (without reading)
-    /// \param channel Channel number (1-based)
-    /// \param num_samples_per_unit Output: count of samples per unit
-    /// \param is_digital_or_serial True if channel is digital or serial
-    void countSamplesPerUnit(uint16_t channel,
-                            uint32_t num_samples_per_unit[cbMAXUNITS + 1],
-                            bool is_digital_or_serial) const;
-
-    /// Read events from a channel, separating by unit classification
-    /// \param channel Channel number (1-based)
-    /// \param max_samples_per_unit Array of max samples to read per unit
-    /// \param timestamps Array of output timestamp pointers (per unit), can be nullptr
-    /// \param digital_data Output for digital/serial data, can be nullptr
-    /// \param num_samples_per_unit Output: actual samples read per unit
-    /// \param is_digital_or_serial True if channel is digital or serial
+    /// Read all events from the ring buffer
+    /// \param output_timestamps Output array for timestamps
+    /// \param output_channels Output array for channel IDs
+    /// \param output_units Output array for units/digital data
+    /// \param max_events Maximum number of events to read
     /// \param bSeek If true, advance read position
-    /// \param final_read_index Output: final read position after reading
-    void readChannelEvents(uint16_t channel,
-                          const uint32_t max_samples_per_unit[cbMAXUNITS + 1],
-                          PROCTIME* timestamps[cbMAXUNITS + 1],
-                          uint16_t* digital_data,
-                          uint32_t num_samples_per_unit[cbMAXUNITS + 1],
-                          bool is_digital_or_serial,
-                          bool bSeek,
-                          uint32_t& final_read_index);
+    /// \return Actual number of events read
+    [[nodiscard]] uint32_t readEvents(PROCTIME* output_timestamps,
+                                      uint16_t* output_channels,
+                                      uint16_t* output_units,
+                                      uint32_t max_events,
+                                      bool bSeek);
 
     // Public member for external access control
     mutable std::mutex m_mutex;  ///< Mutex for thread-safe access
 
 private:
     // Buffer configuration
-    uint32_t m_size;  ///< Buffer size per channel (events)
+    uint32_t m_size;  ///< Total buffer capacity (events across all channels)
 
-    // We use cbMAXCHANS to size the arrays,
-    // even though that's more than the analog + digin + serial channels that are required,
-    // simply so we can index into these arrays using the channel number (-1).
-    // The alternative is to map between channel number and array index, but
-    // this is problematic with the recent change to 2-NSP support.
-    // Later we may add an m_ChIdxInType or m_ChIdxInBuff for such a map.
-
-    // Per-channel data storage
-    PROCTIME* m_timestamps[cbMAXCHANS];  ///< [cbMAXCHANS][size] - timestamps per channel
-    uint16_t* m_units[cbMAXCHANS];       ///< [cbMAXCHANS][size] - unit classifications per channel
+    // Flat time-series storage
+    PROCTIME* m_timestamps;  ///< [size] - timestamp for each event
+    uint16_t* m_channels;    ///< [size] - channel ID (1-based) for each event
+    uint16_t* m_units;       ///< [size] - unit classification or digital data for each event
 
     // Shared waveform buffer (allocated on demand, managed externally)
-    int16_t* m_waveform_data;  ///< Buffer with maximum size [cbNUM_ANALOG_CHANS][size][cbMAX_PNTS]
+    int16_t* m_waveform_data;  ///< Buffer with maximum size [size][cbMAX_PNTS]
 
-    // Ring buffer management (per channel)
-    uint32_t m_write_index[cbMAXCHANS];        ///< Next index location to write data
-    uint32_t m_write_start_index[cbMAXCHANS];  ///< Index location that writing began
+    // Ring buffer management (single buffer for all channels)
+    uint32_t m_write_index;        ///< Next index location to write data
+    uint32_t m_write_start_index;  ///< Index location that reading can begin
 };
 
 #endif // EVENTDATA_H_INCLUDED

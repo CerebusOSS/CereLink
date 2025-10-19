@@ -312,11 +312,11 @@ cdef extern from "cerelink/cbsdk.h":
 
     ctypedef struct cbSdkTrialEvent:
         PROCTIME trial_start_time
-        uint16_t count
-        uint16_t chan[cbNUM_ANALOG_CHANS + 2]
-        uint32_t num_samples[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1]
-        PROCTIME * timestamps[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1]
-        void * waveforms[cbNUM_ANALOG_CHANS + 2]
+        uint32_t num_events
+        PROCTIME * timestamps  # [num_events]
+        uint16_t * channels    # [num_events]
+        uint16_t * units       # [num_events]
+        void * waveforms       # [num_events][cbMAX_PNTS]
 
     ctypedef struct cbSdkConnection:
         int nInPort          # Client port number

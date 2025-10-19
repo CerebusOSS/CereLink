@@ -262,13 +262,12 @@ typedef void (* cbSdkCallback)(uint32_t nInstance, const cbSdkPktType type, cons
 /// Trial spike events
 typedef struct cbSdkTrialEvent
 {
-    PROCTIME trial_start_time;  ///< Trial start time (device timestamp when trial started)
-    // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
-    uint16_t count; ///< Number of valid channels in this trial (up to cbNUM_ANALOG_CHANS+2)
-    uint16_t chan[cbMAXCHANS]; ///< channel numbers (1-based)
-    uint32_t num_samples[cbMAXCHANS][cbMAXUNITS + 1]; ///< number of samples
-    PROCTIME * timestamps[cbMAXCHANS][cbMAXUNITS + 1];   ///< Buffer to hold time stamps
-    void * waveforms[cbMAXCHANS]; ///< Buffer to hold waveforms or digital values
+    PROCTIME trial_start_time; ///< Trial start time (device timestamp when trial started)
+    uint32_t num_events;       ///< Number of events in the arrays
+    PROCTIME* timestamps;      ///< [num_events] - timestamps in chronological order
+    uint16_t* channels;        ///< [num_events] - channel IDs (1-based)
+    uint16_t* units;           ///< [num_events] - unit classification or digital data
+    void* waveforms;           ///< [num_events][cbMAX_PNTS] - spike waveforms (optional, can be nullptr)
 } cbSdkTrialEvent;
 
 /// Connection information
