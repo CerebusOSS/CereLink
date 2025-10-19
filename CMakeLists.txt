@@ -125,6 +125,7 @@ set_property(TARGET CCFUtils PROPERTY POSITION_INDEPENDENT_CODE ON)
 set( LIB_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk/cbsdk.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk/ContinuousData.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk/EventData.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib/cbhwlib.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib/cbHwlibHi.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib/InstNetwork.cpp

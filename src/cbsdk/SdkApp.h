@@ -23,6 +23,7 @@
 #include "../include/cerelink/cbsdk.h"
 #include "../include/cerelink/CCFUtils.h"
 #include "ContinuousData.h"
+#include "EventData.h"
 #include <mutex>
 #include <condition_variable>
 
@@ -182,39 +183,8 @@ protected:
     // Continuous data structures are defined in ContinuousData.h
     ContinuousData * m_CD;
 
-    // Structure to store all the variables associated with the event data
-    struct EventData
-    {
-        // We use cbMAXCHANS to size the arrays,
-        // even though that's more than the analog + digin + serial channels than are required,
-        // simply so we can index into these arrays using the channel number (-1).
-        // The alternative is to map between channel number and array index, but
-        // this is problematic with the recent change to 2-NSP support.
-        // Later I may add a m_ChIdxInType or m_ChIdxInBuff for such a map.
-        // - chadwick.boulay@gmail.com
-        uint32_t size; // default is cbSdk_EVENT_DATA_SAMPLES
-        PROCTIME * timestamps[cbMAXCHANS];
-        uint16_t * units[cbMAXCHANS];
-        int16_t  * waveform_data; // buffer with maximum size of array [cbNUM_ANALOG_CHANS][size][cbMAX_PNTS]
-        uint32_t write_index[cbMAXCHANS];                  // next index location to write data
-        uint32_t write_start_index[cbMAXCHANS];            // index location that writing began
-
-        void reset()
-        {
-            if (size)
-            {
-                for (uint32_t i = 0; i < (cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans() + 2); ++i)
-                {
-                    std::fill_n(timestamps[i], size, 0);
-                    std::fill_n(units[i], size, 0);
-                }
-            }
-            waveform_data = nullptr;
-            memset(write_index, 0, sizeof(write_index));
-            memset(write_start_index, 0, sizeof(write_start_index));
-        }
-
-    } * m_ED;
+    // Event data structures are defined in EventData.h
+    EventData * m_ED;
 
     // Structure to store all the variables associated with the comment data
     struct CommentData

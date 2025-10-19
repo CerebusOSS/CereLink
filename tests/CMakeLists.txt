@@ -30,6 +30,12 @@ add_executable(continuous_data_tests
     test_main.cpp
 )
 
+# EventData tests (for per-channel event storage refactoring)
+add_executable(event_data_tests
+    EventDataTests.cpp
+    test_main.cpp
+)
+
 # Include necessary headers
 target_include_directories(ccfutils_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/CCFUtils
@@ -82,3 +88,24 @@ target_link_libraries(continuous_data_tests
 )
 
 add_test(NAME continuous_data_tests COMMAND continuous_data_tests)
+
+# EventData tests need cbsdk headers
+target_include_directories(event_data_tests PRIVATE
+    ${PROJECT_SOURCE_DIR}/CCFUtils
+    ${PROJECT_SOURCE_DIR}/cbproto
+    ${PROJECT_SOURCE_DIR}/cbsdk
+    ${PROJECT_SOURCE_DIR}/src/cbsdk
+    ${PROJECT_SOURCE_DIR}/src/cbhwlib
+    ${PROJECT_SOURCE_DIR}/cbhwlib
+    ${PROJECT_SOURCE_DIR}/Central
+    ${PROJECT_SOURCE_DIR}/CentralCommon
+    ${PROJECT_SOURCE_DIR}/compat
+)
+
+target_link_libraries(event_data_tests
+    PRIVATE
+        gtest
+        cbsdk_static
+)
+
+add_test(NAME event_data_tests COMMAND event_data_tests)
