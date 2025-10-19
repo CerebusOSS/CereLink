@@ -41,7 +41,7 @@ public:
     void Open(uint32_t nInstance, int nInPort = cbNET_UDP_PORT_BCAST, int nOutPort = cbNET_UDP_PORT_CNT,
         LPCSTR szInIP = cbNET_UDP_ADDR_INST, LPCSTR szOutIP = cbNET_UDP_ADDR_CNT, int nRecBufSize = NSP_REC_BUF_SIZE, int nRange = 0);
 private:
-    void OnPktGroup(const cbPKT_GROUP * pkt);
+    void OnPktGroup(const cbPKT_GROUP * pkt) const;
     void OnPktEvent(const cbPKT_GENERIC * pPkt);
     void OnPktComment(const cbPKT_COMMENT * pPkt);
     void OnPktLog(const cbPKT_LOG * pPkt);
@@ -77,7 +77,7 @@ public:
                                   uint16_t endchan, uint32_t endmask, uint32_t endval,
                                   uint32_t uWaveforms, uint32_t uConts, uint32_t uEvents, uint32_t uComments, uint32_t uTrackings);
     cbSdkResult SdkGetChannelLabel(uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position) const;
-    cbSdkResult SdkSetChannelLabel(uint16_t channel, const char * label, uint32_t userflags, int32_t * position) const;
+    cbSdkResult SdkSetChannelLabel(uint16_t channel, const char * label, uint32_t userflags, const int32_t * position) const;
     cbSdkResult SdkGetTrialData(uint32_t bSeek, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                 cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
     cbSdkResult SdkInitTrialData(uint32_t bResetClock, cbSdkTrialEvent* trialevent, cbSdkTrialCont * trialcont,

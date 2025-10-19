@@ -79,9 +79,8 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 *
 * @param[in] pkt the sample group packet
 */
-void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
-{
-    uint32_t nChanProcStart = 0;
+void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt) const {
+    // uint32_t nChanProcStart = 0;
     uint32_t nChanProcMax = 0;
     cbPROCINFO isProcInfo;
     uint32_t nInstrument = 0;
@@ -112,7 +111,7 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
             if (pkt->cbpkt_header.instrument == nProc)
                 break;
 
-            nChanProcStart = nChanProcMax;
+            // nChanProcStart = nChanProcMax;
         }
     }
 #endif
@@ -1064,7 +1063,7 @@ cbSdkResult SdkApp::SdkOpen(const uint32_t nInstance, cbSdkConnectionType conTyp
     return CBSDKRESULT_SUCCESS;
 }
 
-CBSDKAPI    cbSdkResult cbSdkOpen(const uint32_t nInstance, const cbSdkConnectionType conType, cbSdkConnection con)
+CBSDKAPI    cbSdkResult cbSdkOpen(const uint32_t nInstance, const cbSdkConnectionType conType, const cbSdkConnection &con)
 {
     // check if the library is already open
     if (conType < 0 || conType >= CBSDKCONNECTION_CLOSED)
@@ -1787,7 +1786,7 @@ CBSDKAPI    cbSdkResult cbSdkGetChannelLabel(const uint32_t nInstance,
 * See docstring for cbSdkSetChannelLabel in cbsdk.h for more information.
 */
 
-cbSdkResult SdkApp::SdkSetChannelLabel(const uint16_t channel, const char * label, const uint32_t userflags, int32_t * position) const {
+cbSdkResult SdkApp::SdkSetChannelLabel(const uint16_t channel, const char * label, const uint32_t userflags, const int32_t * position) const {
     if (m_instInfo == 0)
         return CBSDKRESULT_CLOSED;
 
@@ -1797,7 +1796,7 @@ cbSdkResult SdkApp::SdkSetChannelLabel(const uint16_t channel, const char * labe
 }
 
 CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(const uint32_t nInstance,
-                                             const uint16_t channel, const char * label, const uint32_t userflags, int32_t * position)
+                                             const uint16_t channel, const char * label, const uint32_t userflags, const int32_t * position)
 {
     if (channel == 0 || channel > cbMAXCHANS)
         return CBSDKRESULT_INVALIDCHANNEL;
@@ -2873,8 +2872,8 @@ cbSdkResult cbSdkUpload(const char * szSrc, const char * szDstDir, const uint32_
     }
     const char * szBaseName = &szSrc[0];
     // Find the base name and use it on destination too
-    auto nLen = static_cast<uint32_t>(strlen(szSrc));
-    for (int i = nLen - 1; i >= 0; --i)
+    auto nLen = strlen(szSrc);
+    for (int i = static_cast<int>(nLen) - 1; i >= 0; --i)
     {
 #ifdef WIN32
         if (szSrc[i] == '/' || szSrc[i] == '\\')
@@ -2897,7 +2896,7 @@ cbSdkResult cbSdkUpload(const char * szSrc, const char * szDstDir, const uint32_
         free(pFileData);
         return CBSDKRESULT_INVALIDFILENAME;
     }
-    nLen = static_cast<uint32_t>(strlen(szBaseName)) + static_cast<uint32_t>(strlen(szDstDir)) + 1;
+    nLen = strlen(szBaseName) + strlen(szDstDir) + 1;
     if (nLen >= 64)
     {
         free(pFileData);
@@ -3017,7 +3016,7 @@ cbSdkResult SdkApp::SdkExtDoCommand(const cbSdkExtCmd * extCmd) const {
 }
 
 /// sdk stub for SdkApp::cbSdkExtCmd
-CBSDKAPI    cbSdkResult cbSdkExtDoCommand(const uint32_t nInstance, cbSdkExtCmd * extCmd)
+CBSDKAPI    cbSdkResult cbSdkExtDoCommand(const uint32_t nInstance, const cbSdkExtCmd * extCmd)
 {
     if (extCmd == nullptr)
         return CBSDKRESULT_NULLPTR;
@@ -3912,8 +3911,8 @@ SdkApp::SdkApp()
     , m_uTrialEndChannel(0), m_uTrialEndMask(0), m_uTrialEndValue(0)
     , m_uTrialWaveforms(0)
     , m_uTrialConts(0), m_uTrialEvents(0), m_uTrialComments(0)
-    , m_uTrialTrackings(0), m_bWithinTrial(false), m_uTrialStartTime(0), m_nextTrialStartTime(0)
-    , m_uCbsdkTime(0), m_CD(nullptr), m_ED(nullptr), m_CMT(nullptr), m_TR(nullptr)
+    , m_uTrialTrackings(0), m_bWithinTrial(false), m_uTrialStartTime(0), m_uCbsdkTime(0)
+    , m_nextTrialStartTime(0), m_CD(nullptr), m_ED(nullptr), m_CMT(nullptr), m_TR(nullptr)
 {
     memset(&m_lastPktVideoSynch, 0, sizeof(m_lastPktVideoSynch));
     memset(&m_bChannelMask, 0, sizeof(m_bChannelMask));

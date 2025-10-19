@@ -489,7 +489,7 @@ CBSDKAPI    cbSdkResult cbSdkWriteCCF(uint32_t nInstance, cbSdkCCF * pData, cons
  */
 CBSDKAPI    cbSdkResult cbSdkOpen(uint32_t nInstance,
                                   cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT,
-                                  cbSdkConnection con = cbSdkConnection());
+                                  const cbSdkConnection &con = cbSdkConnection());
 
 /**
  * @brief Get the current connection and instrument type for a given instance.
@@ -625,7 +625,7 @@ CBSDKAPI    cbSdkResult cbSdkGetChannelLabel(uint32_t nInstance, uint16_t channe
  * @param position Optional pointer to 4-element int32_t array (e.g. XYZ + reserved) or nullptr to leave unchanged
  * @return cbSdkResult Success or error code
  */
-CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(uint32_t nInstance, uint16_t channel, const char * label, uint32_t userflags, int32_t * position); // Set channel label
+CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(uint32_t nInstance, uint16_t channel, const char * label, uint32_t userflags, const int32_t * position); // Set channel label
 
 /* Get channel capabilities */
 // CBSDKAPI    cbSdkResult cbSdkIsChanAnalogIn(uint32_t nInstance, uint16_t channel, uint32_t* bResult);
@@ -813,7 +813,7 @@ CBSDKAPI    cbSdkResult cbSdkSetSynchOutput(uint32_t nInstance, uint16_t channel
  * @param extCmd Pointer to command structure (cmd + payload string)
  * @return cbSdkResult Success or error code (CBSDKRESULT_INVALIDPARAM if extCmd null)
  */
-CBSDKAPI    cbSdkResult cbSdkExtDoCommand(uint32_t nInstance, cbSdkExtCmd * extCmd);
+CBSDKAPI    cbSdkResult cbSdkExtDoCommand(uint32_t nInstance, const cbSdkExtCmd * extCmd);
 
 /**
  * @brief Configure analog output channel for waveform generation or monitoring.
