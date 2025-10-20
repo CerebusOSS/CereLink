@@ -1,5 +1,6 @@
 #include "EventData.h"
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 
 EventData::EventData() :
@@ -18,9 +19,13 @@ EventData::~EventData()
     cleanup();
 }
 
-bool EventData::allocate(uint32_t buffer_size)
+bool EventData::allocate(const uint32_t buffer_size)
 {
-    if (m_size == buffer_size && m_timestamps != nullptr)
+    // Allocate buffer_size + 1 internally to hide the "one empty slot" ring buffer detail
+    // This allows users to store exactly buffer_size events
+    const uint32_t internal_size = buffer_size + 1;
+
+    if (m_size == internal_size && m_timestamps != nullptr)
     {
         // Already allocated with same size - just reset
         reset();
@@ -28,23 +33,23 @@ bool EventData::allocate(uint32_t buffer_size)
     }
 
     // Clean up old allocation if size changed
-    if (m_size != buffer_size)
+    if (m_size != internal_size)
     {
         cleanup();
     }
 
     try {
         // Allocate flat arrays
-        m_timestamps = new PROCTIME[buffer_size];
-        std::fill_n(m_timestamps, buffer_size, static_cast<PROCTIME>(0));
+        m_timestamps = new PROCTIME[internal_size];
+        std::fill_n(m_timestamps, internal_size, static_cast<PROCTIME>(0));
 
-        m_channels = new uint16_t[buffer_size];
-        std::fill_n(m_channels, buffer_size, static_cast<uint16_t>(0));
+        m_channels = new uint16_t[internal_size];
+        std::fill_n(m_channels, internal_size, static_cast<uint16_t>(0));
 
-        m_units = new uint16_t[buffer_size];
-        std::fill_n(m_units, buffer_size, static_cast<uint16_t>(0));
+        m_units = new uint16_t[internal_size];
+        std::fill_n(m_units, internal_size, static_cast<uint16_t>(0));
 
-        m_size = buffer_size;
+        m_size = internal_size;
         m_write_index = 0;
         m_write_start_index = 0;
         m_waveform_data = nullptr;  // Managed externally
@@ -73,7 +78,7 @@ bool EventData::allocate(uint32_t buffer_size)
     }
 }
 
-bool EventData::writeEvent(uint16_t channel, PROCTIME timestamp, uint16_t unit)
+bool EventData::writeEvent(const uint16_t channel, const PROCTIME timestamp, const uint16_t unit)
 {
     if (channel == 0 || channel > cbMAXCHANS)
         return false;  // Invalid channel
@@ -163,11 +168,25 @@ uint32_t EventData::getNumEvents() const
 
 void EventData::setWriteStartIndex(uint32_t index)
 {
+    // Assert catches bugs in debug builds
+    assert((m_size == 0 || index < m_size) && "setWriteStartIndex: index out of bounds");
+
+    // Defensive check in release builds
+    if (m_size > 0 && index >= m_size)
+        return;
+
     m_write_start_index = index;
 }
 
 void EventData::setWriteIndex(uint32_t index)
 {
+    // Assert catches bugs in debug builds
+    assert((m_size == 0 || index < m_size) && "setWriteIndex: index out of bounds");
+
+    // Defensive check in release builds
+    if (m_size > 0 && index >= m_size)
+        return;
+
     m_write_index = index;
 }
 

@@ -56,6 +56,7 @@ TEST_F(EventDataTest, AllocateWithSameSizeReusesAllocation) {
     const uint32_t buffer_size = 100;
 
     ASSERT_TRUE(ed->allocate(buffer_size));
+    const PROCTIME* pOrigTimestamps = ed->getTimestamps();
 
     // Write some data
     ed->writeEvent(1, 12345, 1);
@@ -67,16 +68,21 @@ TEST_F(EventDataTest, AllocateWithSameSizeReusesAllocation) {
     EXPECT_EQ(ed->getSize(), buffer_size);
     EXPECT_EQ(ed->getWriteIndex(), 0u);  // Reset
     EXPECT_TRUE(ed->isAllocated());
+    const PROCTIME* pNewTimestamps = ed->getTimestamps();
+    EXPECT_EQ(pOrigTimestamps, pNewTimestamps);  // Same allocation
 }
 
 // Test 4: allocate() with different size reallocates
 TEST_F(EventDataTest, AllocateWithDifferentSizeReallocates) {
     ASSERT_TRUE(ed->allocate(100));
     EXPECT_EQ(ed->getSize(), 100u);
+    const PROCTIME* pOrigTimestamps = ed->getTimestamps();
 
     ASSERT_TRUE(ed->allocate(200));
     EXPECT_EQ(ed->getSize(), 200u);
     EXPECT_TRUE(ed->isAllocated());
+    const PROCTIME* pNewTimestamps = ed->getTimestamps();
+    EXPECT_NE(pOrigTimestamps, pNewTimestamps);  // New allocation
 }
 
 // Test 5: writeEvent() stores data correctly
@@ -87,7 +93,7 @@ TEST_F(EventDataTest, WriteEventStoresDataCorrectly) {
     const PROCTIME timestamp = 123456;
     const uint16_t unit = 2;
 
-    bool overflow = ed->writeEvent(channel, timestamp, unit);
+    const bool overflow = ed->writeEvent(channel, timestamp, unit);
 
     EXPECT_FALSE(overflow);
     EXPECT_EQ(ed->getWriteIndex(), 1u);
@@ -100,8 +106,9 @@ TEST_F(EventDataTest, WriteEventStoresDataCorrectly) {
 TEST_F(EventDataTest, WriteEventAdvancesWriteIndex) {
     ASSERT_TRUE(ed->allocate(100));
 
+    bool overflow = false;
     for (uint32_t i = 0; i < 5; ++i) {
-        bool overflow = ed->writeEvent(10, 1000 + i, 1);
+        overflow = ed->writeEvent(10, 1000 + i, 1);
         EXPECT_FALSE(overflow);
         EXPECT_EQ(ed->getWriteIndex(), i + 1);
     }
@@ -112,22 +119,21 @@ TEST_F(EventDataTest, WriteEventDetectsOverflow) {
     const uint32_t buffer_size = 10;
     ASSERT_TRUE(ed->allocate(buffer_size));
 
-    // Fill buffer to capacity - the last write (10th) will detect overflow
+    // Fill buffer to capacity (buffer_size writes should all succeed)
     bool overflow = false;
     for (uint32_t i = 0; i < buffer_size; ++i) {
         overflow = ed->writeEvent(1, i, 0);
-        if (i < buffer_size - 1) {
-            EXPECT_FALSE(overflow);
-        }
+        EXPECT_FALSE(overflow);  // No overflow yet - we have capacity for buffer_size events
     }
 
-    // The 10th write should have detected overflow
+    // The next write (buffer_size + 1) should detect overflow
+    overflow = ed->writeEvent(1, 999, 0);
     EXPECT_TRUE(overflow);
     EXPECT_EQ(ed->getWriteIndex(), 0u);  // Wrapped around
     EXPECT_EQ(ed->getWriteStartIndex(), 1u);  // Advanced
 
-    // Next write should also overflow
-    overflow = ed->writeEvent(1, 999, 0);
+    // Subsequent writes should also overflow
+    overflow = ed->writeEvent(1, 1000, 0);
     EXPECT_TRUE(overflow);
 
     // Write start index should have advanced again
@@ -145,17 +151,17 @@ TEST_F(EventDataTest, WriteEventWrapsAroundCorrectly) {
         ed->writeEvent(3, 1000 + i, static_cast<uint16_t>(i % 6));
     }
 
-    // After 8 writes into a buffer of 5:
-    // - write_index should be at 3 (next write position)
-    // - write_start_index should be at 4 (oldest valid data)
-    EXPECT_EQ(ed->getWriteIndex(), 3u);
-    EXPECT_EQ(ed->getWriteStartIndex(), 4u);
+    // After 8 writes into a buffer of capacity 5 (internal size 6):
+    // - write_index should be at 2 (next write position)
+    // - write_start_index should be at 3 (oldest valid data)
+    EXPECT_EQ(ed->getWriteIndex(), 2u);
+    EXPECT_EQ(ed->getWriteStartIndex(), 3u);
 
     // Buffer contains data from writes 3-7 (the last 5 writes)
-    // At indices: [5, 6, 7, 3, 4] -> timestamps [1005, 1006, 1007, 1003, 1004]
-    EXPECT_EQ(ed->getTimestamps()[0], 1005u);  // From write i=5
-    EXPECT_EQ(ed->getTimestamps()[1], 1006u);  // From write i=6
-    EXPECT_EQ(ed->getTimestamps()[2], 1007u);  // From write i=7
+    // At indices: [6, 7, 2, 3, 4, 5] -> timestamps [1006, 1007, 1002, 1003, 1004, 1005]
+    EXPECT_EQ(ed->getTimestamps()[0], 1006u);  // From write i=6
+    EXPECT_EQ(ed->getTimestamps()[1], 1007u);  // From write i=7
+    EXPECT_EQ(ed->getTimestamps()[2], 1002u);  // From write i=2
     EXPECT_EQ(ed->getTimestamps()[3], 1003u);  // From write i=3
     EXPECT_EQ(ed->getTimestamps()[4], 1004u);  // From write i=4
 }
@@ -176,6 +182,7 @@ TEST_F(EventDataTest, WriteEventWithInvalidChannelReturnsFalse) {
 // Test 10: reset() clears data but preserves allocation
 TEST_F(EventDataTest, ResetClearsDataButPreservesAllocation) {
     ASSERT_TRUE(ed->allocate(100));
+    const PROCTIME* pOrigTimestamps = ed->getTimestamps();
 
     // Write some data from multiple channels
     ed->writeEvent(1, 1000, 1);
@@ -198,6 +205,8 @@ TEST_F(EventDataTest, ResetClearsDataButPreservesAllocation) {
     // Allocation should remain
     EXPECT_TRUE(ed->isAllocated());
     EXPECT_EQ(ed->getSize(), 100u);
+    const PROCTIME* pNewTimestamps = ed->getTimestamps();
+    EXPECT_EQ(pOrigTimestamps, pNewTimestamps);  // Same allocation
 }
 
 // Test 11: cleanup() deallocates all memory
@@ -288,6 +297,26 @@ TEST_F(EventDataTest, SettersWorkCorrectly) {
     EXPECT_EQ(ed->getWriteIndex(), 50u);
     EXPECT_EQ(ed->getWriteStartIndex(), 10u);
 }
+
+// Test 16b: setWriteIndex() and setWriteStartIndex() reject out-of-bounds values
+// Note: Only test defensive behavior in release builds - debug builds will assert
+#ifdef NDEBUG
+TEST_F(EventDataTest, SettersRejectOutOfBounds) {
+    ASSERT_TRUE(ed->allocate(100));
+
+    // Set valid initial values
+    ed->setWriteIndex(50);
+    ed->setWriteStartIndex(10);
+
+    // Try to set out-of-bounds values (should be silently ignored in release)
+    ed->setWriteIndex(200);  // Beyond internal size of 101
+    ed->setWriteStartIndex(200);
+
+    // Values should remain unchanged
+    EXPECT_EQ(ed->getWriteIndex(), 50u);
+    EXPECT_EQ(ed->getWriteStartIndex(), 10u);
+}
+#endif  // NDEBUG
 
 // Test 17: Events from multiple channels are stored in time order
 TEST_F(EventDataTest, EventsFromMultipleChannelsStoredInTimeOrder) {
@@ -538,21 +567,21 @@ TEST_F(EventDataTest, GetNumEventsHandlesWraparound) {
     const uint32_t buffer_size = 10;
     ASSERT_TRUE(ed->allocate(buffer_size));
 
-    // Fill buffer (the 10th write will detect overflow)
+    // Fill buffer (buffer_size writes, no overflow yet)
     for (uint32_t i = 0; i < buffer_size; ++i) {
         ed->writeEvent(3, i, 0);
     }
 
-    // After buffer_size writes, we have buffer_size-1 events available
-    EXPECT_EQ(ed->getNumEvents(), buffer_size - 1);
+    // After buffer_size writes, we have buffer_size events available
+    EXPECT_EQ(ed->getNumEvents(), buffer_size);
 
-    // Write more (will continue to overflow)
+    // Write more (will cause overflow)
     for (uint32_t i = 0; i < 5; ++i) {
         ed->writeEvent(3, 100 + i, 0);
     }
 
-    // Should still report buffer_size-1 events (oldest were overwritten)
-    EXPECT_EQ(ed->getNumEvents(), buffer_size - 1);
+    // Should still report buffer_size events (oldest were overwritten)
+    EXPECT_EQ(ed->getNumEvents(), buffer_size);
 }
 
 // Test 27: readEvents() reads flat arrays correctly
@@ -686,20 +715,21 @@ TEST_F(EventDataTest, ReadEventsHandlesWraparound) {
         ed->writeEvent(1, 1000 + i, 0);
     }
 
-    // Read all available events (should be buffer_size - 1 = 4)
+    // Read all available events (should be buffer_size = 5)
     PROCTIME timestamps[10] = {};
     uint16_t channels[10] = {};
     uint16_t units[10] = {};
 
     const uint32_t num_read = ed->readEvents(timestamps, channels, units, 10, false);
 
-    EXPECT_EQ(num_read, 4u);
+    EXPECT_EQ(num_read, 5u);
 
-    // Should read events 4-7 (the last 4 writes before overflow)
-    EXPECT_EQ(timestamps[0], 1004u);
-    EXPECT_EQ(timestamps[1], 1005u);
-    EXPECT_EQ(timestamps[2], 1006u);
-    EXPECT_EQ(timestamps[3], 1007u);
+    // Should read events 3-7 (the last 5 writes)
+    EXPECT_EQ(timestamps[0], 1003u);
+    EXPECT_EQ(timestamps[1], 1004u);
+    EXPECT_EQ(timestamps[2], 1005u);
+    EXPECT_EQ(timestamps[3], 1006u);
+    EXPECT_EQ(timestamps[4], 1007u);
 }
 
 // Test 32: readEvents() with null pointers for unwanted data

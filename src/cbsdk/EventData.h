@@ -50,7 +50,7 @@ public:
     void cleanup();
 
     // Getters for read access
-    [[nodiscard]] uint32_t getSize() const { return m_size; }
+    [[nodiscard]] uint32_t getSize() const { return m_size > 0 ? m_size - 1 : 0; }  // Return usable capacity
     [[nodiscard]] uint32_t getWriteIndex() const { return m_write_index; }
     [[nodiscard]] uint32_t getWriteStartIndex() const { return m_write_start_index; }
     [[nodiscard]] uint32_t getNumEvents() const;  // Number of events currently in buffer
