@@ -386,7 +386,7 @@ TEST_F(EventDataTest, ParallelWritesToSameChannel) {
     std::atomic<int> successful_writes(0);
 
     for (int t = 0; t < NUM_THREADS; ++t) {
-        threads.emplace_back([this, t, &successful_writes]() {
+        threads.emplace_back([this, t, &successful_writes, WRITES_PER_THREAD, CHANNEL]() {
             for (int i = 0; i < WRITES_PER_THREAD; ++i) {
                 std::lock_guard<std::mutex> lock(ed->m_mutex);
                 const PROCTIME timestamp = t * 1000 + i;
@@ -417,7 +417,7 @@ TEST_F(EventDataTest, ParallelWritesToDifferentChannels) {
     std::vector<std::thread> threads;
 
     for (int t = 0; t < NUM_THREADS; ++t) {
-        threads.emplace_back([this, t]() {
+        threads.emplace_back([this, t, WRITES_PER_THREAD]() {
             const uint16_t channel = t + 1;  // Each thread writes to different channel
 
             for (int i = 0; i < WRITES_PER_THREAD; ++i) {
@@ -452,7 +452,7 @@ TEST_F(EventDataTest, ConcurrentReadsAndWritesWithMutex) {
 
     // Writer threads
     for (int t = 0; t < NUM_WRITER_THREADS; ++t) {
-        threads.emplace_back([this, t]() {
+        threads.emplace_back([this, t, OPERATIONS_PER_THREAD]() {
             for (int i = 0; i < OPERATIONS_PER_THREAD; ++i) {
                 std::lock_guard<std::mutex> lock(ed->m_mutex);
                 ed->writeEvent(1, t * 1000 + i, t % 6);
@@ -463,7 +463,7 @@ TEST_F(EventDataTest, ConcurrentReadsAndWritesWithMutex) {
 
     // Reader threads
     for (int t = 0; t < NUM_READER_THREADS; ++t) {
-        threads.emplace_back([this, &read_successes]() {
+        threads.emplace_back([this, &read_successes, OPERATIONS_PER_THREAD]() {
             for (int i = 0; i < OPERATIONS_PER_THREAD; ++i) {
                 std::lock_guard<std::mutex> lock(ed->m_mutex);
                 const PROCTIME* timestamps = ed->getTimestamps();
