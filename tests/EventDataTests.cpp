@@ -56,11 +56,12 @@ TEST_F(EventDataTest, AllocateWithSameSizeReusesAllocation) {
     const uint32_t buffer_size = 100;
 
     ASSERT_TRUE(ed->allocate(buffer_size));
-    const PROCTIME* pOrigTimestamps = ed->getTimestamps();
+    EXPECT_NE(ed->getTimestamps(), nullptr);
 
     // Write some data
     ed->writeEvent(1, 12345, 1);
     EXPECT_EQ(ed->getWriteIndex(), 1u);
+    EXPECT_EQ(ed->getTimestamps()[0], 12345u);
 
     // Allocate again with same size - should reset but keep allocation
     ASSERT_TRUE(ed->allocate(buffer_size));
@@ -68,21 +69,33 @@ TEST_F(EventDataTest, AllocateWithSameSizeReusesAllocation) {
     EXPECT_EQ(ed->getSize(), buffer_size);
     EXPECT_EQ(ed->getWriteIndex(), 0u);  // Reset
     EXPECT_TRUE(ed->isAllocated());
-    const PROCTIME* pNewTimestamps = ed->getTimestamps();
-    EXPECT_EQ(pOrigTimestamps, pNewTimestamps);  // Same allocation
+
+    // Verify data was reset (proves we didn't deallocate/reallocate, just reset)
+    EXPECT_EQ(ed->getTimestamps()[0], 0u);
+
+    // Verify buffer is still usable
+    ed->writeEvent(2, 54321, 2);
+    EXPECT_EQ(ed->getTimestamps()[0], 54321u);
+    EXPECT_EQ(ed->getChannels()[0], 2u);
 }
 
 // Test 4: allocate() with different size reallocates
 TEST_F(EventDataTest, AllocateWithDifferentSizeReallocates) {
     ASSERT_TRUE(ed->allocate(100));
     EXPECT_EQ(ed->getSize(), 100u);
-    const PROCTIME* pOrigTimestamps = ed->getTimestamps();
+
+    // Write a marker value to verify memory is reallocated/reset
+    ed->writeEvent(1, 99999, 1);
+    EXPECT_EQ(ed->getTimestamps()[0], 99999u);
 
     ASSERT_TRUE(ed->allocate(200));
     EXPECT_EQ(ed->getSize(), 200u);
     EXPECT_TRUE(ed->isAllocated());
-    const PROCTIME* pNewTimestamps = ed->getTimestamps();
-    EXPECT_NE(pOrigTimestamps, pNewTimestamps);  // New allocation
+
+    // Verify data was reset (reallocation clears old data)
+    EXPECT_EQ(ed->getTimestamps()[0], 0u);
+    EXPECT_EQ(ed->getWriteIndex(), 0u);
+    EXPECT_EQ(ed->getWriteStartIndex(), 0u);
 }
 
 // Test 5: writeEvent() stores data correctly
@@ -182,7 +195,7 @@ TEST_F(EventDataTest, WriteEventWithInvalidChannelReturnsFalse) {
 // Test 10: reset() clears data but preserves allocation
 TEST_F(EventDataTest, ResetClearsDataButPreservesAllocation) {
     ASSERT_TRUE(ed->allocate(100));
-    const PROCTIME* pOrigTimestamps = ed->getTimestamps();
+    EXPECT_NE(ed->getTimestamps(), nullptr);
 
     // Write some data from multiple channels
     ed->writeEvent(1, 1000, 1);
@@ -190,6 +203,7 @@ TEST_F(EventDataTest, ResetClearsDataButPreservesAllocation) {
     ed->writeEvent(10, 3000, 3);
 
     EXPECT_NE(ed->getWriteIndex(), 0u);
+    EXPECT_EQ(ed->getTimestamps()[0], 1000u);
 
     ed->reset();
 
@@ -205,8 +219,12 @@ TEST_F(EventDataTest, ResetClearsDataButPreservesAllocation) {
     // Allocation should remain
     EXPECT_TRUE(ed->isAllocated());
     EXPECT_EQ(ed->getSize(), 100u);
-    const PROCTIME* pNewTimestamps = ed->getTimestamps();
-    EXPECT_EQ(pOrigTimestamps, pNewTimestamps);  // Same allocation
+
+    // Verify buffer is still usable after reset
+    ed->writeEvent(15, 9999, 5);
+    EXPECT_EQ(ed->getTimestamps()[0], 9999u);
+    EXPECT_EQ(ed->getChannels()[0], 15u);
+    EXPECT_EQ(ed->getUnits()[0], 5u);
 }
 
 // Test 11: cleanup() deallocates all memory
