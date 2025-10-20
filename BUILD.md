@@ -2,9 +2,19 @@
 
 Most users will only need to download directly from the [releases page](https://github.com/CerebusOSS/CereLink/releases).
 
+| Platform      | C++ Packages (.deb/.zip) | Python Wheels |
+|---------------|--------------------------|---------------|
+| windows-x64   | ✅                        | ✅             |
+| windows-arm64 | ✅                        | ✅             |
+| macOS-latest  | ✅                        | ✅             |
+| jammy         | ✅                        | ❌             |
+| ubuntu-latest | ✅                        | ✅ (manylinux) |
+| bookworm-x64  | ✅                        | ❌             |
+| linux-arm64   | ✅                        | ✅ (aarch64)   |
+
 Other users who just want the CLI commands, or if the below instructions aren't working for you, should check out the GitHub Actions [workflow scripts](https://github.com/CerebusOSS/CereLink/blob/master/.github/workflows/build_cbsdk.yml).
 
-Continue here only if you want to build CereLink (and cerebus.cbpy) from source.
+Continue here only if you want to build CereLink (Python cerelink) from source.
 
 ## Requirements
 
@@ -49,16 +59,20 @@ Note: This may generate an error related to the CLI builds. Please see further i
     * To build Octave binaries. Will only build if Octave development libraries are found.
 * `-DCBSDK_BUILD_TEST=ON`
 * `-DCBSDK_BUILD_SAMPLE=ON`
-* `-DCBSDK_BUILD_HDF5=ON`
-    * Should only build if HDF5 found, but I have had to manually disable this in my builds.
-* `-DMatlab_ROOT_DIR=<path/to/matlab/root>`
-    * This should only be necessary if cmake cannot find Matlab automatically.
-    * e.g.: `-DMatlab_ROOT_DIR=/Applications/MATLAB_R2016a.app/`
-    * Alternatively, you could populate the ../Matlab directories with the Matlab include and lib files.
-* `-DCBMEX_INSTALL_PREFIX` can be used to install cbmex to given directory.
+* `-DCBSDK_BUILD_TOOLS=ON`
+    * NSX to HDF5 tool should only build if HDF5 found.
+    * A few C++ applications in `tools/loop_tester` to test data pulling stability.
 * `-DCBSDK_BUILD_CLI=ON`
     * to build the C#/CLI bindings. Buggy.
 * `-DCBPROTO_311=OFF`
     * Set this to ON to compile CereLink to work with NSPs using protocol 3.11 (firmware 7.0x).
     * Matlab and Python wrappers not supported in this mode.
     * Cannot run alongside Central x86 version (if in "Program Files (x86)") because the Qt6 dependency restricts compilation targets to x64. But it works fine on other computers or if Central is not running.
+
+#### Extra Options for Matlab / cbmex
+
+* `-DMatlab_ROOT_DIR=<path/to/matlab/root>`
+    * This should only be necessary if cmake cannot find Matlab automatically.
+    * e.g.: `-DMatlab_ROOT_DIR=/Applications/MATLAB_R2016a.app/`
+    * Alternatively, you could populate the ../Matlab directories with the Matlab include and lib files.
+* `-DCBMEX_INSTALL_PREFIX` can be used to install cbmex to given directory.

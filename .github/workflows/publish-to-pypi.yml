@@ -1,0 +1,48 @@
+name: Publish Python Package to PyPI
+
+on:
+  workflow_run:
+    workflows: ["Build and Release"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+  id-token: write  # Required for trusted publishing to PyPI
+
+jobs:
+  publish:
+    # Only run if the build workflow succeeded and was triggered by a published release.
+    # This filters out runs from push, pull_request, and workflow_dispatch triggers.
+    # Note: build_cbsdk.yml only responds to 'release: types: [published]', so
+    # if event == 'release', it must be a published release.
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'release'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify trigger event
+        run: |
+          echo "Workflow was triggered by: ${{ github.event.workflow_run.event }}"
+          echo "Workflow conclusion: ${{ github.event.workflow_run.conclusion }}"
+          echo "Workflow head branch: ${{ github.event.workflow_run.head_branch }}"
+
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: python-wheels-*
+          path: dist/
+          merge-multiple: true
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List downloaded wheels
+        run: |
+          echo "Downloaded wheels:"
+          ls -lh dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

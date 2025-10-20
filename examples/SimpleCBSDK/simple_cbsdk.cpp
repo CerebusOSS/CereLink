@@ -99,7 +99,7 @@ cbSdkVersion getVersion()
     // Library version can be read even before library open (return value is a warning)
     //  actual NSP version however needs library to be open
     cbSdkVersion ver;
-    cbSdkResult res = cbSdkGetVersion(INST, &ver);
+    const cbSdkResult res = cbSdkGetVersion(INST, &ver);
     if (res != CBSDKRESULT_SUCCESS)
     {
         printf("Unable to determine instrument version\n");
@@ -117,7 +117,7 @@ cbSdkVersion getVersion()
 cbSdkResult open(const LPCSTR inst_ip, const int inst_port, const LPCSTR client_ip)
 {
     // Try to get the version. Should be a warning because we are not yet open.
-    cbSdkVersion ver = getVersion();
+    getVersion();
 
     // Open the device using default connection type.
     cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
@@ -152,7 +152,7 @@ cbSdkResult open(const LPCSTR inst_ip, const int inst_port, const LPCSTR client_
         char strInstrument[CBSDKINSTRUMENT_COUNT + 1][13] = {"NSP", "nPlay", "Local NSP", "Remote nPlay", "Unknown"};
 
         // Now that we are open, get the version again.
-        ver = getVersion();
+        const cbSdkVersion ver = getVersion();
 
         // Summary results.
         printf("%s real-time interface to %s (%d.%02d.%02d.%02d; proto %d.%02d) successfully initialized\n",
@@ -202,13 +202,20 @@ cbSdkResult close()
 
 /////////////////////////////////////////////////////////////////////////////
 // The test suit main entry
-int main(int argc, char *argv[])
+int main(const int argc, char *argv[])
 {
-    LPCSTR inst_ip = "";
+    auto inst_ip = "";
     int inst_port = cbNET_UDP_PORT_CNT;
-    LPCSTR client_ip = "";
+    auto client_ip = "";
     if (argc > 1) {inst_ip = argv[1];}
-    if (argc > 2) {inst_port = strtol(argv[2], nullptr, 10);}
+    if (argc > 2) {
+        try {
+            inst_port = std::stoi(argv[2]);
+        } catch (const std::exception&) {
+            printf("Error: Invalid port number '%s'\n", argv[2]);
+            return 1;
+        }
+    }
     if (argc > 3) { client_ip = argv[3]; }
     cbSdkResult res = open(inst_ip, inst_port, client_ip);
     if (res < 0)
@@ -216,8 +223,7 @@ int main(int argc, char *argv[])
         printf("open failed (%d)!\n", res);
         return 0;
     }
-    else
-        printf("open succeeded\n");
+    printf("open succeeded\n");
 
     res = getConfig();
     if (res < 0)
@@ -225,8 +231,7 @@ int main(int argc, char *argv[])
         printf("getConfig failed (%d)!\n", res);
         return 0;
     }
-    else
-        printf("getConfig succeeded\n");
+    printf("getConfig succeeded\n");
 
     res = close();
     if (res < 0)

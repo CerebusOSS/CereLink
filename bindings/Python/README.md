@@ -1,4 +1,4 @@
-# cerebus.cbpy
+# cerelink
 
 This is a Python wrapper for the CereLink (cbsdk) library to configure, pull data, and receive callbacks from Blackrock Neurotech devices.
 
@@ -9,9 +9,9 @@ This is a Python wrapper for the CereLink (cbsdk) library to configure, pull dat
 * Download a wheel from the releases page or [build it yourself](#build-instructions).
 * Activate a Python environment with pip, Cython, and numpy
 * Install the wheel: `python -m pip install path\to\filename.whl`
-* Test with `python -c "from cerebus import cbpy; cbpy.open(parameter=cbpy.defaultConParams())"`
+* Test with `python -c "from cerelink import cbpy; cbpy.open(parameter=cbpy.defaultConParams())"`
     * You might get `RuntimeError: -30, Instrument is offline.`. That's OK, depending on your device and network settings.
-* See [cerebuswrapper](https://github.com/CerebusOSS/cerebuswrapper) for a tool that provides a simplified interface to cerebus.cbpy.
+* See [cerebuswrapper](https://github.com/CerebusOSS/cerebuswrapper) for a tool that provides a simplified interface to cerelink.
 
 ## Build Instructions
 
@@ -28,4 +28,22 @@ This is a Python wrapper for the CereLink (cbsdk) library to configure, pull dat
     * activate an environment matching the target machine,
     * `python -m pip wheel bindings/Python -w bindings/Python/dist`
     * The wheels will be in the `bindings/Python/dist` folder.
-    * See the [Wiki](https://github.com/CerebusOSS/CereLink/wiki/cerebus.cbpy) for more information.
+    * See the [Wiki](https://github.com/CerebusOSS/CereLink/wiki/cerelink) for more information.
+
+## NumPy Compatibility
+
+This project is built against **NumPy 2.x**. Users must have NumPy 2.0 or later installed.
+If you are having trouble, try to run the following command and report your results:
+`python -c "import numpy; print(f'NumPy: {numpy.__version__}'); from cerelink import cbpy; print('Success!')"`
+
+If you need to support older NumPy 1.x versions, you can build wheels with:
+
+```toml
+[build-system]
+requires = ["setuptools", "wheel", "cython", "oldest-supported-numpy", "setuptools-scm"]
+
+[project]
+dependencies = [
+  "numpy>=1.23.0,<2.0",
+]
+```

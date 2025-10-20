@@ -21,10 +21,10 @@
 #ifndef INSTNETWORK_H_INCLUDED
 #define INSTNETWORK_H_INCLUDED
 
-#include "debugmacs.h"
+#include "../cbproto/debugmacs.h"
 #include "../include/cerelink/cbhwlib.h"
 #include "cbHwlibHi.h"
-#include "Instrument.h"
+#include "../central/Instrument.h"
 #include "cki_common.h"
 #include <vector>
 #include <string>
@@ -96,8 +96,8 @@ protected:
     void OnWaitEvent(); // Non-stand-alone networking
     inline void CheckForLinkFailure(uint32_t nTicks, uint32_t nCurrentPacketCount); // Check link failure
 private:
-    void UpdateSortModel(const cbPKT_SS_MODELSET & rUnitModel);
-    void UpdateBasisModel(const cbPKT_FS_BASIS & rBasisModel);
+    void UpdateSortModel(const cbPKT_SS_MODELSET & rUnitModel) const;
+    void UpdateBasisModel(const cbPKT_FS_BASIS & rBasisModel) const;
 private:
     static const uint32_t MAX_NUM_OF_PACKETS_TO_PROCESS_PER_PASS;
     std::unique_ptr<std::thread> m_thread; // The network thread

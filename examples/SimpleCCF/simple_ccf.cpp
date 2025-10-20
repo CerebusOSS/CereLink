@@ -18,18 +18,13 @@
 
 #include <map>
 #include <string>
-#include <vector>
-#include <stdio.h>
 #include <iostream>
-#ifdef WIN32
-#include <conio.h>
-#endif //win32
-#include <inttypes.h>
+#include <cinttypes>
 #include <cerelink/cbsdk.h>
 
 #define INST 0
 
-typedef struct _cbsdk_config {
+typedef struct cbsdk_config {
     uint32_t nInstance;
     uint32_t bActive;
     uint16_t begchan;
@@ -47,7 +42,7 @@ typedef struct _cbsdk_config {
     bool bAbsolute;
 } cbsdk_config;
 
-void handleResult(cbSdkResult res)
+void handleResult(const cbSdkResult res)
 {
     switch (res)
     {
@@ -117,7 +112,7 @@ cbSdkVersion getVersion()
     // Library version can be read even before library open (return value is a warning)
     //  actual NSP version however needs library to be open
     cbSdkVersion ver;
-    cbSdkResult res = cbSdkGetVersion(INST, &ver);
+    const cbSdkResult res = cbSdkGetVersion(INST, &ver);
     if (res != CBSDKRESULT_SUCCESS)
     {
         printf("Unable to determine instrument version\n");
@@ -134,7 +129,7 @@ cbSdkVersion getVersion()
 cbSdkResult open(const LPCSTR inst_ip, const int inst_port, const LPCSTR client_ip)
 {
     // Try to get the version. Should be a warning because we are not yet open.
-    cbSdkVersion ver = getVersion();
+    getVersion();
 
     // Open the device using default connection type.
     cbSdkConnectionType conType = CBSDKCONNECTION_DEFAULT;
@@ -169,7 +164,7 @@ cbSdkResult open(const LPCSTR inst_ip, const int inst_port, const LPCSTR client_
         char strInstrument[CBSDKINSTRUMENT_COUNT + 1][13] = {"NSP", "nPlay", "Local NSP", "Remote nPlay", "Unknown"};
 
         // Now that we are open, get the version again.
-        ver = getVersion();
+        const cbSdkVersion ver = getVersion();
 
         // Summary results.
         printf("%s real-time interface to %s (%d.%02d.%02d.%02d) successfully initialized\n", strConnection[conType], strInstrument[instType], ver.nspmajor, ver.nspminor, ver.nsprelease, ver.nspbeta);
@@ -197,17 +192,24 @@ cbSdkResult close()
 
 /////////////////////////////////////////////////////////////////////////////
 // The test suit main entry
-int main(int argc, char *argv[])
+int main(const int argc, char *argv[])
 {
-    LPCSTR inst_ip = cbNET_UDP_ADDR_CNT;
+    auto inst_ip = cbNET_UDP_ADDR_CNT;
     int inst_port = cbNET_UDP_PORT_CNT;
-    LPCSTR client_ip = "";
+    const auto client_ip = "";
     if (argc < 2) {
         std::cerr << "Usage: " << argv[0] << " <filename.ccf>" << std::endl;
         return 1;
     }
     if (argc > 2) {inst_ip = argv[2];}
-    if (argc > 3) {inst_port = strtol(argv[3], nullptr, 10);}
+    if (argc > 3) {
+        try {
+            inst_port = std::stoi(argv[3]);
+        } catch (const std::exception&) {
+            printf("Error: Invalid port number '%s'\n", argv[2]);
+            return 1;
+        }
+    }
     cbSdkResult res = open(inst_ip, inst_port, client_ip);
     handleResult(res);
 
@@ -219,7 +221,7 @@ int main(int argc, char *argv[])
             true,
             true,
             false
-            );
+    );
     handleResult(res);
 
     if (res == CBSDKRESULT_SUCCESS)

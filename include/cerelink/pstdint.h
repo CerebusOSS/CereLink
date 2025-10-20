@@ -187,6 +187,7 @@
  *  Mikkel Fahnoe Jorgensen
  *
  */
+#pragma once
 
 #include <stddef.h>
 #include <limits.h>

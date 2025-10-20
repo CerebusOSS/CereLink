@@ -22,6 +22,8 @@
 #include "InstNetwork.h"
 #include "../include/cerelink/cbsdk.h"
 #include "../include/cerelink/CCFUtils.h"
+#include "ContinuousData.h"
+#include "EventData.h"
 #include <mutex>
 #include <condition_variable>
 
@@ -39,7 +41,7 @@ public:
     void Open(uint32_t nInstance, int nInPort = cbNET_UDP_PORT_BCAST, int nOutPort = cbNET_UDP_PORT_CNT,
         LPCSTR szInIP = cbNET_UDP_ADDR_INST, LPCSTR szOutIP = cbNET_UDP_ADDR_CNT, int nRecBufSize = NSP_REC_BUF_SIZE, int nRange = 0);
 private:
-    void OnPktGroup(const cbPKT_GROUP * pkt);
+    void OnPktGroup(const cbPKT_GROUP * pkt) const;
     void OnPktEvent(const cbPKT_GENERIC * pPkt);
     void OnPktComment(const cbPKT_COMMENT * pPkt);
     void OnPktLog(const cbPKT_LOG * pPkt);
@@ -68,18 +70,17 @@ public:
     cbSdkResult SdkGetTime(PROCTIME * cbtime) const;
     cbSdkResult SdkGetSpkCache(uint16_t channel, cbSPKCACHE **cache) const;
     cbSdkResult SdkGetTrialConfig(uint32_t * pbActive, uint16_t * pBegchan, uint32_t * pBegmask, uint32_t * pBegval,
-                                  uint16_t * pEndchan, uint32_t * pEndmask, uint32_t * pEndval, bool * pbDouble,
+                                  uint16_t * pEndchan, uint32_t * pEndmask, uint32_t * pEndval,
                                   uint32_t * puWaveforms, uint32_t * puConts, uint32_t * puEvents,
-                                  uint32_t * puComments, uint32_t * puTrackings, bool * pbAbsolute) const;
+                                  uint32_t * puComments, uint32_t * puTrackings) const;
     cbSdkResult SdkSetTrialConfig(uint32_t bActive, uint16_t begchan, uint32_t begmask, uint32_t begval,
-                                  uint16_t endchan, uint32_t endmask, uint32_t endval, bool bDouble,
-                                  uint32_t uWaveforms, uint32_t uConts, uint32_t uEvents, uint32_t uComments, uint32_t uTrackings,
-                                  bool bAbsolute);
+                                  uint16_t endchan, uint32_t endmask, uint32_t endval,
+                                  uint32_t uWaveforms, uint32_t uConts, uint32_t uEvents, uint32_t uComments, uint32_t uTrackings);
     cbSdkResult SdkGetChannelLabel(uint16_t channel, uint32_t * bValid, char * label, uint32_t * userflags, int32_t * position) const;
-    cbSdkResult SdkSetChannelLabel(uint16_t channel, const char * label, uint32_t userflags, int32_t * position) const;
-    cbSdkResult SdkGetTrialData(uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
+    cbSdkResult SdkSetChannelLabel(uint16_t channel, const char * label, uint32_t userflags, const int32_t * position) const;
+    cbSdkResult SdkGetTrialData(uint32_t bSeek, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                 cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking);
-    cbSdkResult SdkInitTrialData(uint32_t bActive, cbSdkTrialEvent* trialevent, cbSdkTrialCont * trialcont,
+    cbSdkResult SdkInitTrialData(uint32_t bResetClock, cbSdkTrialEvent* trialevent, cbSdkTrialCont * trialcont,
                                  cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking, unsigned long wait_for_comment_msec = 250);
     cbSdkResult SdkSetFileConfig(const char * filename, const char * comment, uint32_t bStart, uint32_t options);
     cbSdkResult SdkGetFileConfig(char * filename, char * username, bool * pbRecording) const;
@@ -166,81 +167,24 @@ protected:
     uint16_t m_uTrialEndChannel;    // Channel ID that is watched for the trial end notification
     uint32_t m_uTrialEndMask;       // Mask ANDed with channel data to check for trial end
     uint32_t m_uTrialEndValue;      // Value the masked data is compared to identify trial end
-    bool   m_bTrialDouble;        // If data storage (spike or continuous) is double
-    bool   m_bTrialAbsolute;      // Absolute trial timing all events
     uint32_t m_uTrialWaveforms;     // If spike waveform should be stored and returned
     uint32_t m_uTrialConts;         // Number of continuous data to buffer
     uint32_t m_uTrialEvents;        // Number of events to buffer
     uint32_t m_uTrialComments;      // Number of comments to buffer
     uint32_t m_uTrialTrackings;     // Number of tracking data to buffer
-
     uint32_t m_bWithinTrial;        // True is we are within a trial, False if not within a trial
-
-    PROCTIME m_uTrialStartTime;     // Holds theCerebus timestamp of the trial start time
-    PROCTIME m_uPrevTrialStartTime{};
-
-    PROCTIME m_uCbsdkTime;            // Holds the Cerebus timestamp of the last packet received
+    PROCTIME m_uTrialStartTime;     // Holds the Cerebus timestamp of the trial start time
+    PROCTIME m_uCbsdkTime;          // Holds the Cerebus timestamp of the last packet received
+    PROCTIME m_nextTrialStartTime;  // TrialStartTime will be updated to this after GetData if InitData has bResetClock=true
 
     /////////////////////////////////////////////////////////////////////////////
     // Declarations for the data caching structures and variables
 
-    // Structure to store all the variables associated with the continuous data
-    struct ContinuousData
-    {
-        uint32_t size; // default is cbSdk_CONTINUOUS_DATA_SAMPLES
-        uint16_t current_sample_rates[cbNUM_ANALOG_CHANS];        // The continuous sample rate on each channel, in samples/s
-        int16_t * continuous_channel_data[cbNUM_ANALOG_CHANS];
-        uint32_t write_index[cbNUM_ANALOG_CHANS];                 // next index location to write data
-        uint32_t write_start_index[cbNUM_ANALOG_CHANS];           // index location that writing began
-        uint32_t read_end_index[cbNUM_ANALOG_CHANS];              // The last known safe read index. Reset to the write_index on init;
+    // Continuous data structures are defined in ContinuousData.h
+    ContinuousData * m_CD;
 
-        void reset()
-        {
-            if (size)
-            {
-                for (uint32_t i = 0; i < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++i)
-                    std::fill_n(continuous_channel_data[i], size, 0);
-            }
-            memset(current_sample_rates, 0, sizeof(current_sample_rates));
-            memset(write_index, 0, sizeof(write_index));
-            memset(write_start_index, 0, sizeof(write_start_index));
-        }
-
-    } * m_CD;
-
-    // Structure to store all the variables associated with the event data
-    struct EventData
-    {
-        // We use cbMAXCHANS to size the arrays,
-        // even though that's more than the analog + digin + serial channels than are required,
-        // simply so we can index into these arrays using the channel number (-1).
-        // The alternative is to map between channel number and array index, but
-        // this is problematic with the recent change to 2-NSP support.
-        // Later I may add a m_ChIdxInType or m_ChIdxInBuff for such a map.
-        // - chadwick.boulay@gmail.com
-        uint32_t size; // default is cbSdk_EVENT_DATA_SAMPLES
-        PROCTIME * timestamps[cbMAXCHANS];
-        uint16_t * units[cbMAXCHANS];
-        int16_t  * waveform_data; // buffer with maximum size of array [cbNUM_ANALOG_CHANS][size][cbMAX_PNTS]
-        uint32_t write_index[cbMAXCHANS];                  // next index location to write data
-        uint32_t write_start_index[cbMAXCHANS];            // index location that writing began
-
-        void reset()
-        {
-            if (size)
-            {
-                for (uint32_t i = 0; i < (cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans() + 2); ++i)
-                {
-                    std::fill_n(timestamps[i], size, 0);
-                    std::fill_n(units[i], size, 0);
-                }
-            }
-            waveform_data = nullptr;
-            memset(write_index, 0, sizeof(write_index));
-            memset(write_start_index, 0, sizeof(write_start_index));
-        }
-
-    } * m_ED;
+    // Event data structures are defined in EventData.h
+    EventData * m_ED;
 
     // Structure to store all the variables associated with the comment data
     struct CommentData

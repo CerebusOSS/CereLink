@@ -17,7 +17,7 @@
 //
 // Common xPlatform instrument network
 //
-#include "StdAfx.h"
+#include "../cbproto/StdAfx.h"
 #include <algorithm>  // Use C++ default min and max implementation.
 #include <thread>     // For std::thread
 #include <chrono>     // For std::chrono timing
@@ -151,7 +151,6 @@ void InstNetwork::OnNetCommand(NetCommandType cmd, unsigned int /*code*/)
 
 void InstNetwork::SetNumChans()
 {
-    uint32_t nChan;
     uint32_t nCaps;
     uint32_t nAoutCaps;
     uint32_t nDinpCaps;
@@ -165,15 +164,14 @@ void InstNetwork::SetNumChans()
 
     if (!m_bInitChanCount)
     {
-        cbPROCINFO isProcInfo;
-        memset(&isProcInfo, 0, sizeof(cbPROCINFO));
+        cbPROCINFO isProcInfo = {};
         ::cbGetProcInfo(cbNSP1, &isProcInfo);
         if (0 != isProcInfo.chancount)
             m_bInitChanCount = true;
-        for (nChan = 1; nChan <= isProcInfo.chancount; ++nChan)
+        for (uint32_t nChan = 1; nChan <= isProcInfo.chancount; ++nChan)
         {
             if (cbRESULT_OK == (::cbGetChanCaps(nChan, &nCaps) +
-                ::cbGetAoutCaps(nChan, &nAoutCaps, NULL, NULL) +
+                ::cbGetAoutCaps(nChan, &nAoutCaps, nullptr, nullptr) +
                 ::cbGetDinpCaps(nChan, &nDinpCaps)))
             {
                 if ((cbCHAN_EXISTS | cbCHAN_CONNECTED) == (nCaps & (cbCHAN_EXISTS | cbCHAN_CONNECTED)))
@@ -491,22 +489,22 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
     }
 
     // -- Process the incoming packet inside the listeners --
-    for (int i = 0; i < m_listener.size(); ++i)
-        m_listener[i]->ProcessIncomingPacket(pPkt);
+    for (auto & i : m_listener)
+        i->ProcessIncomingPacket(pPkt);
 }
 
 // Author & Date:   Kirk Korver     25 Apr 2005
 // Purpose: update our sorting model
 // Inputs:
 //  rUnitModel - the unit model packet of interest
-inline void InstNetwork::UpdateSortModel(const cbPKT_SS_MODELSET & rUnitModel)
+inline void InstNetwork::UpdateSortModel(const cbPKT_SS_MODELSET & rUnitModel) const
 {
-    uint32_t nChan = rUnitModel.chan;
+    const uint32_t nChan = rUnitModel.chan;
     uint32_t nUnit = rUnitModel.unit_number;
 
     // Unit 255 == noise, put it into the last slot
     if (nUnit == 255)
-        nUnit = ARRAY_SIZE(cb_cfg_buffer_ptr[m_nIdx]->isSortingOptions.asSortModel[0]) - 1;
+        nUnit = std::size(cb_cfg_buffer_ptr[m_nIdx]->isSortingOptions.asSortModel[0]) - 1;
 
     if (cb_library_initialized[m_nIdx] && cb_cfg_buffer_ptr[m_nIdx])
         cb_cfg_buffer_ptr[m_nIdx]->isSortingOptions.asSortModel[nChan][nUnit] = rUnitModel;
@@ -516,12 +514,12 @@ inline void InstNetwork::UpdateSortModel(const cbPKT_SS_MODELSET & rUnitModel)
 // Purpose: update our PCA basis model
 // Inputs:
 //  rBasisModel - the basis model packet of interest
-inline void InstNetwork::UpdateBasisModel(const cbPKT_FS_BASIS & rBasisModel)
+inline void InstNetwork::UpdateBasisModel(const cbPKT_FS_BASIS & rBasisModel) const
 {
     if (0 == rBasisModel.chan)
         return;         // special packet request to get all basis, don't save it
 
-    uint32_t nChan = rBasisModel.chan - 1;
+    const uint32_t nChan = rBasisModel.chan - 1;
 
     if (cb_library_initialized[m_nIdx] && cb_cfg_buffer_ptr[m_nIdx])
         cb_cfg_buffer_ptr[m_nIdx]->isSortingOptions.asBasis[nChan] = rBasisModel;
@@ -534,7 +532,7 @@ inline void InstNetwork::UpdateBasisModel(const cbPKT_FS_BASIS & rBasisModel)
 //  nTicks - the ever growing number of times that the mmtimer has been called
 //  rParent - the parent window
 //  nCurrentPacketCount - the number of packets that we have ever received
-inline void InstNetwork::CheckForLinkFailure(uint32_t nTicks, uint32_t nCurrentPacketCount)
+inline void InstNetwork::CheckForLinkFailure(const uint32_t nTicks, const uint32_t nCurrentPacketCount)
 {
     if ((nTicks % 250) == 0) // Check every 2.5 seconds
     {
@@ -575,7 +573,7 @@ void InstNetwork::processTimerTick()
         else if (m_timerTicks == 50)
         {
             // get runlevel
-            cbGetSystemRunLevel(&m_runlevel, NULL, NULL, m_nInstance);
+            cbGetSystemRunLevel(&m_runlevel, nullptr, nullptr, m_nInstance);
             // if not running reset
             if (cbRUNLEVEL_RUNNING != m_runlevel)
             {
@@ -618,35 +616,22 @@ void InstNetwork::processTimerTick()
     // Process 1024 remaining packets
     while (burstcount < 1024)
     {
-        bool bLoopbackPacket = false;
         burstcount++;
         recv_returned = m_icInstrument.Recv(&(cb_rec_buffer_ptr[m_nIdx]->buffer[cb_rec_buffer_ptr[m_nIdx]->headindex]));
         if (recv_returned <= 0)
-        {
-            // If the real instrument doesn't work, then try the fake one
-            recv_returned = m_icInstrument.Recv(&(cb_rec_buffer_ptr[m_nIdx]->buffer[cb_rec_buffer_ptr[m_nIdx]->headindex]));
-            if (recv_returned <= 0)
-                break; // No data returned
-            bLoopbackPacket = true;
-        }
+            break;
 
         // get pointer to the first packet in received data block
-        auto *pktptr = (cbPKT_GENERIC*) &(cb_rec_buffer_ptr[m_nIdx]->buffer[cb_rec_buffer_ptr[m_nIdx]->headindex]);
+        auto *pktptr = reinterpret_cast<cbPKT_GENERIC *>(&(cb_rec_buffer_ptr[m_nIdx]->buffer[cb_rec_buffer_ptr[m_nIdx]->headindex]));
 
         uint32_t bytes_to_process = recv_returned;
         do {
-            if (bLoopbackPacket)
-            {
-                // Put fake packets in-order
-                pktptr->cbpkt_header.time = cb_rec_buffer_ptr[m_nIdx]->lasttime;
-            } else {
-                ++m_nRecentPacketCount; // only count the "real" packets, not loopback ones
-                m_icInstrument.TestForReply(pktptr); // loopbacks won't need a "reply"...they are never sent
-            }
+            ++m_nRecentPacketCount; // only count the "real" packets, not loopback ones
+            m_icInstrument.TestForReply(pktptr); // loopbacks won't need a "reply"...they are never sent
 
             // make sure that the next packet in the data block that we are processing fits.
-            uint32_t quadlettotal = (pktptr->cbpkt_header.dlen) + cbPKT_HEADER_32SIZE;
-            uint32_t packetsize = quadlettotal << 2;
+            const uint32_t quadlettotal = (pktptr->cbpkt_header.dlen) + cbPKT_HEADER_32SIZE;
+            const uint32_t packetsize = quadlettotal << 2;
             if (packetsize > bytes_to_process)
             {
                 // TODO: complain about bad packet
@@ -658,7 +643,7 @@ void InstNetwork::processTimerTick()
             ProcessIncomingPacket(pktptr);
 
             // increment packet pointer and subract out the packetsize from the processing counter
-            pktptr = (cbPKT_GENERIC*) (((uint8_t*) pktptr) + packetsize);
+            pktptr = reinterpret_cast<cbPKT_GENERIC *>(reinterpret_cast<uint8_t *>(pktptr) + packetsize);
             bytes_to_process -= packetsize;
 
             // Increment head index and check for buffer wraparound.

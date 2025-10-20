@@ -311,11 +311,12 @@ cdef extern from "cerelink/cbsdk.h":
         uint8_t progress            # Progress (in percent)
 
     ctypedef struct cbSdkTrialEvent:
-        uint16_t count
-        uint16_t chan[cbNUM_ANALOG_CHANS + 2]
-        uint32_t num_samples[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1]
-        void * timestamps[cbNUM_ANALOG_CHANS + 2][cbMAXUNITS + 1]
-        void * waveforms[cbNUM_ANALOG_CHANS + 2]
+        PROCTIME trial_start_time
+        uint32_t num_events
+        PROCTIME * timestamps  # [num_events]
+        uint16_t * channels    # [num_events]
+        uint16_t * units       # [num_events]
+        void * waveforms       # [num_events][cbMAX_PNTS]
 
     ctypedef struct cbSdkConnection:
         int nInPort          # Client port number
@@ -327,22 +328,26 @@ cdef extern from "cerelink/cbsdk.h":
 
     # Trial continuous data
     ctypedef struct cbSdkTrialCont:
-        uint16_t    count                               # Number of valid channels in this trial (up to cbNUM_ANALOG_CHANS)
-        uint16_t    chan[cbNUM_ANALOG_CHANS+0]          # channel numbers (1-based)
-        uint16_t    sample_rates[cbNUM_ANALOG_CHANS+0]  # current sample rate (samples per second)
-        uint32_t    num_samples[cbNUM_ANALOG_CHANS+0]   # number of samples
-        PROCTIME    time                                # start time for trial continuous data
-        void *      samples[cbNUM_ANALOG_CHANS+0]       # Buffer to hold sample vectors
+        PROCTIME    trial_start_time                   # Trial start time (device timestamp when trial started)
+        uint8_t     group                              # Sample group to retrieve (0-7, set by user before Init)
+        uint16_t    count                              # Number of valid channels in this group (output from Init)
+        uint16_t    chan[cbNUM_ANALOG_CHANS+0]         # channel numbers (1-based, output from Init)
+        uint16_t    sample_rate                        # Sample rate for this group (Hz, output from Init)
+        uint32_t    num_samples                        # Number of samples: input = max to read, output = actual read
+        void *      samples                            # Pointer to contiguous [num_samples][count] array
+        PROCTIME *  timestamps                         # Pointer to array of [num_samples] timestamps
         
     ctypedef struct cbSdkTrialComment:
-        uint16_t num_samples    # Number of comments
-        uint8_t * charsets      # Buffer to hold character sets
-        uint32_t * rgbas        # Buffer to hold rgba values
-        uint8_t * * comments    # Pointer to comments
-        void * timestamps       # Buffer to hold time stamps
+        PROCTIME trial_start_time  # Trial start time (device timestamp when trial started)
+        uint16_t num_samples       # Number of comments
+        uint8_t * charsets         # Buffer to hold character sets
+        uint32_t * rgbas           # Buffer to hold rgba values
+        uint8_t * * comments       # Pointer to comments
+        PROCTIME * timestamps      # Buffer to hold time stamps
         
     # Trial video tracking data
     ctypedef struct cbSdkTrialTracking:
+        PROCTIME    trial_start_time                        # Trial start time (device timestamp when trial started)
         uint16_t    count                                   # Number of valid trackable objects (up to cbMAXTRACKOBJ)
         uint16_t    ids[cbMAXTRACKOBJ+0]                    # Node IDs (holds count elements)
         uint16_t    max_point_counts[cbMAXTRACKOBJ+0]       # Maximum point counts (holds count elements)
@@ -353,7 +358,7 @@ cdef extern from "cerelink/cbsdk.h":
         void * *    coords[cbMAXTRACKOBJ+0]                 # Buffer to hold tracking points (holds count*num_samples tarackables, each of max_point_counts points
         uint32_t *  synch_frame_numbers[cbMAXTRACKOBJ+0]    # Buffer to hold synch frame numbers (holds count*num_samples elements)
         uint32_t *  synch_timestamps[cbMAXTRACKOBJ+0]       # Buffer to hold synchronized tracking time stamps (in milliseconds) (holds count*num_samples elements)
-        void *      timestamps[cbMAXTRACKOBJ+0]             # Buffer to hold tracking time stamps (holds count*num_samples elements)
+        PROCTIME *  timestamps[cbMAXTRACKOBJ+0]             # Buffer to hold tracking time stamps (holds count*num_samples elements)
 
     ctypedef struct cbSdkAoutMon:
         uint16_t chan   # (1-based) channel to monitor
@@ -390,10 +395,10 @@ cdef extern from "cerelink/cbsdk.h":
     cbSdkResult cbSdkIsChanSerial(uint32_t nInstance, uint16_t channel, uint32_t * bResult);
     # Retrieve data of a trial (NULL means ignore), user should allocate enough buffers beforehand, and trial should not be closed during this call
     cbSdkResult cbSdkGetTrialData(  uint32_t nInstance,
-                                    uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
+                                    uint32_t seek, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                     cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking)
     # Initialize the structures (and fill with information about active channels, comment pointers and samples in the buffer)
-    cbSdkResult cbSdkInitTrialData( uint32_t nInstance,
+    cbSdkResult cbSdkInitTrialData( uint32_t nInstance, uint32_t resetClock,
                                     cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                     cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking, unsigned long wait_for_comment_msec)
     cbSdkResult cbSdkSetFileConfig(uint32_t nInstance, const char * filename, const char * comment, uint32_t start, uint32_t options)  # Also see cbsdk_file_config in helper
@@ -429,27 +434,25 @@ cdef extern from "cbsdk_helper.h":
         uint16_t Endchan
         uint32_t Endmask
         uint32_t Endval
-        int bDouble
         uint32_t uWaveforms
         uint32_t uConts
         uint32_t uEvents
         uint32_t uComments
         uint32_t uTrackings
-        int bAbsolute
 
     cbSdkResult cbsdk_get_trial_config(int nInstance, cbSdkConfigParam * pcfg_param)
     cbSdkResult cbsdk_set_trial_config(int nInstance, const cbSdkConfigParam * pcfg_param)
 
-    cbSdkResult cbsdk_init_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
-    cbSdkResult cbsdk_get_trial_event(int nInstance, int reset, cbSdkTrialEvent * trialevent)
+    cbSdkResult cbsdk_init_trial_event(int nInstance, int clock_reset, cbSdkTrialEvent * trialevent)
+    cbSdkResult cbsdk_get_trial_event(int nInstance, int seek, cbSdkTrialEvent * trialevent)
 
-    cbSdkResult cbsdk_init_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
-    cbSdkResult cbsdk_get_trial_cont(int nInstance, int reset, cbSdkTrialCont * trialcont)
+    cbSdkResult cbsdk_init_trial_cont(int nInstance, int clock_reset, cbSdkTrialCont * trialcont)
+    cbSdkResult cbsdk_get_trial_cont(int nInstance, int seek, cbSdkTrialCont * trialcont)
 
-    cbSdkResult cbsdk_init_trial_data(int nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
-    cbSdkResult cbsdk_get_trial_data(int nInstance, int reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm)
+    cbSdkResult cbsdk_init_trial_data(int nInstance, int clock_reset, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
+    cbSdkResult cbsdk_get_trial_data(int nInstance, int seek, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont, cbSdkTrialComment * trialcomm)
 
-    cbSdkResult cbsdk_init_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
-    cbSdkResult cbsdk_get_trial_comment(int nInstance, int reset, cbSdkTrialComment * trialcomm)
+    cbSdkResult cbsdk_init_trial_comment(int nInstance, int clock_reset, cbSdkTrialComment * trialcomm, unsigned long wait_for_comment_msec)
+    cbSdkResult cbsdk_get_trial_comment(int nInstance, int seek, cbSdkTrialComment * trialcomm)
 
     cbSdkResult cbsdk_file_config(int instance, const char * filename, const char * comment, int start, unsigned int options)

@@ -79,9 +79,8 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 *
 * @param[in] pkt the sample group packet
 */
-void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
-{
-    uint32_t nChanProcStart = 0;
+void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt) const {
+    // uint32_t nChanProcStart = 0;
     uint32_t nChanProcMax = 0;
     cbPROCINFO isProcInfo;
     uint32_t nInstrument = 0;
@@ -94,9 +93,9 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
     if (!m_bWithinTrial || m_CD == nullptr)
         return;
 
-    int group = pkt->cbpkt_header.type;
+    const int group = pkt->cbpkt_header.type;
 
-    if (group >= SMPGRP_RAW)
+    if (group > SMPGRP_RAW)
         return;
 
 #ifndef CBPROTO_311
@@ -112,66 +111,24 @@ void SdkApp::OnPktGroup(const cbPKT_GROUP * const pkt)
             if (pkt->cbpkt_header.instrument == nProc)
                 break;
 
-            nChanProcStart = nChanProcMax;
+            // nChanProcStart = nChanProcMax;
         }
     }
 #endif
 
     // Get information about this group...
-    uint32_t  period;
-    uint32_t  length;
-    uint16_t  list[cbNUM_ANALOG_CHANS];
-    if (cbGetSampleGroupInfo(nInstrument + 1, group, nullptr, &period, &length, m_nInstance) != cbRESULT_OK)
+    uint32_t  period;  // sampling period for the group
+    uint32_t  nChans;  // number of channels in the group
+    uint16_t  chanIds[cbNUM_ANALOG_CHANS];
+    if (cbGetSampleGroupInfo(nInstrument + 1, group, nullptr, &period, &nChans, m_nInstance) != cbRESULT_OK)
         return;
-    if (cbGetSampleGroupList(nInstrument + 1, group, &length, list, m_nInstance) != cbRESULT_OK)
+    if (cbGetSampleGroupList(nInstrument + 1, group, &nChans, chanIds, m_nInstance) != cbRESULT_OK)
         return;
 
-    const uint16_t rate = static_cast<int>((cbSdk_TICKS_PER_SECOND / static_cast<double>(period)));
-
-    bool bOverFlow = false;
-
-    m_lockTrial.lock();
-    // double check if buffer is still valid
-    if (m_CD)
-    {
-        // Check whether our information for each channel is up-to-date...
-        for(uint32_t i = 0; i < length; i++)
-        {
-            if (list[i] == 0 || list[i] > cbNUM_ANALOG_CHANS)
-                continue;
-
-            const auto ch = list[i] - 1 + nChanProcStart;
-
-            if (m_CD->write_index[ch] == m_CD->write_start_index[ch]) // New continuous channel
-            {
-                // Need to make sure there are no samples here yet...
-                m_CD->current_sample_rates[ch] = rate;
-            }
-
-            // Check for sample size changes...
-            if (m_CD->current_sample_rates[ch] != rate) // New rate for channel
-            {
-                m_CD->current_sample_rates[ch] = rate;
-                m_CD->write_index[ch] = m_CD->write_start_index[ch];        // reset buffer to
-            }
-
-            // Add a sample...
-            // If there's room for more data...
-            uint32_t new_write_index = m_CD->write_index[ch] + 1;
-            if (new_write_index >= m_CD->size)
-                new_write_index = 0;
-
-            if (new_write_index != m_CD->write_start_index[ch])
-            {
-                // Store more data
-                m_CD->continuous_channel_data[ch][m_CD->write_index[ch]] = pkt->data[i];
-                m_CD->write_index[ch] = new_write_index;
-            }
-            else if (m_bChannelMask[ch])
-                bOverFlow = true;
-        }
-    }
-    m_lockTrial.unlock();
+    // Write sample using thread-safe method (handles allocation and locking internally)
+    const auto grp_idx = group - 1;  // Convert to 0-based index
+    const bool bOverFlow = m_CD->writeSampleThreadSafe(grp_idx, pkt->cbpkt_header.time,
+                                                        pkt->data, nChans, chanIds);
 
     if (bOverFlow)
     {
@@ -197,6 +154,7 @@ void SdkApp::OnPktEvent(const cbPKT_GENERIC * const pPkt)
             if (!m_bWithinTrial)
             {
                 cbGetSystemClockTime(&m_uTrialStartTime, m_nInstance);
+                m_nextTrialStartTime = m_uTrialStartTime;
             }
 
             m_bWithinTrial = true;
@@ -207,42 +165,30 @@ void SdkApp::OnPktEvent(const cbPKT_GENERIC * const pPkt)
     {
         bool bOverFlow = false;
 
-        uint16_t ch = pPkt->cbpkt_header.chid - 1;
-
         m_lockTrialEvent.lock();
         // double check if buffer is still valid
         if (m_ED)
         {
-            // Add a sample...
-            uint32_t old_write_index = m_ED->write_index[ch];
-            // If there's room for more data...
-            uint32_t new_write_index = old_write_index + 1;
-            if (new_write_index >= m_ED->size)
-                new_write_index = 0;
+            // Determine the unit value based on channel type
+            uint16_t unit;
+            if (IsChanDigin(pPkt->cbpkt_header.chid) || IsChanSerial(pPkt->cbpkt_header.chid))
+                unit = static_cast<uint16_t>(pPkt->data[0] & 0x0000ffff);  // Store the 0th data sample (truncated to 16-bit).
+            else
+                unit = pPkt->cbpkt_header.type; // Store the type.
 
-            if (new_write_index != m_ED->write_start_index[ch])
+            // Write event to buffer (writeEvent returns true if overflow occurred)
+            bOverFlow = m_ED->writeEvent(pPkt->cbpkt_header.chid, pPkt->cbpkt_header.time, unit);
+
+            if (m_bPacketsEvent)
             {
-                // Store more data
-                m_ED->timestamps[ch][old_write_index] = pPkt->cbpkt_header.time;
-                if (IsChanDigin(pPkt->cbpkt_header.chid) || IsChanSerial(pPkt->cbpkt_header.chid))
-                    m_ED->units[ch][old_write_index] = static_cast<uint16_t>(pPkt->data[0] & 0x0000ffff);  // Store the 0th data sample (truncated to 16-bit).
-                else
-                    m_ED->units[ch][old_write_index] = pPkt->cbpkt_header.type; // Store the type.
-                m_ED->write_index[ch] = new_write_index;
-
-                if (m_bPacketsEvent)
+                m_lockGetPacketsEvent.lock();
+                if (pPkt->cbpkt_header.time > m_uTrialStartTime)
                 {
-                    m_lockGetPacketsEvent.lock();
-                        if (pPkt->cbpkt_header.time > m_uTrialStartTime)
-                        {
-                            m_bPacketsEvent = false;
-                            m_waitPacketsEvent.notify_all();
-                        }
-                    m_lockGetPacketsEvent.unlock();
+                    m_bPacketsEvent = false;
+                    m_waitPacketsEvent.notify_all();
                 }
+                m_lockGetPacketsEvent.unlock();
             }
-            else if (m_bChannelMask[pPkt->cbpkt_header.chid - 1])
-                bOverFlow = true;
         }
         m_lockTrialEvent.unlock();
 
@@ -1023,7 +969,6 @@ cbSdkResult SdkApp::SdkOpen(const uint32_t nInstance, cbSdkConnectionType conTyp
     m_uTrialEndChannel   = 0;
     m_uTrialEndMask      = 0;
     m_uTrialEndValue     = 0;
-    m_bTrialDouble       = false;
     m_uTrialWaveforms    = 0;
     m_uTrialConts        = cbSdk_CONTINUOUS_DATA_SAMPLES;
     m_uTrialEvents       = cbSdk_EVENT_DATA_SAMPLES;
@@ -1034,6 +979,7 @@ cbSdkResult SdkApp::SdkOpen(const uint32_t nInstance, cbSdkConnectionType conTyp
     // not be saving data and then set up the cache control variables
     m_bWithinTrial = false;
     m_uTrialStartTime = 0;
+    m_nextTrialStartTime = 0;
 
     std::unique_lock<std::mutex> connectLock(m_connectLock);
 
@@ -1117,7 +1063,7 @@ cbSdkResult SdkApp::SdkOpen(const uint32_t nInstance, cbSdkConnectionType conTyp
     return CBSDKRESULT_SUCCESS;
 }
 
-CBSDKAPI    cbSdkResult cbSdkOpen(const uint32_t nInstance, const cbSdkConnectionType conType, cbSdkConnection con)
+CBSDKAPI    cbSdkResult cbSdkOpen(const uint32_t nInstance, const cbSdkConnectionType conType, const cbSdkConnection &con)
 {
     // check if the library is already open
     if (conType < 0 || conType >= CBSDKCONNECTION_CLOSED)
@@ -1282,42 +1228,23 @@ cbSdkResult SdkApp::unsetTrialConfig(const cbSdkTrialType type)
     case CBSDKTRIAL_CONTINUOUS:
         if (m_CD == nullptr)
             return CBSDKRESULT_ERRCONFIG;
-        for (uint32_t i = 0; i < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++i)
-        {
-            if (m_CD->continuous_channel_data[i])
-            {
-                delete[] m_CD->continuous_channel_data[i];
-                m_CD->continuous_channel_data[i] = nullptr;
-            }
-        }
-        m_CD->size = 0;
+        // Cleanup all groups
+        m_CD->cleanup();
+        // Delete the structure itself
         delete m_CD;
         m_CD = nullptr;
+        m_uTrialConts = 0;
         break;
     case CBSDKTRIAL_EVENTS:
         if (m_ED == nullptr)
             return CBSDKRESULT_ERRCONFIG;
         // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
-        for (uint32_t i = 0; i < cbMAXCHANS; ++i)
-        {
-            if (m_ED->timestamps[i])
-            {
-                delete[] m_ED->timestamps[i];
-                m_ED->timestamps[i] = nullptr;
-            }
-            if (m_ED->units[i])
-            {
-                delete[] m_ED->units[i];
-                m_ED->units[i] = nullptr;
-            }
-        }
-        if (m_ED->waveform_data != nullptr)
+        // Cleanup waveform data if dynamically allocated
+        if (m_ED->getWaveformData() != nullptr)
         {
             if (m_uTrialWaveforms > cbPKT_SPKCACHEPKTCNT)
-                delete[] m_ED->waveform_data;
-            m_ED->waveform_data = nullptr;
+                delete[] m_ED->getWaveformData();
         }
-        m_ED->size = 0;
         delete m_ED;
         m_ED = nullptr;
         break;
@@ -1508,9 +1435,9 @@ CBSDKAPI    cbSdkResult cbSdkGetSpkCache(const uint32_t nInstance, const uint16_
 * See docstring for cbSdkGetTrialConfig in cbsdk.h for more information.
 */
 cbSdkResult SdkApp::SdkGetTrialConfig(uint32_t * pbActive, uint16_t * pBegchan, uint32_t * pBegmask, uint32_t * pBegval,
-                                      uint16_t * pEndchan, uint32_t * pEndmask, uint32_t * pEndval, bool * pbDouble,
+                                      uint16_t * pEndchan, uint32_t * pEndmask, uint32_t * pEndval,
                                       uint32_t * puWaveforms, uint32_t * puConts, uint32_t * puEvents,
-                                      uint32_t * puComments, uint32_t * puTrackings, bool * pbAbsolute) const
+                                      uint32_t * puComments, uint32_t * puTrackings) const
 {
     if (pbActive)
         *pbActive = m_bWithinTrial;
@@ -1526,8 +1453,6 @@ cbSdkResult SdkApp::SdkGetTrialConfig(uint32_t * pbActive, uint16_t * pBegchan, 
         *pEndmask = m_uTrialEndMask;
     if (pEndval)
         *pEndval = m_uTrialEndValue;
-    if (pbDouble)
-        *pbDouble = m_bTrialDouble;
     if (puWaveforms)
         *puWaveforms = m_uTrialWaveforms;
     if (puConts)
@@ -1538,16 +1463,14 @@ cbSdkResult SdkApp::SdkGetTrialConfig(uint32_t * pbActive, uint16_t * pBegchan, 
         *puComments = m_uTrialComments;
     if (puTrackings)
         *puTrackings = m_uTrialTrackings;
-    if (pbAbsolute)
-        *pbAbsolute = m_bTrialAbsolute;
     return CBSDKRESULT_SUCCESS;
 }
 
 CBSDKAPI    cbSdkResult cbSdkGetTrialConfig(const uint32_t nInstance,
                                             uint32_t * pbActive, uint16_t * pBegchan, uint32_t * pBegmask, uint32_t * pBegval,
-                                            uint16_t * pEndchan, uint32_t * pEndmask, uint32_t * pEndval, bool * pbDouble,
+                                            uint16_t * pEndchan, uint32_t * pEndmask, uint32_t * pEndval,
                                             uint32_t * puWaveforms, uint32_t * puConts, uint32_t * puEvents,
-                                            uint32_t * puComments, uint32_t * puTrackings, bool * pbAbsolute)
+                                            uint32_t * puComments, uint32_t * puTrackings)
 {
     if (nInstance >= cbMAXOPEN)
         return CBSDKRESULT_INVALIDPARAM;
@@ -1555,9 +1478,9 @@ CBSDKAPI    cbSdkResult cbSdkGetTrialConfig(const uint32_t nInstance,
         return CBSDKRESULT_CLOSED;
 
     return g_app[nInstance]->SdkGetTrialConfig(pbActive, pBegchan, pBegmask, pBegval,
-                                               pEndchan, pEndmask, pEndval, pbDouble,
+                                               pEndchan, pEndmask, pEndval,
                                                puWaveforms, puConts, puEvents,
-                                               puComments, puTrackings, pbAbsolute);
+                                               puComments, puTrackings);
 }
 
 // Author & Date:   Ehsan Azar     25 Feb 2011
@@ -1565,9 +1488,8 @@ CBSDKAPI    cbSdkResult cbSdkGetTrialConfig(const uint32_t nInstance,
 * See docstring for cbSdkSetTrialConfig in cbsdk.h for more information.
 */
 cbSdkResult SdkApp::SdkSetTrialConfig(const uint32_t bActive, const uint16_t begchan, const uint32_t begmask, const uint32_t begval,
-                                      const uint16_t endchan, const uint32_t endmask, const uint32_t endval, const bool bDouble,
-                                      const uint32_t uWaveforms, const uint32_t uConts, const uint32_t uEvents, const uint32_t uComments, const uint32_t uTrackings,
-                                      const bool bAbsolute)
+                                      const uint16_t endchan, const uint32_t endmask, const uint32_t endval,
+                                      const uint32_t uWaveforms, const uint32_t uConts, const uint32_t uEvents, const uint32_t uComments, const uint32_t uTrackings)
 {
     if (m_instInfo == 0)
         return CBSDKRESULT_CLOSED;
@@ -1580,41 +1502,25 @@ cbSdkResult SdkApp::SdkSetTrialConfig(const uint32_t bActive, const uint16_t beg
     m_uTrialEndChannel   = endchan;
     m_uTrialEndMask      = endmask;
     m_uTrialEndValue     = endval;
-    m_bTrialDouble       = bDouble;
     m_uTrialWaveforms    = uWaveforms;
-    m_bTrialAbsolute     = bAbsolute;
 
     if (uConts && m_CD == nullptr)
     {
         m_lockTrial.lock();
         try {
             m_CD = new ContinuousData;
+            m_CD->default_size = uConts;
+            // Groups are initialized by their constructors
+            // Buffers are allocated lazily in OnPktGroup when first packet arrives
         } catch (...) {
-            m_CD = nullptr;
-        }
-        if (m_CD)
-        {
-            memset(m_CD->continuous_channel_data, 0, sizeof(m_CD->continuous_channel_data));
-            m_CD->size = uConts;
-            bool bErr = false;
-            try {
-                for (uint32_t i = 0; i < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); ++i)
-                {
-                    m_CD->continuous_channel_data[i] = new int16_t[m_CD->size];
-                    if (m_CD->continuous_channel_data[i] == nullptr)
-                    {
-                        bErr = true;
-                        break;
-                    }
-                }
-            } catch (...) {
-                bErr = true;
+            if (m_CD)
+            {
+                delete m_CD;
+                m_CD = nullptr;
             }
-            if (bErr)
-                unsetTrialConfig(CBSDKTRIAL_CONTINUOUS);
         }
-        if (m_CD) m_CD->reset();
         m_lockTrial.unlock();
+
         if (m_CD == nullptr)
             return CBSDKRESULT_ERRMEMORYTRIAL;
         m_uTrialConts = uConts;
@@ -1630,30 +1536,13 @@ cbSdkResult SdkApp::SdkSetTrialConfig(const uint32_t bActive, const uint16_t beg
         }
         if (m_ED)
         {
-            memset(m_ED->timestamps, 0, sizeof(m_ED->timestamps));
-            memset(m_ED->units, 0, sizeof(m_ED->units));
-            m_ED->size = uEvents;
-            bool bErr = false;
-            try {
-                // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 once we have a ChIdxInType map
-                // for indexing m_ED while processing packets.
-                for (uint32_t i = 0; i < cbMAXCHANS; ++i)
-                {
-                    m_ED->timestamps[i] = new PROCTIME[m_ED->size];
-                    m_ED->units[i] = new uint16_t[m_ED->size];
-                    if (m_ED->timestamps[i] == nullptr || m_ED->units[i] == nullptr)
-                    {
-                        bErr = true;
-                        break;
-                    }
-                }
-            } catch (...) {
-                bErr = true;
+            // Allocate buffers for event data
+            if (!m_ED->allocate(uEvents))
+            {
+                delete m_ED;
+                m_ED = nullptr;
             }
-            if (bErr)
-                unsetTrialConfig(CBSDKTRIAL_EVENTS);
         }
-        if (m_ED) m_ED->reset();
         m_lockTrialEvent.unlock();
         if (m_ED == nullptr)
             return CBSDKRESULT_ERRMEMORYTRIAL;
@@ -1761,9 +1650,9 @@ cbSdkResult SdkApp::SdkSetTrialConfig(const uint32_t bActive, const uint16_t beg
 
     if (m_ED)
     {
-        if (uWaveforms && m_ED->waveform_data == nullptr)
+        if (uWaveforms && m_ED->getWaveformData() == nullptr)
         {
-            if (uWaveforms > m_ED->size)
+            if (uWaveforms > m_ED->getSize())
                 return CBSDKRESULT_ERRMEMORYTRIAL;
             /// \todo implement using cache
             return CBSDKRESULT_NOTIMPLEMENTED;
@@ -1783,13 +1672,17 @@ cbSdkResult SdkApp::SdkSetTrialConfig(const uint32_t bActive, const uint16_t beg
         if (!m_bWithinTrial)
         {
             cbGetSystemClockTime(&m_uTrialStartTime, m_nInstance);
+            m_nextTrialStartTime = m_uTrialStartTime;
 
             if (m_CD)
             {
-                // Clear continuous data array
+                // Clear continuous data indices for all groups
                 m_lockTrial.lock();
-                memset(m_CD->write_index, 0, sizeof(m_CD->write_index));
-                memset(m_CD->write_start_index, 0, sizeof(m_CD->write_start_index));
+                for (auto& grp : m_CD->groups)
+                {
+                    grp.setWriteIndex(0);
+                    grp.setWriteStartIndex(0);
+                }
                 m_lockTrial.unlock();
             }
 
@@ -1797,8 +1690,7 @@ cbSdkResult SdkApp::SdkSetTrialConfig(const uint32_t bActive, const uint16_t beg
             {
                 // Clear event data array
                 m_lockTrialEvent.lock();
-                memset(m_ED->write_index, 0, sizeof(m_ED->write_index));
-                memset(m_ED->write_start_index, 0, sizeof(m_ED->write_start_index));
+                m_ED->reset();
                 m_lockTrialEvent.unlock();
             }
 
@@ -1828,9 +1720,8 @@ cbSdkResult SdkApp::SdkSetTrialConfig(const uint32_t bActive, const uint16_t beg
 
 CBSDKAPI    cbSdkResult cbSdkSetTrialConfig(const uint32_t nInstance,
                                             const uint32_t bActive, const uint16_t begchan, const uint32_t begmask, const uint32_t begval,
-                                            const uint16_t endchan, const uint32_t endmask, const uint32_t endval, const bool bDouble,
-                                            const uint32_t uWaveforms, const uint32_t uConts, const uint32_t uEvents, const uint32_t uComments, const uint32_t uTrackings,
-                                            const bool bAbsolute)
+                                            const uint16_t endchan, const uint32_t endmask, const uint32_t endval,
+                                            const uint32_t uWaveforms, const uint32_t uConts, const uint32_t uEvents, const uint32_t uComments, const uint32_t uTrackings)
 {
     if (nInstance >= cbMAXOPEN)
         return CBSDKRESULT_INVALIDPARAM;
@@ -1838,9 +1729,8 @@ CBSDKAPI    cbSdkResult cbSdkSetTrialConfig(const uint32_t nInstance,
         return CBSDKRESULT_CLOSED;
 
     return g_app[nInstance]->SdkSetTrialConfig(bActive, begchan, begmask, begval,
-                                               endchan, endmask, endval, bDouble,
-                                               uWaveforms, uConts, uEvents, uComments, uTrackings,
-                                               bAbsolute);
+                                               endchan, endmask, endval,
+                                               uWaveforms, uConts, uEvents, uComments, uTrackings);
 }
 
 // Author & Date:   Ehsan Azar     25 Feb 2011
@@ -1896,7 +1786,7 @@ CBSDKAPI    cbSdkResult cbSdkGetChannelLabel(const uint32_t nInstance,
 * See docstring for cbSdkSetChannelLabel in cbsdk.h for more information.
 */
 
-cbSdkResult SdkApp::SdkSetChannelLabel(const uint16_t channel, const char * label, const uint32_t userflags, int32_t * position) const {
+cbSdkResult SdkApp::SdkSetChannelLabel(const uint16_t channel, const char * label, const uint32_t userflags, const int32_t * position) const {
     if (m_instInfo == 0)
         return CBSDKRESULT_CLOSED;
 
@@ -1906,7 +1796,7 @@ cbSdkResult SdkApp::SdkSetChannelLabel(const uint16_t channel, const char * labe
 }
 
 CBSDKAPI    cbSdkResult cbSdkSetChannelLabel(const uint32_t nInstance,
-                                             const uint16_t channel, const char * label, const uint32_t userflags, int32_t * position)
+                                             const uint16_t channel, const char * label, const uint32_t userflags, const int32_t * position)
 {
     if (channel == 0 || channel > cbMAXCHANS)
         return CBSDKRESULT_INVALIDCHANNEL;
@@ -1959,189 +1849,72 @@ bool IsChanAudioOut(uint32_t dwChan, uint32_t nInstance = 0);             // TRU
 /** Retrieve data of a configured trial.
 See cbSdkGetTrialData docstring in cbsdk.h for more information.
 */
-cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
+cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bSeek, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                       cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking)
 {
     if (m_instInfo == 0)
         return CBSDKRESULT_CLOSED;
-
-    const PROCTIME prevStartTime = m_uPrevTrialStartTime;
 
     if (trialcont)
     {
         if (m_CD == nullptr)
             return CBSDKRESULT_ERRCONFIG;
 
-        // Save 'trial' start time: Either time of cbSdkSetTrialConfig or prev active cbSdkInitTrialData
-        trialcont->time = prevStartTime;
+        // Set trial start time
+        trialcont->trial_start_time = m_uTrialStartTime;
 
-        // Take a thread-safe snapshot of the latest write indices -- that's as far as we can read.
-        uint32_t read_end_index[cbNUM_ANALOG_CHANS];
-        m_lockTrial.lock();
-        memcpy(read_end_index, m_CD->write_index, sizeof(m_CD->write_index));
-        m_lockTrial.unlock();
-        // We may stop reading before this write index; track how many samples we actually read.
-        uint32_t final_read_index[cbNUM_ANALOG_CHANS] = {0};
+        // Validate group index
+        const uint32_t g = trialcont->group;
+        if (g >= cbMAXGROUPS)
+            return CBSDKRESULT_INVALIDPARAM;
 
-        // copy the data from the "cache" to the allocated memory.
-        for (uint32_t channel = 0; channel < trialcont->count; channel++)
-        {
-            const uint16_t ch = trialcont->chan[channel]; // channel number (index + 1 in cache)
-            if (ch == 0 || ch > cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans())
-                return CBSDKRESULT_INVALIDCHANNEL;
-            // Ignore masked channels
-            if (!m_bChannelMask[ch - 1])
-            {
-                trialcont->num_samples[channel] = 0;
-                continue;
-            }
+        // Use thread-safe read method (handles locking internally)
+        uint32_t num_samples = trialcont->num_samples;
+        const bool success = m_CD->readSamples(g - 1,
+                                               trialcont->samples,
+                                               trialcont->timestamps,
+                                               num_samples,
+                                               bSeek != 0);
 
-            uint32_t read_index = m_CD->write_start_index[ch - 1];
-            auto num_samples = read_end_index[ch - 1] - read_index;
-            if (num_samples < 0)
-                num_samples += m_CD->size;
-            // Stop at lesser of 'written samples' or how many we calculated during last init, which is likely how many were allocated.
-            num_samples = std::min(num_samples, trialcont->num_samples[channel]);
-            // Store how many samples we actually read
-            trialcont->num_samples[channel] = num_samples;
+        if (!success)
+            return CBSDKRESULT_ERRCONFIG;
 
-            // Null means ignore
-            if (void * dataptr = trialcont->samples[channel])
-            {
-                for (int i = 0; i < num_samples; ++i)
-                {
-                    if (m_bTrialDouble)
-                        *(static_cast<double *>(dataptr) + i) = m_CD->continuous_channel_data[ch - 1][read_index];
-                    else
-                        *(static_cast<int16_t *>(dataptr) + i) = m_CD->continuous_channel_data[ch - 1][read_index];
-
-                    read_index++;
-                    if (read_index >= m_CD->size)
-                        read_index = 0;
-                }
-            }
-            final_read_index[ch - 1] = read_index;
-        }
-        if (bActive)
-        {
-            // Update write_start_index to where we stopped reading, effectively consuming those data
-            // so next call to GetTrialData will get only new data.
-            m_lockTrial.lock();
-            memcpy(m_CD->write_start_index, final_read_index, sizeof(final_read_index));
-            m_lockTrial.unlock();
-        }
+        trialcont->num_samples = num_samples;
     }
 
     if (trialevent)
     {
         if (m_ED == nullptr)
             return CBSDKRESULT_ERRCONFIG;
-        
-        // Determine how many samples to copy on this iteration.
-        // We will copy the minimum among (write_index-write_start_index) and
-        // trialevent->num_samples which should correspond to the number of allocated samples.
-        // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
-        uint32_t read_end_index[cbMAXCHANS];
+
+        // Set trial start time
+        trialevent->trial_start_time = m_uTrialStartTime;
+
+        // Lock for reading
         m_lockTrialEvent.lock();
-        memcpy(read_end_index, m_ED->write_index, sizeof(m_ED->write_index));
+
+        // Read all events from the buffer - much simpler with flat layout!
+        const uint32_t num_read = m_ED->readEvents(
+            trialevent->timestamps,
+            trialevent->channels,
+            trialevent->units,
+            trialevent->num_events,  // max events to read
+            bSeek                     // update read position?
+        );
+
+        trialevent->num_events = num_read;  // Update with actual count
+
         m_lockTrialEvent.unlock();
-        // We may stop reading before this write index; track how many samples we actually read.
-        uint32_t final_read_index[cbMAXCHANS] = {0};
-
-        // copy the data from the "cache" to the user-allocated memory.
-        for (uint32_t ev_ix = 0; ev_ix < trialevent->count; ev_ix++)
-        {
-            const uint16_t ch = trialevent->chan[ev_ix]; // channel number, 1-based
-            if (ch == 0 || (ch > cb_pc_status_buffer_ptr[0]->cbGetNumTotalChans()))
-                return CBSDKRESULT_INVALIDCHANNEL;
-            // Ignore masked channels
-            if (!m_bChannelMask[ch - 1])
-            {
-                memset(trialevent->num_samples[ev_ix], 0, sizeof(trialevent->num_samples[ev_ix]));
-                continue;
-            }
-
-            uint32_t read_index = m_ED->write_start_index[ch - 1];
-            auto num_samples = read_end_index[ch - 1] - read_index;
-            if (num_samples < 0)
-                num_samples += m_ED->size;
-
-            // We don't know for sure how many samples were allocated,
-            // but this is what the client application was told to allocate.
-            uint32_t num_allocated = 0;
-            for (int unit_ix = 0; unit_ix < (cbMAXUNITS + 1); unit_ix++)
-            {
-                num_allocated += trialevent->num_samples[ev_ix][unit_ix];
-            }
-            num_samples = std::min(static_cast<uint32_t>(num_samples), num_allocated);
-
-            uint32_t num_samples_unit[cbMAXUNITS + 1] = {};  // To keep track of how many samples are copied per unit.
-
-            for (int sample_ix = 0; sample_ix < num_samples; ++sample_ix)
-            {
-                uint16_t unit = m_ED->units[ch - 1][read_index];  // pktType for anain, or the first data value for dig/serial.
-
-                // For digital or serial data, 'unit' holds data, and is not indicating the unit number.
-                // So here we copy the data to trialevent->waveforms, then set unit to 0.
-                if (IsChanDigin(ch) || IsChanSerial(ch))
-                {
-                    if (num_samples_unit[0] < trialevent->num_samples[ev_ix][0])
-                    {
-                        // Null means ignore
-                        if (void * dataptr = trialevent->waveforms[ev_ix])
-                        {
-                            if (m_bTrialDouble)
-                                *(static_cast<double *>(dataptr) + num_samples_unit[0]) = unit;
-                            else
-                                *(static_cast<uint16_t *>(dataptr) + num_samples_unit[0]) = unit;
-                        }
-                    }
-                    unit = 0;
-                }
-
-                // Timestamps
-                if (unit <= cbMAXUNITS + 1)     // remove noise unit. why?
-                {
-                    if (num_samples_unit[unit] < trialevent->num_samples[ev_ix][unit])
-                    {
-                        // Null means ignore
-                        if (void * dataptr = trialevent->timestamps[ev_ix][unit])
-                        {
-                            auto ts = m_ED->timestamps[ch - 1][read_index];
-                            // If time wraps or due to reset, time will restart amidst trial
-                            if (!m_bTrialAbsolute && ts >= prevStartTime)
-                                ts -= prevStartTime;
-                            if (m_bTrialDouble)
-                                *(static_cast<double *>(dataptr) + num_samples_unit[unit]) = cbSdk_SECONDS_PER_TICK * static_cast<double>(ts);
-                            else
-                                *(static_cast<PROCTIME *>(dataptr) + num_samples_unit[unit]) = ts;
-                        }
-                        num_samples_unit[unit]++;
-                        
-                        // Increment the read index.
-                        read_index++;
-                        if (read_index >= m_ED->size)
-                            read_index = 0;
-                    } 
-                }
-            }
-            // retrieved number of samples
-            memcpy(trialevent->num_samples[ev_ix], num_samples_unit, sizeof(num_samples_unit));
-            // Store where we actually finished reading.
-            final_read_index[ch - 1] = read_index;
-        }
-        if (bActive)
-        {
-            m_lockTrialEvent.lock();
-            memcpy(m_ED->write_start_index, final_read_index, sizeof(final_read_index));
-            m_lockTrialEvent.unlock();
-        }
     }
 
     if (trialcomment)
     {
         if (m_CMT == nullptr)
             return CBSDKRESULT_ERRCONFIG;
+
+        // Set trial start time
+        trialcomment->trial_start_time = m_uTrialStartTime;
+
         // Take a snapshot
         uint32_t read_start_index = m_CMT->write_start_index;
         m_lockTrialComment.lock();
@@ -2160,25 +1933,13 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
 
         for (int i = 0; i < num_samples; ++i)
         {
-            void * dataptr = trialcomment->timestamps;
             // Null means ignore
-            if (dataptr)
-            {
-                auto ts = m_CMT->timestamps[read_index];
-                // If time wraps or due to reset, time will restart amidst trial
-                if (!m_bTrialAbsolute && ts >= prevStartTime)
-                    ts -= prevStartTime;
-                if (m_bTrialDouble)
-                    *(static_cast<double *>(dataptr) + i) = cbSdk_SECONDS_PER_TICK * static_cast<double>(ts);
-                else
-                    *(static_cast<PROCTIME *>(dataptr) + i) = ts;
-            }
-            dataptr = trialcomment->rgbas;
-            if (dataptr)
-                *(static_cast<uint32_t *>(dataptr) + i) = m_CMT->rgba[read_index];
-            dataptr = trialcomment->charsets;
-            if (dataptr)
-                *(static_cast<uint8_t *>(dataptr) + i) = m_CMT->charset[read_index];
+            if (PROCTIME * p_ts = trialcomment->timestamps)
+                *(p_ts + i) = m_CMT->timestamps[read_index];
+            if (uint32_t * p_rgba = trialcomment->rgbas)
+                *(p_rgba + i) = m_CMT->rgba[read_index];
+            if (uint8_t * p_charset = trialcomment->charsets)
+                *(p_charset + i) = m_CMT->charset[read_index];
 
             // Must take a copy because it might get overridden
             if (trialcomment->comments != nullptr && trialcomment->comments[i] != nullptr)
@@ -2188,7 +1949,7 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
             if (read_index >= m_CMT->size)
                 read_index = 0;
         }
-        if (bActive)
+        if (bSeek)
         {
             read_start_index = read_index;
             m_lockTrialComment.lock();
@@ -2203,6 +1964,10 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
         uint32_t read_start_index[cbMAXTRACKOBJ];
         if (m_TR == nullptr)
             return CBSDKRESULT_ERRCONFIG;
+
+        // Set trial start time
+        trialtracking->trial_start_time = m_uTrialStartTime;
+
         // Take a snapshot
         memcpy(read_start_index, m_TR->write_start_index, sizeof(m_TR->write_start_index));
         m_lockTrialTracking.lock();
@@ -2244,31 +2009,19 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
             for (int i = 0; i < num_samples; ++i)
             {
                 {
-                    if (void * dataptr = trialtracking->timestamps[id])
-                    {
-                        auto ts = m_TR->timestamps[id][read_index];
-                        // If time wraps or due to reset, time will restart amidst trial
-                        if (!m_bTrialAbsolute && ts >= prevStartTime)
-                            ts -= prevStartTime;
-                        if (m_bTrialDouble)
-                            *(static_cast<double *>(dataptr) + i) = cbSdk_SECONDS_PER_TICK * static_cast<double>(ts);
-                        else
-                            *(static_cast<PROCTIME *>(dataptr) + i) = ts;
-                    }
+                    if (PROCTIME * p_ts = trialtracking->timestamps[id])
+                        *(p_ts + i) = m_TR->timestamps[id][read_index];
                 }
                 {
-                    uint32_t * dataptr = trialtracking->synch_timestamps[id];
-                    if (dataptr)
-                        *(dataptr + i) = m_TR->synch_timestamps[id][read_index];
-                    dataptr = trialtracking->synch_frame_numbers[id];
-                    if (dataptr)
-                        *(dataptr + i) = m_TR->synch_frame_numbers[id][read_index];
+                    if (uint32_t * p_synch_ts = trialtracking->synch_timestamps[id])
+                        *(p_synch_ts + i) = m_TR->synch_timestamps[id][read_index];
+                    if (uint32_t * p_synch_fn = trialtracking->synch_frame_numbers[id])
+                        *(p_synch_fn + i) = m_TR->synch_frame_numbers[id][read_index];
                 }
                 {
-                    uint16_t * dataptr = trialtracking->point_counts[id];
-                    uint16_t pointCount = std::min(m_TR->point_counts[id][read_index], m_TR->max_point_counts[id]);
-                    if (dataptr)
-                        *(dataptr + i) = pointCount;
+                    const uint16_t pointCount = std::min(m_TR->point_counts[id][read_index], m_TR->max_point_counts[id]);
+                    if (uint16_t * p_points = trialtracking->point_counts[id])
+                        *(p_points + i) = pointCount;
                     if (trialtracking->coords[id])
                     {
                         if (bWordData)
@@ -2288,11 +2041,11 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
                     read_index = 0;
            }
             // Flush the buffer and start a new 'trial'...
-            if (bActive)
+            if (bSeek)
                 read_start_index[id] = read_index;
         }
 
-        if (bActive)
+        if (bSeek)
         {
             m_lockTrialTracking.lock();
             memcpy(m_TR->write_start_index, read_start_index, sizeof(read_start_index));
@@ -2300,11 +2053,15 @@ cbSdkResult SdkApp::SdkGetTrialData(const uint32_t bActive, cbSdkTrialEvent * tr
         }
     }
 
+    // If InitTrial had bResetClock, then the time of Init becomes the _next_ trial start time.
+    //  Otherwise, this value will not have changed.
+    m_uTrialStartTime = m_nextTrialStartTime;
+
     return CBSDKRESULT_SUCCESS;
 }
 
 CBSDKAPI    cbSdkResult cbSdkGetTrialData(const uint32_t nInstance,
-                                          const uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
+                                          const uint32_t bSeek, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                           cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking)
 {
     if (nInstance >= cbMAXOPEN)
@@ -2312,143 +2069,108 @@ CBSDKAPI    cbSdkResult cbSdkGetTrialData(const uint32_t nInstance,
     if (g_app[nInstance] == nullptr)
         return CBSDKRESULT_CLOSED;
 
-    return g_app[nInstance]->SdkGetTrialData(bActive, trialevent, trialcont, trialcomment, trialtracking);
+    // Note: bActive is now interpreted as bSeek for consistency
+    // bActive=1 means advance read pointer (seek), bActive=0 means just peek
+    return g_app[nInstance]->SdkGetTrialData(bSeek, trialevent, trialcont, trialcomment, trialtracking);
 }
 
 // Author & Date:   Ehsan Azar     22 March 2011
 /** Initialize the structures.
 * See cbSdkInitTrialData docstring in cbsdk.h for more information.
 */
-cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bActive, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
+cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bResetClock, cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                      cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking, const unsigned long wait_for_comment_msec)
 {
-    // This time is used for relative timings,
-    //  continuous as well as event relative timings reset any time bActive is set
-    m_uPrevTrialStartTime = m_uTrialStartTime;
-
-    // Optionally get the current time as the new trial start time.
-    if (bActive)
-        cbGetSystemClockTime(&m_uTrialStartTime, m_nInstance);
+    // Optionally get the current time as the next trial start time.
+    if (bResetClock)
+        cbGetSystemClockTime(&m_nextTrialStartTime, m_nInstance);
 
     if (trialevent)
     {
-        trialevent->count = 0;
-        memset(trialevent->num_samples, 0, sizeof(trialevent->num_samples));
+        trialevent->num_events = 0;
         if (m_instInfo == 0)
-        {
-            memset(trialevent->chan, 0, sizeof(trialevent->chan));
             return CBSDKRESULT_WARNCLOSED;
-        }
-        else
-        {
-            if (m_ED == nullptr)
-                return CBSDKRESULT_ERRCONFIG;
-            // Wait for packets to come in
-            m_lockGetPacketsEvent.lock();
-            m_bPacketsEvent = true;
-            m_lockGetPacketsEvent.unlock();
+        if (m_ED == nullptr)
+            return CBSDKRESULT_ERRCONFIG;
 
-            // TODO: Go back to using cbNUM_ANALOG_CHANS + 2 after we have m_ChIdxInType
-            uint32_t read_end_index[cbMAXCHANS];
-            // Take a snapshot of the current write pointer
-            m_lockTrialEvent.lock();
-            memcpy(read_end_index, m_ED->write_index, sizeof(m_ED->write_index));
-            m_lockTrialEvent.unlock();
-            int count = 0;
-            for (uint32_t channel = 0; channel < cbMAXCHANS; channel++)
-            {
-                uint32_t i = m_ED->write_start_index[channel];
-                auto num_samples = read_end_index[channel] - i;
-                if (num_samples < 0)
-                    num_samples += m_ED->size;
-                if (num_samples == 0)
-                    continue;
-                if (!m_bChannelMask[channel])
-                    continue;
-                trialevent->chan[count] = channel + 1;
-                // Count sample numbers for each unit seperately
-                while (i != read_end_index[channel])
-                {
-                    uint16_t unit = m_ED->units[channel][i];
-                    if (unit > cbMAXUNITS || IsChanDigin(channel + 1) || IsChanSerial(channel + 1))
-                        unit = 0;
-                    trialevent->num_samples[count][unit]++;
-                    if (++i >= m_ED->size)
-                        i = 0;
-                }
-                count++;
-            }
-            trialevent->count = count;
-        }
+        // Wait for packets to come in
+        m_lockGetPacketsEvent.lock();
+        m_bPacketsEvent = true;
+        m_lockGetPacketsEvent.unlock();
+
+        // Lock for reading
+        m_lockTrialEvent.lock();
+
+        // With flat layout, just report total number of events available
+        trialevent->num_events = m_ED->getNumEvents();
+
+        m_lockTrialEvent.unlock();
     }
     if (trialcont)
     {
         trialcont->count = 0;
-        memset(trialcont->num_samples, 0, sizeof(trialcont->num_samples));
+        trialcont->num_samples = 0;
+
         if (m_instInfo == 0)
         {
             memset(trialcont->chan, 0, sizeof(trialcont->chan));
-            memset(trialcont->sample_rates, 0, sizeof(trialcont->sample_rates));
             return CBSDKRESULT_WARNCLOSED;
         }
-        else
-        {
-            if (m_CD == nullptr)
-                return CBSDKRESULT_ERRCONFIG;
 
-            // Take a snapshot of the current write pointer as our available read pointer.
-            m_lockTrial.lock();
-            memcpy(m_CD->read_end_index, m_CD->write_index, sizeof(m_CD->write_index));
-            m_lockTrial.unlock();
-            int count = 0;
-            for (uint32_t channel = 0; channel < cb_pc_status_buffer_ptr[0]->cbGetNumAnalogChans(); channel++)
-            {
-                auto num_samples = m_CD->read_end_index[channel] - m_CD->write_start_index[channel];
-                if (m_CD->read_end_index[channel] < m_CD->write_start_index[channel])
-                    num_samples += m_CD->size;
-                if (num_samples && m_bChannelMask[channel])
-                {
-                    trialcont->chan[count] = channel + 1; // Actual channel number
-                    trialcont->num_samples[count] = num_samples;
-                    trialcont->sample_rates[count] = m_CD->current_sample_rates[channel];
-                    count++;
-                }
-            }
-            trialcont->count = count;
+        if (m_CD == nullptr)
+            return CBSDKRESULT_ERRCONFIG;
+
+        // Validate group index (user must set this before calling Init)
+        const uint32_t g = trialcont->group;
+        if (g >= cbMAXGROUPS)
+            return CBSDKRESULT_INVALIDPARAM;
+
+        // Take a thread-safe snapshot of the group state
+        GroupSnapshot snapshot{};
+        if (!m_CD->snapshotForReading(g - 1, snapshot))
+            return CBSDKRESULT_INVALIDPARAM;
+
+        if (!snapshot.is_allocated)
+        {
+            // Group not allocated - return success with count=0
+            memset(trialcont->chan, 0, sizeof(trialcont->chan));
+            return CBSDKRESULT_SUCCESS;
         }
+
+        // Populate trial structure with group info from snapshot
+        trialcont->count = snapshot.num_channels;
+        trialcont->num_samples = snapshot.num_samples;
+
+        // Copy channel IDs from the group (thread-safe through ContinuousData::m_mutex)
+        const auto& grp = m_CD->groups[g - 1];
+        const uint16_t* chan_ids = grp.getChannelIds();
+        memcpy(trialcont->chan, chan_ids, snapshot.num_channels * sizeof(uint16_t));
     }
     if (trialcomment)
     {
         trialcomment->num_samples = 0;
         if (m_instInfo == 0)
-        {
             return CBSDKRESULT_WARNCLOSED;
-        }
-        else
+        if (m_CMT == nullptr)
+            return CBSDKRESULT_ERRCONFIG;
+
+        // Wait for packets to come in
         {
-            if (m_CMT == nullptr)
-                return CBSDKRESULT_ERRCONFIG;
-
-            // Wait for packets to come in
-            {
-                std::unique_lock<std::mutex> lock(m_lockGetPacketsCmt);
-                m_bPacketsCmt = true;
-                m_waitPacketsCmt.wait_for(lock, std::chrono::milliseconds(wait_for_comment_msec));
-            }
-
-            // Take a snapshot of the current write pointer
-            m_lockTrialComment.lock();
-            uint32_t read_end_index = m_CMT->write_index;
-            uint32_t read_index = m_CMT->write_start_index;
-            m_lockTrialComment.unlock();
-            auto num_samples = read_end_index - read_index;
-            if (num_samples < 0)
-                num_samples += m_CMT->size;
-            if (num_samples)
-            {
-                trialcomment->num_samples = num_samples;
-            }
+            std::unique_lock<std::mutex> lock(m_lockGetPacketsCmt);
+            m_bPacketsCmt = true;
+            m_waitPacketsCmt.wait_for(lock, std::chrono::milliseconds(wait_for_comment_msec));
         }
+
+        // Take a snapshot of the current write pointer
+        m_lockTrialComment.lock();
+        const uint32_t read_end_index = m_CMT->write_index;
+        const uint32_t read_index = m_CMT->write_start_index;
+        m_lockTrialComment.unlock();
+        auto num_samples = read_end_index - read_index;
+        if (num_samples < 0)
+            num_samples += m_CMT->size;
+        if (num_samples)
+            trialcomment->num_samples = num_samples;
     }
     if (trialtracking)
     {
@@ -2462,47 +2184,45 @@ cbSdkResult SdkApp::SdkInitTrialData(const uint32_t bActive, cbSdkTrialEvent * t
             memset(trialtracking->names, 0, sizeof(trialtracking->names));
             return CBSDKRESULT_WARNCLOSED;
         }
-        else
+        if (m_TR == nullptr)
+            return CBSDKRESULT_ERRCONFIG;
+
+        uint32_t read_end_index[cbMAXTRACKOBJ];
+
+        // Wait for packets to come in
         {
-            if (m_TR == nullptr)
-                return CBSDKRESULT_ERRCONFIG;
-            uint32_t read_end_index[cbMAXTRACKOBJ];
-
-            // Wait for packets to come in
-            {
-                std::unique_lock<std::mutex> lock(m_lockGetPacketsTrack);
-                m_bPacketsTrack = true;
-                m_waitPacketsTrack.wait_for(lock, std::chrono::milliseconds(250));
-            }
-
-            // Take a snapshot of the current write pointer
-            m_lockTrialTracking.lock();
-            memcpy(read_end_index, m_TR->write_index, sizeof(m_TR->write_index));
-            m_lockTrialTracking.unlock();
-            int count = 0;
-            for (uint16_t id = 0; id < cbMAXTRACKOBJ; ++id)
-            {
-                auto num_samples = read_end_index[id] - m_TR->write_start_index[id];
-                if (num_samples < 0)
-                    num_samples += m_TR->size;
-                uint16_t type = m_TR->node_type[id];
-                if (num_samples && type)
-                {
-                    trialtracking->ids[count] = id; // Actual trackable ID
-                    trialtracking->num_samples[count] = num_samples;
-                    trialtracking->types[count] = type;
-                    trialtracking->max_point_counts[count] = m_TR->max_point_counts[id];
-                    strncpy(reinterpret_cast<char *>(trialtracking->names[count]), reinterpret_cast<char *>(m_TR->node_name[id]), cbLEN_STR_LABEL);
-                    count++;
-                }
-            }
-            trialtracking->count = count;
+            std::unique_lock<std::mutex> lock(m_lockGetPacketsTrack);
+            m_bPacketsTrack = true;
+            m_waitPacketsTrack.wait_for(lock, std::chrono::milliseconds(250));
         }
+
+        // Take a snapshot of the current write pointer
+        m_lockTrialTracking.lock();
+        memcpy(read_end_index, m_TR->write_index, sizeof(m_TR->write_index));
+        m_lockTrialTracking.unlock();
+        int count = 0;
+        for (uint16_t id = 0; id < cbMAXTRACKOBJ; ++id)
+        {
+            auto num_samples = read_end_index[id] - m_TR->write_start_index[id];
+            if (num_samples < 0)
+                num_samples += m_TR->size;
+            uint16_t type = m_TR->node_type[id];
+            if (num_samples && type)
+            {
+                trialtracking->ids[count] = id; // Actual trackable ID
+                trialtracking->num_samples[count] = num_samples;
+                trialtracking->types[count] = type;
+                trialtracking->max_point_counts[count] = m_TR->max_point_counts[id];
+                strncpy(reinterpret_cast<char *>(trialtracking->names[count]), reinterpret_cast<char *>(m_TR->node_name[id]), cbLEN_STR_LABEL);
+                count++;
+            }
+        }
+        trialtracking->count = count;
     }
     return CBSDKRESULT_SUCCESS;
 }
 
-CBSDKAPI    cbSdkResult cbSdkInitTrialData(const uint32_t nInstance, const uint32_t bActive,
+CBSDKAPI    cbSdkResult cbSdkInitTrialData(const uint32_t nInstance, const uint32_t bResetClock,
                                            cbSdkTrialEvent * trialevent, cbSdkTrialCont * trialcont,
                                            cbSdkTrialComment * trialcomment, cbSdkTrialTracking * trialtracking, const unsigned long wait_for_comment_msec)
 {
@@ -2511,7 +2231,7 @@ CBSDKAPI    cbSdkResult cbSdkInitTrialData(const uint32_t nInstance, const uint3
     if (g_app[nInstance] == nullptr)
         return CBSDKRESULT_CLOSED;
 
-    return g_app[nInstance]->SdkInitTrialData(bActive, trialevent, trialcont, trialcomment, trialtracking, wait_for_comment_msec);
+    return g_app[nInstance]->SdkInitTrialData(bResetClock, trialevent, trialcont, trialcomment, trialtracking, wait_for_comment_msec);
 }
 
 // Author & Date:   Ehsan Azar     25 Feb 2011
@@ -3050,8 +2770,8 @@ cbSdkResult cbSdkUpload(const char * szSrc, const char * szDstDir, const uint32_
     }
     const char * szBaseName = &szSrc[0];
     // Find the base name and use it on destination too
-    auto nLen = static_cast<uint32_t>(strlen(szSrc));
-    for (int i = nLen - 1; i >= 0; --i)
+    auto nLen = strlen(szSrc);
+    for (int i = static_cast<int>(nLen) - 1; i >= 0; --i)
     {
 #ifdef WIN32
         if (szSrc[i] == '/' || szSrc[i] == '\\')
@@ -3074,7 +2794,7 @@ cbSdkResult cbSdkUpload(const char * szSrc, const char * szDstDir, const uint32_
         free(pFileData);
         return CBSDKRESULT_INVALIDFILENAME;
     }
-    nLen = static_cast<uint32_t>(strlen(szBaseName)) + static_cast<uint32_t>(strlen(szDstDir)) + 1;
+    nLen = strlen(szBaseName) + strlen(szDstDir) + 1;
     if (nLen >= 64)
     {
         free(pFileData);
@@ -3194,7 +2914,7 @@ cbSdkResult SdkApp::SdkExtDoCommand(const cbSdkExtCmd * extCmd) const {
 }
 
 /// sdk stub for SdkApp::cbSdkExtCmd
-CBSDKAPI    cbSdkResult cbSdkExtDoCommand(const uint32_t nInstance, cbSdkExtCmd * extCmd)
+CBSDKAPI    cbSdkResult cbSdkExtDoCommand(const uint32_t nInstance, const cbSdkExtCmd * extCmd)
 {
     if (extCmd == nullptr)
         return CBSDKRESULT_NULLPTR;
@@ -4087,10 +3807,10 @@ SdkApp::SdkApp()
     , m_bPacketsEvent(false), m_bPacketsCmt(false), m_bPacketsTrack(false)
     , m_uTrialBeginChannel(0), m_uTrialBeginMask(0), m_uTrialBeginValue(0)
     , m_uTrialEndChannel(0), m_uTrialEndMask(0), m_uTrialEndValue(0)
-    , m_bTrialDouble(false), m_bTrialAbsolute(false), m_uTrialWaveforms(0)
+    , m_uTrialWaveforms(0)
     , m_uTrialConts(0), m_uTrialEvents(0), m_uTrialComments(0)
-    , m_uTrialTrackings(0), m_bWithinTrial(false), m_uTrialStartTime(0)
-    , m_uCbsdkTime(0), m_CD(nullptr), m_ED(nullptr), m_CMT(nullptr), m_TR(nullptr)
+    , m_uTrialTrackings(0), m_bWithinTrial(false), m_uTrialStartTime(0), m_uCbsdkTime(0)
+    , m_nextTrialStartTime(0), m_CD(nullptr), m_ED(nullptr), m_CMT(nullptr), m_TR(nullptr)
 {
     memset(&m_lastPktVideoSynch, 0, sizeof(m_lastPktVideoSynch));
     memset(&m_bChannelMask, 0, sizeof(m_bChannelMask));

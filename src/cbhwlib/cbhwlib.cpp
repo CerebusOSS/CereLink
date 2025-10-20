@@ -20,7 +20,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "StdAfx.h"
-// cbhwlib library is currently based on non unicode only
+// cbhwlib library is currently based on non Unicode only
 #undef UNICODE
 #undef _UNICODE
 #ifndef WIN32
@@ -30,9 +30,7 @@
     #include <sys/file.h>
     #include <sys/types.h>
     #include <sys/stat.h>
-    #include <fcntl.h>
-    #include <errno.h>
-    #include <time.h>
+    #include <cerrno>
 #endif
 #include "DataVector.h"
 #ifndef _MSC_VER
@@ -41,7 +39,7 @@
 #ifndef WIN32
     #define Sleep(x) usleep((x) * 1000)
     #define strncpy_s( dst, dstSize, src, count ) strncpy( dst, src, count < dstSize ? count : dstSize )
-#endif                                // so it should probably be moved...
+#endif // WIN32
 #include "debugmacs.h"
 #include "../include/cerelink/cbhwlib.h"
 #include "cbHwlibHi.h"
@@ -59,27 +57,27 @@ cbRESULT CreateSharedObjects(uint32_t nInstance);
 
 
 // buffer handles
-cbSharedMemHandle  cb_xmt_global_buffer_hnd[cbMAXOPEN] = {NULL};       // Transmit queues to send out of this PC
-cbXMTBUFF*  cb_xmt_global_buffer_ptr[cbMAXOPEN] = {NULL};
-LPCSTR GLOBAL_XMT_NAME = "XmtGlobal";
-cbSharedMemHandle  cb_xmt_local_buffer_hnd[cbMAXOPEN] = {NULL};        // Transmit queues only for local (this PC) use
-cbXMTBUFF*  cb_xmt_local_buffer_ptr[cbMAXOPEN] = {NULL};
-LPCSTR LOCAL_XMT_NAME = "XmtLocal";
+cbSharedMemHandle  cb_xmt_global_buffer_hnd[cbMAXOPEN] = {nullptr};       // Transmit queues to send out of this PC
+cbXMTBUFF*  cb_xmt_global_buffer_ptr[cbMAXOPEN] = {nullptr};
+auto GLOBAL_XMT_NAME = "XmtGlobal";
+cbSharedMemHandle  cb_xmt_local_buffer_hnd[cbMAXOPEN] = {nullptr};        // Transmit queues only for local (this PC) use
+cbXMTBUFF*  cb_xmt_local_buffer_ptr[cbMAXOPEN] = {nullptr};
+auto LOCAL_XMT_NAME = "XmtLocal";
 
-LPCSTR REC_BUF_NAME = "cbRECbuffer";
-cbSharedMemHandle  cb_rec_buffer_hnd[cbMAXOPEN] = {NULL};
-cbRECBUFF*  cb_rec_buffer_ptr[cbMAXOPEN] = {NULL};
-LPCSTR CFG_BUF_NAME = "cbCFGbuffer";
-cbSharedMemHandle  cb_cfg_buffer_hnd[cbMAXOPEN] = {NULL};
-cbCFGBUFF*  cb_cfg_buffer_ptr[cbMAXOPEN] = {NULL};
-LPCSTR STATUS_BUF_NAME = "cbSTATUSbuffer";
-cbSharedMemHandle  cb_pc_status_buffer_hnd[cbMAXOPEN] = {NULL};
-cbPcStatus* cb_pc_status_buffer_ptr[cbMAXOPEN] = {NULL};
-LPCSTR SPK_BUF_NAME = "cbSPKbuffer";
-cbSharedMemHandle  cb_spk_buffer_hnd[cbMAXOPEN] = {NULL};
-cbSPKBUFF*  cb_spk_buffer_ptr[cbMAXOPEN] = {NULL};
-LPCSTR SIG_EVT_NAME = "cbSIGNALevent";
-HANDLE      cb_sig_event_hnd[cbMAXOPEN] = {NULL};
+auto REC_BUF_NAME = "cbRECbuffer";
+cbSharedMemHandle  cb_rec_buffer_hnd[cbMAXOPEN] = {nullptr};
+cbRECBUFF*  cb_rec_buffer_ptr[cbMAXOPEN] = {nullptr};
+auto CFG_BUF_NAME = "cbCFGbuffer";
+cbSharedMemHandle  cb_cfg_buffer_hnd[cbMAXOPEN] = {nullptr};
+cbCFGBUFF*  cb_cfg_buffer_ptr[cbMAXOPEN] = {nullptr};
+auto STATUS_BUF_NAME = "cbSTATUSbuffer";
+cbSharedMemHandle  cb_pc_status_buffer_hnd[cbMAXOPEN] = {nullptr};
+cbPcStatus* cb_pc_status_buffer_ptr[cbMAXOPEN] = {nullptr};
+auto SPK_BUF_NAME = "cbSPKbuffer";
+cbSharedMemHandle  cb_spk_buffer_hnd[cbMAXOPEN] = {nullptr};
+cbSPKBUFF*  cb_spk_buffer_ptr[cbMAXOPEN] = {nullptr};
+auto SIG_EVT_NAME = "cbSIGNALevent";
+HANDLE      cb_sig_event_hnd[cbMAXOPEN] = {nullptr};
 
 //
 uint32_t      cb_library_index[cbMAXOPEN] = {0};
@@ -90,13 +88,13 @@ uint32_t      cb_recbuff_processed[cbMAXOPEN] = {0};
 PROCTIME      cb_recbuff_lasttime[cbMAXOPEN] = {0};
 
 // Handle to system lock associated with shared resources
-HANDLE      cb_sys_lock_hnd[cbMAXOPEN] = {NULL};
+HANDLE      cb_sys_lock_hnd[cbMAXOPEN] = {nullptr};
 
 
 // Local functions to make life easier
-inline cbOPTIONTABLE & GetOptionTable(uint32_t nInstance)
+inline cbOPTIONTABLE & GetOptionTable(const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
     return cb_cfg_buffer_ptr[nIdx]->optiontable;
 }
 
@@ -123,35 +121,33 @@ uint32_t cbVersion()
 void DestroySharedObject(cbSharedMemHandle & shmem, void ** ppMem)
 {
 #ifdef WIN32
-    if (*ppMem != NULL)
+    if (*ppMem != nullptr)
         UnmapViewOfFile(*ppMem);
-    if (shmem.hnd != NULL)
+    if (shmem.hnd != nullptr)
         CloseHandle(shmem.hnd);
 #else
-    if (*ppMem != NULL)
+    if (*ppMem != nullptr)
     {
         // Get the number of current attachments
-        int errsv = 0;
         if (munmap(shmem.hnd, shmem.size) == -1)
         {
-            errsv = errno;
-            printf("munmap() failed with errno %d\n", errsv);
+            printf("munmap() failed with errno %d\n", errno);
         }
         close(shmem.fd);
         shm_unlink(shmem.name);
     }
 #endif
-    shmem.hnd = 0;
-    *ppMem = 0;
+    shmem.hnd = nullptr;
+    *ppMem = nullptr;
 }
 
 // Author & Date:       Almut Branner         28 Mar 2006
 // Purpose: Release and clear the shared memory objects
 // Inputs:
 //   nInstance - nsp number to close library for
-void DestroySharedObjects(bool bStandAlone, uint32_t nInstance)
+void DestroySharedObjects(const bool bStandAlone, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     if (bStandAlone)
     {
@@ -167,7 +163,7 @@ void DestroySharedObjects(bool bStandAlone, uint32_t nInstance)
 #else
     if (cb_sig_event_hnd[nIdx])
     {
-        sem_close((sem_t *)cb_sig_event_hnd[nIdx]);
+        sem_close(static_cast<sem_t *>(cb_sig_event_hnd[nIdx]));
         if (bStandAlone)
         {
             char buf[64] = {0};
@@ -181,22 +177,22 @@ void DestroySharedObjects(bool bStandAlone, uint32_t nInstance)
 #endif
 
     // release the shared pc status memory space
-    DestroySharedObject(cb_pc_status_buffer_hnd[nIdx], (void **)&cb_pc_status_buffer_ptr[nIdx]);
+    DestroySharedObject(cb_pc_status_buffer_hnd[nIdx], reinterpret_cast<void **>(&cb_pc_status_buffer_ptr[nIdx]));
 
     // release the shared spike buffer memory space
-    DestroySharedObject(cb_spk_buffer_hnd[nIdx], (void **)&cb_spk_buffer_ptr[nIdx]);
+    DestroySharedObject(cb_spk_buffer_hnd[nIdx], reinterpret_cast<void **>(&cb_spk_buffer_ptr[nIdx]));
 
     // release the shared configuration memory space
-    DestroySharedObject(cb_cfg_buffer_hnd[nIdx], (void **)&cb_cfg_buffer_ptr[nIdx]);
+    DestroySharedObject(cb_cfg_buffer_hnd[nIdx], reinterpret_cast<void **>(&cb_cfg_buffer_ptr[nIdx]));
 
     // release the shared global transmit memory space
-    DestroySharedObject(cb_xmt_global_buffer_hnd[nIdx], (void **)&cb_xmt_global_buffer_ptr[nIdx]);
+    DestroySharedObject(cb_xmt_global_buffer_hnd[nIdx], reinterpret_cast<void **>(&cb_xmt_global_buffer_ptr[nIdx]));
 
     // release the shared local transmit memory space
-    DestroySharedObject(cb_xmt_local_buffer_hnd[nIdx], (void **)&cb_xmt_local_buffer_ptr[nIdx]);
+    DestroySharedObject(cb_xmt_local_buffer_hnd[nIdx], reinterpret_cast<void **>(&cb_xmt_local_buffer_ptr[nIdx]));
 
     // release the shared receive memory space
-    DestroySharedObject(cb_rec_buffer_hnd[nIdx], (void **)&cb_rec_buffer_ptr[nIdx]);
+    DestroySharedObject(cb_rec_buffer_hnd[nIdx], reinterpret_cast<void **>(&cb_rec_buffer_ptr[nIdx]));
 }
 
 // Author & Date:   Ehsan Azar     29 April 2012
@@ -211,21 +207,20 @@ void OpenSharedBuffer(cbSharedMemHandle& shmem, bool bReadOnly)
     // Keep windows version unchanged
     shmem.hnd = OpenFileMappingA(bReadOnly ? FILE_MAP_READ : FILE_MAP_ALL_ACCESS, 0, shmem.name);
 #else
-    int oflag = (bReadOnly ? O_RDONLY : O_RDWR);
-    mode_t omode = (bReadOnly ? 0444 : 0660);
+    const int oflag = (bReadOnly ? O_RDONLY : O_RDWR);
+    const mode_t omode = (bReadOnly ? 0444 : 0660);
     shmem.fd = shm_open(shmem.name, oflag, omode);
     if (shmem.fd == -1)
         /* Handle error */;
-    struct stat shm_stat;
+    struct stat shm_stat{};
     if (fstat(shmem.fd, &shm_stat) == -1)
         /* Handle error */;
-    int prot = (bReadOnly ? PROT_READ : PROT_READ | PROT_WRITE);
+    const int prot = (bReadOnly ? PROT_READ : PROT_READ | PROT_WRITE);
     shmem.size = shm_stat.st_size;
-    shmem.hnd = mmap(NULL, shm_stat.st_size, prot, MAP_SHARED, shmem.fd, 0);
+    shmem.hnd = mmap(nullptr, shm_stat.st_size, prot, MAP_SHARED, shmem.fd, 0);
     if (shmem.hnd == MAP_FAILED || !shmem.hnd)
         /* Handle error */;
 #endif
-    return;
 }
 
 // Author & Date:   Ehsan Azar     29 April 2012
@@ -236,10 +231,10 @@ void CreateSharedBuffer(cbSharedMemHandle& shmem)
 {
 #ifdef WIN32
     // Keep windows version unchanged
-    shmem.hnd = CreateFileMappingA((HANDLE)INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, shmem.size, shmem.name);
+    shmem.hnd = CreateFileMappingA((HANDLE)INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, shmem.size, shmem.name);
 #else
     // round up to the next pagesize.
-    int pagesize = getpagesize();
+    const int pagesize = getpagesize();
     shmem.size = shmem.size - (shmem.size % pagesize) + pagesize;
     // Pre-emptively attempt to unlink in case it already exists.
     int errsv = 0;
@@ -263,18 +258,17 @@ void CreateSharedBuffer(cbSharedMemHandle& shmem)
         return;
     }
     // Get a pointer to the shmem object.
-    void *rptr = mmap(NULL, shmem.size,
+    void *rptr = mmap(nullptr, shmem.size,
                       PROT_READ | PROT_WRITE, MAP_SHARED, shmem.fd, 0);
     if (rptr == MAP_FAILED) {
         errsv = errno;
-        printf("mmap(NULL, %d, ...) failed with errno %d\n", shmem.size, errsv);
+        printf("mmap(nullptr, %d, ...) failed with errno %d\n", shmem.size, errsv);
         close(shmem.fd);
         shm_unlink(shmem.name);
     }
     else
         shmem.hnd = rptr;
 #endif
-    return;
 }
 
 // Author & Date:   Ehsan Azar     29 April 2012
@@ -284,8 +278,8 @@ void CreateSharedBuffer(cbSharedMemHandle& shmem)
 //   bReadOnly - if should open memory for read-only operation
 void * GetSharedBuffer(HANDLE hnd, bool bReadOnly)
 {
-    void * ret = NULL;
-    if (hnd == NULL)
+    void * ret = nullptr;
+    if (hnd == nullptr)
         return ret;
 #ifdef WIN32
     // Keep windows version unchanged
@@ -301,7 +295,7 @@ void * GetSharedBuffer(HANDLE hnd, bool bReadOnly)
 // Inputs:
 //   bStandAlone - if should open library as stand-alone
 //   nInstance     - integer index identifier of library instance (0-based up to cbMAXOPEN-1)
-cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
+cbRESULT cbOpen(const bool bStandAlone, const uint32_t nInstance)
 {
     char buf[64] = {0};
     cbRESULT cbRet;
@@ -328,11 +322,11 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
     else
         _snprintf(szLockName, sizeof(szLockName), "cbSharedDataMutex%d", nInstance);
 
-    // If it is stand alone application
+    // If it is stand-alone application
     if (bStandAlone)
     {
         // Acquire lock
-        cbRet = cbAquireSystemLock(szLockName, cb_sys_lock_hnd[nInstance]);
+        cbRet = cbAcquireSystemLock(szLockName, cb_sys_lock_hnd[nInstance]);
         if (cbRet)
             return cbRet;
         cb_library_index[nInstance] = nIdx;
@@ -360,13 +354,12 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
     else
         _snprintf(cb_rec_buffer_hnd[nIdx].name, sizeof(cb_rec_buffer_hnd[nIdx].name), "%s%d", REC_BUF_NAME, nInstance);
     OpenSharedBuffer(cb_rec_buffer_hnd[nIdx], true);
-    cb_rec_buffer_ptr[nIdx] = (cbRECBUFF*)GetSharedBuffer(cb_rec_buffer_hnd[nIdx].hnd, true);
-    if (cb_rec_buffer_ptr[nIdx] == NULL)
+    cb_rec_buffer_ptr[nIdx] = static_cast<cbRECBUFF *>(GetSharedBuffer(cb_rec_buffer_hnd[nIdx].hnd, true));
+    if (cb_rec_buffer_ptr[nIdx] == nullptr)
     {
         cbClose(false, nInstance);
         return cbRESULT_LIBINITERROR;
     }
-
 
     if (nInstance == 0)
         _snprintf(cb_xmt_global_buffer_hnd[nIdx].name, sizeof(cb_xmt_global_buffer_hnd[nIdx].name), "%s", GLOBAL_XMT_NAME);
@@ -374,8 +367,8 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
         _snprintf(cb_xmt_global_buffer_hnd[nIdx].name, sizeof(cb_xmt_global_buffer_hnd[nIdx].name), "%s%d", GLOBAL_XMT_NAME, nInstance);
     // Create the shared global transmit buffer; if unsuccessful, release rec buffer and return FALSE
     OpenSharedBuffer(cb_xmt_global_buffer_hnd[nIdx], false);
-    cb_xmt_global_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_global_buffer_hnd[nIdx].hnd, false);
-    if (cb_xmt_global_buffer_ptr[nIdx] == NULL)
+    cb_xmt_global_buffer_ptr[nIdx] = static_cast<cbXMTBUFF *>(GetSharedBuffer(cb_xmt_global_buffer_hnd[nIdx].hnd, false));
+    if (cb_xmt_global_buffer_ptr[nIdx] == nullptr)
     {
         cbClose(false, nInstance);
         return cbRESULT_LIBINITERROR;
@@ -387,8 +380,8 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
         _snprintf(cb_xmt_local_buffer_hnd[nIdx].name, sizeof(cb_xmt_local_buffer_hnd[nIdx].name), "%s%d", LOCAL_XMT_NAME, nInstance);
     // Create the shared local transmit buffer; if unsuccessful, release rec buffer and return FALSE
     OpenSharedBuffer(cb_xmt_local_buffer_hnd[nIdx], false);
-    cb_xmt_local_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_local_buffer_hnd[nIdx].hnd, false);
-    if (cb_xmt_local_buffer_ptr[nIdx] == NULL)
+    cb_xmt_local_buffer_ptr[nIdx] = static_cast<cbXMTBUFF *>(GetSharedBuffer(cb_xmt_local_buffer_hnd[nIdx].hnd, false));
+    if (cb_xmt_local_buffer_ptr[nIdx] == nullptr)
     {
         cbClose(false, nInstance);
         return cbRESULT_LIBINITERROR;
@@ -400,8 +393,8 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
         _snprintf(cb_cfg_buffer_hnd[nIdx].name, sizeof(cb_cfg_buffer_hnd[nIdx].name), "%s%d", CFG_BUF_NAME, nInstance);
     // Create the shared neuromatic configuration buffer; if unsuccessful, release rec buffer and return FALSE
     OpenSharedBuffer(cb_cfg_buffer_hnd[nIdx], true);
-    cb_cfg_buffer_ptr[nIdx] = (cbCFGBUFF*)GetSharedBuffer(cb_cfg_buffer_hnd[nIdx].hnd, true);
-    if (cb_cfg_buffer_ptr[nIdx] == NULL)
+    cb_cfg_buffer_ptr[nIdx] = static_cast<cbCFGBUFF *>(GetSharedBuffer(cb_cfg_buffer_hnd[nIdx].hnd, true));
+    if (cb_cfg_buffer_ptr[nIdx] == nullptr)
     {
         cbClose(false, nInstance);
         return cbRESULT_LIBINITERROR;
@@ -425,8 +418,8 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
         _snprintf(cb_pc_status_buffer_hnd[nIdx].name, sizeof(cb_pc_status_buffer_hnd[nIdx].name), "%s%d", STATUS_BUF_NAME, nInstance);
     // Create the shared pc status buffer; if unsuccessful, release rec buffer and return FALSE
     OpenSharedBuffer(cb_pc_status_buffer_hnd[nIdx], false);
-    cb_pc_status_buffer_ptr[nIdx] = (cbPcStatus*)GetSharedBuffer(cb_pc_status_buffer_hnd[nIdx].hnd, false);
-    if (cb_pc_status_buffer_ptr[nIdx] == NULL)
+    cb_pc_status_buffer_ptr[nIdx] = static_cast<cbPcStatus *>(GetSharedBuffer(cb_pc_status_buffer_hnd[nIdx].hnd, false));
+    if (cb_pc_status_buffer_ptr[nIdx] == nullptr)
     {
         cbClose(false, nInstance);
         return cbRESULT_LIBINITERROR;
@@ -438,8 +431,8 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
     else
         _snprintf(cb_spk_buffer_hnd[nIdx].name, sizeof(cb_spk_buffer_hnd[nIdx].name), "%s%d", SPK_BUF_NAME, nInstance);
     OpenSharedBuffer(cb_spk_buffer_hnd[nIdx], false);
-    cb_spk_buffer_ptr[nIdx] = (cbSPKBUFF*)GetSharedBuffer(cb_spk_buffer_hnd[nIdx].hnd, false);
-    if (cb_spk_buffer_ptr[nIdx] == NULL)
+    cb_spk_buffer_ptr[nIdx] = static_cast<cbSPKBUFF *>(GetSharedBuffer(cb_spk_buffer_hnd[nIdx].hnd, false));
+    if (cb_spk_buffer_ptr[nIdx] == nullptr)
     {
         cbClose(false, nInstance);
         return cbRESULT_LIBINITERROR;
@@ -452,7 +445,7 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
         _snprintf(buf, sizeof(buf), "%s%d", SIG_EVT_NAME, nInstance);
 #ifdef WIN32
     cb_sig_event_hnd[nIdx] = OpenEventA(SYNCHRONIZE, TRUE, buf);
-    if (cb_sig_event_hnd[nIdx] == NULL)
+    if (cb_sig_event_hnd[nIdx] == nullptr)
     {
         cbClose(false, nInstance);
         return cbRESULT_LIBINITERROR;
@@ -481,25 +474,25 @@ cbRESULT cbOpen(bool bStandAlone, uint32_t nInstance)
 cbRESULT cbCheckApp(const char * lpName)
 {
     cbRESULT cbRet = cbRESULT_OK;
-    if (lpName == NULL)
+    if (lpName == nullptr)
         return cbRESULT_SYSLOCK;
 #ifdef WIN32
     // Test for availability of central application by attempting to open/close Central App Mutex
     HANDLE hCentralMutex = OpenMutexA(MUTEX_ALL_ACCESS, FALSE, lpName);
     CloseHandle(hCentralMutex);
-    if (hCentralMutex == NULL)
+    if (hCentralMutex == nullptr)
         cbRet = cbRESULT_NOCENTRALAPP;
 #else
     {
         char szLockName[256] = {0};
         char * szTmpDir = getenv("TMPDIR");
-        _snprintf(szLockName, sizeof(szLockName), "%s/%s.lock", szTmpDir == NULL ? "/tmp" : szTmpDir, lpName);
+        _snprintf(szLockName, sizeof(szLockName), "%s/%s.lock", szTmpDir == nullptr ? "/tmp" : szTmpDir, lpName);
         FILE * pflock = fopen(szLockName, "w+");
-        if (pflock == NULL)
+        if (pflock == nullptr)
             cbRet = cbRESULT_OK; // Assume root has the lock
         else if (flock(fileno(pflock), LOCK_EX | LOCK_NB) == 0)
             cbRet = cbRESULT_NOCENTRALAPP;
-        if (pflock != NULL)
+        if (pflock != nullptr)
         {
             fclose(pflock);
             if (cbRet == cbRESULT_NOCENTRALAPP)
@@ -517,13 +510,13 @@ cbRESULT cbCheckApp(const char * lpName)
 // Outputs:
 //   hLock  - the handle to newly created system lock
 //  Returns the error code (cbRESULT_OK if successful)
-cbRESULT cbAquireSystemLock(const char * lpName, HANDLE & hLock)
+cbRESULT cbAcquireSystemLock(const char * lpName, HANDLE & hLock)
 {
-    if (lpName == NULL)
+    if (lpName == nullptr)
         return cbRESULT_SYSLOCK;
 #ifdef WIN32
     // Try creating the system mutex
-    HANDLE hMutex = CreateMutexA(NULL, TRUE, lpName);
+    HANDLE hMutex = CreateMutexA(nullptr, TRUE, lpName);
     if (hMutex == 0 || GetLastError() == ERROR_ACCESS_DENIED || GetLastError() == ERROR_ALREADY_EXISTS)
         return cbRESULT_SYSLOCK;
     hLock = hMutex;
@@ -532,16 +525,16 @@ cbRESULT cbAquireSystemLock(const char * lpName, HANDLE & hLock)
     //  only a file lock seems resilient to crash, also with tmp mounted as tmpfs this is as fast as it could be
     char szLockName[256] = {0};
     char * szTmpDir = getenv("TMPDIR");
-    _snprintf(szLockName, sizeof(szLockName), "%s/%s.lock", szTmpDir == NULL ? "/tmp" : szTmpDir, lpName);
+    _snprintf(szLockName, sizeof(szLockName), "%s/%s.lock", szTmpDir == nullptr ? "/tmp" : szTmpDir, lpName);
     FILE * pflock = fopen(szLockName, "w+");
-    if (pflock == NULL)
+    if (pflock == nullptr)
         return cbRESULT_SYSLOCK;
     if (flock(fileno(pflock), LOCK_EX | LOCK_NB) != 0)
     {
         return cbRESULT_SYSLOCK;
     }
-    fprintf(pflock, "%u", (uint32_t)getpid());
-    hLock = (void *)pflock;
+    fprintf(pflock, "%u", static_cast<uint32_t>(getpid()));
+    hLock = static_cast<void *>(pflock);
 #endif
     return cbRESULT_OK;
 }
@@ -555,7 +548,7 @@ cbRESULT cbAquireSystemLock(const char * lpName, HANDLE & hLock)
 //  Returns the error code (cbRESULT_OK if successful)
 cbRESULT cbReleaseSystemLock(const char * lpName, HANDLE & hLock)
 {
-    if (lpName == NULL)
+    if (lpName == nullptr)
         return cbRESULT_SYSLOCK;
 #ifdef WIN32
     if (CloseHandle(hLock) == 0)
@@ -564,14 +557,14 @@ cbRESULT cbReleaseSystemLock(const char * lpName, HANDLE & hLock)
     if (hLock)
     {
         char szLockName[256] = {0};
-        char * szTmpDir = getenv("TMPDIR");
-        _snprintf(szLockName, sizeof(szLockName), "%s/%s.lock", szTmpDir == NULL ? "/tmp" : szTmpDir, lpName);
-        FILE * pflock = (FILE *)hLock;
+        const char * szTmpDir = getenv("TMPDIR");
+        _snprintf(szLockName, sizeof(szLockName), "%s/%s.lock", szTmpDir == nullptr ? "/tmp" : szTmpDir, lpName);
+        const auto pflock = static_cast<FILE *>(hLock);
         fclose(pflock); // Close mutex
         remove(szLockName); // Cleanup
     }
 #endif
-    hLock = NULL;
+    hLock = nullptr;
     return cbRESULT_OK;
 }
 
@@ -581,10 +574,10 @@ cbRESULT cbReleaseSystemLock(const char * lpName, HANDLE & hLock)
 // Outputs:
 //  instInfo - combination of cbINSTINFO_*
 //  cbRESULT_OK if successful
-cbRESULT cbGetInstInfo(uint32_t *instInfo, uint32_t nInstance)
+cbRESULT cbGetInstInfo(uint32_t *instInfo, const uint32_t nInstance)
 {
     *instInfo = 0;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx])
@@ -594,13 +587,13 @@ cbRESULT cbGetInstInfo(uint32_t *instInfo, uint32_t nInstance)
     cbPROCINFO isInfo;
     if (cbGetProcInfo(cbNSP1, &isInfo, nInstance) == cbRESULT_OK)
     {
-        if (strstr(isInfo.ident, "Cereplex") != NULL)
+        if (strstr(isInfo.ident, "Cereplex") != nullptr)
             type = cbINSTINFO_CEREPLEX;
-        else if (strstr(isInfo.ident, "Emulator") != NULL)
+        else if (strstr(isInfo.ident, "Emulator") != nullptr)
             type = cbINSTINFO_EMULATOR;
-        else if (strstr(isInfo.ident, "wNSP") != NULL)
+        else if (strstr(isInfo.ident, "wNSP") != nullptr)
             type = cbINSTINFO_WNSP;
-        if (strstr(isInfo.ident, "NSP1 ") != NULL)
+        if (strstr(isInfo.ident, "NSP1 ") != nullptr)
             type |= cbINSTINFO_NSP1;
     }
 
@@ -612,7 +605,7 @@ cbRESULT cbGetInstInfo(uint32_t *instInfo, uint32_t nInstance)
 
     uint32_t flags = 0;
     // If online get more info (this will detect remote instruments)
-    if (cbGetNplay(0, 0, &flags, 0, 0, 0, 0, nInstance) == cbRESULT_OK)
+    if (cbGetNplay(nullptr, nullptr, &flags, nullptr, nullptr, nullptr, nullptr, nInstance) == cbRESULT_OK)
     {
         if (flags != cbNPLAY_FLAG_NONE) // If nPlay is running
             *instInfo |= type;
@@ -634,21 +627,20 @@ cbRESULT cbGetInstInfo(uint32_t *instInfo, uint32_t nInstance)
 // Outputs:
 //  nLatency - the latency (in number of samples)
 //  cbRESULT_OK if successful
-cbRESULT cbGetLatency(uint32_t *nLatency, uint32_t nInstance)
+cbRESULT cbGetLatency(uint32_t *nLatency, const uint32_t nInstance)
 {
     *nLatency = 0;
 
     uint32_t spikelen;
-    cbRESULT res = cbGetSpikeLength(&spikelen, NULL, NULL, nInstance);
-    if (res)
+    if (const cbRESULT res = cbGetSpikeLength(&spikelen, nullptr, nullptr, nInstance))
         return res;
     if (nLatency) *nLatency = (2 * spikelen + 16);
     return cbRESULT_OK;
 }
 
-cbRESULT cbMakePacketReadingBeginNow(uint32_t nInstance)
+cbRESULT cbMakePacketReadingBeginNow(const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
@@ -661,18 +653,18 @@ cbRESULT cbMakePacketReadingBeginNow(uint32_t nInstance)
     return cbRESULT_OK;
 }
 
-cbRESULT cbClose(bool bStandAlone, uint32_t nInstance)
+cbRESULT cbClose(const bool bStandAlone, const uint32_t nInstance)
 {
     if (nInstance >= cbMAXOPEN)
         return cbRESULT_INSTINVALID;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // clear lib init flag variable
     cb_library_initialized[nIdx] = false;
 
     // destroy the shared neuromatic memory and synchronization objects
     DestroySharedObjects(bStandAlone, nInstance);
-    // If it is stand alone application
+    // If it is stand-alone application
     if (bStandAlone)
     {
         char buf[256] = {0};
@@ -691,7 +683,7 @@ cbRESULT cbClose(bool bStandAlone, uint32_t nInstance)
 
 // Purpose: Processor Inquiry Function
 //
-cbRESULT cbGetProcInfo(uint32_t proc, cbPROCINFO *procinfo, uint32_t nInstance)
+cbRESULT cbGetProcInfo(uint32_t proc, cbPROCINFO *procinfo, const uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
 
@@ -711,7 +703,7 @@ cbRESULT cbGetProcInfo(uint32_t proc, cbPROCINFO *procinfo, uint32_t nInstance)
 
 // Purpose: Bank Inquiry Function
 //
-cbRESULT cbGetBankInfo(uint32_t proc, uint32_t bank, cbBANKINFO *bankinfo, uint32_t nInstance)
+cbRESULT cbGetBankInfo(uint32_t proc, uint32_t bank, cbBANKINFO *bankinfo, const uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
 
@@ -728,7 +720,7 @@ cbRESULT cbGetBankInfo(uint32_t proc, uint32_t bank, cbBANKINFO *bankinfo, uint3
 }
 
 
-uint32_t GetInstrumentLocalChan(uint32_t nChan, uint32_t nInstance)
+uint32_t GetInstrumentLocalChan(uint32_t nChan, const uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
     return cb_cfg_buffer_ptr[nIdx]->chaninfo[nChan - 1].chan;
@@ -739,7 +731,7 @@ uint32_t GetInstrumentLocalChan(uint32_t nChan, uint32_t nInstance)
 // Retreives the total number of channels in the system
 // Returns: cbRESULT_OK if data successfully retreived.
 //          cbRESULT_NOLIBRARY if the library was not properly initialized.
-cbRESULT cbGetChanCount(uint32_t *count, uint32_t nInstance)
+cbRESULT cbGetChanCount(uint32_t *count, const uint32_t nInstance)
 {
     uint32_t nIdx = cb_library_index[nInstance];
 
@@ -748,8 +740,8 @@ cbRESULT cbGetChanCount(uint32_t *count, uint32_t nInstance)
 
     // Sweep through the processor information banks and sum up the number of channels
     *count = 0;
-    for(int p = 0; p < cbMAXPROCS; p++)
-        if (cb_cfg_buffer_ptr[nIdx]->procinfo[p].cbpkt_header.chid) *count += cb_cfg_buffer_ptr[nIdx]->procinfo[p].chancount;
+    for(const auto & p : cb_cfg_buffer_ptr[nIdx]->procinfo)
+        if (p.cbpkt_header.chid) *count += p.chancount;
 
     return cbRESULT_OK;
 }
@@ -760,23 +752,23 @@ cbRESULT cbGetChanCount(uint32_t *count, uint32_t nInstance)
 // Systemwide Inquiry and Configuration Functions
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-cbRESULT cbSendPacketToInstrument(void * pPacket, uint32_t nInstance, uint32_t nInstrument)
+cbRESULT cbSendPacketToInstrument(void * pPacket, const uint32_t nInstance, uint32_t nInstrument)
 {
 #ifndef CBPROTO_311
-    cbPKT_GENERIC * pPkt = static_cast<cbPKT_GENERIC*>(pPacket);
+    auto * pPkt = static_cast<cbPKT_GENERIC*>(pPacket);
     pPkt->cbpkt_header.instrument = nInstrument;
 #endif
     return cbSendPacket(pPacket, nInstance);
 }
 
-cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance)
+cbRESULT cbSendPacket(void * pPacket, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
-    cbPKT_GENERIC * pPkt = static_cast<cbPKT_GENERIC*>(pPacket);
+    auto * pPkt = static_cast<cbPKT_GENERIC*>(pPacket);
 
     // The logic here is quite complicated. Data is filled in from other processes
     // in a 2 pass mode. First they fill all except they skip the first sizeof(PROCTIME) bytes.
@@ -842,9 +834,9 @@ cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance)
         {
             // attempt to atomically update the head pointer and verify that the head pointer
             // was not changed since orig_head_index was loaded and calculated upon
-            int32_t * pDest = (int32_t *) &cb_xmt_global_buffer_ptr[nIdx]->headindex;
-            int32_t  dwExch = (int32_t) mod_headindex;
-            int32_t  dwComp = (int32_t) orig_headindex;
+            auto * pDest = reinterpret_cast<int32_t *>(&cb_xmt_global_buffer_ptr[nIdx]->headindex);
+            auto  dwExch = static_cast<int32_t>(mod_headindex);
+            auto  dwComp = static_cast<int32_t>(orig_headindex);
 #ifdef WIN32
             if ((int32_t)InterlockedCompareExchange((volatile unsigned long *)pDest, (unsigned long)dwExch, (unsigned long)dwComp) == dwComp)
                 break;
@@ -854,7 +846,6 @@ cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance)
 #endif
                 // NORMAL EXIT
         }
-
 
         // check to see if we should give up or not
         if ((++insertionattempts) >= NUM_INSERTION_ATTEMPTS)
@@ -868,7 +859,7 @@ cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance)
 
     // Copy all but the first 4 bytes of the packet to the target packet location.
     // The Central App will not transmit the packet while the first uint32_t is zero.
-    memcpy(&(cb_xmt_global_buffer_ptr[nIdx]->buffer[orig_headindex+1]), ((uint32_t*)pPacket)+1, ((quadletcount-1)<<2) );
+    memcpy(&(cb_xmt_global_buffer_ptr[nIdx]->buffer[orig_headindex+1]), static_cast<uint32_t *>(pPacket)+1, ((quadletcount-1)<<2) );
 
     // atomically copy the first 4 bytes of the packet
 #ifdef WIN32
@@ -877,7 +868,7 @@ cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance)
     // buffer is uint32_t[] which guarantees 4-byte alignment, but compiler can't prove it at compile-time
     #pragma clang diagnostic push
     #pragma clang diagnostic ignored "-Watomic-alignment"
-    __atomic_exchange_n((int32_t*)&(cb_xmt_global_buffer_ptr[nIdx]->buffer[orig_headindex]),*((int32_t*)pPacket), __ATOMIC_SEQ_CST);
+    __atomic_exchange_n(reinterpret_cast<int32_t *>(&(cb_xmt_global_buffer_ptr[nIdx]->buffer[orig_headindex])),*static_cast<int32_t *>(pPacket), __ATOMIC_SEQ_CST);
     #pragma clang diagnostic pop
 #endif
     return cbRESULT_OK;
@@ -886,14 +877,14 @@ cbRESULT cbSendPacket(void * pPacket, uint32_t nInstance)
 
 // Author & Date:   Kirk Korver     17 Jun 2003
 // Purpose: send a packet only to ourselves (think IPC)
-cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance)
+cbRESULT cbSendLoopbackPacket(void * pPacket, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
-    cbPKT_GENERIC * pPkt = static_cast<cbPKT_GENERIC*>(pPacket);
+    auto * pPkt = static_cast<cbPKT_GENERIC*>(pPacket);
 
     // The logic here is quite complicated. Data is filled in from other processes
     // in a 2 pass mode. First they fill all except they skip the first 4 bytes.
@@ -910,7 +901,7 @@ cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance)
 
     ASSERT( *(static_cast<unsigned int const *>(pPacket)) != 0);
 
-    uint32_t quadletcount = pPkt->cbpkt_header.dlen + cbPKT_HEADER_32SIZE;
+    const uint32_t quadletcount = pPkt->cbpkt_header.dlen + cbPKT_HEADER_32SIZE;
     uint32_t orig_headindex;
 
     // give 3 attempts to claim a spot in the circular xmt buffer for the packet
@@ -924,7 +915,7 @@ cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance)
         // Copy the current buffer indices
         // NOTE: may want to use a 64-bit transfer to atomically get indices.  Otherwise, grab
         // tail index first to get "worst case" scenario;
-        uint32_t orig_tailindex = cb_xmt_local_buffer_ptr[nIdx]->tailindex;
+        const uint32_t orig_tailindex = cb_xmt_local_buffer_ptr[nIdx]->tailindex;
         orig_headindex = cb_xmt_local_buffer_ptr[nIdx]->headindex;
 
         // Compute the new head index at after the target packet position.
@@ -958,9 +949,9 @@ cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance)
         {
             // attempt to atomically update the head pointer and verify that the head pointer
             // was not changed since orig_head_index was loaded and calculated upon
-            int32_t * pDest = (int32_t*) &cb_xmt_local_buffer_ptr[nIdx]->headindex;
-            int32_t dwExch = (int32_t) mod_headindex;
-            int32_t dwComp = (int32_t) orig_headindex;
+            auto * pDest = reinterpret_cast<int32_t *>(&cb_xmt_local_buffer_ptr[nIdx]->headindex);
+            auto dwExch = static_cast<int32_t>(mod_headindex);
+            auto dwComp = static_cast<int32_t>(orig_headindex);
 #ifdef WIN32
             if ((int32_t)InterlockedCompareExchange((volatile unsigned long *)pDest, (unsigned long)dwExch, (unsigned long)dwComp) == dwComp)
                 break;
@@ -981,7 +972,7 @@ cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance)
 
     // Copy all but the first 4 bytes of the packet to the target packet location.
     // The Central App will not transmit the packet while the first uint32_t is zero.
-    memcpy(&(cb_xmt_local_buffer_ptr[nIdx]->buffer[orig_headindex+1]), ((uint32_t*)pPacket)+1, ((quadletcount-1)<<2) );
+    memcpy(&(cb_xmt_local_buffer_ptr[nIdx]->buffer[orig_headindex+1]), static_cast<uint32_t *>(pPacket)+1, ((quadletcount-1)<<2) );
 
     // atomically copy the first 4 bytes of the packet
 #ifdef WIN32
@@ -990,7 +981,7 @@ cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance)
     // buffer is uint32_t[] which guarantees 4-byte alignment, but compiler can't prove it at compile-time
     #pragma clang diagnostic push
     #pragma clang diagnostic ignored "-Watomic-alignment"
-    __atomic_exchange_n((int32_t*)&(cb_xmt_local_buffer_ptr[nIdx]->buffer[orig_headindex]),*((int32_t*)pPacket), __ATOMIC_SEQ_CST);
+    __atomic_exchange_n(reinterpret_cast<int32_t *>(&(cb_xmt_local_buffer_ptr[nIdx]->buffer[orig_headindex])),*static_cast<int32_t *>(pPacket), __ATOMIC_SEQ_CST);
     #pragma clang diagnostic pop
 #endif
 
@@ -999,9 +990,9 @@ cbRESULT cbSendLoopbackPacket(void * pPacket, uint32_t nInstance)
 
 
 
-cbRESULT cbGetSystemRunLevel(uint32_t *runlevel, uint32_t *runflags, uint32_t *resetque, uint32_t nInstance)
+cbRESULT cbGetSystemRunLevel(uint32_t *runlevel, uint32_t *runflags, uint32_t *resetque, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1023,9 +1014,9 @@ cbRESULT cbGetSystemRunLevel(uint32_t *runlevel, uint32_t *runflags, uint32_t *r
 }
 
 
-cbRESULT cbSetSystemRunLevel(uint32_t runlevel, uint32_t runflags, uint32_t resetque, uint8_t nInstrument, uint32_t nInstance)
+cbRESULT cbSetSystemRunLevel(const uint32_t runlevel, const uint32_t runflags, const uint32_t resetque, const uint8_t nInstrument, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1045,9 +1036,9 @@ cbRESULT cbSetSystemRunLevel(uint32_t runlevel, uint32_t runflags, uint32_t rese
 }
 
 
-cbRESULT cbGetSystemClockFreq(uint32_t *freq, uint32_t nInstance)
+cbRESULT cbGetSystemClockFreq(uint32_t *freq, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1059,9 +1050,9 @@ cbRESULT cbGetSystemClockFreq(uint32_t *freq, uint32_t nInstance)
 }
 
 
-cbRESULT cbGetSystemClockTime(PROCTIME *time, uint32_t nInstance)
+cbRESULT cbGetSystemClockTime(PROCTIME *time, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1071,18 +1062,17 @@ cbRESULT cbGetSystemClockTime(PROCTIME *time, uint32_t nInstance)
     return cbRESULT_OK;
 }
 
-cbRESULT cbSetComment(uint8_t charset, uint32_t rgba, PROCTIME time, const char* comment, uint32_t nInstance)
+cbRESULT cbSetComment(const uint8_t charset, const uint32_t rgba, const PROCTIME time, const char* comment, const uint32_t nInstance)
 {
     cbRESULT bRes = cbRESULT_OK;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx])
         return cbRESULT_NOLIBRARY;
 
     // Create the packet data structure and fill it in
-    cbPKT_COMMENT pktComment;
-    memset(&pktComment, 0, sizeof(pktComment));
+    cbPKT_COMMENT pktComment = {};
     pktComment.cbpkt_header.time           = cb_rec_buffer_ptr[nIdx]->lasttime;
     pktComment.cbpkt_header.chid           = 0x8000;
     pktComment.cbpkt_header.type           = cbPKTTYPE_COMMENTSET;
@@ -1096,8 +1086,8 @@ cbRESULT cbSetComment(uint8_t charset, uint32_t rgba, PROCTIME time, const char*
     if (comment)
         strncpy(pktComment.comment, comment, cbMAX_COMMENT);
     pktComment.comment[cbMAX_COMMENT - 1] = 0;
-    nLen = (uint32_t)strlen(pktComment.comment) + 1;      // include terminating null
-    pktComment.cbpkt_header.dlen           = (uint32_t)cbPKTDLEN_COMMENTSHORT + (nLen + 3) / 4;
+    nLen = static_cast<uint32_t>(strlen(pktComment.comment)) + 1;      // include terminating null
+    pktComment.cbpkt_header.dlen           = static_cast<uint32_t>(cbPKTDLEN_COMMENTSHORT) + (nLen + 3) / 4;
 
     // Send it to all NSPs
     for (int nProc = cbNSP1; nProc <= cbMAXPROCS; ++nProc)
@@ -1108,27 +1098,27 @@ cbRESULT cbSetComment(uint8_t charset, uint32_t rgba, PROCTIME time, const char*
     return bRes;
 }
 
-cbRESULT cbGetLncParameters(uint32_t proc, uint32_t* nLncFreq, uint32_t* nLncRefChan, uint32_t* nLncGMode, uint32_t nInstance)
+cbRESULT cbGetLncParameters(const uint32_t nProc, uint32_t* nLncFreq, uint32_t* nLncRefChan, uint32_t* nLncGMode, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
     // Check for cached sysinfo packet initialized
-    if (cb_cfg_buffer_ptr[nIdx]->isLnc[proc - 1].cbpkt_header.chid == 0) return cbRESULT_HARDWAREOFFLINE;
+    if (cb_cfg_buffer_ptr[nIdx]->isLnc[nProc - 1].cbpkt_header.chid == 0) return cbRESULT_HARDWAREOFFLINE;
 
     // otherwise, return the data
-    if (nLncFreq)     *nLncFreq = cb_cfg_buffer_ptr[nIdx]->isLnc[proc - 1].lncFreq;
-    if (nLncRefChan)  *nLncRefChan = cb_cfg_buffer_ptr[nIdx]->isLnc[proc - 1].lncRefChan;
-    if (nLncGMode)    *nLncGMode = cb_cfg_buffer_ptr[nIdx]->isLnc[proc - 1].lncGlobalMode;
+    if (nLncFreq)     *nLncFreq = cb_cfg_buffer_ptr[nIdx]->isLnc[nProc - 1].lncFreq;
+    if (nLncRefChan)  *nLncRefChan = cb_cfg_buffer_ptr[nIdx]->isLnc[nProc - 1].lncRefChan;
+    if (nLncGMode)    *nLncGMode = cb_cfg_buffer_ptr[nIdx]->isLnc[nProc - 1].lncGlobalMode;
     return cbRESULT_OK;
 }
 
 
-cbRESULT cbSetLncParameters(uint32_t proc, uint32_t nLncFreq, uint32_t nLncRefChan, uint32_t nLncGMode, uint32_t nInstance)
+cbRESULT cbSetLncParameters(const uint32_t nProc, const uint32_t nLncFreq, const uint32_t nLncRefChan, const uint32_t nLncGMode, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1144,12 +1134,12 @@ cbRESULT cbSetLncParameters(uint32_t proc, uint32_t nLncFreq, uint32_t nLncRefCh
     pktLnc.lncGlobalMode  = nLncGMode;
 
     // Enter the packet into the XMT buffer queue
-    return cbSendPacketToInstrument(&pktLnc, nInstance, proc - 1);
+    return cbSendPacketToInstrument(&pktLnc, nInstance, nProc - 1);
 }
 
-cbRESULT cbGetNplay(char *fname, float *speed, uint32_t *flags, PROCTIME *ftime, PROCTIME *stime, PROCTIME *etime, PROCTIME * filever, uint32_t nInstance)
+cbRESULT cbGetNplay(char *fname, float *speed, uint32_t *flags, PROCTIME *ftime, PROCTIME *stime, PROCTIME *etime, PROCTIME * filever, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1168,9 +1158,9 @@ cbRESULT cbGetNplay(char *fname, float *speed, uint32_t *flags, PROCTIME *ftime,
     return cbRESULT_OK;
 }
 
-cbRESULT cbSetNplay(const char *fname, float speed, uint32_t mode, PROCTIME val, PROCTIME stime, PROCTIME etime, uint32_t nInstance)
+cbRESULT cbSetNplay(const char *fname, const float speed, const uint32_t mode, const PROCTIME val, const PROCTIME stime, const PROCTIME etime, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1203,9 +1193,9 @@ cbRESULT cbSetNplay(const char *fname, float speed, uint32_t mode, PROCTIME val,
 // Outputs:
 //   name - name of the video source
 //   fps  - the frame rate of the video source
-cbRESULT cbGetVideoSource(char *name, float *fps, uint32_t id, uint32_t nInstance)
+cbRESULT cbGetVideoSource(char *name, float *fps, const uint32_t id, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1227,9 +1217,9 @@ cbRESULT cbGetVideoSource(char *name, float *fps, uint32_t id, uint32_t nInstanc
 //   name - name of the video source
 //   type - type of the trackable object (start from 0)
 //   pointCount - the maximum number of points for this trackable
-cbRESULT cbGetTrackObj(char *name, uint16_t *type, uint16_t *pointCount, uint32_t id, uint32_t nInstance)
+cbRESULT cbGetTrackObj(char *name, uint16_t *type, uint16_t *pointCount, const uint32_t id, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1251,22 +1241,21 @@ cbRESULT cbGetTrackObj(char *name, uint16_t *type, uint16_t *pointCount, uint32_
 //   vs   - video source ID (start from 0)
 //   name - name of the video source
 //   fps  - the frame rate of the video source
-cbRESULT cbSetVideoSource(const char *name, float fps, uint32_t vs, uint32_t nInstance)
+cbRESULT cbSetVideoSource(const char *name, const float fps, const uint32_t id, const uint32_t nInstance)
 {
     cbRESULT cbRes = cbRESULT_OK;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
-    cbPKT_NM pktNm;
-    memset(&pktNm, 0, sizeof(pktNm));
+    cbPKT_NM pktNm = {};
     pktNm.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     pktNm.cbpkt_header.type = cbPKTTYPE_NMSET;
     pktNm.cbpkt_header.dlen = cbPKTDLEN_NM;
     pktNm.mode = cbNM_MODE_SETVIDEOSOURCE;
-    pktNm.flags = vs + 1;
-    pktNm.value = uint32_t(fps * 1000); // frame rate times 1000
+    pktNm.flags = id + 1;
+    pktNm.value = static_cast<uint32_t>(fps * 1000); // frame rate times 1000
     strncpy(pktNm.name, name, cbLEN_STR_LABEL);
 
     // Send it to all NSPs
@@ -1284,16 +1273,15 @@ cbRESULT cbSetVideoSource(const char *name, float fps, uint32_t vs, uint32_t nIn
 //   name - name of the video source
 //   type - type of the trackable object (start from 0)
 //   pointCount - the maximum number of points for this trackable object
-cbRESULT cbSetTrackObj(const char *name, uint16_t type, uint16_t pointCount, uint32_t id, uint32_t nInstance)
+cbRESULT cbSetTrackObj(const char *name, const uint16_t type, const uint16_t pointCount, const uint32_t id, const uint32_t nInstance)
 {
     cbRESULT cbRes = cbRESULT_OK;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
-    cbPKT_NM pktNm;
-    memset(&pktNm, 0, sizeof(pktNm));
+    cbPKT_NM pktNm = {};
     pktNm.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     pktNm.cbpkt_header.type = cbPKTTYPE_NMSET;
     pktNm.cbpkt_header.dlen = cbPKTDLEN_NM;
@@ -1311,9 +1299,9 @@ cbRESULT cbSetTrackObj(const char *name, uint16_t type, uint16_t pointCount, uin
     return cbRes;
 }
 
-cbRESULT cbGetSpikeLength(uint32_t *length, uint32_t *pretrig, uint32_t * pSysfreq, uint32_t nInstance)
+cbRESULT cbGetSpikeLength(uint32_t *length, uint32_t *pretrig, uint32_t * pSysfreq, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1329,10 +1317,10 @@ cbRESULT cbGetSpikeLength(uint32_t *length, uint32_t *pretrig, uint32_t * pSysfr
 }
 
 
-cbRESULT cbSetSpikeLength(uint32_t length, uint32_t pretrig, uint32_t nInstance)
+cbRESULT cbSetSpikeLength(const uint32_t length, const uint32_t pretrig, const uint32_t nInstance)
 {
     cbRESULT bRes = cbRESULT_OK;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1363,10 +1351,10 @@ cbRESULT cbSetSpikeLength(uint32_t length, uint32_t pretrig, uint32_t nInstance)
 //   trig     - trigget type
 //   trigChan - Channel for trigger
 //   wave     - waveform data
-cbRESULT cbGetAoutWaveform(uint32_t channel, uint8_t  trigNum, uint16_t  * mode, uint32_t  * repeats, uint16_t  * trig,
-                           uint16_t  * trigChan, uint16_t  * trigValue, cbWaveformData * wave, uint32_t nInstance)
+cbRESULT cbGetAoutWaveform(uint32_t channel, uint8_t  const trigNum, uint16_t  * mode, uint32_t  * repeats, uint16_t  * trig,
+                           uint16_t  * trigChan, uint16_t  * trigValue, cbWaveformData * wave, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
     uint32_t wavenum = 0;
 
     // Test for prior library initialization
@@ -1392,17 +1380,9 @@ cbRESULT cbGetAoutWaveform(uint32_t channel, uint8_t  trigNum, uint16_t  * mode,
 }
 
 
-/// @author     Hyrum L. Sessions
-/// @date       1 Aug 2019
-/// @brief      Get the waveform number for a specific aout channel
-///
-/// since channels are not contiguous, we can't just subtract the number of analog channels to
-/// get the number.
-///
-/// @param [in] channel  - 1-based channel number
-cbRESULT cbGetAoutWaveformNumber(uint32_t channel, uint32_t* wavenum, uint32_t nInstance)
+cbRESULT cbGetAoutWaveformNumber(const uint32_t channel, uint32_t* wavenum, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
     uint32_t nWaveNum = 0;
 
     // Test for prior library initialization
@@ -1430,9 +1410,9 @@ cbRESULT cbGetAoutWaveformNumber(uint32_t channel, uint32_t* wavenum, uint32_t n
 }
 
 
-cbRESULT cbGetFilterDesc(uint32_t proc, uint32_t filt, cbFILTDESC *filtdesc, uint32_t nInstance)
+cbRESULT cbGetFilterDesc(const uint32_t proc, const uint32_t filt, cbFILTDESC *filtdesc, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1447,9 +1427,9 @@ cbRESULT cbGetFilterDesc(uint32_t proc, uint32_t filt, cbFILTDESC *filtdesc, uin
     return cbRESULT_OK;
 }
 
-cbRESULT cbGetFileInfo(cbPKT_FILECFG * filecfg, uint32_t nInstance)
+cbRESULT cbGetFileInfo(cbPKT_FILECFG * filecfg, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1460,9 +1440,9 @@ cbRESULT cbGetFileInfo(cbPKT_FILECFG * filecfg, uint32_t nInstance)
     return cbRESULT_OK;
 }
 
-cbRESULT cbGetSampleGroupInfo( uint32_t proc, uint32_t group, char *label, uint32_t *period, uint32_t* length, uint32_t nInstance)
+cbRESULT cbGetSampleGroupInfo(const uint32_t proc, const uint32_t group, char *label, uint32_t *period, uint32_t* length, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1479,9 +1459,9 @@ cbRESULT cbGetSampleGroupInfo( uint32_t proc, uint32_t group, char *label, uint3
 }
 
 
-cbRESULT cbGetSampleGroupList( uint32_t proc, uint32_t group, uint32_t *length, uint16_t *list, uint32_t nInstance)
+cbRESULT cbGetSampleGroupList(const uint32_t proc, const uint32_t group, uint32_t *length, uint16_t *list, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx])
@@ -1504,9 +1484,9 @@ cbRESULT cbGetSampleGroupList( uint32_t proc, uint32_t group, uint32_t *length, 
     return cbRESULT_OK;
 }
 
-cbRESULT cbGetChanLoc(uint32_t chan, uint32_t *proc, uint32_t *bank, char *banklabel, uint32_t *term, uint32_t nInstance)
+cbRESULT cbGetChanLoc(const uint32_t chan, uint32_t *proc, uint32_t *bank, char *banklabel, uint32_t *term, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1515,8 +1495,8 @@ cbRESULT cbGetChanLoc(uint32_t chan, uint32_t *proc, uint32_t *bank, char *bankl
     if ((chan - 1) >= cbMAXCHANS) return cbRESULT_INVALIDCHANNEL;
     if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
-    uint32_t nProcessor = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].proc;
-    uint32_t nBank = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].bank;
+    const uint32_t nProcessor = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].proc;
+    const uint32_t nBank = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].bank;
 
     // Return the requested data from the rec buffer
     if (proc) *proc = nProcessor;       // 1 based
@@ -1532,9 +1512,9 @@ cbRESULT cbGetChanLoc(uint32_t chan, uint32_t *proc, uint32_t *bank, char *bankl
     return cbRESULT_OK;
 }
 
-cbRESULT cbGetChanCaps(uint32_t chan, uint32_t *chancaps, uint32_t nInstance)
+cbRESULT cbGetChanCaps(const uint32_t chan, uint32_t *chancaps, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1549,9 +1529,9 @@ cbRESULT cbGetChanCaps(uint32_t chan, uint32_t *chancaps, uint32_t nInstance)
     return cbRESULT_OK;
 }
 
-cbRESULT cbGetChanLabel( uint32_t chan, char *label, uint32_t *userflags, int32_t *position, uint32_t nInstance)
+cbRESULT cbGetChanLabel(const uint32_t chan, char *label, uint32_t *userflags, int32_t *position,const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1568,9 +1548,9 @@ cbRESULT cbGetChanLabel( uint32_t chan, char *label, uint32_t *userflags, int32_
     return cbRESULT_OK;
 }
 
-cbRESULT cbSetChanLabel(uint32_t chan, const char *label, uint32_t userflags, int32_t *position, uint32_t nInstance)
+cbRESULT cbSetChanLabel(const uint32_t chan, const char *label, const uint32_t userflags, const int32_t *position, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1601,9 +1581,9 @@ cbRESULT cbSetChanLabel(uint32_t chan, const char *label, uint32_t userflags, in
 }
 
 
-cbRESULT cbGetChanUnitMapping(uint32_t chan, cbMANUALUNITMAPPING *unitmapping, uint32_t nInstance)
+cbRESULT cbGetChanUnitMapping(const uint32_t chan, cbMANUALUNITMAPPING *unitmapping, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1620,9 +1600,9 @@ cbRESULT cbGetChanUnitMapping(uint32_t chan, cbMANUALUNITMAPPING *unitmapping, u
 }
 
 
-cbRESULT cbSetChanUnitMapping(uint32_t chan, cbMANUALUNITMAPPING *unitmapping, uint32_t nInstance)
+cbRESULT cbSetChanUnitMapping(const uint32_t chan, const cbMANUALUNITMAPPING *unitmapping, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1652,9 +1632,9 @@ cbRESULT cbSetChanUnitMapping(uint32_t chan, cbMANUALUNITMAPPING *unitmapping, u
 }
 
 
-cbRESULT cbGetChanNTrodeGroup(uint32_t chan, uint32_t *NTrodeGroup, uint32_t nInstance)
+cbRESULT cbGetChanNTrodeGroup(const uint32_t chan, uint32_t *NTrodeGroup, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1670,9 +1650,9 @@ cbRESULT cbGetChanNTrodeGroup(uint32_t chan, uint32_t *NTrodeGroup, uint32_t nIn
 }
 
 
-cbRESULT cbSetChanNTrodeGroup( uint32_t chan, const uint32_t NTrodeGroup, uint32_t nInstance)
+cbRESULT cbSetChanNTrodeGroup(const uint32_t chan, const uint32_t NTrodeGroup, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1699,9 +1679,9 @@ cbRESULT cbSetChanNTrodeGroup( uint32_t chan, const uint32_t NTrodeGroup, uint32
     return cbSendPacket(&chaninfo, nInstance);
 }
 
-cbRESULT cbGetChanAmplitudeReject(uint32_t chan, cbAMPLITUDEREJECT *AmplitudeReject, uint32_t nInstance)
+cbRESULT cbGetChanAmplitudeReject(const uint32_t chan, cbAMPLITUDEREJECT *AmplitudeReject, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1722,9 +1702,9 @@ cbRESULT cbGetChanAmplitudeReject(uint32_t chan, cbAMPLITUDEREJECT *AmplitudeRej
 }
 
 
-cbRESULT cbSetChanAmplitudeReject(uint32_t chan, const cbAMPLITUDEREJECT AmplitudeReject, uint32_t nInstance)
+cbRESULT cbSetChanAmplitudeReject(const uint32_t chan, const cbAMPLITUDEREJECT AmplitudeReject, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1759,9 +1739,9 @@ cbRESULT cbSetChanAmplitudeReject(uint32_t chan, const cbAMPLITUDEREJECT Amplitu
 // Outputs:
 //   chaninfo   - shared segment size to create
 //   Returns the error code
-cbRESULT cbGetChanInfo(uint32_t chan, cbPKT_CHANINFO *chaninfo, uint32_t nInstance)
+cbRESULT cbGetChanInfo(const uint32_t chan, cbPKT_CHANINFO *pChanInfo, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1771,14 +1751,14 @@ cbRESULT cbGetChanInfo(uint32_t chan, cbPKT_CHANINFO *chaninfo, uint32_t nInstan
     if (cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].cbpkt_header.chid == 0) return cbRESULT_INVALIDCHANNEL;
 
     // Return the requested data from the rec buffer
-    if (chaninfo) memcpy(chaninfo, &(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1]), sizeof(cbPKT_CHANINFO));
+    if (pChanInfo) memcpy(pChanInfo, &(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1]), sizeof(cbPKT_CHANINFO));
 
     return cbRESULT_OK;
 }
 
-cbRESULT cbGetChanAutoThreshold(uint32_t chan, uint32_t *bEnabled, uint32_t nInstance)
+cbRESULT cbGetChanAutoThreshold(const uint32_t chan, uint32_t *bEnabled, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1795,9 +1775,9 @@ cbRESULT cbGetChanAutoThreshold(uint32_t chan, uint32_t *bEnabled, uint32_t nIns
 }
 
 
-cbRESULT cbSetChanAutoThreshold( uint32_t chan, const uint32_t bEnabled, uint32_t nInstance)
+cbRESULT cbSetChanAutoThreshold(const uint32_t chan, const uint32_t bEnabled, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1825,10 +1805,10 @@ cbRESULT cbSetChanAutoThreshold( uint32_t chan, const uint32_t bEnabled, uint32_
 }
 
 
-cbRESULT cbGetNTrodeInfo( const uint32_t ntrode, char *label, cbMANUALUNITMAPPING ellipses[][cbMAXUNITS],
-                         uint16_t * nSite, uint16_t * chans, uint16_t * fs, uint32_t nInstance)
+cbRESULT cbGetNTrodeInfo(const uint32_t ntrode, char *label, cbMANUALUNITMAPPING ellipses[][cbMAXUNITS],
+                         uint16_t * nSite, uint16_t * chans, uint16_t * fs, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1846,9 +1826,9 @@ cbRESULT cbGetNTrodeInfo( const uint32_t ntrode, char *label, cbMANUALUNITMAPPIN
     return cbRESULT_OK;
 }
 
-cbRESULT cbSetNTrodeInfo( const uint32_t ntrode, const char *label, cbMANUALUNITMAPPING ellipses[][cbMAXUNITS], uint16_t fs, uint32_t nInstance)
+cbRESULT cbSetNTrodeInfo( const uint32_t ntrode, const char *label, cbMANUALUNITMAPPING ellipses[][cbMAXUNITS], const uint16_t fs, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1878,9 +1858,9 @@ cbRESULT cbSetNTrodeInfo( const uint32_t ntrode, const char *label, cbMANUALUNIT
 /// @author Hyrum L. Sessions
 /// @date   May the Forth be with you 2020
 /// @brief  Set the N-Trode label without affecting other data
-cbRESULT cbSetNTrodeLabel(const uint32_t ntrode, const char* label, uint32_t nInstance)
+cbRESULT cbSetNTrodeLabel(const uint32_t ntrode, const char* label, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1906,9 +1886,9 @@ cbRESULT cbSetNTrodeLabel(const uint32_t ntrode, const char* label, uint32_t nIn
 
 // Purpose: Digital Input Inquiry and Configuration Functions
 //
-cbRESULT cbGetDinpCaps(uint32_t chan, uint32_t *dinpcaps, uint32_t nInstance)
+cbRESULT cbGetDinpCaps(const uint32_t chan, uint32_t *dinpcaps, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1925,9 +1905,9 @@ cbRESULT cbGetDinpCaps(uint32_t chan, uint32_t *dinpcaps, uint32_t nInstance)
 
 // Purpose: Digital Input Inquiry and Configuration Functions
 //
-cbRESULT cbGetDinpOptions(uint32_t chan, uint32_t *options, uint32_t *eopchar, uint32_t nInstance)
+cbRESULT cbGetDinpOptions(const uint32_t chan, uint32_t *options, uint32_t *eopchar, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1947,9 +1927,9 @@ cbRESULT cbGetDinpOptions(uint32_t chan, uint32_t *options, uint32_t *eopchar, u
 
 // Purpose: Digital Input Inquiry and Configuration Functions
 //
-cbRESULT cbSetDinpOptions(uint32_t chan, uint32_t options, uint32_t eopchar, uint32_t nInstance)
+cbRESULT cbSetDinpOptions(const uint32_t chan, const uint32_t options, const uint32_t eopchar, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1978,9 +1958,9 @@ cbRESULT cbSetDinpOptions(uint32_t chan, uint32_t options, uint32_t eopchar, uin
 
 // Purpose: Digital Output Inquiry and Configuration Functions
 //
-cbRESULT cbGetDoutCaps(uint32_t chan, uint32_t *doutcaps, uint32_t nInstance)
+cbRESULT cbGetDoutCaps(const uint32_t chan, uint32_t *doutcaps, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -1997,10 +1977,10 @@ cbRESULT cbGetDoutCaps(uint32_t chan, uint32_t *doutcaps, uint32_t nInstance)
 
 // Purpose: Digital Output Inquiry and Configuration Functions
 //
-cbRESULT cbGetDoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, uint32_t *value,
-                          uint8_t *triggertype, uint16_t *trigchan, uint16_t *trigval, uint32_t nInstance)
+cbRESULT cbGetDoutOptions(const uint32_t chan, uint32_t *options, uint32_t *monchan, int32_t *doutval,
+                          uint8_t *triggertype, uint16_t *trigchan, uint16_t *trigval, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2033,7 +2013,7 @@ cbRESULT cbGetDoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, u
         }
 #endif
     }
-    if (value)			*value			= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].outvalue;
+    if (doutval)			*doutval			= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].outvalue;
     if (triggertype)    *triggertype	= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].trigtype;
     if (trigchan)		*trigchan		= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].trigchan;
     if (trigval)        *trigval		= cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].trigval;
@@ -2043,11 +2023,11 @@ cbRESULT cbGetDoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, u
 
 // Purpose: Digital Output Inquiry and Configuration Functions
 //
-cbRESULT cbSetDoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uint32_t value,
-                          uint8_t triggertype, uint16_t trigchan, uint16_t trigval, uint32_t nInstance)
+cbRESULT cbSetDoutOptions(const uint32_t chan, const uint32_t options, uint32_t monchan, const int32_t doutval,
+                          const uint8_t triggertype, const uint16_t trigchan, const uint16_t trigval, const uint32_t nInstance)
 {
     cbRESULT nResult = cbRESULT_OK;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
@@ -2085,7 +2065,7 @@ cbRESULT cbSetDoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uin
 #endif
         }
     }
-    chaninfo.outvalue  = value;
+    chaninfo.outvalue  = doutval;
     chaninfo.trigtype  = triggertype;
     chaninfo.trigchan  = trigchan;
     chaninfo.trigval   = trigval;
@@ -2101,9 +2081,9 @@ cbRESULT cbSetDoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uin
 
 // Purpose: Analog Input Inquiry and Configuration Functions
 //
-cbRESULT cbGetAinpCaps( uint32_t chan, uint32_t *ainpcaps, cbSCALING *physcalin, cbFILTDESC *phyfiltin, uint32_t nInstance)
+cbRESULT cbGetAinpCaps(const uint32_t chan, uint32_t *ainpcaps, cbSCALING *physcalin, cbFILTDESC *phyfiltin, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2123,9 +2103,9 @@ cbRESULT cbGetAinpCaps( uint32_t chan, uint32_t *ainpcaps, cbSCALING *physcalin,
 
 // Purpose: Analog Input Inquiry and Configuration Functions
 //
-cbRESULT cbGetAinpOpts(uint32_t chan, uint32_t *ainpopts, uint32_t *LNCrate, uint32_t *refElecChan, uint32_t nInstance)
+cbRESULT cbGetAinpOpts(const uint32_t chan, uint32_t *ainpopts, uint32_t *LNCrate, uint32_t *refElecChan, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2146,9 +2126,9 @@ cbRESULT cbGetAinpOpts(uint32_t chan, uint32_t *ainpopts, uint32_t *LNCrate, uin
 
 // Purpose: Analog Input Inquiry and Configuration Functions
 //
-cbRESULT cbSetAinpOpts(uint32_t chan, const uint32_t ainpopts,  uint32_t LNCrate, const uint32_t refElecChan, uint32_t nInstance)
+cbRESULT cbSetAinpOpts(const uint32_t chan, const uint32_t ainpopts, const uint32_t LNCrate, const uint32_t refElecChan, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2178,9 +2158,9 @@ cbRESULT cbSetAinpOpts(uint32_t chan, const uint32_t ainpopts,  uint32_t LNCrate
 
 // Purpose: Analog Input Inquiry and Configuration Functions
 //
-cbRESULT cbGetAinpScaling(uint32_t chan, cbSCALING *scalin, uint32_t nInstance)
+cbRESULT cbGetAinpScaling(const uint32_t chan, cbSCALING *scaling, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2191,16 +2171,16 @@ cbRESULT cbGetAinpScaling(uint32_t chan, cbSCALING *scalin, uint32_t nInstance)
     if (!(cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chancaps & cbCHAN_AINP)) return cbRESULT_INVALIDFUNCTION;
 
     // Return the requested data from the rec buffer
-    if (scalin)  *scalin  = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].scalin;
+    if (scaling)  *scaling  = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].scalin;
     return cbRESULT_OK;
 }
 
 
 // Purpose: Analog Input Inquiry and Configuration Functions
 //
-cbRESULT cbSetAinpScaling(uint32_t chan, cbSCALING *scalin, uint32_t nInstance)
+cbRESULT cbSetAinpScaling(const uint32_t chan, const cbSCALING *scaling, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2217,7 +2197,7 @@ cbRESULT cbSetAinpScaling(uint32_t chan, cbSCALING *scalin, uint32_t nInstance)
     chaninfo.cbpkt_header.type      = cbPKTTYPE_CHANSETSCALE;
     chaninfo.cbpkt_header.dlen      = cbPKTDLEN_CHANINFO;
     chaninfo.chan      = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
-    chaninfo.scalin    = *scalin;
+    chaninfo.scalin    = *scaling;
     chaninfo.scalout   = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].scalout;
 
     // Enter the packet into the XMT buffer queue
@@ -2226,9 +2206,9 @@ cbRESULT cbSetAinpScaling(uint32_t chan, cbSCALING *scalin, uint32_t nInstance)
 
 // Purpose: Analog Input Inquiry and Configuration Functions
 //
-cbRESULT cbGetAinpDisplay(uint32_t chan, int32_t *smpdispmin, int32_t *smpdispmax, int32_t *spkdispmax, int32_t *lncdispmax, uint32_t nInstance)
+cbRESULT cbGetAinpDisplay(uint32_t chan, int32_t *smpdispmin, int32_t *smpdispmax, int32_t *spkdispmax, int32_t *lncdispmax, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2250,9 +2230,13 @@ cbRESULT cbGetAinpDisplay(uint32_t chan, int32_t *smpdispmin, int32_t *smpdispma
 
 // Purpose: Analog Input Inquiry and Configuration Functions
 //
-cbRESULT cbSetAinpDisplay( uint32_t chan, int32_t smpdispmin, int32_t smpdispmax, int32_t spkdispmax, int32_t lncdispmax, uint32_t nInstance)
+cbRESULT cbSetAinpDisplay(
+    const uint32_t chan,
+    const int32_t smpdispmin, const int32_t smpdispmax, const int32_t spkdispmax, const int32_t lncdispmax,
+    const uint32_t nInstance
+)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2272,13 +2256,13 @@ cbRESULT cbSetAinpDisplay( uint32_t chan, int32_t smpdispmin, int32_t smpdispmax
 #endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     if (smpdispmin) chaninfo.smpdispmin = smpdispmin;
-        else chaninfo.smpdispmin = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].smpdispmin;
+    else chaninfo.smpdispmin = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].smpdispmin;
     if (smpdispmax) chaninfo.smpdispmax = smpdispmax;
-        else chaninfo.smpdispmax = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].smpdispmax;
+    else chaninfo.smpdispmax = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].smpdispmax;
     if (spkdispmax) chaninfo.spkdispmax = spkdispmax;
-        else chaninfo.spkdispmax = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].spkdispmax;
+    else chaninfo.spkdispmax = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].spkdispmax;
     if (lncdispmax) chaninfo.lncdispmax = lncdispmax;
-        else chaninfo.lncdispmax = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].lncdispmax;
+    else chaninfo.lncdispmax = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].lncdispmax;
 
     // Enter the packet into the XMT buffer queue
     return cbSendPacket(&chaninfo, nInstance);
@@ -2287,10 +2271,10 @@ cbRESULT cbSetAinpDisplay( uint32_t chan, int32_t smpdispmin, int32_t smpdispmax
 
 // Purpose: Analog Input Inquiry and Configuration Functions
 //
-cbRESULT cbSetAinpPreview(uint32_t chan, uint32_t prevopts, uint32_t nInstance)
+cbRESULT cbSetAinpPreview(const uint32_t chan, const int32_t prevopts, const uint32_t nInstance)
 {
     cbRESULT res = cbRESULT_OK;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     ASSERT(prevopts == cbAINPPREV_LNC ||
            prevopts == cbAINPPREV_STREAM ||
@@ -2344,9 +2328,9 @@ cbRESULT cbSetAinpPreview(uint32_t chan, uint32_t prevopts, uint32_t nInstance)
 }
 
 // Purpose: AINP Sampling Stream Functions
-cbRESULT cbGetAinpSampling(uint32_t chan, uint32_t *filter, uint32_t *group, uint32_t nInstance)
+cbRESULT cbGetAinpSampling(uint32_t chan, uint32_t *filter, uint32_t *group, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2364,9 +2348,9 @@ cbRESULT cbGetAinpSampling(uint32_t chan, uint32_t *filter, uint32_t *group, uin
 }
 
 // Purpose: AINP Sampling Stream Functions
-cbRESULT cbSetAinpSampling(uint32_t chan, uint32_t filter, uint32_t group, uint32_t nInstance)
+cbRESULT cbSetAinpSampling(uint32_t chan, uint32_t filter, uint32_t group, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2394,9 +2378,9 @@ cbRESULT cbSetAinpSampling(uint32_t chan, uint32_t filter, uint32_t group, uint3
 }
 
 // Purpose: AINP Spike Stream Functions
-cbRESULT cbGetAinpSpikeCaps(uint32_t chan, uint32_t *spkcaps, uint32_t nInstance)
+cbRESULT cbGetAinpSpikeCaps(uint32_t chan, uint32_t *spkcaps, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2413,9 +2397,9 @@ cbRESULT cbGetAinpSpikeCaps(uint32_t chan, uint32_t *spkcaps, uint32_t nInstance
 }
 
 // Purpose: AINP Spike Stream Functions
-cbRESULT cbGetAinpSpikeOptions(uint32_t chan, uint32_t *options, uint32_t *filter, uint32_t nInstance)
+cbRESULT cbGetAinpSpikeOptions(uint32_t chan, uint32_t *options, uint32_t *filter, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2433,9 +2417,9 @@ cbRESULT cbGetAinpSpikeOptions(uint32_t chan, uint32_t *options, uint32_t *filte
 }
 
 // Purpose: AINP Spike Stream Functions
-cbRESULT cbSetAinpSpikeOptions(uint32_t chan, uint32_t spkopts, uint32_t spkfilter, uint32_t nInstance)
+cbRESULT cbSetAinpSpikeOptions(uint32_t chan, uint32_t spkopts, uint32_t spkfilter, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2463,9 +2447,9 @@ cbRESULT cbSetAinpSpikeOptions(uint32_t chan, uint32_t spkopts, uint32_t spkfilt
 }
 
 // Purpose: AINP Spike Stream Functions
-cbRESULT cbGetAinpSpikeThreshold(uint32_t chan, int32_t *spkthrlevel, uint32_t nInstance)
+cbRESULT cbGetAinpSpikeThreshold(uint32_t chan, int32_t *spkthrlevel, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2482,9 +2466,9 @@ cbRESULT cbGetAinpSpikeThreshold(uint32_t chan, int32_t *spkthrlevel, uint32_t n
 }
 
 // Purpose: AINP Spike Stream Functions
-cbRESULT cbSetAinpSpikeThreshold(uint32_t chan, int32_t spkthrlevel, uint32_t nInstance)
+cbRESULT cbSetAinpSpikeThreshold(uint32_t chan, int32_t spkthrlevel, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx])
@@ -2517,9 +2501,9 @@ cbRESULT cbSetAinpSpikeThreshold(uint32_t chan, int32_t spkthrlevel, uint32_t nI
 }
 
 // Purpose: AINP Spike Stream Functions
-cbRESULT cbGetAinpSpikeHoops(uint32_t chan, cbHOOP *hoops, uint32_t nInstance)
+cbRESULT cbGetAinpSpikeHoops(uint32_t chan, cbHOOP *hoops, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2537,9 +2521,9 @@ cbRESULT cbGetAinpSpikeHoops(uint32_t chan, cbHOOP *hoops, uint32_t nInstance)
 }
 
 // Purpose: AINP Spike Stream Functions
-cbRESULT cbSetAinpSpikeHoops(uint32_t chan, cbHOOP *hoops, uint32_t nInstance)
+cbRESULT cbSetAinpSpikeHoops(const uint32_t chan, const cbHOOP *hoops, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2574,9 +2558,9 @@ cbRESULT cbSetAinpSpikeHoops(uint32_t chan, cbHOOP *hoops, uint32_t nInstance)
 
 // Purpose: Analog Output Inquiry and Configuration Functions
 //
-cbRESULT cbGetAoutCaps( uint32_t chan, uint32_t *aoutcaps, cbSCALING *physcalout, cbFILTDESC *phyfiltout, uint32_t nInstance)
+cbRESULT cbGetAoutCaps( uint32_t chan, uint32_t *aoutcaps, cbSCALING *physcalout, cbFILTDESC *phyfiltout, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2595,9 +2579,9 @@ cbRESULT cbGetAoutCaps( uint32_t chan, uint32_t *aoutcaps, cbSCALING *physcalout
 
 // Purpose: Analog Output Inquiry and Configuration Functions
 //
-cbRESULT cbGetAoutScaling(uint32_t chan, cbSCALING *scalout, uint32_t nInstance)
+cbRESULT cbGetAoutScaling(uint32_t chan, cbSCALING *scalout, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2615,9 +2599,9 @@ cbRESULT cbGetAoutScaling(uint32_t chan, cbSCALING *scalout, uint32_t nInstance)
 
 // Purpose: Analog Output Inquiry and Configuration Functions
 //
-cbRESULT cbSetAoutScaling(uint32_t chan, cbSCALING *scalout, uint32_t nInstance)
+cbRESULT cbSetAoutScaling(const uint32_t chan, const cbSCALING *scaling, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2638,7 +2622,7 @@ cbRESULT cbSetAoutScaling(uint32_t chan, cbSCALING *scalout, uint32_t nInstance)
 #endif
     chaninfo.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].chan;
     chaninfo.scalin    = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].scalin;
-    chaninfo.scalout   = *scalout;
+    chaninfo.scalout   = *scaling;
 
     // Enter the packet into the XMT buffer queue
     return cbSendPacket(&chaninfo, nInstance);
@@ -2646,9 +2630,9 @@ cbRESULT cbSetAoutScaling(uint32_t chan, cbSCALING *scalout, uint32_t nInstance)
 
 // Purpose: Analog Output Inquiry and Configuration Functions
 //
-cbRESULT cbGetAoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, uint32_t *value, uint32_t nInstance)
+cbRESULT cbGetAoutOptions(const uint32_t chan, uint32_t *options, uint32_t *monchan, int32_t *value, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2672,10 +2656,10 @@ cbRESULT cbGetAoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, u
 
 // Purpose: Analog Output Inquiry and Configuration Functions
 //
-cbRESULT cbSetAoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uint32_t value, uint32_t nInstance)
+cbRESULT cbSetAoutOptions(uint32_t chan, const uint32_t options, const uint32_t monchan, const int32_t value, const uint32_t nInstance)
 {
     cbRESULT nResult = cbRESULT_OK;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2715,10 +2699,10 @@ cbRESULT cbSetAoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uin
 
 // Author & Date:   Kirk Korver     26 Apr 2005
 // Purpose: Request that the ENTIRE sorting model be updated
-cbRESULT cbGetSortingModel(uint32_t nInstance)
+cbRESULT cbGetSortingModel(const uint32_t nInstance)
 {
     cbRESULT ret = cbRESULT_OK;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2746,10 +2730,10 @@ cbRESULT cbGetSortingModel(uint32_t nInstance)
 
 // Author & Date:   Hyrum L. Sessions   22 Apr 2009
 // Purpose: Request that the ENTIRE sorting model be updated
-cbRESULT cbGetFeatureSpaceDomain(uint32_t nInstance)
+cbRESULT cbGetFeatureSpaceDomain(const uint32_t nInstance)
 {
     cbRESULT ret = cbRESULT_OK;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2780,8 +2764,6 @@ cbRESULT cbGetFeatureSpaceDomain(uint32_t nInstance)
 
 void GetAxisLengths(const cbPKT_SS_NOISE_BOUNDARY* pPkt, float afAxisLen[3])
 {
-    // TODO: must be implemented for non MSC
-#ifndef QT_APP
     afAxisLen[0] = sqrt(pPkt->afS[0][0] * pPkt->afS[0][0] +
                         pPkt->afS[0][1] * pPkt->afS[0][1] +
                         pPkt->afS[0][2] * pPkt->afS[0][2]);
@@ -2791,19 +2773,15 @@ void GetAxisLengths(const cbPKT_SS_NOISE_BOUNDARY* pPkt, float afAxisLen[3])
     afAxisLen[2] = sqrt(pPkt->afS[2][0] * pPkt->afS[2][0] +
                         pPkt->afS[2][1] * pPkt->afS[2][1] +
                         pPkt->afS[2][2] * pPkt->afS[2][2]);
-#endif
 }
 
 void GetRotationAngles(const cbPKT_SS_NOISE_BOUNDARY* pPkt, float afTheta[3])
 {
-    // TODO: must be implemented for non MSC
-#ifndef QT_APP
-    Vector3f major(pPkt->afS[0]);
-    Vector3f minor_1(pPkt->afS[1]);
-    Vector3f minor_2(pPkt->afS[2]);
+    const Vector3f major(pPkt->afS[0]);
+    const Vector3f minor_1(pPkt->afS[1]);
+    const Vector3f minor_2(pPkt->afS[2]);
 
     ::GetRotationAngles(major, minor_1, minor_2, afTheta);
-#endif
 }
 
 // Author & Date:   Jason Scott     23 Jan 2009
@@ -2816,9 +2794,9 @@ void GetRotationAngles(const cbPKT_SS_NOISE_BOUNDARY* pPkt, float afTheta[3])
 //  minor_1 - first minor axis of the ellipsoid
 //  minor_2 - second minor axis of the ellipsoid
 //  cbRESULT_OK if life is good
-cbRESULT cbSSGetNoiseBoundary(uint32_t chanIdx, float afCentroid[3], float afMajor[3], float afMinor_1[3], float afMinor_2[3], uint32_t nInstance)
+cbRESULT cbSSGetNoiseBoundary(const uint32_t chanIdx, float afCentroid[3], float afMajor[3], float afMinor_1[3], float afMinor_2[3], const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2859,8 +2837,13 @@ cbRESULT cbSSGetNoiseBoundary(uint32_t chanIdx, float afCentroid[3], float afMaj
 
 // Author & Date:   Hyrum Sessions  17 January 2023
 // Purpose: Initialize SS Noise Boundary packet
-void InitPktSSNoiseBoundary(cbPKT_SS_NOISE_BOUNDARY* pPkt, uint32_t chan, float cen1, float cen2, float cen3, float maj1, float maj2, float maj3,
-                            float min11, float min12, float min13, float min21, float min22, float min23)
+void InitPktSSNoiseBoundary(
+    cbPKT_SS_NOISE_BOUNDARY* pPkt, const uint32_t chan,
+    const float cen1, const float cen2, const float cen3,
+    const float maj1, const float maj2, const float maj3,
+    const float min11, const float min12, const float min13,
+    const float min21, const float min22, const float min23
+)
 {
     pPkt->cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     pPkt->cbpkt_header.type = cbPKTTYPE_SS_NOISE_BOUNDARYSET;
@@ -2890,9 +2873,9 @@ void InitPktSSNoiseBoundary(cbPKT_SS_NOISE_BOUNDARY* pPkt, uint32_t chan, float 
 //  minor_2 - second minor axis of the ellipsoid
 // Outputs:
 //  cbRESULT_OK if life is good
-cbRESULT cbSSSetNoiseBoundary(uint32_t chanIdx, float afCentroid[3], float afMajor[3], float afMinor_1[3], float afMinor_2[3], uint32_t nInstance)
+cbRESULT cbSSSetNoiseBoundary(const uint32_t chanIdx, float afCentroid[3], float afMajor[3], float afMinor_1[3], float afMinor_2[3], const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2922,9 +2905,9 @@ cbRESULT cbSSSetNoiseBoundary(uint32_t chanIdx, float afCentroid[3], float afMaj
 //          Rotations should be performed in that order (yes, it matters)
 // Outputs:
 //  cbRESULT_OK if life is good
-cbRESULT cbSSGetNoiseBoundaryByTheta(uint32_t chanIdx, float afCentroid[3], float afAxisLen[3], float afTheta[3], uint32_t nInstance)
+cbRESULT cbSSGetNoiseBoundaryByTheta(const uint32_t chanIdx, float afCentroid[3], float afAxisLen[3], float afTheta[3], const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2932,7 +2915,7 @@ cbRESULT cbSSGetNoiseBoundaryByTheta(uint32_t chanIdx, float afCentroid[3], floa
     if (!IsChanAnalogIn(chanIdx)) return cbRESULT_INVALIDCHANNEL;
 
     // get noise boundary info
-    cbPKT_SS_NOISE_BOUNDARY & rPkt = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktNoiseBoundary[chanIdx - 1];
+    const cbPKT_SS_NOISE_BOUNDARY & rPkt = cb_cfg_buffer_ptr[nIdx]->isSortingOptions.pktNoiseBoundary[chanIdx - 1];
 
     // move over the centroid info
     if (afCentroid)
@@ -2967,9 +2950,9 @@ cbRESULT cbSSGetNoiseBoundaryByTheta(uint32_t chanIdx, float afCentroid[3], floa
 //          Rotations will be performed in that order (yes, it matters)
 // Outputs:
 //  cbRESULT_OK if life is good
-cbRESULT cbSSSetNoiseBoundaryByTheta(uint32_t chanIdx, const float afCentroid[3], const float afAxisLen[3], const float afTheta[3], uint32_t nInstance)
+cbRESULT cbSSSetNoiseBoundaryByTheta(const uint32_t chanIdx, const float afCentroid[3], const float afAxisLen[3], const float afTheta[3], const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -2989,13 +2972,12 @@ cbRESULT cbSSSetNoiseBoundaryByTheta(uint32_t chanIdx, const float afCentroid[3]
     ApplyRotationAngles(minor_2, afTheta[0], afTheta[1], afTheta[2]);
 
     // Create the packet
-    cbPKT_SS_NOISE_BOUNDARY icPkt;
-    memset(&icPkt, 0, sizeof(icPkt));
+    cbPKT_SS_NOISE_BOUNDARY icPkt = {};
     InitPktSSNoiseBoundary(&icPkt, chanIdx,
-        afCentroid[0], afCentroid[1], afCentroid[2],
-        major[0], major[1], major[2],
-        minor_1[0], minor_1[1], minor_1[2],
-        minor_2[0], minor_2[1], minor_2[2]);
+                           afCentroid[0], afCentroid[1], afCentroid[2],
+                           major[0], major[1], major[2],
+                           minor_1[0], minor_1[1], minor_1[2],
+                           minor_2[0], minor_2[1], minor_2[2]);
     icPkt.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chan;
     icPkt.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].cbpkt_header.instrument;
     // Send it
@@ -3007,7 +2989,7 @@ cbRESULT cbSSSetNoiseBoundaryByTheta(uint32_t chanIdx, const float afCentroid[3]
 }
 
 // Author & Date:   Kirk Korver     21 Jun 2005
-// Purpose: Getting spike sorting statistics (NULL = don't want that value)
+// Purpose: Getting spike sorting statistics (nullptr = don't want that value)
 // Outputs:
 //  cbRESULT_OK if life is good
 //
@@ -3030,9 +3012,9 @@ cbRESULT cbSSGetStatistics(uint32_t * pnUpdateSpikes, uint32_t * pnAutoalg, uint
                            float * pfClusterHistMinPeakPercentage,
                            uint32_t * pnWaveBasisSize,
                            uint32_t * pnWaveSampleSize,
-                           uint32_t nInstance)
+                           const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -3085,10 +3067,10 @@ cbRESULT cbSSSetStatistics(uint32_t nUpdateSpikes, uint32_t nAutoalg, uint32_t n
                            float fClusterHistMinPeakPercentage,
                            uint32_t nWaveBasisSize,
                            uint32_t nWaveSampleSize,
-                           uint32_t nInstance)
+                           const uint32_t nInstance)
 {
     cbRESULT cbRes = cbRESULT_OK;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -3127,9 +3109,9 @@ cbRESULT cbSSSetStatistics(uint32_t nUpdateSpikes, uint32_t nAutoalg, uint32_t n
 //  pnMaxChans - the maximum number of channels that can fire within 48 samples
 //  pnRefractorySamples - num of samples (30 kHz) are "refractory" and thus ignored for detection
 //  cbRESULT_OK if life is good
-cbRESULT cbSSGetArtifactReject(uint32_t * pnMaxChans, uint32_t * pnRefractorySamples, uint32_t nInstance)
+cbRESULT cbSSGetArtifactReject(uint32_t * pnMaxChans, uint32_t * pnRefractorySamples, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -3147,16 +3129,15 @@ cbRESULT cbSSGetArtifactReject(uint32_t * pnMaxChans, uint32_t * pnRefractorySam
 //  nRefractorySamples - num of samples (30 kHz) are "refractory" and thus ignored for detection
 // Outputs:
 //  cbRESULT_OK if life is good
-cbRESULT cbSSSetArtifactReject(uint32_t nMaxChans, uint32_t nRefractorySamples, uint32_t nInstance)
+cbRESULT cbSSSetArtifactReject(const uint32_t nMaxChans, const uint32_t nRefractorySamples, const uint32_t nInstance)
 {
     cbRESULT cbRes = cbRESULT_OK;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
-    cbPKT_SS_ARTIF_REJECT isPkt;
-    memset(&isPkt, 0, sizeof(isPkt));
+    cbPKT_SS_ARTIF_REJECT isPkt = {};
 
     isPkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     isPkt.cbpkt_header.type = cbPKTTYPE_SS_ARTIF_REJECTSET;
@@ -3181,9 +3162,9 @@ cbRESULT cbSSSetArtifactReject(uint32_t nMaxChans, uint32_t nRefractorySamples, 
 //  pfThreshold - the base threshold value
 //  pfScaling - the threshold scaling factor
 //  cbRESULT_OK if life is good
-cbRESULT cbSSGetDetect(float * pfThreshold, float * pfScaling, uint32_t nInstance)
+cbRESULT cbSSGetDetect(float * pfThreshold, float * pfScaling, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -3202,16 +3183,15 @@ cbRESULT cbSSGetDetect(float * pfThreshold, float * pfScaling, uint32_t nInstanc
 //  pfScaling - the threshold scaling factor
 // Outputs:
 //  cbRESULT_OK if life is good
-cbRESULT cbSSSetDetect(float fThreshold, float fScaling, uint32_t nInstance)
+cbRESULT cbSSSetDetect(const float fThreshold, const float fScaling, const uint32_t nInstance)
 {
     cbRESULT cbRes = cbRESULT_OK;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
-    cbPKT_SS_DETECT isPkt;
-    memset(&isPkt, 0, sizeof(isPkt));
+    cbPKT_SS_DETECT isPkt = {};
 
     isPkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     isPkt.cbpkt_header.type = cbPKTTYPE_SS_DETECTSET;
@@ -3236,9 +3216,9 @@ cbRESULT cbSSSetDetect(float fThreshold, float fScaling, uint32_t nInstance)
 //  pnMode - 0=number of units is still adapting  1=number of units is frozen
 //  pfElapsedMinutes - this only makes sense if nMode=0 - minutes from start adapting
 //  cbRESULT_OK if life is good
-cbRESULT cbSSGetStatus(cbAdaptControl * pcntlUnitStats, cbAdaptControl * pcntlNumUnits, uint32_t nInstance)
+cbRESULT cbSSGetStatus(cbAdaptControl * pcntlUnitStats, cbAdaptControl * pcntlNumUnits, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -3258,16 +3238,15 @@ cbRESULT cbSSGetStatus(cbAdaptControl * pcntlUnitStats, cbAdaptControl * pcntlNu
 //  cntlNumUnits - control/timer information for number of units
 // Outputs:
 //  cbRESULT_OK if life is good
-cbRESULT cbSSSetStatus(cbAdaptControl cntlUnitStats, cbAdaptControl cntlNumUnits, uint32_t nInstance)
+cbRESULT cbSSSetStatus(const cbAdaptControl cntlUnitStats, const cbAdaptControl cntlNumUnits, const uint32_t nInstance)
 {
     cbRESULT cbRes = cbRESULT_OK;
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
-    cbPKT_SS_STATUS icPkt;
-    memset(&icPkt, 0, sizeof(icPkt));
+    cbPKT_SS_STATUS icPkt = {};
 
     icPkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     icPkt.cbpkt_header.type = cbPKTTYPE_SS_STATUSSET;
@@ -3296,9 +3275,9 @@ cbRESULT cbSSSetStatus(cbAdaptControl cntlUnitStats, cbAdaptControl cntlNumUnits
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-cbRESULT cbCheckforData(cbLevelOfConcern & nLevelOfConcern, uint32_t *pktstogo /* = NULL */, uint32_t nInstance)
+cbRESULT cbCheckforData(cbLevelOfConcern & nLevelOfConcern, uint32_t *pktstogo /* = nullptr */, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -3321,12 +3300,12 @@ cbRESULT cbCheckforData(cbLevelOfConcern & nLevelOfConcern, uint32_t *pktstogo /
         *pktstogo = cb_rec_buffer_ptr[nIdx]->received - cb_recbuff_processed[nIdx];
 
     // Level of concern is based on fourths
-    int nDiff = cb_rec_buffer_ptr[nIdx]->headindex - cb_recbuff_tailindex[nIdx];
+    uint32_t nDiff = cb_rec_buffer_ptr[nIdx]->headindex - cb_recbuff_tailindex[nIdx];
     if (nDiff < 0)
         nDiff += cbRECBUFFLEN;
 
-    int xxx = nDiff * LOC_COUNT;
-    int xx = cbRECBUFFLEN;
+    const uint32_t xxx = nDiff * LOC_COUNT;
+    const int xx = cbRECBUFFLEN;
     nLevelOfConcern = static_cast<cbLevelOfConcern>(xxx / xx);
 
     // make sure to return a valid value
@@ -3362,15 +3341,15 @@ int sem_timedwait(sem_t * sem, int ms)
 #endif
 
 // Purpose: Wait for master application (usually Central) to fill buffers
-cbRESULT cbWaitforData(uint32_t nInstance)
+cbRESULT cbWaitforData(const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
 #ifdef WIN32
     if (WaitForSingleObject(cb_sig_event_hnd[nIdx], 250) == WAIT_OBJECT_0)
         return cbRESULT_OK;
 #elif defined __APPLE__
-    if (sem_timedwait((sem_t *)cb_sig_event_hnd[nIdx], 250) == 0)
+    if (sem_timedwait(static_cast<sem_t *>(cb_sig_event_hnd[nIdx]), 250) == 0)
         return cbRESULT_OK;
 #else
     timespec ts;
@@ -3392,15 +3371,15 @@ cbRESULT cbWaitforData(uint32_t nInstance)
 }
 
 
-cbPKT_GENERIC * cbGetNextPacketPtr(uint32_t nInstance)
+cbPKT_GENERIC * cbGetNextPacketPtr(const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // if there is new data return the next data packet and increment the pointer
     if (cb_recbuff_processed[nIdx] < cb_rec_buffer_ptr[nIdx]->received)
     {
         // get the pointer to the current packet
-        cbPKT_GENERIC *packetptr = (cbPKT_GENERIC*)&(cb_rec_buffer_ptr[nIdx]->buffer[cb_recbuff_tailindex[nIdx]]);
+        auto *packetptr = reinterpret_cast<cbPKT_GENERIC *>(&(cb_rec_buffer_ptr[nIdx]->buffer[cb_recbuff_tailindex[nIdx]]));
 
         // increament the read index
         cb_recbuff_tailindex[nIdx] += (cbPKT_HEADER_32SIZE + packetptr->cbpkt_header.dlen);
@@ -3422,15 +3401,15 @@ cbPKT_GENERIC * cbGetNextPacketPtr(uint32_t nInstance)
         return packetptr;
     }
     else
-        return NULL;
+        return nullptr;
 }
 
 
 // Purpose: options sharing
 //
-cbRESULT cbGetColorTable(cbCOLORTABLE **colortable, uint32_t nInstance)
+cbRESULT cbGetColorTable(cbCOLORTABLE **colortable, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
@@ -3440,20 +3419,21 @@ cbRESULT cbGetColorTable(cbCOLORTABLE **colortable, uint32_t nInstance)
 
 // Purpose: options sharing spike cache
 //
-cbRESULT cbGetSpkCache(uint32_t chid, cbSPKCACHE **cache, uint32_t nInstance)
+cbRESULT cbGetSpkCache(const uint32_t chid, cbSPKCACHE **cache, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
 
-    *cache = (cbSPKCACHE*)( ((uint8_t*)&(cb_spk_buffer_ptr[nIdx]->cache)) + ((chid - 1)*(cb_spk_buffer_ptr[nIdx]->linesize)) );
+    *cache = reinterpret_cast<cbSPKCACHE *>(reinterpret_cast<uint8_t *>(&(cb_spk_buffer_ptr[nIdx]->cache)) + (
+                                                (chid - 1) * (cb_spk_buffer_ptr[nIdx]->linesize)));
     return cbRESULT_OK;
 }
 
 // Author & Date:   Kirk Korver     29 May 2003
 // Purpose: Get the multiplier to use for autothresholdine when using RMS to guess noise
 // This will adjust fAutoThresholdDistance above, but use the API instead
-float cbGetRMSAutoThresholdDistance(uint32_t nInstance)
+float cbGetRMSAutoThresholdDistance(const uint32_t nInstance)
 {
     return GetOptionTable(nInstance).fRMSAutoThresholdDistance;
 }
@@ -3461,21 +3441,21 @@ float cbGetRMSAutoThresholdDistance(uint32_t nInstance)
 // Author & Date:   Kirk Korver     29 May 2003
 // Purpose: Set the multiplier to use for autothresholdine when using RMS to guess noise
 // This will adjust fAutoThresholdDistance above, but use the API instead
-void cbSetRMSAutoThresholdDistance(float fRMSAutoThresholdDistance, uint32_t nInstance)
+void cbSetRMSAutoThresholdDistance(const float fRMSAutoThresholdDistance, const uint32_t nInstance)
 {
     GetOptionTable(nInstance).fRMSAutoThresholdDistance = fRMSAutoThresholdDistance;
 }
 
 
 // Tell me about the current adaptive filter settings
-cbRESULT cbGetAdaptFilter(uint32_t  proc,             // which NSP processor?
+cbRESULT cbGetAdaptFilter(const uint32_t  proc,             // which NSP processor?
                           uint32_t  * pnMode,         // 0=disabled, 1=filter continuous & spikes, 2=filter spikes
                           float   * pdLearningRate, // speed at which adaptation happens. Very small. e.g. 5e-12
                           uint32_t  * pnRefChan1,     // The first reference channel (1 based).
                           uint32_t  * pnRefChan2,     // The second reference channel (1 based).
-                          uint32_t nInstance)
+                          const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -3483,7 +3463,7 @@ cbRESULT cbGetAdaptFilter(uint32_t  proc,             // which NSP processor?
     // Test that the proc address is valid and that requested procinfo structure is not empty
     if ((proc - 1) >= cbMAXPROCS) return cbRESULT_INVALIDADDRESS;
 
-    // Allow the parameters to be NULL
+    // Allow the parameters to be nullptr
     if (pnMode)         *pnMode         = cb_cfg_buffer_ptr[nIdx]->adaptinfo[proc - 1].nMode;
     if (pdLearningRate) *pdLearningRate = cb_cfg_buffer_ptr[nIdx]->adaptinfo[proc - 1].dLearningRate;
     if (pnRefChan1)     *pnRefChan1     = cb_cfg_buffer_ptr[nIdx]->adaptinfo[proc - 1].nRefChan1;
@@ -3494,14 +3474,14 @@ cbRESULT cbGetAdaptFilter(uint32_t  proc,             // which NSP processor?
 
 
 // Update the adaptive filter settings
-cbRESULT cbSetAdaptFilter(uint32_t  proc,             // which NSP processor?
-                          uint32_t  * pnMode,         // 0=disabled, 1=filter continuous & spikes, 2=filter spikes
-                          float   * pdLearningRate, // speed at which adaptation happens. Very small. e.g. 5e-12
-                          uint32_t  * pnRefChan1,     // The first reference channel (1 based).
-                          uint32_t  * pnRefChan2,     // The second reference channel (1 based).
-                          uint32_t nInstance)
+cbRESULT cbSetAdaptFilter(const uint32_t  proc,             // which NSP processor?
+                          const uint32_t  * pnMode,         // 0=disabled, 1=filter continuous & spikes, 2=filter spikes
+                          const float   * pdLearningRate, // speed at which adaptation happens. Very small. e.g. 5e-12
+                          const uint32_t  * pnRefChan1,     // The first reference channel (1 based).
+                          const uint32_t  * pnRefChan2,     // The second reference channel (1 based).
+                          const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -3516,12 +3496,12 @@ cbRESULT cbSetAdaptFilter(uint32_t  proc,             // which NSP processor?
     uint32_t  nRefChan1;     // The first reference channel (1 based).
     uint32_t  nRefChan2;     // The second reference channel (1 based).
 
-    cbRESULT ret = cbGetAdaptFilter(proc, &nMode, &dLearningRate, &nRefChan1, &nRefChan2, nInstance);
+    const cbRESULT ret = cbGetAdaptFilter(proc, &nMode, &dLearningRate, &nRefChan1, &nRefChan2, nInstance);
     ASSERT(ret == cbRESULT_OK);
     if (ret != cbRESULT_OK)
         return ret;
 
-    // Handle the cases where there are "NULL's" passed in
+    // Handle the cases where there are "nullptr's" passed in
     if (pnMode)         nMode =         *pnMode;
     if (pdLearningRate) dLearningRate = *pdLearningRate;
     if (pnRefChan1)     nRefChan1 =     *pnRefChan1;
@@ -3532,12 +3512,12 @@ cbRESULT cbSetAdaptFilter(uint32_t  proc,             // which NSP processor?
 }
 
 // Tell me about the current RefElecive filter settings
-cbRESULT cbGetRefElecFilter(uint32_t  proc,             // which NSP processor?
+cbRESULT cbGetRefElecFilter(const uint32_t  proc,             // which NSP processor?
                             uint32_t  * pnMode,         // 0=disabled, 1=filter continuous & spikes, 2=filter spikes
                             uint32_t  * pnRefChan,      // The reference channel (1 based).
-                            uint32_t nInstance)
+                            const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -3545,7 +3525,7 @@ cbRESULT cbGetRefElecFilter(uint32_t  proc,             // which NSP processor?
     // Test that the proc address is valid and that requested procinfo structure is not empty
     if ((proc - 1) >= cbMAXPROCS) return cbRESULT_INVALIDADDRESS;
 
-    // Allow the parameters to be NULL
+    // Allow the parameters to be nullptr
     if (pnMode)         *pnMode     = cb_cfg_buffer_ptr[nIdx]->refelecinfo[proc - 1].nMode;
     if (pnRefChan)      *pnRefChan  = cb_cfg_buffer_ptr[nIdx]->refelecinfo[proc - 1].nRefChan;
 
@@ -3554,12 +3534,12 @@ cbRESULT cbGetRefElecFilter(uint32_t  proc,             // which NSP processor?
 
 
 // Update the reference electrode filter settings
-cbRESULT cbSetRefElecFilter(uint32_t  proc,             // which NSP processor?
-                            uint32_t  * pnMode,         // 0=disabled, 1=filter continuous & spikes, 2=filter spikes
-                            uint32_t  * pnRefChan,      // The reference channel (1 based).
-                            uint32_t nInstance)
+cbRESULT cbSetRefElecFilter(const uint32_t  proc,             // which NSP processor?
+                            const uint32_t  * pnMode,         // 0=disabled, 1=filter continuous & spikes, 2=filter spikes
+                            const uint32_t  * pnRefChan,      // The reference channel (1 based).
+                            const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -3572,17 +3552,16 @@ cbRESULT cbSetRefElecFilter(uint32_t  proc,             // which NSP processor?
     uint32_t  nMode;         // 0=disabled, 1=filter continuous & spikes, 2=filter spikes
     uint32_t  nRefChan;      // The reference channel (1 based).
 
-    cbRESULT ret = cbGetRefElecFilter(proc, &nMode, &nRefChan, nInstance);
+    const cbRESULT ret = cbGetRefElecFilter(proc, &nMode, &nRefChan, nInstance);
     ASSERT(ret == cbRESULT_OK);
     if (ret != cbRESULT_OK)
         return ret;
 
-    // Handle the cases where there are "NULL's" passed in
+    // Handle the cases where there are "nullptr's" passed in
     if (pnMode)         nMode =         *pnMode;
     if (pnRefChan)      nRefChan =      *pnRefChan;
 
-    cbPKT_REFELECFILTINFO icPkt;
-    memset(&icPkt, 0, sizeof(icPkt));
+    cbPKT_REFELECFILTINFO icPkt = {};
 
     icPkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     icPkt.cbpkt_header.type = cbPKTTYPE_REFELECFILTSET;
@@ -3599,9 +3578,9 @@ cbRESULT cbSetRefElecFilter(uint32_t  proc,             // which NSP processor?
 // Inputs:
 //   szName    - buffer name
 //   bReadOnly - if should open memory for read-only operation
-cbRESULT cbGetChannelSelection(cbPKT_UNIT_SELECTION* pPktUnitSel, uint32_t nProc, uint32_t nInstance)
+cbRESULT cbGetChannelSelection(cbPKT_UNIT_SELECTION* pPktUnitSel, const uint32_t nProc, const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Test for prior library initialization
     if (!cb_library_initialized[nIdx]) return cbRESULT_NOLIBRARY;
@@ -3618,9 +3597,9 @@ cbRESULT cbGetChannelSelection(cbPKT_UNIT_SELECTION* pPktUnitSel, uint32_t nProc
 // Purpose: Create the shared memory objects
 // Inputs:
 //   nInstance - nsp number to open library for
-cbRESULT CreateSharedObjects(uint32_t nInstance)
+cbRESULT CreateSharedObjects(const uint32_t nInstance)
 {
-    uint32_t nIdx = cb_library_index[nInstance];
+    const uint32_t nIdx = cb_library_index[nInstance];
 
     // Create the shared neuromatic receive buffer, if unsuccessful, return the associated error code
     if (nInstance == 0)
@@ -3629,8 +3608,8 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
         _snprintf(cb_rec_buffer_hnd[nIdx].name, sizeof(cb_rec_buffer_hnd[nIdx].name), "%s%d", REC_BUF_NAME, nInstance);
     cb_rec_buffer_hnd[nIdx].size = sizeof(cbRECBUFF);
     CreateSharedBuffer(cb_rec_buffer_hnd[nIdx]);
-    cb_rec_buffer_ptr[nIdx] = (cbRECBUFF*)GetSharedBuffer(cb_rec_buffer_hnd[nIdx].hnd, false);
-    if (cb_rec_buffer_ptr[nIdx] == NULL)
+    cb_rec_buffer_ptr[nIdx] = static_cast<cbRECBUFF *>(GetSharedBuffer(cb_rec_buffer_hnd[nIdx].hnd, false));
+    if (cb_rec_buffer_ptr[nIdx] == nullptr)
         return cbRESULT_BUFRECALLOCERR;
     memset(cb_rec_buffer_ptr[nIdx], 0, cb_rec_buffer_hnd[nIdx].size);
 
@@ -3644,9 +3623,9 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
         cb_xmt_global_buffer_hnd[nIdx].size = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_GLOBAL_BUFFLEN);
         CreateSharedBuffer(cb_xmt_global_buffer_hnd[nIdx]);
         // map the global memory into local ram space and get pointer
-        cb_xmt_global_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_global_buffer_hnd[nIdx].hnd, false);
+        cb_xmt_global_buffer_ptr[nIdx] = static_cast<cbXMTBUFF *>(GetSharedBuffer(cb_xmt_global_buffer_hnd[nIdx].hnd, false));
         // clean up if error occurs
-        if (cb_xmt_global_buffer_ptr[nIdx] == NULL)
+        if (cb_xmt_global_buffer_ptr[nIdx] == nullptr)
             return cbRESULT_BUFGXMTALLOCERR;
         // initialize the buffers...they MUST all be initialized to 0 for later logic to work!!
         memset(cb_xmt_global_buffer_ptr[nIdx], 0, cb_xmt_global_buffer_hnd[nIdx].size);
@@ -3662,9 +3641,9 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
         cb_xmt_local_buffer_hnd[nIdx].size = sizeof(cbXMTBUFF) + (sizeof(uint32_t)*cbXMT_LOCAL_BUFFLEN);
         CreateSharedBuffer(cb_xmt_local_buffer_hnd[nIdx]);
         // map the global memory into local ram space and get pointer
-        cb_xmt_local_buffer_ptr[nIdx] = (cbXMTBUFF*)GetSharedBuffer(cb_xmt_local_buffer_hnd[nIdx].hnd, false);
+        cb_xmt_local_buffer_ptr[nIdx] = static_cast<cbXMTBUFF *>(GetSharedBuffer(cb_xmt_local_buffer_hnd[nIdx].hnd, false));
         // clean up if error occurs
-        if (cb_xmt_local_buffer_ptr[nIdx] == NULL)
+        if (cb_xmt_local_buffer_ptr[nIdx] == nullptr)
             return cbRESULT_BUFLXMTALLOCERR;
         // initialize the buffers...they MUST all be initialized to 0 for later logic to work!!
         memset(cb_xmt_local_buffer_ptr[nIdx], 0, cb_xmt_local_buffer_hnd[nIdx].size);
@@ -3680,8 +3659,8 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
         _snprintf(cb_cfg_buffer_hnd[nIdx].name, sizeof(cb_cfg_buffer_hnd[nIdx].name), "%s%d", CFG_BUF_NAME, nInstance);
     cb_cfg_buffer_hnd[nIdx].size = sizeof(cbCFGBUFF);
     CreateSharedBuffer(cb_cfg_buffer_hnd[nIdx]);
-    cb_cfg_buffer_ptr[nIdx] = (cbCFGBUFF*)GetSharedBuffer(cb_cfg_buffer_hnd[nIdx].hnd, false);
-    if (cb_cfg_buffer_ptr[nIdx] == NULL)
+    cb_cfg_buffer_ptr[nIdx] = static_cast<cbCFGBUFF *>(GetSharedBuffer(cb_cfg_buffer_hnd[nIdx].hnd, false));
+    if (cb_cfg_buffer_ptr[nIdx] == nullptr)
         return cbRESULT_BUFCFGALLOCERR;
     memset(cb_cfg_buffer_ptr[nIdx], 0, cb_cfg_buffer_hnd[nIdx].size);
 
@@ -3692,8 +3671,8 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
         _snprintf(cb_pc_status_buffer_hnd[nIdx].name, sizeof(cb_pc_status_buffer_hnd[nIdx].name), "%s%d", STATUS_BUF_NAME, nInstance);
     cb_pc_status_buffer_hnd[nIdx].size = sizeof(cbPcStatus);
     CreateSharedBuffer(cb_pc_status_buffer_hnd[nIdx]);
-    cb_pc_status_buffer_ptr[nIdx] = (cbPcStatus*)GetSharedBuffer(cb_pc_status_buffer_hnd[nIdx].hnd, false);
-    if (cb_pc_status_buffer_ptr[nIdx] == NULL)
+    cb_pc_status_buffer_ptr[nIdx] = static_cast<cbPcStatus *>(GetSharedBuffer(cb_pc_status_buffer_hnd[nIdx].hnd, false));
+    if (cb_pc_status_buffer_ptr[nIdx] == nullptr)
         return cbRESULT_BUFPCSTATALLOCERR;
     memset(cb_pc_status_buffer_ptr[nIdx], 0, cb_pc_status_buffer_hnd[nIdx].size);
 
@@ -3704,8 +3683,8 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
         _snprintf(cb_spk_buffer_hnd[nIdx].name, sizeof(cb_spk_buffer_hnd[nIdx].name), "%s%d", SPK_BUF_NAME, nInstance);
     cb_spk_buffer_hnd[nIdx].size = sizeof(cbSPKBUFF);
     CreateSharedBuffer(cb_spk_buffer_hnd[nIdx]);
-    cb_spk_buffer_ptr[nIdx] = (cbSPKBUFF*)GetSharedBuffer(cb_spk_buffer_hnd[nIdx].hnd, false);
-    if (cb_spk_buffer_ptr[nIdx] == NULL)
+    cb_spk_buffer_ptr[nIdx] = static_cast<cbSPKBUFF *>(GetSharedBuffer(cb_spk_buffer_hnd[nIdx].hnd, false));
+    if (cb_spk_buffer_ptr[nIdx] == nullptr)
         return cbRESULT_BUFSPKALLOCERR;
 
     memset(cb_spk_buffer_ptr[nIdx], 0, sizeof(cbSPKBUFF));
@@ -3749,8 +3728,8 @@ cbRESULT CreateSharedObjects(uint32_t nInstance)
     else
         _snprintf(buf, sizeof(buf), "%s%d", SIG_EVT_NAME, nInstance);
 #ifdef WIN32
-    cb_sig_event_hnd[nIdx] = CreateEventA(NULL, TRUE, FALSE, buf);
-    if (cb_sig_event_hnd[nIdx] == NULL)
+    cb_sig_event_hnd[nIdx] = CreateEventA(nullptr, TRUE, FALSE, buf);
+    if (cb_sig_event_hnd[nIdx] == nullptr)
         return cbRESULT_EVSIGERR;
 #else
     sem_t * sem = sem_open(buf, O_CREAT | O_EXCL, 0666, 0);

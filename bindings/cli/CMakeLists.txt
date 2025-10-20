@@ -1,6 +1,6 @@
-option(BUILD_CLI "Build C++/CLI" OFF)
+option(CBSDK_BUILD_CLI "Build C++/CLI" OFF)
 
-IF(${BUILD_CLI})
+IF(${CBSDK_BUILD_CLI})
     cmake_minimum_required(VERSION 3.12)
     set(CMAKE_CSharp_FLAGS "/langversion:latest")
     SET( LIB_NAME_CLI cbsdk_cli)
@@ -49,4 +49,4 @@ IF(${BUILD_CLI})
     # CSharp program to test cbsdk_ext
     add_subdirectory(TestCSharp)
 
-ENDIF(${BUILD_CLI})
+ENDIF(${CBSDK_BUILD_CLI})

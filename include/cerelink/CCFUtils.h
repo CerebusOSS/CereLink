@@ -41,7 +41,7 @@ typedef struct {
 } cbCCF;
 
 // CCF processing state
-typedef enum _cbStateCCF
+typedef enum cbStateCCF
 {
     CCFSTATE_READ = 0,     // Reading in progress
     CCFSTATE_WRITE,        // Writing in progress

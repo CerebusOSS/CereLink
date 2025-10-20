@@ -13,6 +13,7 @@ bindings/Python/cerebus/cbpy.cp*
 .idea/
 out/
 CMakeSettings.json
+Testing/  # Created by CTest
 
 .gitattributes
 *.*~
@@ -42,7 +43,8 @@ Release/
 .settings/
 .metadata/
 
-cerebus/cbpy.so
-cerebus/cbpy.cpp
-cerebus/cbpyw.cpp
-cerebus/*.dll
+**/cerelink/cbpy.so
+**/cerelink/cbpy.cpp
+**/cerelink/cbpyw.cpp
+**/cerelink/*.dll
+**/cerelink/__version__.py

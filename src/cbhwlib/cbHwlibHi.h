@@ -102,12 +102,74 @@ bool AreHoopsDefined(uint32_t nChannel, uint32_t nInstance = 0);
 bool AreHoopsDefined(uint32_t nChannel, uint32_t nUnit, uint32_t nInstance = 0);
 
 // Get channel number from ordinal
+/// @author     Hyrum L. Sessions
+/// @date       24 Feb 2017
+/// @brief      Get the channel number of the specified ordinal analog input channel
+///             e.g. on a 128 channel system, the 1st digin channel is 151
+///
+/// @param [in] nOrdinal 1 based ordinal digin to find
+/// @param [in] nInstance Instance number of the library
+/// @return     Channel number of the ordinal digin, 0 if none exist or invalid ordinal
 uint32_t GetAIAnalogInChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
+
+/// @author     Hyrum L. Sessions
+/// @date       24 Feb 2017
+/// @brief      Get the channel number of the specified ordinal digin channel
+///             e.g. on a 128 channel system, the 1st digin channel is 151
+///
+/// @param [in] nOrdinal 1 based ordinal digin to find
+/// @param [in] nInstance Instance number of the library
+/// @return     Channel number of the ordinal digin, 0 if none exist or invalid ordinal
 uint32_t GetAnalogOutChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
+
+/// @author     Hyrum L. Sessions
+/// @date       24 Feb 2017
+/// @brief      Get the channel number of the specified ordinal digin channel
+///             e.g. on a 128 channel system, the 1st digin channel is 151
+///
+/// @param [in] nOrdinal 1 based ordinal digin to find
+/// @param [in] nInstance Instance number of the library
+/// @return     Channel number of the ordinal digin, 0 if none exist or invalid ordinal
 uint32_t GetAudioOutChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
+
+/// @author     Hyrum L. Sessions
+/// @date       27 Feb 2017
+/// @brief      Get the channel number of the specified ordinal analog or audio channel
+///             e.g. on a 128 channel system, the 1st digin channel is 145
+///
+/// @param [in] nOrdinal 1 based ordinal digin to find
+/// @param [in] nInstance Instance number of the library
+/// @return     Channel number of the ordinal digin, 0 if none exist or invalid ordinal
 uint32_t GetAnalogOrAudioOutChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
+
+/// @author     Hyrum L. Sessions
+/// @date       24 Feb 2017
+/// @brief      Get the channel number of the specified ordinal digin channel
+///             e.g. on a 128 channel system, the 1st digin channel is 151
+///
+/// @param [in] nOrdinal 1 based ordinal digin to find
+/// @param [in] nInstance Instance number of the library
+/// @return     Channel number of the ordinal digin, 0 if none exist or invalid ordinal
 uint32_t GetDiginChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
+
+/// @author     Hyrum L. Sessions
+/// @date       24 Feb 2017
+/// @brief      Get the channel number of the specified ordinal digin channel
+///             e.g. on a 128 channel system, the 1st digin channel is 151
+///
+/// @param [in] nOrdinal 1 based ordinal digin to find
+/// @param [in] nInstance Instance number of the library
+/// @return     Channel number of the ordinal digin, 0 if none exist or invalid ordinal
 uint32_t GetSerialChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
+
+/// @author     Hyrum L. Sessions
+/// @date       24 Feb 2017
+/// @brief      Get the channel number of the specified ordinal digin channel
+///             e.g. on a 128 channel system, the 1st digin channel is 151
+///
+/// @param [in] nOrdinal 1 based ordinal digin to find
+/// @param [in] nInstance Instance number of the library
+/// @return     Channel number of the ordinal digin, 0 if none exist or invalid ordinal
 uint32_t GetDigoutChanNumber(uint32_t nOrdinal, uint32_t nInstance = 0);
 
 uint32_t cbGetNumActiveInstruments();
@@ -257,16 +319,16 @@ uint32_t cbGetChanUnits(uint32_t nChan, uint32_t nInstance = 0);
 uint32_t cbIsChanUnitValid(uint32_t nChan, int32_t nUnit, uint32_t nInstance = 0);
 
 // Purpose: Set the noise boundary parameters (compatibility for int16_t)
-cbRESULT cbSSSetNoiseBoundary(uint32_t chanIdx, int16_t anCentroid[3], int16_t anMajor[3], int16_t anMinor_1[3], int16_t anMinor_2[3], uint32_t nInstance = 0);
+cbRESULT cbSSSetNoiseBoundary(uint32_t chanIdx, const int16_t anCentroid[3], const int16_t anMajor[3], const int16_t anMinor_1[3], const int16_t anMinor_2[3], uint32_t nInstance = 0);
 
 // Purpose: Get NTrode unitmapping for a particular site
 cbRESULT cbGetNTrodeUnitMapping(uint32_t ntrode, uint16_t nSite, cbMANUALUNITMAPPING *unitmapping, uint32_t nInstance = 0);
 
 // Purpose: Set NTrode unitmapping of a particular site
-cbRESULT cbSetNTrodeUnitMapping(uint32_t ntrode, uint16_t nSite, cbMANUALUNITMAPPING *unitmapping, int16_t fs = -1, uint32_t nInstance = 0);
+cbRESULT cbSetNTrodeUnitMapping(uint32_t ntrode, uint16_t nSite, const cbMANUALUNITMAPPING *unitmapping, int16_t fs = -1, uint32_t nInstance = 0);
 
 // Purpose: Set NTrode feature space, keeping the rest of NTrode information intact
-cbRESULT cbSetNTrodeFeatureSpace(uint32_t ntrode, uint16_t fs, uint32_t nInstance = 0);
+cbRESULT cbSetNTrodeFeatureSpace(uint32_t ntrode, int16_t fs, uint32_t nInstance = 0);
 
 // Purpose: Get the instrument this NTrode belongs to
 uint32_t cbGetNTrodeInstrument(uint32_t nNTrode, uint32_t nInstance = 0);

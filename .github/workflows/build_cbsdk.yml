@@ -27,61 +27,124 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - {name: "windows-x64", os: "windows-latest", cmake_extra: "-T v142,host=x86"}
-          - { name: "macOS-latest", os: "macOS-latest"}
-          - { name: "jammy", os: "ubuntu-22.04"}
-          - { name: "ubuntu-latest", os: "ubuntu-latest"}
+          - {name: "windows-x64", os: "windows-latest", cmake_extra: "-T v142,host=x86", arch: "AMD64"}
+          - {name: "windows-arm64", os: "windows-latest", cmake_extra: "-A ARM64", arch: "ARM64"}
+          - {name: "macOS-latest", os: "macOS-latest", arch: "auto"}
+          - {name: "jammy", os: "ubuntu-22.04", arch: "x86_64"}
+          - {name: "ubuntu-latest", os: "ubuntu-latest", arch: "x86_64"}
+          - {name: "bookworm-x64", os: "ubuntu-latest", container: "debian:bookworm", arch: "x86_64"}
+          - {name: "linux-arm64", os: "ubuntu-latest", arch: "aarch64"}
+
+    container: ${{ matrix.config.container }}
 
     steps:
 
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up QEMU for ARM emulation
+        if: matrix.config.arch == 'aarch64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Install build dependencies (Debian container)
+        if: matrix.config.container
+        run: |
+          apt-get update
+          apt-get install -y \
+            cmake g++ make git \
+            python3 python3-pip python3-venv \
+            file lsb-release dpkg-dev
+
+      - name: Install ARM64 cross-compilation tools
+        if: matrix.config.arch == 'aarch64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Create CMake toolchain file for ARM64
+        if: matrix.config.arch == 'aarch64'
+        run: |
+          cat > arm64-toolchain.cmake << 'EOF'
+          set(CMAKE_SYSTEM_NAME Linux)
+          set(CMAKE_SYSTEM_PROCESSOR aarch64)
+          set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)
+          set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
+          set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+          set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+          EOF
+
       - name: Configure CBSDK
         run: |
           cmake --version
+          TOOLCHAIN_ARG=""
+          SHLIBDEPS_ARG="-DCPACK_DEBIAN_PACKAGE_SHLIBDEPS=ON"
+          if [ "${{ matrix.config.arch }}" = "aarch64" ]; then
+            TOOLCHAIN_ARG="-DCMAKE_TOOLCHAIN_FILE=arm64-toolchain.cmake"
+            SHLIBDEPS_ARG="-DCPACK_DEBIAN_PACKAGE_SHLIBDEPS=OFF"
+          fi
           cmake -B build -S . \
           -DCBSDK_BUILD_CBMEX=OFF \
           -DCBSDK_BUILD_CBOCT=OFF \
           -DCBSDK_BUILD_TEST=OFF \
           -DCBSDK_BUILD_SAMPLE=OFF \
-          -DCBSDK_BUILD_HDF5=OFF \
+          -DCBSDK_BUILD_TOOLS=OFF \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=${PWD}/install \
           -DCPACK_PACKAGE_DIRECTORY=${PWD}/dist \
-          -DCPACK_DEBIAN_PACKAGE_SHLIBDEPS=ON \
+          $SHLIBDEPS_ARG \
+          $TOOLCHAIN_ARG \
           ${{ matrix.config.cmake_extra }}
 
       - name: Build and Package
         run: |
           cmake --build build --target install --config Release -j
-          cmake --build build --target package --config Release -j
+          # Skip CPack for ARM64 due to missing shlibdeps support
+          if [ "${{ matrix.config.arch }}" != "aarch64" ]; then
+            cmake --build build --target package --config Release -j
+          fi
 
       - name: Set up Python
+        if: "!matrix.config.container"
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Install cibuildwheel
+        if: "!matrix.config.container"
         run: python -m pip install cibuildwheel==2.16.5
 
       - name: Build wheels
-        if: "!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest'"
+        if: "(!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest' || matrix.config.name == 'linux-arm64') && !matrix.config.container"
         run: python -m cibuildwheel bindings/Python --output-dir bindings/Python/dist
         env:
-          CIBW_BUILD: cp39-* cp310-* cp311-* cp312-*
+          CIBW_BUILD: cp311-* cp312-* cp313-*
           CIBW_SKIP: "*-musllinux_* *-win32 *-manylinux_i686"
           CIBW_BUILD_VERBOSITY: 1
-          CIBW_ENVIRONMENT: CBSDK_INSTALL_PATH="${{ github.workspace }}/install"
+          CIBW_ENVIRONMENT: CBSDK_INSTALL_PATH="${{ github.workspace }}/install" PIP_ONLY_BINARY=":all:"
+          CIBW_ARCHS: ${{ matrix.config.arch }}
 
-      - name: Ubuntu - Prefix package with release name
-        if: startswith(matrix.config.os, 'ubuntu-')
+      - name: Linux - Prefix package with release name
+        if: startswith(matrix.config.os, 'ubuntu-') && !matrix.config.container && matrix.config.arch != 'aarch64'
         run: |
           pushd dist
           temp="$(lsb_release -cs)"
           for name in *
           do
             mv "$name" "$(echo $temp)-$name"
+          done
+          popd
+
+      - name: Debian - Prefix package with release name
+        if: matrix.config.container
+        run: |
+          pushd dist
+          for name in *
+          do
+            mv "$name" "bookworm-$name"
           done
           popd
 
@@ -94,7 +157,7 @@ jobs:
 
       - name: Upload Python Wheels
         uses: actions/upload-artifact@v4
-        if: "!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest'"
+        if: "(!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest' || matrix.config.name == 'linux-arm64') && !matrix.config.container"
         with:
           name: python-wheels-${{ matrix.config.name }}
           path: bindings/Python/dist/*.whl

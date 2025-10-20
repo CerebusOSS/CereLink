@@ -1,38 +1,20 @@
 # CBSDK CMake Build System
 # Author: griffin.milsap@gmail.com
 #         chadwick.boulay@gmail.com
-# Version 1.1 Jan. 2017
-#   Build information for
-#       cbsdk Library
-#       -shared, -static (optional), -matlab (optional), -octave (optional)
-#       -testcbsdk Test Binary (optional)
-#   See "Optional Targets" below for options to disable specific targets.
-#
-# MATLAB:
-#    First ../Matlab  is looked.
-#    If mex.h is not found then FindMatlab.cmake looks at usual places.
-#    Use -DMatlab_ROOT_DIR if installed in unknown location (or copy to ../Matlab).
-#    e.g., Matlab R2016a on Mac OS: -DMatlab_ROOT_DIR=/Applications/MATLAB_R2016a.app/
-#    -DCBMEX_INSTALL_PREFIX can be used to install cbmex to given directory
-#
-# General Windows:
-#    - If you are using MSVC and not logged-in as an administrator then you will not be
-#    able to build the INSTALL target, as by default it tries to install to C:\Program Files.
-#    Change the install target using CMAKE_INSTALL_PREFIX. See example CMAKE command below.
-#    - If you would like to build the C# libraries and examples then add -DBUILD_CLI=ON
-# NOTE: Qt dependency has been completely removed (replaced with C++ standard library)
-#
-
 
 cmake_minimum_required( VERSION 3.16 )
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake" ${CMAKE_MODULE_PATH})
 include(AppleSilicon)
+include(GetVersionFromGit)
 # cmake_policy(SET CMP0091 NEW)
+
+# Get version from git tags
+get_version_from_git()
 
 project(CBSDK
         DESCRIPTION "Blackrock Neurotech CereBus Software Development Kit"
         LANGUAGES C CXX
-        VERSION 7.6.2
+        VERSION ${GIT_VERSION_FULL}
         )
 
 # Common Configuration
@@ -44,15 +26,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED On)
 include(CMakeDependentOption)
 
 # These options default to ON when building standalone, OFF when included as a subdirectory
-cmake_dependent_option(CBSDK_BUILD_CBMEX "Build Matlab wrapper" ON
+cmake_dependent_option(CBSDK_BUILD_CBMEX "Build Matlab wrapper" OFF
     "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
-cmake_dependent_option(CBSDK_BUILD_CBOCT "Build Octave wrapper" ON
+cmake_dependent_option(CBSDK_BUILD_CBOCT "Build Octave wrapper" OFF
     "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
 cmake_dependent_option(CBSDK_BUILD_TEST "Build tests" ON
     "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
 cmake_dependent_option(CBSDK_BUILD_SAMPLE "Build sample applications" ON
     "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
-cmake_dependent_option(CBSDK_BUILD_HDF5 "Build HDF5" ON
+cmake_dependent_option(CBSDK_BUILD_TOOLS "Build tools" ON
     "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
 
 # These options are always available regardless of build context
@@ -66,8 +48,6 @@ set( INSTALL_TARGET_LIST ${LIB_NAME} )
 set( LIB_NAME_STATIC cbsdk_static )
 set( LIB_NAME_CBMEX cbmex )
 set( LIB_NAME_CBOCT cboct )
-set( TEST_ANAOUT_NAME test_analog_out )
-set( N2H5_NAME n2h5 )
 
 ##########################################################################################
 # Misc Configuration
@@ -144,6 +124,8 @@ set_property(TARGET CCFUtils PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 set( LIB_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk/cbsdk.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk/ContinuousData.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk/EventData.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib/cbhwlib.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib/cbHwlibHi.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib/InstNetwork.cpp
@@ -244,6 +226,9 @@ endif(CBSDK_BUILD_SAMPLE)
 ##
 # Language bindings (MATLAB, Octave, C++/CLI, Python)
 add_subdirectory(bindings)
+
+## Misc Tools
+add_subdirectory(tools)
 
 
 #########################################################################################

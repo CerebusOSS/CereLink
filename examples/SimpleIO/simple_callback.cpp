@@ -85,14 +85,21 @@ void chaninfo_callback(uint32_t nInstance, const cbSdkPktType type, const void* 
 }
 
 
-int main(int argc, char *argv[]) {
+int main(const int argc, char *argv[]) {
     auto inst_ip = "";
     int inst_port = cbNET_UDP_PORT_CNT;
     auto client_ip = "";
     // Parse command line arguments.
     {
         if (argc > 1 && argv[1][0] != '-') {inst_ip = argv[1];}
-        if (argc > 2 && argv[2][0] != '-') {inst_port = strtol(argv[2], nullptr, 10);}
+        if (argc > 2 && argv[2][0] != '-') {
+            try {
+                inst_port = std::stoi(argv[2]);
+            } catch (const std::exception&) {
+                printf("Error: Invalid port number '%s'\n", argv[2]);
+                return 1;
+            }
+        }
         if (argc > 3 && argv[3][0] != '-') { client_ip = argv[3]; }
     }
 
@@ -104,18 +111,19 @@ int main(int argc, char *argv[]) {
     con.nInPort = inst_port;
     cbSdkResult res = cbSdkOpen(INST, conType, con);
     handleResult(res);
-    if (res == CBSDKRESULT_SUCCESS) {
-        printf("cbSdkOpen succeeded\n");
-    }
-    else {
+    if (res != CBSDKRESULT_SUCCESS) {
         printf("Unable to open instrument connection.\n");
         return -1;
     }
+    printf("cbSdkOpen succeeded\n");
 
     std::pair<uint32_t, std::string> chan_label_pair(0, "");
-    res = cbSdkRegisterCallback(INST, cbSdkCallbackType::CBSDKCALLBACK_CHANINFO,
-                                &chaninfo_callback,
-                                &chan_label_pair);
+    cbSdkRegisterCallback(
+        INST,
+        cbSdkCallbackType::CBSDKCALLBACK_CHANINFO,
+        &chaninfo_callback,
+        &chan_label_pair
+    );
     std::cout << "Please use central to modify a channel label." << std::flush;
     while (chan_label_pair.first == 0)
         std::this_thread::sleep_for(std::chrono::milliseconds(200));

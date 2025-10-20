@@ -40,9 +40,9 @@ cbRESULT cbClose(bool bStandAlone = false, uint32_t nInstance = 0);
 cbRESULT cbCheckApp(const char * lpName);
 // Check if an application is running using its mutex
 
-cbRESULT cbAquireSystemLock(const char * lpName, HANDLE & hLock);
+cbRESULT cbAcquireSystemLock(const char * lpName, HANDLE & hLock);
 cbRESULT cbReleaseSystemLock(const char * lpName, HANDLE & hLock);
-// Aquire or release application system lock
+// Acquire or release application system lock
 
 uint32_t GetInstrumentLocalChan(uint32_t nChan, uint32_t nInstance = 0);
 // Get the instrument local channel number
@@ -78,8 +78,8 @@ cbRESULT cbGetSystemClockTime(PROCTIME *time, uint32_t nInstance = 0);
 // Shuts down the programming library and frees any resources linked in cbOpen()
 // Returns cbRESULT_OK if successful, cbRESULT_NOLIBRARY if library was never initialized.
 // Updates the read pointers in the memory area so that
-// all of the un-read packets are ignored. In other words, it
-// initializes all of the pointers so that the begging of read time is NOW.
+// all the un-read packets are ignored. In other words, it
+// initializes all the pointers so that the begging of read time is NOW.
 cbRESULT cbMakePacketReadingBeginNow(uint32_t nInstance = 0);
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
@@ -100,7 +100,7 @@ enum cbLevelOfConcern
     LOC_COUNT               // How many level of concerns are there
 };
 
-cbRESULT cbCheckforData(cbLevelOfConcern & nLevelOfConcern, uint32_t *pktstogo = NULL, uint32_t nInstance = 0);
+cbRESULT cbCheckforData(cbLevelOfConcern & nLevelOfConcern, uint32_t *pktstogo = nullptr, uint32_t nInstance = 0);
 // The pktstogo and timetogo are optional fields (NULL if not used) that returns the number of new
 // packets and timestamps that need to be read to catch up to the buffer.
 //
@@ -211,9 +211,9 @@ cbRESULT cbGetDoutCaps(uint32_t chan, uint32_t *doutcaps, uint32_t nInstance = 0
 //          cbRESULT_NOLIBRARY if the library was not properly initialized.
 
 
-cbRESULT cbGetDoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, uint32_t *doutval,
-                          uint8_t *triggertype = NULL, uint16_t *trigchan = NULL, uint16_t *trigval = NULL, uint32_t nInstance = 0);
-cbRESULT cbSetDoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uint32_t doutval,
+cbRESULT cbGetDoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, int32_t *doutval,
+                          uint8_t *triggertype = nullptr, uint16_t *trigchan = nullptr, uint16_t *trigval = nullptr, uint32_t nInstance = 0);
+cbRESULT cbSetDoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, int32_t doutval,
                           uint8_t triggertype = cbDOUT_TRIGGER_NONE, uint16_t trigchan = 0, uint16_t trigval = 0, uint32_t nInstance = 0);
 // Get/Set the Digital Output Port options for the specified channel.
 //
@@ -244,7 +244,7 @@ cbRESULT cbGetAinpCaps(uint32_t chan, uint32_t *ainpcaps, cbSCALING *physcalin, 
 //          cbRESULT_NOLIBRARY if the library was not properly initialized.
 
 cbRESULT cbGetAinpOpts(uint32_t chan, uint32_t *ainpopts, uint32_t *LNCrate, uint32_t *refElecChan, uint32_t nInstance = 0);
-cbRESULT cbSetAinpOpts(uint32_t chan, const uint32_t ainpopts,  uint32_t LNCrate, const uint32_t refElecChan, uint32_t nInstance = 0);
+cbRESULT cbSetAinpOpts(uint32_t chan, uint32_t ainpopts,  uint32_t LNCrate, uint32_t refElecChan, uint32_t nInstance = 0);
 // Get and Set the user-assigned amplitude reject values.
 //
 // Returns: cbRESULT_OK if data successfully retreived or packet successfully queued to be sent.
@@ -256,7 +256,7 @@ cbRESULT cbSetAinpOpts(uint32_t chan, const uint32_t ainpopts,  uint32_t LNCrate
 //
 //    newLNCvalue = (LNCrate/65536)*(oldLNCvalue) + ((65536-LNCrate)/65536)*LNCsample
 //
-// The relationships between the adaptation time constant in sec, line frequency in Hz and the
+// The relationships between the adaptation time constant in sec, line frequency in Hz and
 // the LNCrate variable are given below:
 //
 //         time_constant = 1 / ln[ (LNCrate/65536)^(-line_freq) ]
@@ -270,7 +270,7 @@ cbRESULT cbSetAinpOpts(uint32_t chan, const uint32_t ainpopts,  uint32_t LNCrate
 
 
 cbRESULT cbGetAinpScaling(uint32_t chan, cbSCALING *scaling, uint32_t nInstance = 0);
-cbRESULT cbSetAinpScaling(uint32_t chan, cbSCALING *scaling, uint32_t nInstance = 0);
+cbRESULT cbSetAinpScaling(uint32_t chan, const cbSCALING *scaling, uint32_t nInstance = 0);
 // Get/Set the user-specified scaling for the channel.  The digmin and digmax values of the user
 // specified scaling must be within the digmin and digmax values for the physical channel mapping.
 //
@@ -304,7 +304,6 @@ cbRESULT cbSetAinpPreview(uint32_t chan, uint32_t prevopts, uint32_t nInstance =
 
 //////////////////////////////////////////////////////////////
 // AINP Continuous Stream Functions
-
 
 cbRESULT cbGetAinpSampling(uint32_t chan, uint32_t *filter, uint32_t *group, uint32_t nInstance = 0);
 cbRESULT cbSetAinpSampling(uint32_t chan, uint32_t filter,  uint32_t group, uint32_t nInstance = 0);
@@ -348,7 +347,7 @@ cbRESULT cbSetAinpSpikeThreshold(uint32_t chan, int32_t level, uint32_t nInstanc
 
 
 cbRESULT cbGetAinpSpikeHoops(uint32_t chan, cbHOOP *hoops, uint32_t nInstance = 0);
-cbRESULT cbSetAinpSpikeHoops(uint32_t chan, cbHOOP *hoops, uint32_t nInstance = 0);
+cbRESULT cbSetAinpSpikeHoops(uint32_t chan, const cbHOOP *hoops, uint32_t nInstance = 0);
 // Get/Set the spike hoop set.  The hoops parameter points to an array of hoops declared as
 // cbHOOP hoops[cbMAXUNITS][cbMAXHOOPS].
 //
@@ -382,7 +381,7 @@ cbRESULT cbGetAoutCaps(uint32_t chan, uint32_t *aoutcaps, cbSCALING *physcalout,
 
 
 cbRESULT cbGetAoutScaling(uint32_t chan, cbSCALING *scaling, uint32_t nInstance = 0);
-cbRESULT cbSetAoutScaling(uint32_t chan, cbSCALING *scaling, uint32_t nInstance = 0);
+cbRESULT cbSetAoutScaling(uint32_t chan, const cbSCALING *scaling, uint32_t nInstance = 0);
 // Get/Set the user-specified scaling for the channel.  The digmin and digmax values of the user
 // specified scaling must be within the digmin and digmax values for the physical channel mapping.
 //
@@ -391,9 +390,9 @@ cbRESULT cbSetAoutScaling(uint32_t chan, cbSCALING *scaling, uint32_t nInstance 
 //          cbRESULT_NOLIBRARY if the library was not properly initialized.
 
 
-cbRESULT cbGetAoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, uint32_t *value, uint32_t nInstance = 0);
-cbRESULT cbSetAoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, uint32_t value, uint32_t nInstance = 0);
-// Get/Set the Monitored channel for a Analog Output Port.  Setting zero for the monitored channel
+cbRESULT cbGetAoutOptions(uint32_t chan, uint32_t *options, uint32_t *monchan, int32_t *value, uint32_t nInstance = 0);
+cbRESULT cbSetAoutOptions(uint32_t chan, uint32_t options, uint32_t monchan, int32_t value, uint32_t nInstance = 0);
+// Get/Set the Monitored channel for an Analog Output Port.  Setting zero for the monitored channel
 // stops the monitoring and frees any instrument monitor resources.  The factor ranges
 //
 // Returns: cbRESULT_OK if data successfully retreived or packet successfully queued to be sent.
@@ -491,7 +490,7 @@ cbRESULT cbSetComment(uint8_t charset, uint32_t rgba, PROCTIME time, const char*
 
 
 cbRESULT cbGetProcInfo(uint32_t proc, cbPROCINFO *procinfo, uint32_t nInstance = 0);
-// Retreives information for a the Signal Processor module located at procid
+// Retreives information for the Signal Processor module located at procid
 // The function requires an allocated but uninitialized cbPROCINFO structure.
 //
 // Returns: cbRESULT_OK if data successfully retreived.
@@ -532,16 +531,16 @@ cbRESULT cbGetAdaptFilter(uint32_t  proc,             // which NSP processor?
 
 // Update the adaptive filter settings
 cbRESULT cbSetAdaptFilter(uint32_t  proc,             // which NSP processor?
-                          uint32_t  * pnMode,         // 0=disabled, 1=filter continuous & spikes, 2=filter spikes
-                          float   * pdLearningRate, // speed at which adaptation happens. Very small. e.g. 5e-12
-                          uint32_t  * pnRefChan1,     // The first reference channel (1 based).
-                          uint32_t  * pnRefChan2,     // The second reference channel (1 based).
+                          const uint32_t  * pnMode,         // 0=disabled, 1=filter continuous & spikes, 2=filter spikes
+                          const float   * pdLearningRate, // speed at which adaptation happens. Very small. e.g. 5e-12
+                          const uint32_t  * pnRefChan1,     // The first reference channel (1 based).
+                          const uint32_t  * pnRefChan2,     // The second reference channel (1 based).
                           uint32_t nInstance = 0);
 
 // Useful for creating cbPKT_ADAPTFILTINFO packets
 struct PktAdaptFiltInfo : public cbPKT_ADAPTFILTINFO
 {
-    PktAdaptFiltInfo(uint32_t nMode, float dLearningRate, uint32_t nRefChan1, uint32_t nRefChan2)
+    PktAdaptFiltInfo(const uint32_t nMode, const float dLearningRate, const uint32_t nRefChan1, const uint32_t nRefChan2) : cbPKT_ADAPTFILTINFO()
     {
         this->cbpkt_header.chid = 0x8000;
         this->cbpkt_header.type = cbPKTTYPE_ADAPTFILTSET;
@@ -566,13 +565,13 @@ cbRESULT cbGetRefElecFilter(uint32_t  proc,           // which NSP processor?
 
 // Update the reference electrode filter settings
 cbRESULT cbSetRefElecFilter(uint32_t  proc,           // which NSP processor?
-                            uint32_t  * pnMode,       // 0=disabled, 1=filter continuous & spikes, 2=filter spikes
-                            uint32_t  * pnRefChan,    // The reference channel (1 based).
+                            const uint32_t  * pnMode,       // 0=disabled, 1=filter continuous & spikes, 2=filter spikes
+                            const uint32_t  * pnRefChan,    // The reference channel (1 based).
                             uint32_t nInstance = 0);
 
 // NTrode Information Packets
-cbRESULT cbGetNTrodeInfo( const uint32_t ntrode, char *label, cbMANUALUNITMAPPING ellipses[][cbMAXUNITS], uint16_t * nSite, uint16_t * chans, uint16_t * fs, uint32_t nInstance = 0);
-cbRESULT cbSetNTrodeInfo( const uint32_t ntrode, const char *label, cbMANUALUNITMAPPING ellipses[][cbMAXUNITS], uint16_t fs, uint32_t nInstance = 0);
+cbRESULT cbGetNTrodeInfo( uint32_t ntrode, char *label, cbMANUALUNITMAPPING ellipses[][cbMAXUNITS], uint16_t * nSite, uint16_t * chans, uint16_t * fs, uint32_t nInstance = 0);
+cbRESULT cbSetNTrodeInfo( uint32_t ntrode, const char *label, cbMANUALUNITMAPPING ellipses[][cbMAXUNITS], uint16_t fs, uint32_t nInstance = 0);
 
 // Sample Group (GROUP) Information Packets
 cbRESULT cbGetSampleGroupInfo(uint32_t proc, uint32_t group, char *label, uint32_t *period, uint32_t *length, uint32_t nInstance = 0);
@@ -593,7 +592,7 @@ cbRESULT cbGetChanInfo(uint32_t chan, cbPKT_CHANINFO *pChanInfo, uint32_t nInsta
 //          cbRESULT_INVALIDCHANNEL if the specified channel is not mapped or does not exist.
 //          cbRESULT_NOLIBRARY if the library was not properly initialized.
 cbRESULT cbGetChanAmplitudeReject(uint32_t chan, cbAMPLITUDEREJECT *AmplitudeReject, uint32_t nInstance = 0);
-cbRESULT cbSetChanAmplitudeReject(uint32_t chan, const cbAMPLITUDEREJECT AmplitudeReject, uint32_t nInstance = 0);
+cbRESULT cbSetChanAmplitudeReject(uint32_t chan, cbAMPLITUDEREJECT AmplitudeReject, uint32_t nInstance = 0);
 // Get and Set the user-assigned amplitude reject values.
 //
 // Returns: cbRESULT_OK if data successfully retreived or packet successfully queued to be sent.
@@ -601,7 +600,7 @@ cbRESULT cbSetChanAmplitudeReject(uint32_t chan, const cbAMPLITUDEREJECT Amplitu
 //          cbRESULT_NOLIBRARY if the library was not properly initialized.
 
 cbRESULT cbGetChanAutoThreshold(uint32_t chan, uint32_t *bEnabled, uint32_t nInstance = 0);
-cbRESULT cbSetChanAutoThreshold(uint32_t chan, const uint32_t bEnabled, uint32_t nInstance = 0);
+cbRESULT cbSetChanAutoThreshold(uint32_t chan, uint32_t bEnabled, uint32_t nInstance = 0);
 // Get and Set the user-assigned auto threshold option
 //
 // Returns: cbRESULT_OK if data successfully retreived or packet successfully queued to be sent.
@@ -609,7 +608,7 @@ cbRESULT cbSetChanAutoThreshold(uint32_t chan, const uint32_t bEnabled, uint32_t
 //          cbRESULT_NOLIBRARY if the library was not properly initialized.
 
 cbRESULT cbGetChanUnitMapping( uint32_t chan, cbMANUALUNITMAPPING *unitmapping, uint32_t nInstance = 0);
-cbRESULT cbSetChanUnitMapping( uint32_t chan, cbMANUALUNITMAPPING *unitmapping, uint32_t nInstance = 0);
+cbRESULT cbSetChanUnitMapping( uint32_t chan, const cbMANUALUNITMAPPING *unitmapping, uint32_t nInstance = 0);
 // Get and Set the user-assigned unit override for the channel.
 //
 // Returns: cbRESULT_OK if data successfully retreived or packet successfully queued to be sent.
@@ -619,7 +618,7 @@ cbRESULT cbSetChanUnitMapping( uint32_t chan, cbMANUALUNITMAPPING *unitmapping, 
 cbRESULT cbGetChanLoc(uint32_t chan, uint32_t *proc, uint32_t *bank, char *banklabel, uint32_t *term, uint32_t nInstance = 0);
 // Gives the physical processor number, bank label, and terminal number of the specified channel
 // by reading the configuration data in the Central App Cache.  Bank Labels are the name of the
-// bank that is written on the instrument and they are null-terminated, up to 16 char long.
+// bank that is written on the instrument, and they are null-terminated, up to 16 char long.
 //
 // Returns: cbRESULT_OK if all is ok
 //          cbRESULT_INVALIDCHANNEL if the specified channel is not mapped or does not exist.
@@ -632,7 +631,7 @@ cbRESULT cbGetChanLoc(uint32_t chan, uint32_t *proc, uint32_t *bank, char *bankl
 //#define cbUSER_NEURAL       0x00000200  // Channel connected to neural electrode or signal
 
 cbRESULT cbGetChanLabel(uint32_t chan, char *label, uint32_t *userflags, int32_t *position, uint32_t nInstance = 0);
-cbRESULT cbSetChanLabel(uint32_t chan, const char *label, uint32_t userflags,  int32_t *position, uint32_t nInstance = 0);
+cbRESULT cbSetChanLabel(uint32_t chan, const char *label, uint32_t userflags, const int32_t *position, uint32_t nInstance = 0);
 // Get and Set the user-assigned label for the channel.  Channel Names may be up to 16 chars long
 // and should be null terminated if shorter.
 //
@@ -641,7 +640,7 @@ cbRESULT cbSetChanLabel(uint32_t chan, const char *label, uint32_t userflags,  i
 //          cbRESULT_NOLIBRARY if the library was not properly initialized.
 
 cbRESULT cbGetChanNTrodeGroup(uint32_t chan, uint32_t *NTrodeGroup, uint32_t nInstance = 0);
-cbRESULT cbSetChanNTrodeGroup(uint32_t chan, const uint32_t NTrodeGroup, uint32_t nInstance = 0);
+cbRESULT cbSetChanNTrodeGroup(uint32_t chan, uint32_t NTrodeGroup, uint32_t nInstance = 0);
 // Get and Set the user-assigned label for the N-Trode.  N-Trode Names may be up to 16 chars long
 // and should be null terminated if shorter.
 //
@@ -708,6 +707,16 @@ cbRESULT cbGetAoutWaveform(uint32_t channel, uint8_t  trigNum, uint16_t  * mode,
 // Returns anallog output waveform information
 // Returns cbRESULT_OK if successful, cbRESULT_NOLIBRARY if library was never initialized.
 
+/// @author     Hyrum L. Sessions
+/// @date       1 Aug 2019
+/// @brief      Get the waveform number for a specific aout channel
+///
+/// since channels are not contiguous, we can't just subtract the number of analog channels to
+/// get the number.
+///
+/// @param [in] channel  - 1-based channel number
+/// @param [out] wavenum  -
+/// @param [in] nInstance - Instance number of the library
 cbRESULT cbGetAoutWaveformNumber(uint32_t channel, uint32_t* wavenum, uint32_t nInstance = 0);
 
 
@@ -784,7 +793,7 @@ enum WM_USER_GLOBAL
 #endif
 
 
-#define cbRECBUFFLEN cbNUM_FE_CHANS * 32768 * 4
+#define cbRECBUFFLEN (cbNUM_FE_CHANS * 32768 * 4)
 typedef struct {
     uint32_t received;
     PROCTIME lasttime;
@@ -815,8 +824,8 @@ typedef struct {
     uint32_t buffer[0];       // big buffer of data...there are actually "bufferlen"--+ indices
 } cbXMTBUFF;
 
-#define cbXMT_GLOBAL_BUFFLEN    (cbCER_UDP_SIZE_MAX / 4) * 5000 + 2     // room for 500 packets
-#define cbXMT_LOCAL_BUFFLEN     (cbCER_UDP_SIZE_MAX / 4) * 2000 + 2     // room for 200 packets
+#define cbXMT_GLOBAL_BUFFLEN    ((cbCER_UDP_SIZE_MAX / 4) * 5000 + 2)     // room for 500 packets
+#define cbXMT_LOCAL_BUFFLEN     ((cbCER_UDP_SIZE_MAX / 4) * 2000 + 2)     // room for 200 packets
 
 
 #ifdef _MSC_VER
@@ -829,8 +838,8 @@ typedef struct {
 typedef struct {
     // ***** THESE MUST BE 1ST IN THE STRUCTURE WITH MODELSET LAST OF THESE ***
     // ***** SEE WriteCCFNoPrompt() ***
-    cbPKT_FS_BASIS          asBasis[cbMAXCHANS];    // All of the PCA basis values
-    cbPKT_SS_MODELSET       asSortModel[cbMAXCHANS][cbMAXUNITS + 2];    // All of the model (rules) for spike sorting
+    cbPKT_FS_BASIS          asBasis[cbMAXCHANS];    // All the PCA basis values
+    cbPKT_SS_MODELSET       asSortModel[cbMAXCHANS][cbMAXUNITS + 2];    // All the model (rules) for spike sorting
 
     //////// These are spike sorting options
     cbPKT_SS_DETECT         pktDetect;        // parameters dealing with actual detection
@@ -849,7 +858,7 @@ enum NSP_STATUS { NSP_INIT, NSP_NOIPADDR, NSP_NOREPLY, NSP_FOUND, NSP_INVALID };
 class cbPcStatus
 {
 public:
-    cbPKT_UNIT_SELECTION isSelection[cbMAXPROCS];
+    cbPKT_UNIT_SELECTION isSelection[cbMAXPROCS]{};
 
 private:
     int32_t m_iBlockRecording;
@@ -865,8 +874,8 @@ private:
     uint32_t m_nNumDigoutChans;
     uint32_t m_nNumTotalChans;
 #ifndef CBPROTO_311
-    NSP_STATUS  m_nNspStatus[cbMAXPROCS];       // true if the nsp has received a sysinfo from each NSP
-    uint32_t m_nNumNTrodesPerInstrument[cbMAXPROCS];
+    NSP_STATUS  m_nNspStatus[cbMAXPROCS]{};       // true if the nsp has received a sysinfo from each NSP
+    uint32_t m_nNumNTrodesPerInstrument[cbMAXPROCS]{};
     uint32_t m_nGeminiSystem;   // Used as boolean true if connected to a gemini system
 #endif
 
@@ -897,40 +906,40 @@ public:
 #endif
         }
     }
-    bool IsRecordingBlocked()           { return m_iBlockRecording != 0; }
-    uint32_t cbGetPCStatusFlags()       { return m_nPCStatusFlags; }
-    uint32_t cbGetNumFEChans()          { return m_nNumFEChans; }
-    uint32_t cbGetNumAnainChans()       { return m_nNumAnainChans; }
-    uint32_t cbGetNumAnalogChans()      { return m_nNumAnalogChans; }
-    uint32_t cbGetNumAoutChans()        { return m_nNumAoutChans; }
-    uint32_t cbGetNumAudioChans()       { return m_nNumAudioChans; }
-    uint32_t cbGetNumAnalogoutChans()   { return m_nNumAnalogoutChans; }
-    uint32_t cbGetNumDiginChans()       { return m_nNumDiginChans; }
-    uint32_t cbGetNumSerialChans()      { return m_nNumSerialChans; }
-    uint32_t cbGetNumDigoutChans()      { return m_nNumDigoutChans; }
-    uint32_t cbGetNumTotalChans()       { return m_nNumTotalChans; }
+    [[nodiscard]] bool IsRecordingBlocked() const           { return m_iBlockRecording != 0; }
+    [[nodiscard]] uint32_t cbGetPCStatusFlags() const       { return m_nPCStatusFlags; }
+    [[nodiscard]] uint32_t cbGetNumFEChans() const          { return m_nNumFEChans; }
+    [[nodiscard]] uint32_t cbGetNumAnainChans() const       { return m_nNumAnainChans; }
+    [[nodiscard]] uint32_t cbGetNumAnalogChans() const      { return m_nNumAnalogChans; }
+    [[nodiscard]] uint32_t cbGetNumAoutChans() const        { return m_nNumAoutChans; }
+    [[nodiscard]] uint32_t cbGetNumAudioChans() const       { return m_nNumAudioChans; }
+    [[nodiscard]] uint32_t cbGetNumAnalogoutChans() const   { return m_nNumAnalogoutChans; }
+    [[nodiscard]] uint32_t cbGetNumDiginChans() const       { return m_nNumDiginChans; }
+    [[nodiscard]] uint32_t cbGetNumSerialChans() const      { return m_nNumSerialChans; }
+    [[nodiscard]] uint32_t cbGetNumDigoutChans() const      { return m_nNumDigoutChans; }
+    [[nodiscard]] uint32_t cbGetNumTotalChans() const       { return m_nNumTotalChans; }
 
 #ifndef CBPROTO_311
-    NSP_STATUS cbGetNspStatus(uint32_t nProc) { return m_nNspStatus[nProc]; }
-    uint32_t cbGetNumNTrodesPerInstrument(uint32_t nProc) { return m_nNumNTrodesPerInstrument[nProc - 1]; }
-    void cbSetNspStatus(uint32_t nInstrument, NSP_STATUS nStatus) { m_nNspStatus[nInstrument] = nStatus; }
-    void cbSetNumNTrodesPerInstrument(uint32_t nInstrument, uint32_t nNumNTrodesPerInstrument) { m_nNumNTrodesPerInstrument[nInstrument - 1] = nNumNTrodesPerInstrument; }
+    [[nodiscard]] NSP_STATUS cbGetNspStatus(const uint32_t nProc) const { return m_nNspStatus[nProc]; }
+    [[nodiscard]] uint32_t cbGetNumNTrodesPerInstrument(const uint32_t nProc) const { return m_nNumNTrodesPerInstrument[nProc - 1]; }
+    void cbSetNspStatus(const uint32_t nInstrument, const NSP_STATUS nStatus) { m_nNspStatus[nInstrument] = nStatus; }
+    void cbSetNumNTrodesPerInstrument(const uint32_t nInstrument, const uint32_t nNumNTrodesPerInstrument) { m_nNumNTrodesPerInstrument[nInstrument - 1] = nNumNTrodesPerInstrument; }
 #else
     // m_NspStatus not avail in 3.11 so set to always found to pass logic checks.
     NSP_STATUS cbGetNspStatus(uint32_t nProc) { return NSP_FOUND; }
 #endif
-    void SetBlockRecording(bool bBlockRecording)                { m_iBlockRecording += bBlockRecording ? 1 : -1; }
-    void cbSetPCStatusFlags(uint32_t nPCStatusFlags)            { m_nPCStatusFlags = nPCStatusFlags; }
-    void cbSetNumFEChans(uint32_t nNumFEChans)                  { m_nNumFEChans = nNumFEChans; }
-    void cbSetNumAnainChans(uint32_t nNumAnainChans)            { m_nNumAnainChans = nNumAnainChans; }
-    void cbSetNumAnalogChans(uint32_t nNumAnalogChans)          { m_nNumAnalogChans = nNumAnalogChans; }
-    void cbSetNumAoutChans(uint32_t nNumAoutChans)              { m_nNumAoutChans = nNumAoutChans; }
-    void cbSetNumAudioChans(uint32_t nNumAudioChans)            { m_nNumAudioChans = nNumAudioChans; }
-    void cbSetNumAnalogoutChans(uint32_t nNumAnalogoutChans)    { m_nNumAnalogoutChans = nNumAnalogoutChans; }
-    void cbSetNumDiginChans(uint32_t nNumDiginChans)            { m_nNumDiginChans = nNumDiginChans; }
-    void cbSetNumSerialChans(uint32_t nNumSerialChans)          { m_nNumSerialChans = nNumSerialChans; }
-    void cbSetNumDigoutChans(uint32_t nNumDigoutChans)          { m_nNumDigoutChans = nNumDigoutChans; }
-    void cbSetNumTotalChans(uint32_t nNumTotalChans)            { m_nNumTotalChans = nNumTotalChans; }
+    void SetBlockRecording(const bool bBlockRecording)                { m_iBlockRecording += bBlockRecording ? 1 : -1; }
+    void cbSetPCStatusFlags(const uint32_t nPCStatusFlags)            { m_nPCStatusFlags = nPCStatusFlags; }
+    void cbSetNumFEChans(const uint32_t nNumFEChans)                  { m_nNumFEChans = nNumFEChans; }
+    void cbSetNumAnainChans(const uint32_t nNumAnainChans)            { m_nNumAnainChans = nNumAnainChans; }
+    void cbSetNumAnalogChans(const uint32_t nNumAnalogChans)          { m_nNumAnalogChans = nNumAnalogChans; }
+    void cbSetNumAoutChans(const uint32_t nNumAoutChans)              { m_nNumAoutChans = nNumAoutChans; }
+    void cbSetNumAudioChans(const uint32_t nNumAudioChans)            { m_nNumAudioChans = nNumAudioChans; }
+    void cbSetNumAnalogoutChans(const uint32_t nNumAnalogoutChans)    { m_nNumAnalogoutChans = nNumAnalogoutChans; }
+    void cbSetNumDiginChans(const uint32_t nNumDiginChans)            { m_nNumDiginChans = nNumDiginChans; }
+    void cbSetNumSerialChans(const uint32_t nNumSerialChans)          { m_nNumSerialChans = nNumSerialChans; }
+    void cbSetNumDigoutChans(const uint32_t nNumDigoutChans)          { m_nNumDigoutChans = nNumDigoutChans; }
+    void cbSetNumTotalChans(const uint32_t nNumTotalChans)            { m_nNumTotalChans = nNumTotalChans; }
 };
 
 typedef struct {
@@ -964,7 +973,7 @@ typedef struct {
 
 // External Global Variables
 
-typedef struct _cbSharedMemHandle {
+typedef struct cbSharedMemHandle {
     HANDLE hnd = nullptr;
     char name[64] = {0};
     int fd = -1;
@@ -989,7 +998,6 @@ extern HANDLE       cb_sig_event_hnd[cbMAXOPEN];
 
 extern uint32_t       cb_library_initialized[cbMAXOPEN];
 extern uint32_t       cb_library_index[cbMAXOPEN];
-
 
 #pragma pack(pop)
 

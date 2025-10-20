@@ -1,27 +1,24 @@
 # distutils: language = c++
 # cython: language_level=2
-
-"""
-Created on March 9, 2013
-
-@author: dashesy
-
-Purpose: Python module for cbsdk_cython
-
-"""
-
 from cbsdk_cython cimport *
 from libcpp cimport bool
 from libc.stdlib cimport malloc, free
 from libc.string cimport strncpy
-import sys
-import numpy as np
-import locale
 cimport numpy as cnp
 cimport cython
 
+import sys
+import locale
+import typing
+
+import numpy as np
+
 # Initialize numpy C API
 cnp.import_array()
+
+# NumPy array flags for ownership
+cdef extern from "numpy/arrayobject.h":
+    cdef int NPY_ARRAY_OWNDATA
 
 
 # Determine the correct numpy dtype for PROCTIME based on its size
@@ -85,10 +82,10 @@ def defaultConParams():
     return con_parms
 
 
-def open(int instance=0, connection='default', parameter={}):
+def open(int instance=0, connection: str = 'default', parameter: dict[str, str | int] | None = None) -> dict[str, str]:
     """Open library.
     Inputs:
-       connection - connection type, string can be one the following
+       connection - connection type, string can be one of the following
                'default': tries slave then master connection
                'master': tries master connection (UDP)
                'slave': tries slave connection (needs another master already open)
@@ -103,10 +100,9 @@ def open(int instance=0, connection='default', parameter={}):
         Same as "get_connection_type" command output
 
     Test with:
-from cerebus import cbpy
+from cerelink import cbpy
 cbpy.open(parameter=cbpy.defaultConParams())
     """
-    
     cdef cbSdkResult res
     
     wconType = {'default': CBSDKCONNECTION_DEFAULT, 'slave': CBSDKCONNECTION_CENTRAL, 'master': CBSDKCONNECTION_UDP} 
@@ -116,6 +112,7 @@ cbpy.open(parameter=cbpy.defaultConParams())
     cdef cbSdkConnectionType conType = wconType[connection]
     cdef cbSdkConnection con
 
+    parameter = parameter if parameter is not None else {}
     cdef bytes szOutIP = parameter.get('inst-addr', cbNET_UDP_ADDR_CNT.decode("utf-8")).encode()
     cdef bytes szInIP  = parameter.get('client-addr', '').encode()
     
@@ -129,7 +126,7 @@ cbpy.open(parameter=cbpy.defaultConParams())
 
     handle_result(res)
     
-    return <int>res, get_connection_type(instance=instance)
+    return get_connection_type(instance=instance)
 
 
 def close(int instance=0):
@@ -140,7 +137,7 @@ def close(int instance=0):
     return handle_result(cbSdkClose(<uint32_t>instance))
 
 
-def get_connection_type(int instance=0):
+def get_connection_type(int instance=0) -> dict[str, str]:
     """ Get connection type
     Inputs:
        instance - (optional) library instance number
@@ -153,7 +150,6 @@ def get_connection_type(int instance=0):
     """
     
     cdef cbSdkResult res
-    
     cdef cbSdkConnectionType conType
     cdef cbSdkInstrumentType instType
 
@@ -171,51 +167,51 @@ def get_connection_type(int instance=0):
     if inst_idx < 0 or inst_idx >= len(instruments):
         inst_idx = len(instruments) - 1
         
-    return {'connection':connections[con_idx], 'instrument':instruments[inst_idx]}
+    return {"connection": connections[con_idx], "instrument": instruments[inst_idx]}
 
 
-def trial_config(int instance=0, reset=True,
-                 buffer_parameter={}, 
-                 range_parameter={},
-                 noevent=0, nocontinuous=0, nocomment=0):
+def trial_config(
+        int instance=0,
+        activate=True,
+        n_continuous: int = 0,
+        n_event: int = 0,
+        n_comment: int = 0,
+        n_tracking: int = 0,
+        begin_channel: int = 0,
+        begin_mask: int = 0,
+        begin_value: int = 0,
+        end_channel: int = 0,
+        end_mask: int = 0,
+        end_value: int = 0,
+    ) -> None:
     """
     Configure trial settings. See cbSdkSetTrialConfig in cbsdk.h for details.
 
     Inputs:
-       reset - boolean, set True to flush data cache and start collecting data immediately,
+       activate - boolean, set True to flush data cache and start collecting data immediately,
                set False to stop collecting data immediately or, if not already in a trial,
                to rely on the begin/end channel mask|value to start/stop collecting data.
-       buffer_parameter - (optional) dictionary with following keys (all optional)
-               'double': boolean, if specified and true then the data and timestamps are assumed to be
-                    double precision format, else it remains the previous value.
-               'absolute': boolean, if specified and True then event timing is absolute
-                    (new polling will not reset time for events)
-               'continuous_length': if specified then this sets the number of continuous data samples to be cached.
-                    0 means no continuous data is cached. default is cbSdk_CONTINUOUS_DATA_SAMPLES.
-                    Only used if not `nocontinuous`.
-               'event_length': if specified then this sets the number of events to be cached.
-                    default is cbSdk_EVENT_DATA_SAMPLES.
-                    Only used if not `noevent`.
-               'comment_length': if specified then this sets the number of comments to be cached.
-                    default is 0.
-                    Only used if not `nocomment`.
-               'tracking_length': set the number of video tracking events to be cached.
-                    Deprecated.
-       range_parameter - (optional) dictionary with following keys (all optional)
-               'begin_channel': integer, channel to monitor to trigger trial start
-               'begin_mask': integer, mask to bitwise-and with data on begin_channel to look for trigger
-               'begin_value': value to trigger trial start
-               'end_channel': channel to monitor to trigger trial stop
-               'end_mask': mask to bitwise-and with data on end_channel to evaluate trigger
-               'end_value': value to trigger trial stop
-       'noevent': equivalent of setting buffer_parameter['event_length'] to 0
-       'nocontinuous': equivalent of setting buffer_parameter['continuous_length'] to 0
-       'nocomment': equivalent of setting buffer_parameter['comment_length'] to 0
+       n_continuous - integer, number of continuous data samples to be cached.
+            0 means no continuous data is cached. -1 will use cbSdk_CONTINUOUS_DATA_SAMPLES.
+       n_event - integer, number of events to be cached.
+            0 means no events are captured. -1 will use cbSdk_EVENT_DATA_SAMPLES.
+       n_comment - integer, number of comments to be cached.
+       n_tracking - integer, number of video tracking events to be cached. Deprecated.
+       begin_channel - integer, channel to monitor to trigger trial start
+            Ignored if activate is True.
+       begin_mask - integer, mask to bitwise-and with data on begin_channel to look for trigger
+            Ignored if activate is True.
+       begin_value - value to trigger trial start
+            Ignored if activate is True.
+       end_channel - integer, channel to monitor to trigger trial stop
+            Ignored if activate is True.
+       end_mask - mask to bitwise-and with data on end_channel to evaluate trigger
+            Ignored if activate is True.
+       end_value - value to trigger trial stop
+            Ignored if activate is True.
        instance - (optional) library instance number
-    Outputs:
-       reset - (boolean) if it is reset
     """
-    
+
     cdef cbSdkResult res
     cdef cbSdkConfigParam cfg_param
     
@@ -223,208 +219,235 @@ def trial_config(int instance=0, reset=True,
     res = cbsdk_get_trial_config(<uint32_t>instance, &cfg_param)
     handle_result(res)
     
-    cfg_param.bActive = <uint32_t>reset
-    
+    cfg_param.bActive = <uint32_t>activate
+
     # Fill cfg_param with provided buffer_parameter values or default.
-    cfg_param.bDouble = buffer_parameter.get('double', cfg_param.bDouble)
-    cfg_param.uWaveforms = 0 # does not work anyways
-    cfg_param.uConts = 0 if nocontinuous else buffer_parameter.get('continuous_length', cbSdk_CONTINUOUS_DATA_SAMPLES)
-    cfg_param.uEvents = 0 if noevent else buffer_parameter.get('event_length', cbSdk_EVENT_DATA_SAMPLES)
-    cfg_param.uComments = 0 if nocomment else buffer_parameter.get('comment_length', 0)
-    cfg_param.uTrackings = buffer_parameter.get('tracking_length', 0)
-    cfg_param.bAbsolute = buffer_parameter.get('absolute', 0)
+    cfg_param.uWaveforms = 0  # waveforms do not work
+    cfg_param.uConts = n_continuous if n_continuous >= 0 else cbSdk_CONTINUOUS_DATA_SAMPLES
+    cfg_param.uEvents = n_event if n_event >= 0 else cbSdk_EVENT_DATA_SAMPLES
+    cfg_param.uComments = n_comment or 0
+    cfg_param.uTrackings = n_tracking or 0
     
     # Fill cfg_param mask-related parameters with provided range_parameter or default.
-    cfg_param.Begchan = range_parameter.get('begin_channel', 0)
-    cfg_param.Begmask = range_parameter.get('begin_mask', 0)
-    cfg_param.Begval = range_parameter.get('begin_value', 0)
-    cfg_param.Endchan = range_parameter.get('end_channel', 0)
-    cfg_param.Endmask = range_parameter.get('end_mask', 0)
-    cfg_param.Endval = range_parameter.get('end_value', 0)
+    cfg_param.Begchan = begin_channel
+    cfg_param.Begmask = begin_mask
+    cfg_param.Begval = begin_value
+    cfg_param.Endchan = end_channel
+    cfg_param.Endmask = end_mask
+    cfg_param.Endval = end_value
     
     res = cbsdk_set_trial_config(<int>instance, &cfg_param)
 
     handle_result(res)
-    
-    return <int>res, reset
 
 
-def trial_event(int instance=0, bool reset=False, bool reset_clock=False):
+def trial_event(int instance=0, bool seek=False, bool reset_clock=False):
     """ Trial spike and event data.
     Inputs:
        instance - (optional) library instance number
-       reset - (optional) boolean
-               set False (default) to leave buffer intact.
+       seek - (optional) boolean
+               set False (default) to leave buffer intact -- peek only.
                set True to clear all the data after it has been retrieved.
        reset_clock - (optional) boolean
                 set False (default) to leave the trial clock alone.
                 set True to update the _next_ trial time to the current time.
                     This is overly complicated. Leave this as `False` unless you really know what you are doing.
-                    Better yet, use trial_config(buffer_parameter={'absolute':True}) to avoid confusion.
+                    Note: All timestamps are now in absolute device time.
     Outputs:
        list of arrays [channel, {'timestamps':[unit0_ts, ..., unitN_ts], 'events':digital_events}]
            channel: integer, channel number (1-based)
            digital_events: array, digital event values for channel (if a digital or serial channel)
            unitN_ts: array, spike timestamps of unit N for channel (if an electrode channel));
     """
-    
+
     cdef cbSdkResult res
-    cdef cbSdkConfigParam cfg_param
     cdef cbSdkTrialEvent trialevent
-    cdef uint32_t b_dig_in
-    cdef uint32_t b_serial
-    
-    trial = []
-    
-    # retrieve old values
-    res = cbsdk_get_trial_config(<uint32_t>instance, &cfg_param)
-    handle_result(res)
-    
+
     # get how many samples are available
     res = cbsdk_init_trial_event(<uint32_t>instance, <int>reset_clock, &trialevent)
     handle_result(res)
-    
-    if trialevent.count == 0:
-        return res, trial
 
-    cdef cnp.double_t[:] mxa_d
-    cdef cnp.ndarray mxa_proctime
-    cdef cnp.uint16_t[:] mxa_u16
+    if trialevent.num_events == 0:
+        return res, {'timestamps': np.array([], dtype=_PROCTIME_DTYPE),
+                     'channels': np.array([], dtype=np.uint16),
+                     'units': np.array([], dtype=np.uint16)}
 
-    # allocate memory
-    for ev_ix in range(trialevent.count):
-        ch = trialevent.chan[ev_ix] # Actual channel number
+    # Allocate flat arrays for event data
+    cdef cnp.ndarray timestamps = np.zeros(trialevent.num_events, dtype=_PROCTIME_DTYPE)
+    cdef cnp.ndarray channels = np.zeros(trialevent.num_events, dtype=np.uint16)
+    cdef cnp.ndarray units = np.zeros(trialevent.num_events, dtype=np.uint16)
 
-        timestamps = []
-        # Fill timestamps for non-empty events
-        for u in range(cbMAXUNITS+1):
-            trialevent.timestamps[ev_ix][u] = NULL
-            num_samples = trialevent.num_samples[ev_ix][u]
-            ts = []
-            if num_samples:
-                if cfg_param.bDouble:
-                    mxa_d = np.zeros(num_samples, dtype=np.double)
-                    trialevent.timestamps[ev_ix][u] = <void *>&mxa_d[0]
-                    ts = np.asarray(mxa_d)
-                else:
-                    mxa_proctime = np.zeros(num_samples, dtype=_PROCTIME_DTYPE)
-                    trialevent.timestamps[ev_ix][u] = <void *>cnp.PyArray_DATA(mxa_proctime)
-                    ts = mxa_proctime
-            timestamps.append(ts)
-        
-        trialevent.waveforms[ev_ix] = NULL
-        dig_events = []
-        res = cbSdkIsChanAnyDigIn(<uint32_t> instance, ch, &b_dig_in)
-        res = cbSdkIsChanSerial(<uint32_t> instance, ch, &b_serial)
+    # Point C structure to our numpy arrays
+    trialevent.timestamps = <PROCTIME *>cnp.PyArray_DATA(timestamps)
+    trialevent.channels = <uint16_t *>cnp.PyArray_DATA(channels)
+    trialevent.units = <uint16_t *>cnp.PyArray_DATA(units)
+    trialevent.waveforms = NULL  # TODO: Add waveform support if needed
 
-        handle_result(res)
-        # Fill values for non-empty digital or serial channels
-        if b_dig_in or b_serial:
-            num_samples = trialevent.num_samples[ev_ix][0]
-            if num_samples:
-                if cfg_param.bDouble:
-                    mxa_d = np.zeros(num_samples, dtype=np.double)
-                    trialevent.waveforms[ev_ix] = <void *>&mxa_d[0]
-                    dig_events = np.asarray(mxa_d)
-                else:
-                    mxa_u16 = np.zeros(num_samples, dtype=np.uint16)
-                    trialevent.waveforms[ev_ix] = <void *>&mxa_u16[0]
-                    dig_events = np.asarray(mxa_u16)
-        
-        trial.append([ch, {'timestamps':timestamps, 'events':dig_events}])
-    
     # get the trial
-    res = cbsdk_get_trial_event(<uint32_t>instance, <int>reset, &trialevent)
+    res = cbsdk_get_trial_event(<uint32_t>instance, <int>seek, &trialevent)
     handle_result(res)
+
+    trial = {
+        'timestamps': timestamps,
+        'channels': channels,
+        'units': units
+    }
 
     return <int>res, trial
 
 
-def trial_continuous(int instance=0, bool reset=False, bool reset_clock=False):
+def trial_continuous(
+        int instance=0,
+        uint8_t group=0,
+        bool seek=True,
+        bool reset_clock=False,
+        timestamps=None,
+        samples=None,
+        uint32_t num_samples=0
+) -> dict[str, typing.Any]:
     """
-    Trial continuous data.
+    Trial continuous data for a specific sample group.
+
     Inputs:
        instance - (optional) library instance number
-       reset - (optional) boolean
-               set False (default) to leave buffer intact.
-               set True to clear all the data.
+       group - (optional) sample group to retrieve (0-6), default=0 will always return an empty result.
+       seek - (optional) boolean
+               set True (default) to advance read pointer after retrieval.
+               set False to peek -- data remains in buffer for next call.
        reset_clock - (optional) boolean
              Keep False (default) unless you really know what you are doing.
+       timestamps - (optional) pre-allocated numpy array for timestamps, shape=[num_samples], dtype=uint32 or uint64
+                   If None, function will allocate
+       samples - (optional) pre-allocated numpy array for samples, shape=[num_samples, num_channels], dtype=int16
+                If None, function will allocate
+       num_samples - (optional) maximum samples to read. If 0 and arrays provided, inferred from array shape.
+                    If arrays provided and this is specified, reads min(num_samples, array_size)
+
     Outputs:
-       res   - result code
-       trial - list of the form [channel, continuous_array]
-           channel: integer, channel number (1-based)
-           continuous_array: array, continuous values for channel
-       timestamp of the first sample since trial reset (either by config or _previous_ call with reset_clock=True)
-            Note: the behaviour of reset_clock is complicated and not recommended for use.
-            Unfortunately, this means that the user is responsible for keeping track of the number of samples
-            since the trial config.
+       data  - dictionary with keys:
+           'group': group number (0-6)
+           'count': number of channels in this group
+           'chan': array of channel IDs (1-based)
+           'num_samples': actual number of samples read
+           'trial_start_time': PROCTIME timestamp when the current **trial** started
+           'timestamps': numpy array [num_samples] of PROCTIME timestamps (absolute device time)
+           'samples': numpy array [num_samples, count] of int16 sample data
     """
     cdef cbSdkResult res
-    cdef cbSdkConfigParam cfg_param
     cdef cbSdkTrialCont trialcont
-    
-    trial = []
+    cdef cnp.ndarray timestamps_array
+    cdef cnp.ndarray samples_array
+    cdef bool user_provided_arrays = timestamps is not None and samples is not None
 
-    # retrieve old values
-    res = cbsdk_get_trial_config(<uint32_t>instance, &cfg_param)
-    handle_result(res)
+    # Set the group we want to retrieve
+    trialcont.group = group
 
-    # get how many samples are available
-    res = cbsdk_init_trial_cont(<uint32_t>instance, <int>reset_clock, &trialcont)
+    # Initialize - get channel count and buffer info for this group
+    res = cbSdkInitTrialData(<uint32_t>instance, reset_clock, NULL, &trialcont, NULL, NULL, 0)
     handle_result(res)
 
     if trialcont.count == 0:
-        return res, trial, None
+        # No channels in this group
+        return {
+            "group": group,
+            "count": 0,
+            "chan": np.array([], dtype=np.uint16),
+            "num_samples": 0,
+            "trial_start_time": trialcont.trial_start_time,
+            "timestamps": np.array([], dtype=_PROCTIME_DTYPE),
+            "samples": np.array([], dtype=np.int16).reshape(0, 0)
+        }
 
-    cdef cnp.double_t[:] mxa_d
-    cdef cnp.int16_t[:] mxa_i16
+    # Determine num_samples to request
+    if user_provided_arrays:
+        # Validate and use user arrays
+        if not isinstance(timestamps, np.ndarray) or not isinstance(samples, np.ndarray):
+            raise ValueError("timestamps and samples must both be numpy arrays")
 
-    # allocate memory
-    for channel in range(trialcont.count):
-        ch = trialcont.chan[channel] # Actual channel number
-        
-        row = [ch]
-        
-        trialcont.samples[channel] = NULL
-        num_samples = trialcont.num_samples[channel]
-        if cfg_param.bDouble:
-            mxa_d = np.zeros(num_samples, dtype=np.double)
-            if num_samples:
-                trialcont.samples[channel] = <void *>&mxa_d[0]
-            cont = np.asarray(mxa_d)
+        # Check dtypes
+        if timestamps.dtype not in [np.uint32, np.uint64]:
+            raise ValueError(f"timestamps must be dtype uint32 or uint64, got {timestamps.dtype}")
+        if samples.dtype != np.int16:
+            raise ValueError(f"samples must be dtype int16, got {samples.dtype}")
+
+        # Check contiguity
+        if not timestamps.flags['C_CONTIGUOUS']:
+            raise ValueError("timestamps array must be C-contiguous")
+        if not samples.flags['C_CONTIGUOUS']:
+            raise ValueError("samples array must be C-contiguous")
+
+        # Check shapes
+        if timestamps.ndim != 1:
+            raise ValueError(f"timestamps must be 1D array, got shape {timestamps.shape}")
+        if samples.ndim != 2:
+            raise ValueError(f"samples must be 2D array, got shape {samples.shape}")
+
+        if timestamps.shape[0] != samples.shape[0]:
+            raise ValueError(f"timestamps and samples must have same length: {timestamps.shape[0]} != {samples.shape[0]}")
+
+        if samples.shape[1] != trialcont.count:
+            raise ValueError(f"samples shape[1] must match channel count: {samples.shape[1]} != {trialcont.count} expected")
+
+        # Determine num_samples from arrays if not specified
+        if num_samples == 0:
+            num_samples = timestamps.shape[0]
         else:
-            mxa_i16 = np.zeros(num_samples, dtype=np.int16)
-            if num_samples:
-                trialcont.samples[channel] = <void *>&mxa_i16[0]
-            cont = np.asarray(mxa_i16)
-            
-        row.append(cont)
-        trial.append(row)
-        
-    # get the trial
-    res = cbsdk_get_trial_cont(<uint32_t>instance, <int>reset, &trialcont)
+            # Use minimum of requested and available array size
+            num_samples = min(num_samples, <uint32_t>timestamps.shape[0])
+
+        timestamps_array = timestamps
+        samples_array = samples
+    else:
+        # Allocate arrays
+        if num_samples == 0:
+            num_samples = trialcont.num_samples  # Use what Init reported as available
+
+        timestamps_array = np.empty(num_samples, dtype=_PROCTIME_DTYPE)
+        samples_array = np.empty((num_samples, trialcont.count), dtype=np.int16)
+
+    # Set num_samples and point to array data
+    trialcont.num_samples = num_samples
+    trialcont.timestamps = <PROCTIME*>cnp.PyArray_DATA(timestamps_array)
+    trialcont.samples = <int16_t*>cnp.PyArray_DATA(samples_array)
+
+    # Get the data
+    res = cbSdkGetTrialData(<uint32_t>instance, <uint32_t>seek, NULL, &trialcont, NULL, NULL)
     handle_result(res)
 
-    return <int>res, trial, trialcont.time
+    # Build channel array
+    cdef cnp.ndarray chan_array = np.empty(trialcont.count, dtype=np.uint16)
+    cdef uint16_t[::1] chan_view = chan_array
+    cdef int i
+    for i in range(trialcont.count):
+        chan_view[i] = trialcont.chan[i]
+
+    # Prepare output - actual num_samples may be less than requested
+    cdef uint32_t actual_samples = trialcont.num_samples
+
+    return {
+        'group': group,
+        'count': trialcont.count,
+        'chan': chan_array,
+        'num_samples': actual_samples,
+        'trial_start_time': trialcont.trial_start_time,
+        'timestamps': timestamps_array[:actual_samples],
+        'samples': samples_array[:actual_samples, :]
+    }
 
 
-def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is_double=False,
+def trial_data(int instance=0, bool seek=False, bool reset_clock=False,
                bool do_event=True, bool do_cont=True, bool do_comment=False, unsigned long wait_for_comment_msec=250):
     """
 
     :param instance: (optional) library instance number
-    :param reset: (optional) boolean
-               set False (default) to leave buffer intact.
-               set True to clear all the data and reset the trial time to the current time.
+    :param seek: (optional) boolean
+               set False (default) to peek only and leave buffer intact.
+               set True to advance the data pointer after retrieval.
     :param reset_clock - (optional) boolean
                 set False (default) to leave the trial clock alone.
                 set True to update the _next_ trial time to the current time.
                     This is overly complicated. Leave this as `False` unless you really know what you are doing.
-                    Better yet, use trial_config(buffer_parameter={'absolute':True}) to avoid confusion.
-    :param is_double: (optional) boolean
-                set False (default) to use int16
-                set True to use double
+                    Note: All timestamps are now in absolute device time.
     :param do_event: (optional) boolean. Set False to skip fetching events.
     :param do_cont: (optional) boolean. Set False to skip fetching continuous data.
     :param do_comment: (optional) boolean. Set to True to fetch comments.
@@ -435,22 +458,30 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
              event data: list of arrays [channel, {'timestamps':[unit0_ts, ..., unitN_ts], 'events':digital_events}]
                 channel: integer, channel number (1-based)
                 digital_events: array, digital event values for channel (if a digital or serial channel)
-                unitN_ts: array, spike timestamps of unit N for channel (if an electrode channel));
-             continuous data: list of the form [channel, continuous_array]
-                channel: integer, channel number (1-based)
-                continuous_array: array, continuous values for channel
-             t_zero: timestamp of sample 0
+                unitN_ts: array, spike timestamps of unit N for channel (if an electrode channel)
+                Note: timestamps are PROCTIME (uint32 or uint64), events are uint16
+             continuous data: list of dictionaries, one per sample group (0-7) that has channels:
+                {
+                    'group': group number (0-7),
+                    'count': number of channels,
+                    'chan': numpy array of channel IDs (1-based),
+                    'sample_rate': sample rate (Hz),
+                    'num_samples': number of samples,
+                    'timestamps': numpy array [num_samples] of PROCTIME,
+                    'samples': numpy array [num_samples, count] of int16
+                }
+             t_zero: deprecated, always 0
              comment_data: list of lists the form [timestamp, comment_str, charset, rgba]
-                timestamp: ?
+                timestamp: PROCTIME
                 comment_str: the comment in binary.
                              Use comment_str.decode('utf-16' if charset==1 else locale.getpreferredencoding())
                 rgba: integer; the comment colour. 8 bits each for r, g, b, a
     """
 
     cdef cbSdkResult res
-    cdef cbSdkTrialCont trialcont
     cdef cbSdkTrialEvent trialevent
     cdef cbSdkTrialComment trialcomm
+    cdef cbSdkTrialCont trialcont_group
     # cdef uint8_t ch_type
     cdef uint32_t b_dig_in
     cdef uint32_t b_serial
@@ -461,95 +492,102 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
     cdef int channel
     cdef uint16_t ch
     cdef int u
+    cdef int g, j
+    cdef uint32_t actual_samples_grp
 
-    cdef cnp.double_t[:] mxa_d
-    cdef cnp.int16_t[:] mxa_i16
     cdef cnp.ndarray mxa_proctime
     cdef cnp.uint16_t[:] mxa_u16
     cdef cnp.uint8_t[:] mxa_u8
     cdef cnp.uint32_t[:] mxa_u32
+    cdef cnp.ndarray timestamps_grp
+    cdef cnp.ndarray samples_grp
+    cdef cnp.ndarray chan_array_grp
+    cdef uint16_t[::1] chan_view_grp
 
     trial_event = []
     trial_cont = []
     trial_comment = []
 
     # get how many samples are available
+    # Note: continuous data is now handled per-group below, so we don't init it here
     res = cbsdk_init_trial_data(<uint32_t>instance, <int>reset_clock, &trialevent if do_event else NULL,
-                                &trialcont if do_cont else NULL, &trialcomm if do_comment else NULL,
+                                NULL, &trialcomm if do_comment else NULL,
                                 wait_for_comment_msec)
     handle_result(res)
 
     # Early return if none of the requested data are available.
-    if (not do_event or (trialevent.count == 0)) and (not do_cont or (trialcont.count == 0))\
-            and (not do_comment or (trialcomm.num_samples == 0)):
+    # For continuous, we'll check per-group below
+    if (not do_event or (trialevent.num_events == 0)) \
+            and (not do_comment or (trialcomm.num_samples == 0)) \
+            and (not do_cont):
         return res, trial_event, trial_cont, tzero, trial_comment
 
     # Events #
     # ------ #
-    if do_event:
-        # allocate memory and prepare outputs.
-        for channel in range(trialevent.count):
-            # First the spike timestamps.
-            ev_timestamps = []
-            for u in range(cbMAXUNITS+1):
-                trialevent.timestamps[channel][u] = NULL
-                num_samples = trialevent.num_samples[channel][u]
-                ts = []
-                if num_samples > 0:
-                    if is_double:
-                        mxa_d = np.zeros(num_samples, dtype=np.double)
-                        trialevent.timestamps[channel][u] = <void *>&mxa_d[0]
-                        ts = np.asarray(mxa_d)
-                    else:
-                        mxa_proctime = np.zeros(num_samples, dtype=_PROCTIME_DTYPE)
-                        trialevent.timestamps[channel][u] = <void *>cnp.PyArray_DATA(mxa_proctime)
-                        ts = mxa_proctime
-                ev_timestamps.append(ts)
+    if do_event and trialevent.num_events > 0:
+        # Allocate flat arrays for event data
+        timestamps = np.zeros(trialevent.num_events, dtype=_PROCTIME_DTYPE)
+        channels = np.zeros(trialevent.num_events, dtype=np.uint16)
+        units = np.zeros(trialevent.num_events, dtype=np.uint16)
 
-            ch = trialevent.chan[channel] # Actual channel number
-            trialevent.waveforms[channel] = NULL
-            dig_events = []
+        # Point C structure to our numpy arrays
+        trialevent.timestamps = <PROCTIME *>cnp.PyArray_DATA(timestamps)
+        trialevent.channels = <uint16_t *>cnp.PyArray_DATA(channels)
+        trialevent.units = <uint16_t *>cnp.PyArray_DATA(units)
+        trialevent.waveforms = NULL  # TODO: Add waveform support if needed
 
-            res = cbSdkIsChanAnyDigIn(<uint32_t>instance, ch, &b_dig_in)
-            res = cbSdkIsChanSerial(<uint32_t> instance, ch, &b_serial)
-
-            handle_result(res)
-            # Fill values for non-empty digital or serial channels
-            if b_dig_in or b_serial:
-                num_samples = trialevent.num_samples[channel][0]
-                if num_samples > 0:
-                    if is_double:
-                        mxa_d = np.zeros(num_samples, dtype=np.double)
-                        trialevent.waveforms[channel] = <void *>&mxa_d[0]
-                        dig_events = np.asarray(mxa_d)
-                    else:
-                        mxa_u16 = np.zeros(num_samples, dtype=np.uint16)
-                        trialevent.waveforms[channel] = <void *>&mxa_u16[0]
-                        dig_events = np.asarray(mxa_u16)
-
-            trial_event.append([ch, {'timestamps':ev_timestamps, 'events':dig_events}])
+        trial_event = {
+            'timestamps': timestamps,
+            'channels': channels,
+            'units': units
+        }
 
     # Continuous #
     # ---------- #
+    # With the new group-based API, we fetch each group (0-7) separately
     if do_cont:
-        # allocate memory and prepare outputs.
-        for channel in range(trialcont.count):
-            row = [trialcont.chan[channel]]  # each row will be [chan_id, dat_array]
-            trialcont.samples[channel] = NULL
-            num_samples = trialcont.num_samples[channel]
-            if is_double:
-                mxa_d = np.zeros(num_samples, dtype=np.double)
-                if num_samples:
-                    trialcont.samples[channel] = <void *>&mxa_d[0]
-                cont = np.asarray(mxa_d)
-            else:
-                mxa_i16 = np.zeros(num_samples, dtype=np.int16)
-                if num_samples:
-                    trialcont.samples[channel] = <void *>&mxa_i16[0]
-                cont = np.asarray(mxa_i16)
+        # Fetch all 8 groups
+        for g in range(8):  # Groups 0-7 (cbMAXGROUPS)
+            trialcont_group.group = g
 
-            row.append(cont)
-            trial_cont.append(row)
+            # Initialize this group
+            res = cbSdkInitTrialData(<uint32_t>instance, reset_clock, NULL, &trialcont_group, NULL, NULL, 0)
+            if res != CBSDKRESULT_SUCCESS or trialcont_group.count == 0:
+                continue  # Skip groups with no channels
+
+            # Allocate arrays for this group
+            num_samples = trialcont_group.num_samples
+            timestamps_grp = np.empty(num_samples, dtype=_PROCTIME_DTYPE)
+            samples_grp = np.empty((num_samples, trialcont_group.count), dtype=np.int16)
+
+            # Point trialcont to arrays
+            trialcont_group.num_samples = num_samples
+            trialcont_group.timestamps = <PROCTIME*>cnp.PyArray_DATA(timestamps_grp)
+            trialcont_group.samples = <int16_t*>cnp.PyArray_DATA(samples_grp)
+
+            # Get data for this group
+            res = cbSdkGetTrialData(<uint32_t>instance, 0, NULL, &trialcont_group, NULL, NULL)
+            if res != CBSDKRESULT_SUCCESS:
+                continue
+
+            # Build channel array
+            chan_array_grp = np.empty(trialcont_group.count, dtype=np.uint16)
+            chan_view_grp = chan_array_grp
+            for j in range(trialcont_group.count):
+                chan_view_grp[j] = trialcont_group.chan[j]
+
+            actual_samples_grp = trialcont_group.num_samples
+
+            # Append group data as dictionary
+            trial_cont.append({
+                'group': g,
+                'count': trialcont_group.count,
+                'chan': chan_array_grp,
+                'sample_rate': trialcont_group.sample_rate,
+                'num_samples': actual_samples_grp,
+                'timestamps': timestamps_grp[:actual_samples_grp],
+                'samples': samples_grp[:actual_samples_grp, :]
+            })
 
     # Comments #
     # -------- #
@@ -564,14 +602,9 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
         trialcomm.rgbas = <uint32_t *>&mxa_u32[0]
         my_rgbas = np.asarray(mxa_u32)
         # For timestamps
-        if is_double:
-            mxa_d = np.zeros(trialcomm.num_samples, dtype=np.double)
-            trialcomm.timestamps = <void *>&mxa_d[0]
-            my_timestamps = np.asarray(mxa_d)
-        else:
-            mxa_proctime = np.zeros(trialcomm.num_samples, dtype=_PROCTIME_DTYPE)
-            trialcomm.timestamps = <void *>cnp.PyArray_DATA(mxa_proctime)
-            my_timestamps = mxa_proctime
+        mxa_proctime = np.zeros(trialcomm.num_samples, dtype=_PROCTIME_DTYPE)
+        trialcomm.timestamps = <PROCTIME *>cnp.PyArray_DATA(mxa_proctime)
+        my_timestamps = mxa_proctime
         # For comments
         trialcomm.comments = <uint8_t **>malloc(trialcomm.num_samples * sizeof(uint8_t*))
         for comm_ix in range(trialcomm.num_samples):
@@ -580,45 +613,44 @@ def trial_data(int instance=0, bool reset=False, bool reset_clock=False, bool is
                                   my_charsets[comm_ix], my_rgbas[comm_ix]])
 
     # cbsdk get trial data
+    # Note: continuous data was already fetched per-group above
     try:
-        res = cbsdk_get_trial_data(<uint32_t>instance, <int>reset,
-                                   &trialevent if do_event else NULL,
-                                   &trialcont if do_cont else NULL,
-                                   &trialcomm if do_comment else NULL)
-        handle_result(res)
-        if do_cont:
-            tzero = trialcont.time
+        if do_event or do_comment:
+            res = cbsdk_get_trial_data(<uint32_t>instance, <int>seek,
+                                       &trialevent if do_event else NULL,
+                                       NULL,  # continuous handled per-group above
+                                       &trialcomm if do_comment else NULL)
+            handle_result(res)
     finally:
         if do_comment:
             free(trialcomm.comments)
 
+    # Note: tzero is no longer meaningful with group-based continuous data
     return <int>res, trial_event, trial_cont, tzero, trial_comment
 
 
-def trial_comment(int instance=0, bool reset=False, unsigned long wait_for_comment_msec=250):
+def trial_comment(int instance=0, bool seek=False, bool clock_reset=False, unsigned long wait_for_comment_msec=250):
     """ Trial comment data.
     Inputs:
-       reset - (optional) boolean
-               set False (default) to leave buffer intact.
-               set True to clear all the data and reset the trial time to the current time.
+       seek - (optional) boolean
+               set False (default) to peek only and leave buffer intact.
+               set True to clear all the data and advance the data pointer.
+       clock_reset - (optional) boolean
+                set False (default) to leave the trial clock alone.
+                set True to update the _next_ trial time to the current time.
        instance - (optional) library instance number
     Outputs:
        list of lists the form [timestamp, comment_str, rgba]
-           timestamp: ?
+           timestamp: PROCTIME
            comment_str: the comment as a py string
            rgba: integer; the comment colour. 8 bits each for r, g, b, a
     """
 
     cdef cbSdkResult res
-    cdef cbSdkConfigParam cfg_param
     cdef cbSdkTrialComment trialcomm
 
-    # retrieve old values
-    res = cbsdk_get_trial_config(<uint32_t>instance, &cfg_param)
-    handle_result(<cbSdkResult>res)
-
     # get how many comments are available
-    res = cbsdk_init_trial_comment(<uint32_t>instance, <int>reset, &trialcomm, wait_for_comment_msec)
+    res = cbsdk_init_trial_comment(<uint32_t>instance, <int>clock_reset, &trialcomm, wait_for_comment_msec)
     handle_result(res)
 
     if trialcomm.num_samples == 0:
@@ -630,7 +662,6 @@ def trial_comment(int instance=0, bool reset=False, unsigned long wait_for_comme
     cdef cnp.uint8_t[:] mxa_u8_cs  # charsets
     cdef cnp.uint32_t[:] mxa_u32_rgbas
     cdef cnp.ndarray mxa_proctime
-    cdef cnp.double_t[:] mxa_d_ts
 
     # For charsets;
     mxa_u8_cs = np.zeros(trialcomm.num_samples, dtype=np.uint8)
@@ -649,18 +680,13 @@ def trial_comment(int instance=0, bool reset=False, unsigned long wait_for_comme
         trialcomm.comments[comm_ix] = <uint8_t *>malloc(256 * sizeof(uint8_t))
 
     # For timestamps
-    if cfg_param.bDouble:
-        mxa_d_ts = np.zeros(trialcomm.num_samples, dtype=np.double)
-        trialcomm.timestamps = <void *>&mxa_d_ts[0]
-        my_timestamps = np.asarray(mxa_d_ts)
-    else:
-        mxa_proctime = np.zeros(trialcomm.num_samples, dtype=_PROCTIME_DTYPE)
-        trialcomm.timestamps = <void *>cnp.PyArray_DATA(mxa_proctime)
-        my_timestamps = mxa_proctime
+    mxa_proctime = np.zeros(trialcomm.num_samples, dtype=_PROCTIME_DTYPE)
+    trialcomm.timestamps = <PROCTIME *>cnp.PyArray_DATA(mxa_proctime)
+    my_timestamps = mxa_proctime
 
     trial = []
     try:
-        res = cbsdk_get_trial_comment(<int>instance, <int>reset, &trialcomm)
+        res = cbsdk_get_trial_comment(<int>instance, <int>seek, &trialcomm)
         handle_result(res)
         for comm_ix in range(trialcomm.num_samples):
             # this_enc = 'utf-16' if my_charsets[comm_ix]==1 else locale.getpreferredencoding()
@@ -833,7 +859,7 @@ def digital_out(int channel, int instance=0, value='low'):
     return <int>res
 
 
-def get_channel_config(int channel, int instance=0, encoding='utf-8'):
+def get_channel_config(int channel, int instance=0, encoding="utf-8") -> dict[str, typing.Any]:
     """ Get channel configuration.
     Inputs:
         - channel: 1-based channel number 
@@ -886,7 +912,7 @@ def get_channel_config(int channel, int instance=0, encoding='utf-8'):
     res = cbSdkGetChannelConfig(<uint32_t>instance, <uint16_t>channel, &cb_chaninfo)
     handle_result(res)
     if res != 0:
-        return <int>res, {}
+        return {}
 
     chaninfo = {
         'time': cb_chaninfo.cbpkt_header.time,
@@ -949,10 +975,10 @@ def get_channel_config(int channel, int instance=0, encoding='utf-8'):
         #cbMANUALUNITMAPPING unitmapping[cbMAXUNITS+0]             # manual unit mapping
         #cbHOOP              spkhoops[cbMAXUNITS+0][cbMAXHOOPS+0]    # spike hoop sorting set
 
-    return <int>res, chaninfo
+    return chaninfo
 
 
-def set_channel_config(int channel, chaninfo={}, int instance=0, encoding='utf-8'):
+def set_channel_config(int channel, chaninfo: dict[str, typing.Any] | None = None, int instance=0, encoding="utf-8") -> None:
     """ Set channel configuration.
     Inputs:
         - channel: 1-based channel number 
@@ -965,34 +991,51 @@ def set_channel_config(int channel, chaninfo={}, int instance=0, encoding='utf-8
     res = cbSdkGetChannelConfig(<uint32_t>instance, <uint16_t>channel, &cb_chaninfo)
     handle_result(res)
 
-    if 'label' in chaninfo:
-        new_label = chaninfo['label']
+    if "label" in chaninfo:
+        new_label = chaninfo["label"]
         if not isinstance(new_label, bytes):
             new_label = new_label.encode(encoding)
         strncpy(cb_chaninfo.label, new_label, sizeof(new_label))
 
-    if 'smpgroup' in chaninfo:
-        cb_chaninfo.smpgroup = chaninfo['smpgroup']
+    if "smpgroup" in chaninfo:
+        cb_chaninfo.smpgroup = chaninfo["smpgroup"]
 
-    if 'spkthrlevel' in chaninfo:
-        cb_chaninfo.spkthrlevel = chaninfo['spkthrlevel']
+    if "spkthrlevel" in chaninfo:
+        cb_chaninfo.spkthrlevel = chaninfo["spkthrlevel"]
+
+    if "ainpopts" in chaninfo:
+        cb_chaninfo.ainpopts = chaninfo["ainpopts"]
 
     res = cbSdkSetChannelConfig(<uint32_t>instance, <uint16_t>channel, &cb_chaninfo)
     handle_result(res)
-    return <int>res
 
 
-def get_sample_group(int group_ix, int instance=0, encoding='utf-8'):
+def get_sample_group(int group_ix, int instance=0, encoding="utf-8", int proc=1) -> list[dict[str, typing.Any]]:
     """
+    Get the channel infos for all channels in a sample group.
+    Inputs:
+        - group_ix: sample group index (1-6)
+        - instance: (optional) library instance number
+        - encoding: (optional) encoding for string fields, default = 'utf-8'
+    Outputs:
+        - channels_info: A list of dictionaries, one per channel in the group. Each dictionary has the following fields:
+        'chid': 0x8000,
+        'chan': actual channel id of the channel being configured,
+        'proc': the address of the processor on which the channel resides,
+        'bank': the address of the bank on which the channel resides,
+        'term': the terminal number of the channel within its bank,
+        'gain': the analog input gain (calculated from physical scaling),
+        'label': Label of the channel (null terminated if <16 characters),
+        'unit': physical unit of the channel,
     """
     cdef cbSdkResult res
-    cdef uint32_t proc = 1
     cdef uint32_t nChansInGroup
     cdef uint16_t pGroupList[cbNUM_ANALOG_CHANS+0]
-    res = cbSdkGetSampleGroupList(<uint32_t>instance, proc, <uint32_t>group_ix, &nChansInGroup, pGroupList)
+    
+    res = cbSdkGetSampleGroupList(<uint32_t>instance, <uint32_t>proc, <uint32_t>group_ix, &nChansInGroup, pGroupList)
     if res:
         handle_result(res)
-        return <int> res, []
+        return []
 
     cdef cbPKT_CHANINFO chanInfo
     channels_info = []
@@ -1000,19 +1043,18 @@ def get_sample_group(int group_ix, int instance=0, encoding='utf-8'):
         chan_info = {}
         res = cbSdkGetChannelConfig(<uint32_t>instance, pGroupList[chan_ix], &chanInfo)
         handle_result(<cbSdkResult>res)
-        anaRange = chanInfo.physcalin.anamax - chanInfo.physcalin.anamin
-        digRange = chanInfo.physcalin.digmax - chanInfo.physcalin.digmin
-        chan_info['chid'] = chanInfo.cbpkt_header.chid
-        chan_info['chan'] = chanInfo.chan
-        chan_info['proc'] = chanInfo.proc
-        chan_info['bank'] = chanInfo.bank
-        chan_info['term'] = chanInfo.term
-        chan_info['gain'] = anaRange / digRange
-        chan_info['label'] = chanInfo.label.decode(encoding)
-        chan_info['unit'] = chanInfo.physcalin.anaunit.decode(encoding)
+        ana_range = chanInfo.physcalin.anamax - chanInfo.physcalin.anamin
+        dig_range = chanInfo.physcalin.digmax - chanInfo.physcalin.digmin
+        chan_info["chan"] = chanInfo.chan
+        chan_info["proc"] = chanInfo.proc
+        chan_info["bank"] = chanInfo.bank
+        chan_info["term"] = chanInfo.term
+        chan_info["gain"] = ana_range / dig_range
+        chan_info["label"] = chanInfo.label.decode(encoding)
+        chan_info["unit"] = chanInfo.physcalin.anaunit.decode(encoding)
         channels_info.append(chan_info)
 
-    return <int>res, channels_info
+    return channels_info
 
 
 def set_comment(comment_string, rgba_tuple=(0, 0, 0, 255), int instance=0):
@@ -1090,7 +1132,7 @@ cdef class SpikeCache:
             for samp_ix in range(self.n_samples):
                 np_waveforms[wf_ix, samp_ix] = self.p_cache.spkpkt[pkt_ix].wave[samp_ix]
         #unit_ids_out = [<int>unit_ids[wf_ix] for wf_ix in range(n_new)]
-        PyArray_ENABLEFLAGS(np_waveforms, cnp.NPY_OWNDATA)
+        PyArray_ENABLEFLAGS(np_waveforms, NPY_ARRAY_OWNDATA)
         self.last_valid = new_valid
         return np_waveforms, np_unit_ids
 
