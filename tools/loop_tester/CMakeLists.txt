@@ -39,7 +39,13 @@ add_executable(sawtooth_cbsdk_callback sawtooth_cbsdk_callback.cpp)
 target_link_libraries(sawtooth_cbsdk_callback PRIVATE cbsdk_static)
 target_compile_features(sawtooth_cbsdk_callback PRIVATE cxx_std_17)
 
+# Fourth application -- cbsdk spike pattern validator
+# Validates spike event timing from spikes_lsl.py test pattern
+add_executable(spikes_cbsdk spikes_cbsdk.cpp)
+target_link_libraries(spikes_cbsdk PRIVATE cbsdk_static)
+target_compile_features(spikes_cbsdk PRIVATE cxx_std_17)
+
 # Install all executables
-install(TARGETS sawtooth_lsl sawtooth_cbsdk sawtooth_cbsdk_callback
+install(TARGETS sawtooth_lsl sawtooth_cbsdk sawtooth_cbsdk_callback spikes_cbsdk
     RUNTIME DESTINATION bin
 )
