@@ -205,21 +205,46 @@ uint32_t EventData::readEvents(PROCTIME* output_timestamps,
 
     const uint32_t num_to_read = std::min(available, max_events);
 
-    // Read from ring buffer
+    // Read from ring buffer using bulk memory copies
     uint32_t read_index = m_write_start_index;
-    for (uint32_t i = 0; i < num_to_read; ++i)
-    {
-        if (output_timestamps)
-            output_timestamps[i] = m_timestamps[read_index];
-        if (output_channels)
-            output_channels[i] = m_channels[read_index];
-        if (output_units)
-            output_units[i] = m_units[read_index];
+    const uint32_t end_index = read_index + num_to_read;
 
-        // Advance read index (ring buffer)
-        read_index++;
-        if (read_index >= m_size)
-            read_index = 0;
+    if (end_index <= m_size)
+    {
+        // No wraparound - single bulk copy per array
+        if (output_timestamps)
+            std::memcpy(output_timestamps, &m_timestamps[read_index], num_to_read * sizeof(PROCTIME));
+        if (output_channels)
+            std::memcpy(output_channels, &m_channels[read_index], num_to_read * sizeof(uint16_t));
+        if (output_units)
+            std::memcpy(output_units, &m_units[read_index], num_to_read * sizeof(uint16_t));
+
+        read_index = end_index % m_size;
+    }
+    else
+    {
+        // Wraparound - two bulk copies per array
+        const uint32_t first_chunk = m_size - read_index;
+        const uint32_t second_chunk = num_to_read - first_chunk;
+
+        // Copy first chunk (from read_index to end of buffer)
+        if (output_timestamps)
+        {
+            std::memcpy(output_timestamps, &m_timestamps[read_index], first_chunk * sizeof(PROCTIME));
+            std::memcpy(&output_timestamps[first_chunk], m_timestamps, second_chunk * sizeof(PROCTIME));
+        }
+        if (output_channels)
+        {
+            std::memcpy(output_channels, &m_channels[read_index], first_chunk * sizeof(uint16_t));
+            std::memcpy(&output_channels[first_chunk], m_channels, second_chunk * sizeof(uint16_t));
+        }
+        if (output_units)
+        {
+            std::memcpy(output_units, &m_units[read_index], first_chunk * sizeof(uint16_t));
+            std::memcpy(&output_units[first_chunk], m_units, second_chunk * sizeof(uint16_t));
+        }
+
+        read_index = second_chunk;
     }
 
     // Update read position if seeking
