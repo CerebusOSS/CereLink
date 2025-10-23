@@ -167,9 +167,7 @@
 
 #define MAX_UINT16      0xFFFF
 
-#ifdef WIN32
-#include <windows.h>
-#else
+#ifndef WIN32
 typedef const char * LPCSTR;
 typedef void * HANDLE;
 typedef uint32_t COLORREF;
