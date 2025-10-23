@@ -6,6 +6,7 @@ cmake_minimum_required( VERSION 3.16 )
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake" ${CMAKE_MODULE_PATH})
 include(AppleSilicon)
 include(GetVersionFromGit)
+include(CheckAtomicNeeded)
 # cmake_policy(SET CMP0091 NEW)
 
 # Get version from git tags
@@ -205,6 +206,7 @@ if(CBSDK_BUILD_STATIC)
         set_target_properties( ${LIB_NAME_STATIC} PROPERTIES
             POSITION_INDEPENDENT_CODE ON)
     endif( WIN32)
+    check_and_link_atomic(${LIB_NAME_STATIC})
     list(APPEND INSTALL_TARGET_LIST ${LIB_NAME_STATIC})
 endif(CBSDK_BUILD_STATIC)
 
