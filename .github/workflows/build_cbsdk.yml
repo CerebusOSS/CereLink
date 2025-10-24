@@ -115,7 +115,7 @@ jobs:
 
       - name: Install cibuildwheel
         if: "!matrix.config.container"
-        run: python -m pip install cibuildwheel==2.16.5
+        run: python -m pip install cibuildwheel
 
       - name: Build wheels
         if: "(!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest' || matrix.config.name == 'linux-arm64') && !matrix.config.container"
