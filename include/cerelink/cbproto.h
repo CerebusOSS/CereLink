@@ -259,6 +259,11 @@ typedef int16_t           A2D_DATA;
 // Channel Definitions
 #define cbNUM_ANAIN_CHANS     (16 * cbMAXPROCS)                         // #Analog Input channels
 #define cbNUM_ANALOG_CHANS    (cbNUM_FE_CHANS + cbNUM_ANAIN_CHANS)      // Total Analog Inputs
+
+// Fixed size for structures shared across NSP devices and Central
+// This matches the NSP device's cbNUM_ANALOG_CHANS (256 FE + 16 ANAIN = 272)
+// Must be used for variable-length arrays in packet structures to ensure consistent shared memory layout
+#define cbNUM_ANALOG_CHANS_STRUCT   272
 #define cbNUM_ANAOUT_CHANS    (4 * cbMAXPROCS)                          // #Analog Output channels
 #define cbNUM_AUDOUT_CHANS    (2 * cbMAXPROCS)                          // #Audio Output channels
 #define cbNUM_ANALOGOUT_CHANS (cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS) // Total Analog Output
@@ -1417,7 +1422,7 @@ typedef struct {
     char   label[cbLEN_STR_LABEL];  //!< sampling group label
     uint32_t period;     //!< sampling period for the group
     uint32_t length;     //!< number of channels in the list
-    uint16_t list[cbNUM_ANALOG_CHANS];   //!< variable length list. The max size is the total number of analog channels
+    uint16_t list[cbNUM_ANALOG_CHANS_STRUCT];   //!< variable length list. Uses NSP device size for shared memory compatibility
 } cbPKT_GROUPINFO;
 
 // Analog Input (AINP) Information Packets
