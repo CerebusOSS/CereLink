@@ -238,8 +238,8 @@ typedef int16_t           A2D_DATA;
 #define cbMAXOPEN   4                               // Maximum number of open cbhwlib's (nsp's)
 #if defined(__cplusplus) && !defined(CBPROTO_311)
 // Client-side defs
-#define cbMAXPROCS  4                               // Number of NSPs for client (updated to match Central/Gemini)
-#define cbNUM_FE_CHANS        512                   // Front end channels for client (updated to match Central/Gemini)
+#define cbMAXPROCS  3                               // Number of NSPs for client
+#define cbNUM_FE_CHANS        512                   // Front end channels for client
 #else
 // If we were to reuse cbProto in a (simulated device)...
 #define cbMAXPROCS  1                               // Number of NSPs for the embedded software
