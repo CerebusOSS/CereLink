@@ -126,6 +126,10 @@ typedef enum cbSdkConnectionType
     CBSDKCONNECTION_DEFAULT = 0, ///< Try Central then UDP
     CBSDKCONNECTION_CENTRAL,     ///< Use Central
     CBSDKCONNECTION_UDP,         ///< Use UDP
+    CBSDKCONNECTION_GEMININSP,   ///< Connect to Gemini NSP
+    CBSDKCONNECTION_GEMINIHUB,   ///< Connect to Gemini Hub
+    CBSDKCONNECTION_GEMINIHUB2,  ///< Connect to a second Gemini Hub
+    CBSDKCONNECTION_GEMINIHUB3,  ///< Connect to a third Gemini Hub
     CBSDKCONNECTION_CLOSED,      ///< Closed
     CBSDKCONNECTION_COUNT ///< Allways the last value (Unknown)
 } cbSdkConnectionType;
@@ -137,6 +141,8 @@ typedef enum cbSdkInstrumentType
     CBSDKINSTRUMENT_NPLAY,         ///< Local nPlay
     CBSDKINSTRUMENT_LOCALNSP,      ///< Local NSP
     CBSDKINSTRUMENT_REMOTENPLAY,   ///< Remote nPlay
+    CBSDKINSTRUMENT_GEMININSP,     ///< Gemini NSP
+    CBSDKINSTRUMENT_GEMINIHUB,     ///< Gemini Hub
     CBSDKINSTRUMENT_COUNT ///< Allways the last value (Invalid)
 } cbSdkInstrumentType;
 
@@ -145,7 +151,7 @@ typedef struct cbSdkCCFEvent
 {
     cbStateCCF state;           ///< CCF state
     cbSdkResult result;         ///< Last result
-    LPCSTR szFileName;          ///< CCF filename under operation
+    const char* szFileName;          ///< CCF filename under operation
     uint8_t progress; ///< Progress (in percent)
 } cbSdkCCFEvent;
 
@@ -289,9 +295,9 @@ typedef struct cbSdkConnection
     int nInPort;  ///< Client port number
     int nOutPort; ///< Instrument port number
     int nRecBufSize; ///< Receive buffer size (0 to ignore altogether)
-    LPCSTR szInIP;  ///< Client IPv4 address
-    LPCSTR szOutIP; ///< Instrument IPv4 address
-    int nRange; ///< Range of IP addresses to try to open
+    const char* szInIP;  ///< Client IPv4 address
+    const char* szOutIP; ///< Instrument IPv4 address
+    int nRange;     ///< Range of IP addresses to try to open
 } cbSdkConnection;
 
 /// Trial continuous data

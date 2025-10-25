@@ -257,7 +257,7 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 {
                     // Any change to the instrument will be reported here, including initial connection as stand-alone
                     uint32_t instInfo;
-                    cbGetInstInfo(&instInfo, m_nInstance);
+                    cbGetInstInfo(pPkt->cbpkt_header.instrument + 1, &instInfo, m_nInstance);
                     // If instrument connection state has changed
                     if (instInfo != m_instInfo)
                     {
@@ -779,7 +779,7 @@ void InstNetwork::run()
     STARTUP_OPTIONS startupOption = m_nStartupOptionsFlags;
     // If non-stand-alone just being local can be detected at this stage
     //  because the network is not yet running.
-    cbGetInstInfo(&m_instInfo, m_nInstance);
+    cbGetInstInfo(cbNSP1, &m_instInfo, m_nInstance);
     if (m_instInfo & cbINSTINFO_LOCAL)
     {
         // if local instrument detected

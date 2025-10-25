@@ -574,7 +574,7 @@ cbRESULT cbReleaseSystemLock(const char * lpName, HANDLE & hLock)
 // Outputs:
 //  instInfo - combination of cbINSTINFO_*
 //  cbRESULT_OK if successful
-cbRESULT cbGetInstInfo(uint32_t *instInfo, const uint32_t nInstance)
+cbRESULT cbGetInstInfo(uint8_t nInstrument, uint32_t *instInfo, const uint32_t nInstance)
 {
     *instInfo = 0;
     const uint32_t nIdx = cb_library_index[nInstance];
@@ -583,18 +583,28 @@ cbRESULT cbGetInstInfo(uint32_t *instInfo, const uint32_t nInstance)
     if (!cb_library_initialized[nIdx])
         return cbRESULT_NOLIBRARY;
 
-    int type = cbINSTINFO_NPLAY;
+    // Test that the proc address is valid
+    if ((nInstrument) > cbMAXPROCS) return cbRESULT_INVALIDADDRESS;
+
+    int type = 0;
     cbPROCINFO isInfo;
-    if (cbGetProcInfo(cbNSP1, &isInfo, nInstance) == cbRESULT_OK)
+    if (cbGetProcInfo(nInstrument, &isInfo, nInstance) == cbRESULT_OK)
     {
-        if (strstr(isInfo.ident, "Cereplex") != nullptr)
+        if (strstr(isInfo.ident, "player") != nullptr)
+            type = cbINSTINFO_NPLAY;
+        else if (strstr(isInfo.ident, "Cereplex") != nullptr)
             type = cbINSTINFO_CEREPLEX;
         else if (strstr(isInfo.ident, "Emulator") != nullptr)
             type = cbINSTINFO_EMULATOR;
         else if (strstr(isInfo.ident, "wNSP") != nullptr)
             type = cbINSTINFO_WNSP;
-        if (strstr(isInfo.ident, "NSP1 ") != nullptr)
+        else if (strstr(isInfo.ident, "Gemini NSP ") != nullptr)
+            type |= cbINSTINFO_GEMINI_NSP;
+        else if (strstr(isInfo.ident, "Gemini Hub ") != nullptr)
+            type |= cbINSTINFO_GEMINI_HUB;
+        else if (strstr(isInfo.ident, "NSP ") != nullptr)
             type |= cbINSTINFO_NSP1;
+        *instInfo |= type;
     }
 
     if (cbCheckApp("cbNPlayMutex") == cbRESULT_OK)

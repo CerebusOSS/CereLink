@@ -54,7 +54,9 @@ uint32_t GetInstrumentLocalChan(uint32_t nChan, uint32_t nInstance = 0);
 #define  cbINSTINFO_EMULATOR   0x0010     // Instrument is Emulator
 #define  cbINSTINFO_NSP1       0x0020     // Instrument is NSP1
 #define  cbINSTINFO_WNSP       0x0040     // Instrument is WNSP
-cbRESULT cbGetInstInfo(uint32_t *instInfo, uint32_t nInstance = 0);
+#define  cbINSTINFO_GEMINI_NSP 0x0080     // Instrument is Gemini NSP
+#define  cbINSTINFO_GEMINI_HUB 0x0100     // Instrument is Gemini Hub
+cbRESULT cbGetInstInfo(uint8_t nInstrument, uint32_t *instInfo, uint32_t nInstance = 0);
 // Purpose: get instrument information.
 
 cbRESULT cbGetLatency(uint32_t *nLatency, uint32_t nInstance = 0);
