@@ -23,10 +23,12 @@
 #define STR(s) #s
 #define STRINGIFY(s) STR(s)
 
+#define BMI_VERSION_DATE_BUILT      1 August 2025
+
 #define BMI_VERSION_MAJOR    7
-#define BMI_VERSION_MINOR    6
-#define BMI_VERSION_RELEASE  2
-#define BMI_VERSION_BETA     0
+#define BMI_VERSION_MINOR    7
+#define BMI_VERSION_RELEASE  1
+#define BMI_VERSION_BETA     6
 
 // Take care of the leading zero
 #if BMI_VERSION_MINOR < 10
