@@ -34,6 +34,8 @@
 typedef struct sockaddr_in SOCKADDR_IN;
 typedef int SOCKET;
 #endif
+#include <string>
+#include <set>
 #include "../include/cerelink/cbhwlib.h"
 #include "cki_common.h"
 
@@ -78,6 +80,8 @@ protected:
     int m_nPacketSize; // packet size
     bool m_bVerbose;   // verbose output
     bool m_TCPconnected;
+    std::set<int> validHostIP_Legacy = {1, 17, 33, 49}; // Legacy Host PC default Host IDs
+    std::set<int> validHostIP_Gemini = {199, 183, 167, 151}; // Gemini Host PC default Host IDs
 };
 
 #endif // include guard

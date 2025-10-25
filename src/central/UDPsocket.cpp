@@ -194,8 +194,31 @@ cbRESULT UDPSocket::OpenUDP(STARTUP_OPTIONS nStartupOptionsFlags, int nRange, bo
             socketbound = true;
         else
         {
-            // increment the last ip number
-            inst_sockaddr.sin_addr.s_addr = htonl(ntohl(inst_sockaddr.sin_addr.s_addr) + 1);
+            // Extract the Host ID of the instrument network IP address
+            std::string ipStr(szInIP);
+            size_t lastDot = ipStr.rfind('.');
+            int iHostID = 0;
+            if (lastDot != std::string::npos) {
+                std::string szHostID = ipStr.substr(lastDot + 1);
+                iHostID = std::stoi(szHostID);
+            }
+            else
+            {
+                return cbRESULT_INSTINVALID;
+            }
+            // increment the Host ID number of IP address if legacy and decrement the ID number if Gemini
+            if (validHostIP_Gemini.count(iHostID))
+            {
+                inst_sockaddr.sin_addr.s_addr = htonl(ntohl(inst_sockaddr.sin_addr.s_addr) - 1); // decrement IP by 1
+            }
+            else if (validHostIP_Legacy.count(iHostID))
+            {
+                inst_sockaddr.sin_addr.s_addr = htonl(ntohl(inst_sockaddr.sin_addr.s_addr) + 1); // increment IP by 1
+            }
+            else
+            {
+                return cbRESULT_INSTINVALID;
+            }
         }
         nCount++;
     } while( (!socketbound) && (nCount <= nRange));
