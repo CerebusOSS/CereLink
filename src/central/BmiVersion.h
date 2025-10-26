@@ -26,9 +26,9 @@
 #define BMI_VERSION_DATE_BUILT      1 August 2025
 
 #define BMI_VERSION_MAJOR    7
-#define BMI_VERSION_MINOR    7
-#define BMI_VERSION_RELEASE  1
-#define BMI_VERSION_BETA     6
+#define BMI_VERSION_MINOR    8
+#define BMI_VERSION_RELEASE  0
+#define BMI_VERSION_BETA     1
 
 // Take care of the leading zero
 #if BMI_VERSION_MINOR < 10

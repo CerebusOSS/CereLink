@@ -74,10 +74,16 @@
 #define cbVERSION_MINOR  11
 #else
 #define cbVERSION_MAJOR  4
-#define cbVERSION_MINOR  1
+#define cbVERSION_MINOR  2
 #endif
 
 // Version history:
+// 4.2  - 01 Oct 2025 yp  - Added IP address and port number for a 3rd Gemini Hub device
+//      - 01 Oct 2025 yp  - Changed cbPKTTYPE_PREVREPLNC value from 0x01 to 0x04
+//      - 02 Oct 2025 yp  - Changed cbPKTTYPE_PREVSETLNC value from 0x81 to 0x84
+//      - 01 Oct 2025 yp  - renamed cbPKT_CHANRESET member 'monsource' to 'moninst', added new uint8_t member 'monchan'
+//      - 01 Oct 2025 yp  - Changed cbMAX_LOG value from 128 to 130
+//      - 01 Oct 2025 yp  - added definition for cbPKTDLEN_UPDATE_OLD
 //      - 03 Feb 2023 hls - Separate protocol structures into new file cbProto.h
 // 4.1  - 14 Mar 2022 hls - Update CHANINFO to be a multiple of 32-bits.  Added triginst.
 //        25 May 2022 hls - change type in cbPKT_HEADER to 16-bit to allow for future expansion & add counter to
@@ -205,11 +211,13 @@ typedef int16_t           A2D_DATA;
 #define cbNET_UDP_ADDR_HOST         "192.168.137.199"   // Cerebus (central) default address
 #define cbNET_UDP_ADDR_GEMINI_NSP   "192.168.137.128" // NSP default control address
 #define cbNET_UDP_ADDR_GEMINI_HUB   "192.168.137.200" // HUB default control address
-#define cbNET_UDP_ADDR_GEMINI_HUB2  "192.168.137.201" // HUB default control address
+#define cbNET_UDP_ADDR_GEMINI_HUB2  "192.168.137.201" // HUB2 default control address
+#define cbNET_UDP_ADDR_GEMINI_HUB3  "192.168.137.202" // HUB3 default control address
 #define cbNET_UDP_ADDR_BCAST        "192.168.137.255" // NSP default broadcast address
 #define cbNET_UDP_PORT_GEMINI_NSP   51001             // Gemini NSP Port
 #define cbNET_UDP_PORT_GEMINI_HUB   51002             // Gemini HUB Port
-#define cbNET_UDP_PORT_GEMINI_HUB2  51003             // Gemini HUB Port
+#define cbNET_UDP_PORT_GEMINI_HUB2  51003             // Gemini HUB2 Port
+#define cbNET_UDP_PORT_GEMINI_HUB3  51004             // Gemini HUB3 Port
 
 #define PROTOCOL_UDP        0
 #define PROTOCOL_TCP        1
@@ -238,8 +246,8 @@ typedef int16_t           A2D_DATA;
 #define cbMAXOPEN   4                               // Maximum number of open cbhwlib's (nsp's)
 #if defined(__cplusplus) && !defined(CBPROTO_311)
 // Client-side defs
-#define cbMAXPROCS  3                               // Number of NSPs for client
-#define cbNUM_FE_CHANS        512                   // Front end channels for client
+#define cbMAXPROCS  4                               // Number of NSPs for client
+#define cbNUM_FE_CHANS        768                   // Front end channels for client
 #else
 // If we were to reuse cbProto in a (simulated device)...
 #define cbMAXPROCS  1                               // Number of NSPs for the embedded software
@@ -837,6 +845,8 @@ typedef struct {
     uint8_t  block[512];      //!< block data
 } cbPKT_UPDATE;
 
+#define cbPKTDLEN_UPDATE_OLD    (sizeof(cbPKT_UPDATE_OLD)/4)-2
+
 /// @brief PKT Set:0xF1 Rep:0x71 - Update Packet
 ///
 /// Update the firmware of the NSP.  This will copy data received into files in a temporary location and if
@@ -1040,7 +1050,7 @@ typedef struct {
 #define cbLOG_MODE_NSP_REBOOT  11   // PC->NSP: Reboot the NSP
 
 // Reconfiguration log event
-#define cbMAX_LOG          128  // Maximum log description
+#define cbMAX_LOG          130  // Maximum log description
 #define cbPKTTYPE_LOGREP   0x63 /* NPLAY->PC response */
 #define cbPKTTYPE_LOGSET   0xE3 /* PC->NPLAY request */
 #define cbPKTDLEN_LOG    ((sizeof(cbPKT_LOG)/4) - cbPKT_HEADER_32SIZE)
@@ -1319,7 +1329,8 @@ typedef struct {
     uint8_t  dinpopts;       //!< digital input options (composed of cbDINP_* flags)
     uint8_t  aoutopts;       //!< analog output options
     uint8_t  eopchar;        //!< the end of packet character
-    uint8_t  monsource;      //!< address of channel to monitor
+    uint8_t  moninst;        //!< instrument number of channel to monitor
+    uint8_t  monchan;        //!< channel to monitor
     uint8_t  outvalue;       //!< output value
     uint8_t  ainpopts;       //!< analog input options (composed of cbAINP_* flags)
     uint8_t  lncrate;        //!< line noise cancellation filter adaptation rate
@@ -2069,7 +2080,7 @@ typedef struct {
 
 
 // preview information requests
-#define cbPKTTYPE_PREVSETLNC    0x81
+#define cbPKTTYPE_PREVSETLNC    0x84
 #define cbPKTTYPE_PREVSETSTREAM 0x82
 #define cbPKTTYPE_PREVSET       0x83
 
@@ -2077,7 +2088,7 @@ typedef struct {
 
 
 // line noise cancellation (LNC) waveform preview packet
-#define cbPKTTYPE_PREVREPLNC    0x01
+#define cbPKTTYPE_PREVREPLNC    0x04
 #define cbPKTDLEN_PREVREPLNC    ((sizeof(cbPKT_LNCPREV)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief Preview packet - Line Noise preview
