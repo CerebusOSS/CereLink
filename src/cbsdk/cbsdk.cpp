@@ -1187,8 +1187,18 @@ cbSdkResult SdkApp::SdkGetType(cbSdkConnectionType * conType, cbSdkInstrumentTyp
         {
             if (instInfo & cbINSTINFO_LOCAL)
                 *instType = CBSDKINSTRUMENT_LOCALNSP;
-            else
+            else if (instInfo & cbINSTINFO_CEREPLEX)
                 *instType = CBSDKINSTRUMENT_NSP;
+            else if (instInfo & cbINSTINFO_EMULATOR)
+                *instType = CBSDKINSTRUMENT_NSP;
+            else if (instInfo & cbINSTINFO_NSP1)
+                *instType = CBSDKINSTRUMENT_NSP;
+            else if (instInfo & cbINSTINFO_WNSP)
+                *instType = CBSDKINSTRUMENT_NSP;
+            else if (instInfo & cbINSTINFO_GEMINI_NSP)
+                *instType = CBSDKINSTRUMENT_GEMININSP;
+            else if (instInfo & cbINSTINFO_GEMINI_HUB)
+                *instType = CBSDKINSTRUMENT_GEMINIHUB;
         }
     }
 
