@@ -1174,7 +1174,7 @@ cbSdkResult SdkApp::SdkGetType(cbSdkConnectionType * conType, cbSdkInstrumentTyp
     if (instType)
     {
         uint32_t instInfo = 0;
-        if (cbGetInstInfo(cbNSP1, &instInfo, m_nInstance) == cbRESULT_NOLIBRARY)
+        if (cbGetInstInfo(m_nInstance, &instInfo, m_nInstance) == cbRESULT_NOLIBRARY)
             return CBSDKRESULT_CLOSED;
         if (instInfo & cbINSTINFO_NPLAY)
         {
