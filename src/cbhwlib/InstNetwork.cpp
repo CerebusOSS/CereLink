@@ -791,14 +791,39 @@ void InstNetwork::run()
         // Give nPlay and Cereplex more time
         bool bHighLatency = (m_instInfo & (cbINSTINFO_NPLAY | cbINSTINFO_CEREPLEX));
         m_icInstrument.Reset(bHighLatency ? (int)INST_TICK_COUNT : (int)Instrument::TICK_COUNT);
-        // Set network connection details
-        m_icInstrument.SetNetwork(PROTOCOL_UDP, m_nInPort, m_nOutPort,
-                                  m_strInIP.c_str(), m_strOutIP.c_str(), m_nRange);
-        // Open UDP
-        cbRESULT cbres = m_icInstrument.Open(startupOption, m_bBroadcast, m_bDontRoute, m_bNonBlocking, m_nRecBufSize);
+
+        // List of device configurations to try in order
+        struct DeviceConfig {
+            int inPort;
+            int outPort;
+            const char* outIP;
+        };
+
+        DeviceConfig deviceConfigs[] = {
+            // Try user-specified configuration first
+            { m_nInPort, m_nOutPort, m_strOutIP.c_str() },
+            // Try Gemini devices
+            { cbNET_UDP_PORT_GEMINI_NSP, cbNET_UDP_PORT_GEMINI_NSP, cbNET_UDP_ADDR_GEMINI_NSP },
+            { cbNET_UDP_PORT_GEMINI_HUB, cbNET_UDP_PORT_GEMINI_HUB, cbNET_UDP_ADDR_GEMINI_HUB },
+            { cbNET_UDP_PORT_GEMINI_HUB2, cbNET_UDP_PORT_GEMINI_HUB2, cbNET_UDP_ADDR_GEMINI_HUB2 },
+            { cbNET_UDP_PORT_GEMINI_HUB3, cbNET_UDP_PORT_GEMINI_HUB3, cbNET_UDP_ADDR_GEMINI_HUB3 },
+            // Try legacy NSP
+            {cbNET_UDP_PORT_BCAST, cbNET_UDP_PORT_CNT, cbNET_UDP_ADDR_CNT}
+        };
+
+        cbRESULT cbres = cbRESULT_HARDWAREOFFLINE;
+        for (const auto& config : deviceConfigs)
+        {
+            m_icInstrument.SetNetwork(PROTOCOL_UDP, config.inPort, config.outPort,
+                                      m_strInIP.c_str(), config.outIP, m_nRange);
+            cbres = m_icInstrument.Open(startupOption, m_bBroadcast, m_bDontRoute, m_bNonBlocking, m_nRecBufSize);
+            if (cbres == cbRESULT_OK)
+                break; // Successfully connected
+        }
+
         if (cbres)
         {
-            // if we can't open NSP, say so
+            // if we can't open any device, report error
             InstNetworkEvent(NET_EVENT_NETOPENERR, cbres); // report cbRESULT
             cbClose(m_bStandAlone, m_nInstance); // Close library
             return;
