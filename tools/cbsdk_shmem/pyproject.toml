@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cbsdk-shmem"
+version = "0.1.0"
+description = "Pure Python access to CereLink shared memory buffers"
+authors = [
+    {name = "Chadwick Boulay", email = "chadwick.boulay@gmail.com"},
+]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0.0",
+]
+readme = "README.md"
+license = {text = "MIT"}
+
+[project.urls]
+Homepage = "https://github.com/CerebusOSS/CereLink"
+Repository = "https://github.com/CerebusOSS/CereLink"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cbsdk_shmem*"]
