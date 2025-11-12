@@ -29,7 +29,8 @@ namespace cbshmem {
 ///
 struct ShmemSession::Impl {
     Mode mode;
-    std::string name;
+    std::string cfg_name;  // Config buffer name (e.g., "cbCFGbuffer")
+    std::string xmt_name;  // Transmit buffer name (e.g., "XmtGlobal")
     bool is_open;
 
     // Platform-specific handles (separate segments for config and transmit)
@@ -78,8 +79,8 @@ struct ShmemSession::Impl {
         xmt_file_mapping = nullptr;
 #else
         // POSIX requires shared memory names to start with "/"
-        std::string posix_cfg_name = (name[0] == '/') ? name : ("/" + name);
-        std::string posix_xmt_name = posix_cfg_name + "_xmt";
+        std::string posix_cfg_name = (cfg_name[0] == '/') ? cfg_name : ("/" + cfg_name);
+        std::string posix_xmt_name = (xmt_name[0] == '/') ? xmt_name : ("/" + xmt_name);
 
         if (cfg_buffer) {
             munmap(cfg_buffer, sizeof(CentralConfigBuffer));
@@ -129,7 +130,7 @@ struct ShmemSession::Impl {
             access,
             0,
             sizeof(CentralConfigBuffer),
-            name.c_str()
+            cfg_name.c_str()
         );
 
         if (!cfg_file_mapping) {
@@ -147,7 +148,6 @@ struct ShmemSession::Impl {
         }
 
         // Create transmit buffer segment (separate from config)
-        std::string xmt_name = name + "_xmt";
         xmt_file_mapping = CreateFileMappingA(
             INVALID_HANDLE_VALUE,
             nullptr,
@@ -182,8 +182,8 @@ struct ShmemSession::Impl {
 #else
         // POSIX (macOS/Linux) implementation - create two separate shared memory segments
         // POSIX requires shared memory names to start with "/"
-        std::string posix_cfg_name = (name[0] == '/') ? name : ("/" + name);
-        std::string posix_xmt_name = posix_cfg_name + "_xmt";
+        std::string posix_cfg_name = (cfg_name[0] == '/') ? cfg_name : ("/" + cfg_name);
+        std::string posix_xmt_name = (xmt_name[0] == '/') ? xmt_name : ("/" + xmt_name);
 
         int flags = (mode == Mode::STANDALONE) ? (O_CREAT | O_RDWR) : O_RDONLY;
         mode_t perms = (mode == Mode::STANDALONE) ? 0644 : 0;
@@ -297,9 +297,10 @@ ShmemSession::~ShmemSession() = default;
 ShmemSession::ShmemSession(ShmemSession&& other) noexcept = default;
 ShmemSession& ShmemSession::operator=(ShmemSession&& other) noexcept = default;
 
-Result<ShmemSession> ShmemSession::create(const std::string& name, Mode mode) {
+Result<ShmemSession> ShmemSession::create(const std::string& cfg_name, const std::string& xmt_name, Mode mode) {
     ShmemSession session;
-    session.m_impl->name = name;
+    session.m_impl->cfg_name = cfg_name;
+    session.m_impl->xmt_name = xmt_name;
     session.m_impl->mode = mode;
 
     auto result = session.m_impl->open();

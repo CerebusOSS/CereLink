@@ -156,32 +156,36 @@ int main(int argc, char* argv[]) {
 #ifndef _WIN32
         // Forcefully unlink all possible shared memory segments to ensure STANDALONE mode
         // POSIX requires shared memory names to start with "/"
+        // Use Central-compatible names: "cbCFGbuffer", "XmtGlobal", etc.
         for (const auto& device : devices) {
-            // Map device type to shared memory name (must match Central's naming convention)
-            std::string shmem_name;
+            std::string cfg_name;
+            std::string xmt_name;
+
+            // Map device type to Central-compatible shared memory names
             switch (device->type) {
                 case cbsdk::DeviceType::LEGACY_NSP:
-                    shmem_name = "cbsdk_default";
-                    break;
                 case cbsdk::DeviceType::GEMINI_NSP:
-                    shmem_name = "cbsdk_gemini_nsp";
+                case cbsdk::DeviceType::NPLAY:
+                    // Instance 0 uses base names without suffix
+                    cfg_name = "cbCFGbuffer";
+                    xmt_name = "XmtGlobal";
                     break;
                 case cbsdk::DeviceType::GEMINI_HUB1:
-                    shmem_name = "cbsdk_gemini_hub1";
+                    cfg_name = "cbCFGbuffer1";
+                    xmt_name = "XmtGlobal1";
                     break;
                 case cbsdk::DeviceType::GEMINI_HUB2:
-                    shmem_name = "cbsdk_gemini_hub2";
+                    cfg_name = "cbCFGbuffer2";
+                    xmt_name = "XmtGlobal2";
                     break;
                 case cbsdk::DeviceType::GEMINI_HUB3:
-                    shmem_name = "cbsdk_gemini_hub3";
-                    break;
-                case cbsdk::DeviceType::NPLAY:
-                    shmem_name = "cbsdk_nplay";
+                    cfg_name = "cbCFGbuffer3";
+                    xmt_name = "XmtGlobal3";
                     break;
             }
 
-            std::string posix_cfg_name = "/" + shmem_name;
-            std::string posix_xmt_name = posix_cfg_name + "_xmt";
+            std::string posix_cfg_name = "/" + cfg_name;
+            std::string posix_xmt_name = "/" + xmt_name;
             shm_unlink(posix_cfg_name.c_str());  // Ignore errors
             shm_unlink(posix_xmt_name.c_str());  // Ignore errors
         }

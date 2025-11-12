@@ -84,24 +84,50 @@ SdkSession::~SdkSession() {
     }
 }
 
-// Helper function to map DeviceType to shared memory name
-// This ensures compatibility with Central's naming convention
-static std::string getSharedMemoryName(DeviceType type) {
+// Helper function to map DeviceType to instance number
+// Central uses instance numbers to distinguish multiple devices:
+// - Instance 0: NSP (first device)
+// - Instance 1: Hub1 (second device)
+// - Instance 2: Hub2 (third device)
+// - Instance 3: Hub3 (fourth device)
+static int getInstanceNumber(DeviceType type) {
     switch (type) {
         case DeviceType::LEGACY_NSP:
-            return "cbsdk_default";
+            return 0;
         case DeviceType::GEMINI_NSP:
-            return "cbsdk_gemini_nsp";
+            return 0;  // NSP is always instance 0
         case DeviceType::GEMINI_HUB1:
-            return "cbsdk_gemini_hub1";
+            return 1;
         case DeviceType::GEMINI_HUB2:
-            return "cbsdk_gemini_hub2";
+            return 2;
         case DeviceType::GEMINI_HUB3:
-            return "cbsdk_gemini_hub3";
+            return 3;
         case DeviceType::NPLAY:
-            return "cbsdk_nplay";
+            return 0;  // nPlay uses instance 0
         default:
-            return "cbsdk_default";
+            return 0;
+    }
+}
+
+// Helper function to get Central-compatible shared memory names
+// Returns config buffer name (e.g., "cbCFGbuffer" or "cbCFGbuffer1")
+static std::string getConfigBufferName(DeviceType type) {
+    int instance = getInstanceNumber(type);
+    if (instance == 0) {
+        return "cbCFGbuffer";
+    } else {
+        return "cbCFGbuffer" + std::to_string(instance);
+    }
+}
+
+// Helper function to get Central-compatible transmit buffer name
+// Returns transmit buffer name (e.g., "XmtGlobal" or "XmtGlobal1")
+static std::string getTransmitBufferName(DeviceType type) {
+    int instance = getInstanceNumber(type);
+    if (instance == 0) {
+        return "XmtGlobal";
+    } else {
+        return "XmtGlobal" + std::to_string(instance);
     }
 }
 
@@ -109,18 +135,19 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     SdkSession session;
     session.m_impl->config = config;
 
-    // Automatically determine shared memory name from device type
-    std::string shmem_name = getSharedMemoryName(config.device_type);
+    // Automatically determine shared memory names from device type (Central-compatible)
+    std::string cfg_name = getConfigBufferName(config.device_type);
+    std::string xmt_name = getTransmitBufferName(config.device_type);
 
     // Auto-detect mode: Try CLIENT first (attach to existing), fall back to STANDALONE (create new)
     bool is_standalone = false;
 
     // Try to attach to existing shared memory (CLIENT mode)
-    auto shmem_result = cbshmem::ShmemSession::create(shmem_name, cbshmem::Mode::CLIENT);
+    auto shmem_result = cbshmem::ShmemSession::create(cfg_name, xmt_name, cbshmem::Mode::CLIENT);
 
     if (shmem_result.isError()) {
         // No existing shared memory, create new (STANDALONE mode)
-        shmem_result = cbshmem::ShmemSession::create(shmem_name, cbshmem::Mode::STANDALONE);
+        shmem_result = cbshmem::ShmemSession::create(cfg_name, xmt_name, cbshmem::Mode::STANDALONE);
         if (shmem_result.isError()) {
             return Result<SdkSession>::error("Failed to create shared memory: " + shmem_result.error());
         }
