@@ -41,6 +41,7 @@ cmake_dependent_option(CBSDK_BUILD_TOOLS "Build tools" ON
 # These options are always available regardless of build context
 option(CBSDK_BUILD_STATIC "Build static cbsdk library" ON)
 option(CBPROTO_311 "Build for protocol 3.11" OFF)
+option(CBSDK_BUILD_NEW_ARCH "Build new modular architecture (experimental)" OFF)
 
 ##########################################################################################
 # Define target names
@@ -115,7 +116,7 @@ target_include_directories(CCFUtils
         INTERFACE # for unit tests
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/ccfutils>
         PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/src/cbproto
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/cbproto_old
 )
 set_property(TARGET CCFUtils PROPERTY POSITION_INDEPENDENT_CODE ON)
 
@@ -146,7 +147,7 @@ target_include_directories( ${LIB_NAME}
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cbproto
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/cbproto_old
         ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk
         ${CMAKE_CURRENT_SOURCE_DIR}/src/ccfutils
         ${CMAKE_CURRENT_SOURCE_DIR}/src/central
@@ -182,7 +183,7 @@ if(CBSDK_BUILD_STATIC)
                 $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
             PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib
-                ${CMAKE_CURRENT_SOURCE_DIR}/src/cbproto
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/cbproto_old
                 ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk
                 ${CMAKE_CURRENT_SOURCE_DIR}/src/ccfutils
                 ${CMAKE_CURRENT_SOURCE_DIR}/src/central
@@ -231,6 +232,16 @@ add_subdirectory(bindings)
 
 ## Misc Tools
 add_subdirectory(tools)
+
+##
+# New Modular Architecture (Experimental)
+if(CBSDK_BUILD_NEW_ARCH)
+    message(STATUS "Building new modular architecture (experimental)")
+    add_subdirectory(src/cbproto)
+    add_subdirectory(src/cbshmem)
+    add_subdirectory(src/cbdev)
+    add_subdirectory(src/cbsdk_v2)
+endif(CBSDK_BUILD_NEW_ARCH)
 
 
 #########################################################################################

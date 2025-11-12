@@ -21,7 +21,7 @@
 #ifndef INSTNETWORK_H_INCLUDED
 #define INSTNETWORK_H_INCLUDED
 
-#include "../cbproto/debugmacs.h"
+#include "../cbproto_old/debugmacs.h"
 #include "../include/cerelink/cbhwlib.h"
 #include "cbHwlibHi.h"
 #include "../central/Instrument.h"

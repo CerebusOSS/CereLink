@@ -17,7 +17,7 @@
 //
 // Common xPlatform instrument network
 //
-#include "../cbproto/StdAfx.h"
+#include "../cbproto_old/StdAfx.h"
 #include <algorithm>  // Use C++ default min and max implementation.
 #include <thread>     // For std::thread
 #include <chrono>     // For std::chrono timing

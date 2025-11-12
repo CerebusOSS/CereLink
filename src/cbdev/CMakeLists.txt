@@ -1,0 +1,49 @@
+# cbdev - Device Transport Layer
+# Handles UDP socket communication with devices
+
+project(cbdev
+    DESCRIPTION "CereLink Device Transport Layer"
+    LANGUAGES CXX
+)
+
+# Library sources
+set(CBDEV_SOURCES
+    src/device_session.cpp
+)
+
+# Build as STATIC library
+add_library(cbdev STATIC ${CBDEV_SOURCES})
+
+target_include_directories(cbdev
+    BEFORE PUBLIC  # BEFORE to control include order (similar to cbshmem)
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        # upstream needed for protocol definitions
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/upstream>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+# Dependencies
+target_link_libraries(cbdev
+    PUBLIC
+        cbproto
+        cbshmem  # Needs cbshmem for upstream_protocol.h wrapper
+)
+
+# C++17 required
+target_compile_features(cbdev PUBLIC cxx_std_17)
+
+# Platform-specific networking libraries
+if(WIN32)
+    target_link_libraries(cbdev PRIVATE wsock32 ws2_32)
+elseif(APPLE)
+    # macOS networking (includes the IP_BOUND_IF fix!)
+    target_link_libraries(cbdev PRIVATE pthread)
+else()
+    # Linux networking
+    target_link_libraries(cbdev PRIVATE pthread)
+endif()
+
+# Installation
+install(TARGETS cbdev
+    EXPORT CBSDKTargets
+)

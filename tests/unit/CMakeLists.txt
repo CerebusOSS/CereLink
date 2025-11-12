@@ -1,0 +1,93 @@
+# Unit Tests
+# Each module (cbproto, cbshmem, cbdev, cbsdk_v2) will have its own test suite
+
+# Only build if new architecture is enabled
+if(NOT CBSDK_BUILD_NEW_ARCH)
+    message(STATUS "Skipping unit tests for new architecture (CBSDK_BUILD_NEW_ARCH=OFF)")
+    return()
+endif()
+
+# GoogleTest will be fetched as needed
+include(FetchContent)
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG v1.14.0
+    GIT_SHALLOW TRUE
+)
+# For Windows: Prevent overriding the parent project's compiler/linker settings
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
+enable_testing()
+include(GoogleTest)
+
+# cbproto tests
+add_executable(cbproto_tests
+    test_instrument_id.cpp
+    test_protocol_structures.cpp
+)
+
+target_link_libraries(cbproto_tests
+    PRIVATE
+        cbproto
+        GTest::gtest_main
+)
+
+target_include_directories(cbproto_tests
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/cbproto/include
+)
+
+gtest_discover_tests(cbproto_tests)
+
+message(STATUS "Unit tests configured for cbproto")
+
+# cbshmem tests
+add_executable(cbshmem_tests
+    test_shmem_session.cpp
+)
+
+target_link_libraries(cbshmem_tests
+    PRIVATE
+        cbshmem
+        cbproto
+        GTest::gtest_main
+)
+
+target_include_directories(cbshmem_tests
+    BEFORE PRIVATE  # BEFORE to ensure our paths come first
+        # upstream MUST come before cbproto to resolve <cbproto/cbproto.h> correctly
+        ${PROJECT_SOURCE_DIR}/upstream
+        ${PROJECT_SOURCE_DIR}/src/cbshmem/include
+        ${PROJECT_SOURCE_DIR}/src/cbproto/include
+)
+
+gtest_discover_tests(cbshmem_tests)
+
+message(STATUS "Unit tests configured for cbshmem")
+
+# cbdev tests
+add_executable(cbdev_tests
+    test_device_session.cpp
+)
+
+target_link_libraries(cbdev_tests
+    PRIVATE
+        cbdev
+        cbproto
+        cbshmem
+        GTest::gtest_main
+)
+
+target_include_directories(cbdev_tests
+    BEFORE PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/cbdev/include
+        ${PROJECT_SOURCE_DIR}/upstream
+        ${PROJECT_SOURCE_DIR}/src/cbshmem/include
+        ${PROJECT_SOURCE_DIR}/src/cbproto/include
+)
+
+gtest_discover_tests(cbdev_tests)
+
+message(STATUS "Unit tests configured for cbdev")
