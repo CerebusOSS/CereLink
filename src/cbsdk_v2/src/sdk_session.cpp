@@ -17,6 +17,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <cstring>
+#include <iostream>
 
 namespace cbsdk {
 

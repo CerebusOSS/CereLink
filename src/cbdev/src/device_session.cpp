@@ -16,6 +16,8 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <iostream>
+#include <iomanip>
 
 // Platform-specific includes
 #ifdef _WIN32
@@ -330,6 +332,26 @@ Result<DeviceSession> DeviceSession::create(const DeviceConfig& config) {
         }
     }
 
+    // Set receive timeout (1 second) so recv() doesn't block forever
+    // This allows the receive thread to check the running flag periodically
+#ifdef _WIN32
+    DWORD timeout_ms = 1000;
+    if (setsockopt(session.m_impl->socket, SOL_SOCKET, SO_RCVTIMEO,
+                  (char*)&timeout_ms, sizeof(timeout_ms)) != 0) {
+#else
+    struct timeval tv;
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    if (setsockopt(session.m_impl->socket, SOL_SOCKET, SO_RCVTIMEO,
+                  (char*)&tv, sizeof(tv)) != 0) {
+#endif
+        closeSocket(session.m_impl->socket);
+#ifdef _WIN32
+        WSACleanup();
+#endif
+        return Result<DeviceSession>::error("Failed to set receive timeout");
+    }
+
     // Set non-blocking mode
     if (config.non_blocking) {
 #ifdef _WIN32
@@ -554,37 +576,95 @@ Result<void> DeviceSession::startReceiveThread() {
 
     m_impl->recv_thread_running.store(true);
     m_impl->recv_thread = std::make_unique<std::thread>([this]() {
-        // Small buffer for opportunistic batching
-        // We drain all available packets (non-blocking) and deliver immediately
-        constexpr size_t MAX_BATCH = 16;
-        cbPKT_GENERIC packets[MAX_BATCH];
+        // UDP datagrams can contain MULTIPLE aggregated packets (up to 58080 bytes)
+        // Receive into large buffer and parse out all cbPKT_GENERIC packets
+        // Allocate on heap to avoid stack overflow
+        constexpr size_t UDP_BUFFER_SIZE = 58080;  // cbCER_UDP_SIZE_MAX
+        auto udp_buffer = std::make_unique<uint8_t[]>(UDP_BUFFER_SIZE);
+
+        constexpr size_t MAX_BATCH = 512;
+        auto packets = std::make_unique<cbPKT_GENERIC[]>(MAX_BATCH);
 
         while (m_impl->recv_thread_running.load()) {
+            // Receive UDP datagram (may contain multiple packets)
+            int bytes_recv = recv(m_impl->socket, (char*)udp_buffer.get(), UDP_BUFFER_SIZE, 0);
+
+            if (bytes_recv == SOCKET_ERROR_VALUE) {
+#ifdef _WIN32
+                int err = WSAGetLastError();
+                if (err == WSAEWOULDBLOCK) {
+                    // No data available - yield and continue
+                    std::this_thread::yield();
+                    continue;
+                }
+#else
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    // No data available - yield and continue
+                    std::this_thread::yield();
+                    continue;
+                }
+#endif
+                // Real error - log and continue
+                std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
+                m_impl->stats.recv_errors++;
+                continue;
+            }
+
+            if (bytes_recv == 0) {
+                // Socket closed
+                continue;
+            }
+
+            // Parse all packets from the UDP datagram
+            // Wire format: variable-sized packets with size = sizeof(cbPKT_HEADER) + (dlen * 4)
+            // We expand each to cbPKT_GENERIC (1024 bytes zero-padded) for callbacks
             size_t count = 0;
+            size_t offset = 0;
+            constexpr size_t HEADER_SIZE = sizeof(cbPKT_HEADER);
+            constexpr size_t MAX_PKT_SIZE = sizeof(cbPKT_GENERIC);  // 1024 bytes
 
-            // Opportunistic batching: drain all packets that are immediately available
-            while (count < MAX_BATCH) {
-                auto result = pollPacket(packets[count], 0);  // 0ms timeout = non-blocking
+            while (offset + HEADER_SIZE <= static_cast<size_t>(bytes_recv) && count < MAX_BATCH) {
+                // Peek at header to get packet size
+                cbPKT_HEADER* hdr = reinterpret_cast<cbPKT_HEADER*>(udp_buffer.get() + offset);
 
-                if (result.isOk() && result.value()) {
-                    // Packet received
-                    count++;
-                } else {
-                    // No more packets available immediately
+                // Calculate actual packet size on wire: header + (dlen * 4 bytes)
+                size_t wire_pkt_size = HEADER_SIZE + (hdr->dlen * 4);
+
+                // Validate packet size
+                constexpr size_t MAX_DLEN = (MAX_PKT_SIZE - HEADER_SIZE) / 4;
+                if (hdr->dlen > MAX_DLEN || wire_pkt_size > MAX_PKT_SIZE) {
+                    // Invalid packet - stop parsing this datagram
                     break;
                 }
+
+                // Check if full packet is available in datagram
+                if (offset + wire_pkt_size > static_cast<size_t>(bytes_recv)) {
+                    // Truncated datagram - stop parsing
+                    break;
+                }
+
+                // Zero out the cbPKT_GENERIC buffer
+                std::memset(&packets[count], 0, MAX_PKT_SIZE);
+
+                // Copy wire packet (variable size) into cbPKT_GENERIC (zero-padded)
+                std::memcpy(&packets[count], udp_buffer.get() + offset, wire_pkt_size);
+                count++;
+                offset += wire_pkt_size;
+            }
+
+            // Update statistics
+            {
+                std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
+                m_impl->stats.packets_received += count;
+                m_impl->stats.bytes_received += bytes_recv;
             }
 
             // Deliver packets if we received any
             if (count > 0) {
                 std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
                 if (m_impl->packet_callback) {
-                    m_impl->packet_callback(packets, count);
+                    m_impl->packet_callback(packets.get(), count);
                 }
-            } else {
-                // No packets ready - wait briefly before polling again
-                // Use a very short sleep to minimize latency while avoiding busy-wait
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
             }
         }
     });

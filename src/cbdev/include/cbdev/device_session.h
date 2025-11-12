@@ -116,7 +116,7 @@ struct DeviceConfig {
 
     // Socket options
     bool broadcast = false;         ///< Enable broadcast mode
-    bool non_blocking = true;       ///< Non-blocking socket
+    bool non_blocking = false;      ///< Non-blocking socket (false = blocking, better for dedicated receive thread)
     int recv_buffer_size = 6000000; ///< Receive buffer size (6MB default)
 
     /// Create configuration for a known device type

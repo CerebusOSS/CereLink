@@ -9,6 +9,11 @@ set(SIMPLE_EXAMPLES
     "simple_analog_out:SimpleAnalogOut/simple_analog_out.cpp"
 )
 
+# cbsdk_v2 examples (link against cbsdk_v2 instead of old SDK)
+set(CBSDK_V2_EXAMPLES
+    "gemini_example:GeminiExample/gemini_example.cpp"
+)
+
 set(SAMPLE_TARGET_LIST)
 
 # Create executables for simple examples (just link against the library)
@@ -19,6 +24,17 @@ foreach(example ${SIMPLE_EXAMPLES})
 
     add_executable(${target_name} ${source_file})
     target_link_libraries(${target_name} ${LIB_NAME_STATIC})
+    list(APPEND SAMPLE_TARGET_LIST ${target_name})
+endforeach()
+
+# Create executables for cbsdk_v2 examples (link against cbsdk_v2)
+foreach(example ${CBSDK_V2_EXAMPLES})
+    string(REPLACE ":" ";" example_parts ${example})
+    list(GET example_parts 0 target_name)
+    list(GET example_parts 1 source_file)
+
+    add_executable(${target_name} ${source_file})
+    target_link_libraries(${target_name} cbsdk_v2)
     list(APPEND SAMPLE_TARGET_LIST ${target_name})
 endforeach()
 
