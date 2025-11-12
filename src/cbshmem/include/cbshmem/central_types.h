@@ -73,6 +73,26 @@ constexpr uint32_t CENTRAL_cbMAXBANKS = (CENTRAL_cbNUM_FE_BANKS + CENTRAL_cbNUM_
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Buffer Size Constants (must be defined before structures)
+/// @{
+
+/// Max UDP packet size (from Central)
+constexpr uint32_t CENTRAL_cbCER_UDP_SIZE_MAX = 58080;
+
+/// Transmit buffer sizes (Central-compatible)
+constexpr uint32_t CENTRAL_cbXMT_GLOBAL_BUFFLEN = ((CENTRAL_cbCER_UDP_SIZE_MAX / 4) * 5000 + 2);  ///< Room for 5000 packet-sized slots
+constexpr uint32_t CENTRAL_cbXMT_LOCAL_BUFFLEN = ((CENTRAL_cbCER_UDP_SIZE_MAX / 4) * 2000 + 2);   ///< Room for 2000 packet-sized slots
+
+/// Spike cache constants
+constexpr uint32_t CENTRAL_cbPKT_SPKCACHEPKTCNT = 400;                          ///< Packets per channel cache
+constexpr uint32_t CENTRAL_cbPKT_SPKCACHELINECNT = CENTRAL_cbNUM_ANALOG_CHANS;  ///< One cache per analog channel
+
+/// Receive buffer size
+constexpr uint32_t CENTRAL_cbRECBUFFLEN = CENTRAL_cbNUM_FE_CHANS * 65536 * 4 - 1;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Instrument status flags (bit field)
 ///
 /// Used to track which instruments are active in shared memory
@@ -83,26 +103,21 @@ enum class InstrumentStatus : uint32_t {
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Transmit buffer for outgoing packets
+/// @brief Transmit buffer for outgoing packets (Global - sent to device)
 ///
-/// Ring buffer for packets waiting to be transmitted to device.
+/// Ring buffer for packets waiting to be transmitted to device via UDP.
 /// Buffer stores raw packet data as uint32_t words (Central's format).
 ///
 /// This is stored in a separate shared memory segment (not embedded in config buffer)
 /// to match Central's architecture.
 ///
-/// NOTE: We use a fixed-size buffer for simplicity. Central uses a variable-length buffer
-/// allocated at runtime, but for shared memory cross-platform compatibility, fixed size is easier.
-///
-constexpr uint32_t CENTRAL_cbXMTBUFFLEN = 8192;  ///< Buffer size in uint32_t words (32KB of packet data)
-
 struct CentralTransmitBuffer {
-    uint32_t transmitted;                       ///< How many packets have been sent
-    uint32_t headindex;                         ///< First empty position (write index)
-    uint32_t tailindex;                         ///< One past last emptied position (read index)
-    uint32_t last_valid_index;                  ///< Greatest valid starting index
-    uint32_t bufferlen;                         ///< Number of indices in buffer (CENTRAL_cbXMTBUFFLEN)
-    uint32_t buffer[CENTRAL_cbXMTBUFFLEN];      ///< Ring buffer for packet data
+    uint32_t transmitted;                                   ///< How many packets have been sent
+    uint32_t headindex;                                     ///< First empty position (write index)
+    uint32_t tailindex;                                     ///< One past last emptied position (read index)
+    uint32_t last_valid_index;                              ///< Greatest valid starting index
+    uint32_t bufferlen;                                     ///< Number of indices in buffer
+    uint32_t buffer[CENTRAL_cbXMT_GLOBAL_BUFFLEN];          ///< Ring buffer for packet data
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -142,10 +157,82 @@ struct CentralConfigBuffer {
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Local transmit buffer (IPC-only packets)
+///
+/// Smaller than Global buffer, used for cbSendLoopbackPacket() - packets meant only for
+/// local processes, not sent to device.
+///
+struct CentralTransmitBufferLocal {
+    uint32_t transmitted;                                   ///< How many packets have been sent
+    uint32_t headindex;                                     ///< First empty position (write index)
+    uint32_t tailindex;                                     ///< One past last emptied position (read index)
+    uint32_t last_valid_index;                              ///< Greatest valid starting index
+    uint32_t bufferlen;                                     ///< Number of indices in buffer
+    uint32_t buffer[CENTRAL_cbXMT_LOCAL_BUFFLEN];           ///< Ring buffer for packet data
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Spike cache buffer
+///
+/// Caches recent spike packets for each channel to allow quick access without
+/// scanning the entire receive buffer.
+///
+struct CentralSpikeCache {
+    uint32_t chid;                                          ///< Channel ID
+    uint32_t pktcnt;                                        ///< Number of packets that can be saved
+    uint32_t pktsize;                                       ///< Size of individual packet
+    uint32_t head;                                          ///< Where to place next packet (circular)
+    uint32_t valid;                                         ///< How many packets since last config
+    cbPKT_SPK spkpkt[CENTRAL_cbPKT_SPKCACHEPKTCNT];        ///< Circular buffer of cached spikes
+};
+
+struct CentralSpikeBuffer {
+    uint32_t flags;                                         ///< Status flags
+    uint32_t chidmax;                                       ///< Maximum channel ID
+    uint32_t linesize;                                      ///< Size of each cache line
+    uint32_t spkcount;                                      ///< Total spike count
+    CentralSpikeCache cache[CENTRAL_cbPKT_SPKCACHELINECNT]; ///< Per-channel spike caches
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief PC Status buffer (flattened from cbPcStatus class)
+///
+/// IMPROVEMENT: Flattened to C struct for ABI stability and cross-compiler compatibility.
+/// Central uses a C++ class which is fragile across different build environments.
+///
+enum class NSPStatus : uint32_t {
+    NSP_INIT = 0,
+    NSP_NOIPADDR = 1,
+    NSP_NOREPLY = 2,
+    NSP_FOUND = 3,
+    NSP_INVALID = 4
+};
+
+struct CentralPCStatus {
+    // Public data
+    cbPKT_UNIT_SELECTION isSelection[CENTRAL_cbMAXPROCS];   ///< Unit selection per instrument
+
+    // Status fields (was private in cbPcStatus)
+    int32_t  m_iBlockRecording;                             ///< Recording block counter
+    uint32_t m_nPCStatusFlags;                              ///< PC status flags
+    uint32_t m_nNumFEChans;                                 ///< Number of FE channels
+    uint32_t m_nNumAnainChans;                              ///< Number of analog input channels
+    uint32_t m_nNumAnalogChans;                             ///< Number of analog channels
+    uint32_t m_nNumAoutChans;                               ///< Number of analog output channels
+    uint32_t m_nNumAudioChans;                              ///< Number of audio channels
+    uint32_t m_nNumAnalogoutChans;                          ///< Number of analog output channels
+    uint32_t m_nNumDiginChans;                              ///< Number of digital input channels
+    uint32_t m_nNumSerialChans;                             ///< Number of serial channels
+    uint32_t m_nNumDigoutChans;                             ///< Number of digital output channels
+    uint32_t m_nNumTotalChans;                              ///< Total channel count
+    NSPStatus m_nNspStatus[CENTRAL_cbMAXPROCS];             ///< NSP status per instrument
+    uint32_t m_nNumNTrodesPerInstrument[CENTRAL_cbMAXPROCS];///< NTrode count per instrument
+    uint32_t m_nGeminiSystem;                               ///< Gemini system flag
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Receive buffer for incoming packets (simplified for Phase 2)
 ///
-constexpr uint32_t CENTRAL_cbRECBUFFLEN = CENTRAL_cbNUM_FE_CHANS * 65536 * 4 - 1;
-
 struct CentralReceiveBuffer {
     uint32_t received;                          ///< Number of packets received
     PROCTIME lasttime;                          ///< Last timestamp

@@ -440,8 +440,8 @@ struct ShmemSession::Impl {
             xmt_buffer->transmitted = 0;
             xmt_buffer->headindex = 0;
             xmt_buffer->tailindex = 0;
-            xmt_buffer->last_valid_index = CENTRAL_cbXMTBUFFLEN - 1;
-            xmt_buffer->bufferlen = CENTRAL_cbXMTBUFFLEN;
+            xmt_buffer->last_valid_index = CENTRAL_cbXMT_GLOBAL_BUFFLEN - 1;
+            xmt_buffer->bufferlen = CENTRAL_cbXMT_GLOBAL_BUFFLEN;
         }
 
         is_open = true;
