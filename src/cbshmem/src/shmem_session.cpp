@@ -133,6 +133,50 @@ struct ShmemSession::Impl {
         is_open = false;
     }
 
+    /// @brief Write a packet to the receive buffer ring
+    /// @param pkt Packet to write
+    /// @return Result indicating success or failure
+    Result<void> writeToReceiveBuffer(const cbPKT_GENERIC& pkt) {
+        if (!rec_buffer) {
+            return Result<void>::error("Receive buffer not initialized");
+        }
+
+        // Calculate packet size in uint32_t words
+        // packet header is 2 uint32_t words (time, chid/type/dlen)
+        // dlen is in uint32_t words
+        uint32_t pkt_size_words = 2 + pkt.cbpkt_header.dlen;
+
+        // Check if packet fits in buffer
+        if (pkt_size_words > CENTRAL_cbRECBUFFLEN) {
+            return Result<void>::error("Packet too large for receive buffer");
+        }
+
+        // Get current head index
+        uint32_t head = rec_buffer->headindex;
+
+        // Check if we need to wrap
+        if (head + pkt_size_words > CENTRAL_cbRECBUFFLEN) {
+            // Wrap to beginning
+            head = 0;
+            rec_buffer->headwrap++;
+        }
+
+        // Copy packet data to buffer (as uint32_t words)
+        const uint32_t* pkt_data = reinterpret_cast<const uint32_t*>(&pkt);
+        for (uint32_t i = 0; i < pkt_size_words; ++i) {
+            rec_buffer->buffer[head + i] = pkt_data[i];
+        }
+
+        // Update head index
+        rec_buffer->headindex = head + pkt_size_words;
+
+        // Update packet count and timestamp
+        rec_buffer->received++;
+        rec_buffer->lasttime = pkt.cbpkt_header.time;
+
+        return Result<void>::ok();
+    }
+
     Result<void> open() {
         if (is_open) {
             return Result<void>::error("Session already open");
@@ -631,6 +675,14 @@ Result<void> ShmemSession::storePacket(const cbPKT_GENERIC& pkt) {
         return Result<void>::error("Session not open");
     }
 
+    // CRITICAL: Write ALL packets to receive buffer ring (Central's architecture)
+    // This is the streaming data that clients read from
+    auto rec_result = m_impl->writeToReceiveBuffer(pkt);
+    if (rec_result.isError()) {
+        // Log error but don't fail - config updates may still work
+        // (In production, might want to track this as a stat)
+    }
+
     // Extract instrument ID from packet header
     cbproto::InstrumentId id = cbproto::InstrumentId::fromPacketField(pkt.cbpkt_header.instrument);
 
@@ -641,7 +693,8 @@ Result<void> ShmemSession::storePacket(const cbPKT_GENERIC& pkt) {
     // THE KEY FIX: ALWAYS use packet.instrument as index (mode-independent!)
     uint8_t idx = id.toIndex();
 
-    // Route based on packet type
+    // ADDITIONALLY update config buffer for configuration packets
+    // (This maintains the config "database" for query operations)
     uint16_t pkt_type = pkt.cbpkt_header.type;
 
     if (pkt_type == cbPKTTYPE_PROCREP) {
@@ -665,7 +718,7 @@ Result<void> ShmemSession::storePacket(const cbPKT_GENERIC& pkt) {
             std::memcpy(&m_impl->cfg_buffer->filtinfo[idx][filt_pkt->filt], &pkt, sizeof(cbPKT_FILTINFO));
         }
     }
-    // TODO: Add more packet types as needed
+    // TODO: Add more config packet types as needed (CHANINFO, GROUPINFO, etc.)
 
     return Result<void>::ok();
 }

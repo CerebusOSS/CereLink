@@ -156,9 +156,10 @@ int main(int argc, char* argv[]) {
 #ifndef _WIN32
         // Forcefully unlink all possible shared memory segments to ensure STANDALONE mode
         // POSIX requires shared memory names to start with "/"
-        // Use Central-compatible names: "cbCFGbuffer", "XmtGlobal", etc.
+        // Use Central-compatible names: "cbCFGbuffer", "cbRECbuffer", "XmtGlobal", etc.
         for (const auto& device : devices) {
             std::string cfg_name;
+            std::string rec_name;
             std::string xmt_name;
 
             // Map device type to Central-compatible shared memory names
@@ -168,25 +169,31 @@ int main(int argc, char* argv[]) {
                 case cbsdk::DeviceType::NPLAY:
                     // Instance 0 uses base names without suffix
                     cfg_name = "cbCFGbuffer";
+                    rec_name = "cbRECbuffer";
                     xmt_name = "XmtGlobal";
                     break;
                 case cbsdk::DeviceType::GEMINI_HUB1:
                     cfg_name = "cbCFGbuffer1";
+                    rec_name = "cbRECbuffer1";
                     xmt_name = "XmtGlobal1";
                     break;
                 case cbsdk::DeviceType::GEMINI_HUB2:
                     cfg_name = "cbCFGbuffer2";
+                    rec_name = "cbRECbuffer2";
                     xmt_name = "XmtGlobal2";
                     break;
                 case cbsdk::DeviceType::GEMINI_HUB3:
                     cfg_name = "cbCFGbuffer3";
+                    rec_name = "cbRECbuffer3";
                     xmt_name = "XmtGlobal3";
                     break;
             }
 
             std::string posix_cfg_name = "/" + cfg_name;
+            std::string posix_rec_name = "/" + rec_name;
             std::string posix_xmt_name = "/" + xmt_name;
             shm_unlink(posix_cfg_name.c_str());  // Ignore errors
+            shm_unlink(posix_rec_name.c_str());  // Ignore errors
             shm_unlink(posix_xmt_name.c_str());  // Ignore errors
         }
 #endif

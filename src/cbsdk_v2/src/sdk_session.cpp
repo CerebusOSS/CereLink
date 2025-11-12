@@ -131,23 +131,35 @@ static std::string getTransmitBufferName(DeviceType type) {
     }
 }
 
+// Helper function to get Central-compatible receive buffer name
+// Returns receive buffer name (e.g., "cbRECbuffer" or "cbRECbuffer1")
+static std::string getReceiveBufferName(DeviceType type) {
+    int instance = getInstanceNumber(type);
+    if (instance == 0) {
+        return "cbRECbuffer";
+    } else {
+        return "cbRECbuffer" + std::to_string(instance);
+    }
+}
+
 Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     SdkSession session;
     session.m_impl->config = config;
 
     // Automatically determine shared memory names from device type (Central-compatible)
     std::string cfg_name = getConfigBufferName(config.device_type);
+    std::string rec_name = getReceiveBufferName(config.device_type);
     std::string xmt_name = getTransmitBufferName(config.device_type);
 
     // Auto-detect mode: Try CLIENT first (attach to existing), fall back to STANDALONE (create new)
     bool is_standalone = false;
 
     // Try to attach to existing shared memory (CLIENT mode)
-    auto shmem_result = cbshmem::ShmemSession::create(cfg_name, xmt_name, cbshmem::Mode::CLIENT);
+    auto shmem_result = cbshmem::ShmemSession::create(cfg_name, rec_name, xmt_name, cbshmem::Mode::CLIENT);
 
     if (shmem_result.isError()) {
         // No existing shared memory, create new (STANDALONE mode)
-        shmem_result = cbshmem::ShmemSession::create(cfg_name, xmt_name, cbshmem::Mode::STANDALONE);
+        shmem_result = cbshmem::ShmemSession::create(cfg_name, rec_name, xmt_name, cbshmem::Mode::STANDALONE);
         if (shmem_result.isError()) {
             return Result<SdkSession>::error("Failed to create shared memory: " + shmem_result.error());
         }
