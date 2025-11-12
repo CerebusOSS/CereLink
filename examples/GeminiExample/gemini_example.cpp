@@ -180,8 +180,10 @@ int main(int argc, char* argv[]) {
                     break;
             }
 
-            std::string posix_name = "/" + shmem_name;
-            shm_unlink(posix_name.c_str());  // Ignore errors
+            std::string posix_cfg_name = "/" + shmem_name;
+            std::string posix_xmt_name = posix_cfg_name + "_xmt";
+            shm_unlink(posix_cfg_name.c_str());  // Ignore errors
+            shm_unlink(posix_xmt_name.c_str());  // Ignore errors
         }
 #endif
 

@@ -83,10 +83,13 @@ enum class InstrumentStatus : uint32_t {
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Transmit buffer for outgoing packets (simplified for Phase 2)
+/// @brief Transmit buffer for outgoing packets
 ///
 /// Ring buffer for packets waiting to be transmitted to device.
 /// Buffer stores raw packet data as uint32_t words (Central's format).
+///
+/// This is stored in a separate shared memory segment (not embedded in config buffer)
+/// to match Central's architecture.
 ///
 /// NOTE: We use a fixed-size buffer for simplicity. Central uses a variable-length buffer
 /// allocated at runtime, but for shared memory cross-platform compatibility, fixed size is easier.
@@ -127,11 +130,6 @@ struct CentralConfigBuffer {
 
     // Channel configuration (shared across all instruments)
     cbPKT_CHANINFO chaninfo[CENTRAL_cbMAXCHANS];                        ///< Channel configuration
-
-    // Transmit buffer (for sending packets to device)
-    // NOTE: Embedded here for Phase 2 simplicity. Will move to separate shared memory
-    // segment in Phase 3 for full Central compatibility.
-    CentralTransmitBuffer xmt_buffer;                                   ///< Transmit queue
 
     // TODO: Add remaining fields from upstream cbCFGBUFF as needed:
     // - cbOPTIONTABLE optiontable

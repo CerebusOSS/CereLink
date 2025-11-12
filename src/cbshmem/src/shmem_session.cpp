@@ -32,11 +32,13 @@ struct ShmemSession::Impl {
     std::string name;
     bool is_open;
 
-    // Platform-specific handles
+    // Platform-specific handles (separate segments for config and transmit)
 #ifdef _WIN32
-    HANDLE file_mapping;
+    HANDLE cfg_file_mapping;
+    HANDLE xmt_file_mapping;
 #else
-    int shm_fd;
+    int cfg_shm_fd;
+    int xmt_shm_fd;
 #endif
 
     // Pointers to shared memory buffers
@@ -48,9 +50,11 @@ struct ShmemSession::Impl {
         : mode(Mode::STANDALONE)
         , is_open(false)
 #ifdef _WIN32
-        , file_mapping(nullptr)
+        , cfg_file_mapping(nullptr)
+        , xmt_file_mapping(nullptr)
 #else
-        , shm_fd(-1)
+        , cfg_shm_fd(-1)
+        , xmt_shm_fd(-1)
 #endif
         , cfg_buffer(nullptr)
         , rec_buffer(nullptr)
@@ -67,21 +71,39 @@ struct ShmemSession::Impl {
         // Unmap shared memory
 #ifdef _WIN32
         if (cfg_buffer) UnmapViewOfFile(cfg_buffer);
-        if (file_mapping) CloseHandle(file_mapping);
-        file_mapping = nullptr;
+        if (xmt_buffer) UnmapViewOfFile(xmt_buffer);
+        if (cfg_file_mapping) CloseHandle(cfg_file_mapping);
+        if (xmt_file_mapping) CloseHandle(xmt_file_mapping);
+        cfg_file_mapping = nullptr;
+        xmt_file_mapping = nullptr;
 #else
+        // POSIX requires shared memory names to start with "/"
+        std::string posix_cfg_name = (name[0] == '/') ? name : ("/" + name);
+        std::string posix_xmt_name = posix_cfg_name + "_xmt";
+
         if (cfg_buffer) {
             munmap(cfg_buffer, sizeof(CentralConfigBuffer));
         }
-        if (shm_fd >= 0) {
-            ::close(shm_fd);
+        if (xmt_buffer) {
+            munmap(xmt_buffer, sizeof(CentralTransmitBuffer));
+        }
+
+        if (cfg_shm_fd >= 0) {
+            ::close(cfg_shm_fd);
             if (mode == Mode::STANDALONE) {
-                // POSIX requires shared memory names to start with "/"
-                std::string posix_name = (name[0] == '/') ? name : ("/" + name);
-                shm_unlink(posix_name.c_str());
+                shm_unlink(posix_cfg_name.c_str());
             }
         }
-        shm_fd = -1;
+
+        if (xmt_shm_fd >= 0) {
+            ::close(xmt_shm_fd);
+            if (mode == Mode::STANDALONE) {
+                shm_unlink(posix_xmt_name.c_str());
+            }
+        }
+
+        cfg_shm_fd = -1;
+        xmt_shm_fd = -1;
 #endif
 
         cfg_buffer = nullptr;
@@ -96,10 +118,12 @@ struct ShmemSession::Impl {
         }
 
 #ifdef _WIN32
-        // Windows implementation
+        // Windows implementation - create two separate shared memory segments
         DWORD access = (mode == Mode::STANDALONE) ? PAGE_READWRITE : PAGE_READONLY;
+        DWORD map_access = (mode == Mode::STANDALONE) ? FILE_MAP_ALL_ACCESS : FILE_MAP_READ;
 
-        file_mapping = CreateFileMappingA(
+        // Create config buffer segment
+        cfg_file_mapping = CreateFileMappingA(
             INVALID_HANDLE_VALUE,
             nullptr,
             access,
@@ -108,64 +132,137 @@ struct ShmemSession::Impl {
             name.c_str()
         );
 
-        if (!file_mapping) {
-            return Result<void>::error("Failed to create file mapping");
+        if (!cfg_file_mapping) {
+            return Result<void>::error("Failed to create config file mapping");
         }
 
-        DWORD map_access = (mode == Mode::STANDALONE) ? FILE_MAP_ALL_ACCESS : FILE_MAP_READ;
         cfg_buffer = static_cast<CentralConfigBuffer*>(
-            MapViewOfFile(file_mapping, map_access, 0, 0, sizeof(CentralConfigBuffer))
+            MapViewOfFile(cfg_file_mapping, map_access, 0, 0, sizeof(CentralConfigBuffer))
         );
 
         if (!cfg_buffer) {
-            CloseHandle(file_mapping);
-            file_mapping = nullptr;
-            return Result<void>::error("Failed to map view of file");
+            CloseHandle(cfg_file_mapping);
+            cfg_file_mapping = nullptr;
+            return Result<void>::error("Failed to map config view of file");
+        }
+
+        // Create transmit buffer segment (separate from config)
+        std::string xmt_name = name + "_xmt";
+        xmt_file_mapping = CreateFileMappingA(
+            INVALID_HANDLE_VALUE,
+            nullptr,
+            access,
+            0,
+            sizeof(CentralTransmitBuffer),
+            xmt_name.c_str()
+        );
+
+        if (!xmt_file_mapping) {
+            UnmapViewOfFile(cfg_buffer);
+            CloseHandle(cfg_file_mapping);
+            cfg_buffer = nullptr;
+            cfg_file_mapping = nullptr;
+            return Result<void>::error("Failed to create transmit file mapping");
+        }
+
+        xmt_buffer = static_cast<CentralTransmitBuffer*>(
+            MapViewOfFile(xmt_file_mapping, map_access, 0, 0, sizeof(CentralTransmitBuffer))
+        );
+
+        if (!xmt_buffer) {
+            UnmapViewOfFile(cfg_buffer);
+            CloseHandle(cfg_file_mapping);
+            CloseHandle(xmt_file_mapping);
+            cfg_buffer = nullptr;
+            cfg_file_mapping = nullptr;
+            xmt_file_mapping = nullptr;
+            return Result<void>::error("Failed to map transmit view of file");
         }
 
 #else
-        // POSIX (macOS/Linux) implementation
+        // POSIX (macOS/Linux) implementation - create two separate shared memory segments
         // POSIX requires shared memory names to start with "/"
-        std::string posix_name = (name[0] == '/') ? name : ("/" + name);
+        std::string posix_cfg_name = (name[0] == '/') ? name : ("/" + name);
+        std::string posix_xmt_name = posix_cfg_name + "_xmt";
 
         int flags = (mode == Mode::STANDALONE) ? (O_CREAT | O_RDWR) : O_RDONLY;
         mode_t perms = (mode == Mode::STANDALONE) ? 0644 : 0;
+        int prot = (mode == Mode::STANDALONE) ? (PROT_READ | PROT_WRITE) : PROT_READ;
 
         // In STANDALONE mode, unlink any existing shared memory first
         if (mode == Mode::STANDALONE) {
-            shm_unlink(posix_name.c_str());  // Ignore errors if it doesn't exist
+            shm_unlink(posix_cfg_name.c_str());  // Ignore errors if it doesn't exist
+            shm_unlink(posix_xmt_name.c_str());
         }
 
-        shm_fd = shm_open(posix_name.c_str(), flags, perms);
-        if (shm_fd < 0) {
-            return Result<void>::error("Failed to open shared memory: " + std::string(strerror(errno)));
+        // Create/open config buffer segment
+        cfg_shm_fd = shm_open(posix_cfg_name.c_str(), flags, perms);
+        if (cfg_shm_fd < 0) {
+            return Result<void>::error("Failed to open config shared memory: " + std::string(strerror(errno)));
         }
 
         if (mode == Mode::STANDALONE) {
-            // Set size for standalone mode
-            if (ftruncate(shm_fd, sizeof(CentralConfigBuffer)) < 0) {
-                std::string err_msg = "Failed to set shared memory size: " + std::string(strerror(errno));
-                ::close(shm_fd);
-                shm_fd = -1;
+            if (ftruncate(cfg_shm_fd, sizeof(CentralConfigBuffer)) < 0) {
+                std::string err_msg = "Failed to set config shared memory size: " + std::string(strerror(errno));
+                ::close(cfg_shm_fd);
+                cfg_shm_fd = -1;
                 return Result<void>::error(err_msg);
             }
         }
 
-        int prot = (mode == Mode::STANDALONE) ? (PROT_READ | PROT_WRITE) : PROT_READ;
         cfg_buffer = static_cast<CentralConfigBuffer*>(
-            mmap(nullptr, sizeof(CentralConfigBuffer), prot, MAP_SHARED, shm_fd, 0)
+            mmap(nullptr, sizeof(CentralConfigBuffer), prot, MAP_SHARED, cfg_shm_fd, 0)
         );
 
         if (cfg_buffer == MAP_FAILED) {
-            ::close(shm_fd);
-            shm_fd = -1;
+            ::close(cfg_shm_fd);
+            cfg_shm_fd = -1;
             cfg_buffer = nullptr;
-            return Result<void>::error("Failed to map shared memory");
+            return Result<void>::error("Failed to map config shared memory");
+        }
+
+        // Create/open transmit buffer segment
+        xmt_shm_fd = shm_open(posix_xmt_name.c_str(), flags, perms);
+        if (xmt_shm_fd < 0) {
+            munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+            ::close(cfg_shm_fd);
+            cfg_buffer = nullptr;
+            cfg_shm_fd = -1;
+            return Result<void>::error("Failed to open transmit shared memory: " + std::string(strerror(errno)));
+        }
+
+        if (mode == Mode::STANDALONE) {
+            if (ftruncate(xmt_shm_fd, sizeof(CentralTransmitBuffer)) < 0) {
+                std::string err_msg = "Failed to set transmit shared memory size: " + std::string(strerror(errno));
+                munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+                ::close(cfg_shm_fd);
+                ::close(xmt_shm_fd);
+                cfg_buffer = nullptr;
+                cfg_shm_fd = -1;
+                xmt_shm_fd = -1;
+                return Result<void>::error(err_msg);
+            }
+        }
+
+        xmt_buffer = static_cast<CentralTransmitBuffer*>(
+            mmap(nullptr, sizeof(CentralTransmitBuffer), prot, MAP_SHARED, xmt_shm_fd, 0)
+        );
+
+        if (xmt_buffer == MAP_FAILED) {
+            munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+            ::close(cfg_shm_fd);
+            ::close(xmt_shm_fd);
+            cfg_buffer = nullptr;
+            xmt_buffer = nullptr;
+            cfg_shm_fd = -1;
+            xmt_shm_fd = -1;
+            return Result<void>::error("Failed to map transmit shared memory");
         }
 #endif
 
-        // Initialize buffer in standalone mode
+        // Initialize buffers in standalone mode
         if (mode == Mode::STANDALONE) {
+            // Initialize config buffer
             std::memset(cfg_buffer, 0, sizeof(CentralConfigBuffer));
             cfg_buffer->version = cbVERSION_MAJOR * 100 + cbVERSION_MINOR;
 
@@ -174,16 +271,14 @@ struct ShmemSession::Impl {
                 cfg_buffer->instrument_status[i] = static_cast<uint32_t>(InstrumentStatus::INACTIVE);
             }
 
-            // Initialize transmit buffer
-            cfg_buffer->xmt_buffer.transmitted = 0;
-            cfg_buffer->xmt_buffer.headindex = 0;
-            cfg_buffer->xmt_buffer.tailindex = 0;
-            cfg_buffer->xmt_buffer.last_valid_index = CENTRAL_cbXMTBUFFLEN - 1;
-            cfg_buffer->xmt_buffer.bufferlen = CENTRAL_cbXMTBUFFLEN;
+            // Initialize transmit buffer (in separate shared memory segment)
+            std::memset(xmt_buffer, 0, sizeof(CentralTransmitBuffer));
+            xmt_buffer->transmitted = 0;
+            xmt_buffer->headindex = 0;
+            xmt_buffer->tailindex = 0;
+            xmt_buffer->last_valid_index = CENTRAL_cbXMTBUFFLEN - 1;
+            xmt_buffer->bufferlen = CENTRAL_cbXMTBUFFLEN;
         }
-
-        // Point xmt_buffer to the embedded transmit buffer
-        xmt_buffer = &cfg_buffer->xmt_buffer;
 
         is_open = true;
         return Result<void>::ok();
