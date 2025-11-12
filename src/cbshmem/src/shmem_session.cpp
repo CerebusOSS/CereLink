@@ -173,7 +173,17 @@ struct ShmemSession::Impl {
             for (int i = 0; i < CENTRAL_cbMAXPROCS; ++i) {
                 cfg_buffer->instrument_status[i] = static_cast<uint32_t>(InstrumentStatus::INACTIVE);
             }
+
+            // Initialize transmit buffer
+            cfg_buffer->xmt_buffer.transmitted = 0;
+            cfg_buffer->xmt_buffer.headindex = 0;
+            cfg_buffer->xmt_buffer.tailindex = 0;
+            cfg_buffer->xmt_buffer.last_valid_index = CENTRAL_cbXMTBUFFLEN - 1;
+            cfg_buffer->xmt_buffer.bufferlen = CENTRAL_cbXMTBUFFLEN;
         }
+
+        // Point xmt_buffer to the embedded transmit buffer
+        xmt_buffer = &cfg_buffer->xmt_buffer;
 
         is_open = true;
         return Result<void>::ok();
@@ -456,6 +466,117 @@ Result<void> ShmemSession::storePackets(const cbPKT_GENERIC* pkts, size_t count)
     }
 
     return Result<void>::ok();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Transmit Queue Operations
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
+    if (!m_impl || !m_impl->is_open) {
+        return Result<void>::error("Session is not open");
+    }
+
+    if (!m_impl->xmt_buffer) {
+        return Result<void>::error("Transmit buffer not initialized");
+    }
+
+    CentralTransmitBuffer* xmt = m_impl->xmt_buffer;
+
+    // Calculate packet size in uint32_t words
+    // packet header is 2 uint32_t words (time, chid/type/dlen)
+    // dlen is in uint32_t words
+    uint32_t pkt_size_words = 2 + pkt.cbpkt_header.dlen;
+
+    // Check if there's enough space in the ring buffer
+    uint32_t head = xmt->headindex;
+    uint32_t tail = xmt->tailindex;
+    uint32_t buflen = xmt->bufferlen;
+
+    // Calculate available space
+    uint32_t used;
+    if (head >= tail) {
+        used = head - tail;
+    } else {
+        used = buflen - tail + head;
+    }
+
+    uint32_t available = buflen - used - 1;  // -1 to distinguish full from empty
+
+    if (available < pkt_size_words) {
+        return Result<void>::error("Transmit buffer full");
+    }
+
+    // Copy packet data to buffer (as uint32_t words)
+    const uint32_t* pkt_data = reinterpret_cast<const uint32_t*>(&pkt);
+
+    for (uint32_t i = 0; i < pkt_size_words; ++i) {
+        xmt->buffer[head] = pkt_data[i];
+        head = (head + 1) % buflen;
+    }
+
+    // Update head index
+    xmt->headindex = head;
+
+    return Result<void>::ok();
+}
+
+Result<bool> ShmemSession::dequeuePacket(cbPKT_GENERIC& pkt) {
+    if (!m_impl || !m_impl->is_open) {
+        return Result<bool>::error("Session is not open");
+    }
+
+    if (!m_impl->xmt_buffer) {
+        return Result<bool>::error("Transmit buffer not initialized");
+    }
+
+    CentralTransmitBuffer* xmt = m_impl->xmt_buffer;
+
+    uint32_t head = xmt->headindex;
+    uint32_t tail = xmt->tailindex;
+
+    // Check if queue is empty
+    if (head == tail) {
+        return Result<bool>::ok(false);  // Queue is empty
+    }
+
+    uint32_t buflen = xmt->bufferlen;
+
+    // Read packet header (2 uint32_t words)
+    uint32_t* pkt_data = reinterpret_cast<uint32_t*>(&pkt);
+
+    if (tail + 2 <= buflen) {
+        // Header doesn't wrap
+        pkt_data[0] = xmt->buffer[tail];
+        pkt_data[1] = xmt->buffer[tail + 1];
+    } else {
+        // Header wraps around
+        pkt_data[0] = xmt->buffer[tail];
+        pkt_data[1] = xmt->buffer[(tail + 1) % buflen];
+    }
+
+    // Now we know the packet size from dlen
+    uint32_t pkt_size_words = 2 + pkt.cbpkt_header.dlen;
+
+    // Read the rest of the packet
+    for (uint32_t i = 0; i < pkt_size_words; ++i) {
+        pkt_data[i] = xmt->buffer[tail];
+        tail = (tail + 1) % buflen;
+    }
+
+    // Update tail index
+    xmt->tailindex = tail;
+    xmt->transmitted++;
+
+    return Result<bool>::ok(true);  // Successfully dequeued
+}
+
+bool ShmemSession::hasTransmitPackets() const {
+    if (!m_impl || !m_impl->is_open || !m_impl->xmt_buffer) {
+        return false;
+    }
+
+    return m_impl->xmt_buffer->headindex != m_impl->xmt_buffer->tailindex;
 }
 
 } // namespace cbshmem

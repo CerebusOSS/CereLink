@@ -225,6 +225,14 @@ int main(int argc, char* argv[]) {
                     if (pkts[i].cbpkt_header.type == 0x0006) {
                         dev->timestamps.addTimestamp(pkts[i].cbpkt_header.time);
                     }
+
+                    // Detect SYSREP packets (type 0x10-0x1F)
+                    if ((pkts[i].cbpkt_header.type & 0xF0) == 0x10) {
+                        // Cast to cbPKT_SYSINFO to read runlevel
+                        const cbPKT_SYSINFO* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkts[i]);
+                        std::cout << "[" << dev->name << "] SYSREP packet received - runlevel: "
+                                  << sysinfo->runlevel << "\n";
+                    }
                 }
 
                 // Print first few packets for demonstration (including instrument ID)
@@ -289,10 +297,21 @@ int main(int argc, char* argv[]) {
         for (const auto* dev : active_devices) {
             std::cout << "  - " << dev->name << "\n";
         }
-        std::cout << "Press Ctrl+C to stop...\n\n";
 
         // Update connected_devices to only include active ones
         connected_devices = active_devices;
+
+        // === Send runlevel command to transition devices to RUNNING state ===
+        std::cout << "\nSending cbRUNLEVEL_RUNNING command to active devices...\n";
+        for (auto* dev : connected_devices) {
+            auto result = dev->session->setSystemRunLevel(cbRUNLEVEL_RUNNING);
+            if (result.isOk()) {
+                std::cout << "  ✓ " << dev->name << " - runlevel command sent\n";
+            } else {
+                std::cout << "  ✗ " << dev->name << " - failed: " << result.error() << "\n";
+            }
+        }
+        std::cout << "\nPress Ctrl+C to stop...\n\n";
 
         // === Main Loop - Print Statistics Every 5 Seconds ===
         auto last_print = std::chrono::steady_clock::now();

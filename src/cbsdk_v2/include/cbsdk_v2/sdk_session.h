@@ -345,6 +345,23 @@ public:
     /// @return Reference to SDK configuration
     const SdkConfig& getConfig() const;
 
+    ///--------------------------------------------------------------------------------------------
+    /// Packet Transmission
+    ///--------------------------------------------------------------------------------------------
+
+    /// Send a single packet to the device
+    /// Only available in STANDALONE mode (when device_session exists)
+    /// @param pkt Packet to send
+    /// @return Result indicating success or error
+    Result<void> sendPacket(const cbPKT_GENERIC& pkt);
+
+    /// Send a runlevel command packet to the device
+    /// @param runlevel Desired runlevel (cbRUNLEVEL_*)
+    /// @param resetque Channel for reset to queue on (default: 0)
+    /// @param runflags Lock recording after reset (default: 0)
+    /// @return Result indicating success or error
+    Result<void> setSystemRunLevel(uint32_t runlevel, uint32_t resetque = 0, uint32_t runflags = 0);
+
 private:
     /// Private constructor (use create() factory method)
     SdkSession();

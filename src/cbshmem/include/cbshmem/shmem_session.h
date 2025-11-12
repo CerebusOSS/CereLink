@@ -248,6 +248,35 @@ public:
 
     /// @}
 
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name Transmit Queue (for sending packets to device)
+    /// @{
+
+    /// @brief Enqueue a packet to be sent to the device
+    ///
+    /// Writes packet to shared memory transmit buffer. In STANDALONE mode,
+    /// the device thread will dequeue and send it. In CLIENT mode, the
+    /// STANDALONE process will dequeue and send it.
+    ///
+    /// @param pkt Packet to enqueue for transmission
+    /// @return Result indicating success or failure (buffer full returns error)
+    Result<void> enqueuePacket(const cbPKT_GENERIC& pkt);
+
+    /// @brief Dequeue a packet from the transmit buffer
+    ///
+    /// Used by STANDALONE mode to get packets to send to device.
+    /// Returns error if queue is empty.
+    ///
+    /// @param pkt Output parameter to receive dequeued packet
+    /// @return Result<bool> - true if packet was dequeued, false if queue empty
+    Result<bool> dequeuePacket(cbPKT_GENERIC& pkt);
+
+    /// @brief Check if transmit queue has packets waiting
+    /// @return true if queue has packets, false if empty
+    bool hasTransmitPackets() const;
+
+    /// @}
+
 private:
     /// @brief Private constructor (use create() factory method)
     ShmemSession();

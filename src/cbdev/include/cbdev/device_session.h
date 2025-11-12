@@ -158,6 +158,12 @@ struct DeviceStats {
 /// @param count Number of packets in array
 using PacketCallback = std::function<void(const cbPKT_GENERIC* pkts, size_t count)>;
 
+/// Callback function for transmit operations
+/// Returns true if a packet was dequeued, false if queue is empty
+/// @param pkt Output parameter to receive the packet to transmit
+/// @return true if packet was dequeued, false if no packets available
+using TransmitCallback = std::function<bool(cbPKT_GENERIC& pkt)>;
+
 /// Device communication session
 ///
 /// This class manages UDP socket communication with Cerebus devices. It handles:
@@ -250,6 +256,27 @@ public:
     /// Check if receive thread is running
     /// @return true if receive thread is active
     bool isReceiveThreadRunning() const;
+
+    ///--------------------------------------------------------------------------------------------
+    /// Send Thread (for transmit queue)
+    ///--------------------------------------------------------------------------------------------
+
+    /// Set callback function for transmit operations
+    /// The send thread will periodically call this to get packets to send
+    /// @param callback Function to call to dequeue packets for transmission
+    void setTransmitCallback(TransmitCallback callback);
+
+    /// Start asynchronous send thread
+    /// Thread will periodically call transmit callback to get packets to send
+    /// @return Result indicating success or error
+    Result<void> startSendThread();
+
+    /// Stop asynchronous send thread
+    void stopSendThread();
+
+    /// Check if send thread is running
+    /// @return true if send thread is active
+    bool isSendThreadRunning() const;
 
     ///--------------------------------------------------------------------------------------------
     /// Statistics & Monitoring

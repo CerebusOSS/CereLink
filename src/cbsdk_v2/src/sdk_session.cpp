@@ -197,22 +197,46 @@ Result<void> SdkSession::start() {
         callbackThreadLoop();
     });
 
-    // Set up device packet callback (if in STANDALONE mode)
+    // Set up device callbacks (if in STANDALONE mode)
     if (m_impl->device_session.has_value()) {
+        // Packet receive callback
         m_impl->device_session->setPacketCallback([this](const cbPKT_GENERIC* pkts, size_t count) {
             onPacketsReceivedFromDevice(pkts, count);
         });
 
+        // Transmit callback (for send thread to dequeue packets from shared memory)
+        m_impl->device_session->setTransmitCallback([this](cbPKT_GENERIC& pkt) -> bool {
+            // Dequeue packet from shared memory transmit buffer
+            auto result = m_impl->shmem_session->dequeuePacket(pkt);
+            if (result.isError()) {
+                return false;  // Error - treat as empty
+            }
+            return result.value();  // Returns true if packet was dequeued, false if queue empty
+        });
+
         // Start device receive thread
-        auto result = m_impl->device_session->startReceiveThread();
-        if (result.isError()) {
+        auto recv_result = m_impl->device_session->startReceiveThread();
+        if (recv_result.isError()) {
             // Clean up callback thread
             m_impl->callback_thread_running.store(false);
             m_impl->callback_cv.notify_one();
             if (m_impl->callback_thread && m_impl->callback_thread->joinable()) {
                 m_impl->callback_thread->join();
             }
-            return Result<void>::error("Failed to start device receive thread: " + result.error());
+            return Result<void>::error("Failed to start device receive thread: " + recv_result.error());
+        }
+
+        // Start device send thread
+        auto send_result = m_impl->device_session->startSendThread();
+        if (send_result.isError()) {
+            // Clean up receive thread and callback thread
+            m_impl->device_session->stopReceiveThread();
+            m_impl->callback_thread_running.store(false);
+            m_impl->callback_cv.notify_one();
+            if (m_impl->callback_thread && m_impl->callback_thread->joinable()) {
+                m_impl->callback_thread->join();
+            }
+            return Result<void>::error("Failed to start device send thread: " + send_result.error());
         }
     }
 
@@ -227,9 +251,10 @@ void SdkSession::stop() {
 
     m_impl->is_running.store(false);
 
-    // Stop device receive thread
+    // Stop device threads
     if (m_impl->device_session.has_value()) {
         m_impl->device_session->stopReceiveThread();
+        m_impl->device_session->stopSendThread();
     }
 
     // Stop callback thread
@@ -271,6 +296,48 @@ void SdkSession::resetStats() {
 
 const SdkConfig& SdkSession::getConfig() const {
     return m_impl->config;
+}
+
+Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {
+    // Enqueue packet to shared memory transmit buffer
+    // Works in both STANDALONE and CLIENT modes:
+    // - STANDALONE: send thread will dequeue and transmit
+    // - CLIENT: STANDALONE process's send thread will pick it up
+    auto result = m_impl->shmem_session->enqueuePacket(pkt);
+    if (result.isOk()) {
+        // Wake up send thread if in STANDALONE mode
+        if (m_impl->device_session.has_value()) {
+            // Notify send thread that packets are available
+            // (device_session checks hasTransmitPackets via callback)
+        }
+        return Result<void>::ok();
+    } else {
+        return Result<void>::error(result.error());
+    }
+}
+
+Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags) {
+    // Create runlevel command packet
+    cbPKT_SYSINFO sysinfo;
+    std::memset(&sysinfo, 0, sizeof(sysinfo));
+
+    // Fill header
+    sysinfo.cbpkt_header.time = 1;
+    sysinfo.cbpkt_header.chid = 0x8000;  // cbPKTCHAN_CONFIGURATION
+    sysinfo.cbpkt_header.type = 0x92;    // cbPKTTYPE_SYSSETRUNLEV
+    sysinfo.cbpkt_header.dlen = ((sizeof(cbPKT_SYSINFO)/4) - 2);  // cbPKTDLEN_SYSINFO
+    sysinfo.cbpkt_header.instrument = 0;
+
+    // Fill payload
+    sysinfo.runlevel = runlevel;
+    sysinfo.resetque = resetque;
+    sysinfo.runflags = runflags;
+
+    // Cast to generic packet and send
+    cbPKT_GENERIC pkt;
+    std::memcpy(&pkt, &sysinfo, sizeof(sysinfo));
+
+    return sendPacket(pkt);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

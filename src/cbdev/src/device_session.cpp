@@ -16,6 +16,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <condition_variable>
 #include <iostream>
 #include <iomanip>
 
@@ -194,16 +195,32 @@ struct DeviceSession::Impl {
     PacketCallback packet_callback;
     std::mutex callback_mutex;
 
+    // Send thread
+    std::unique_ptr<std::thread> send_thread;
+    std::atomic<bool> send_thread_running{false};
+    std::atomic<bool> send_thread_waiting{false};
+    TransmitCallback transmit_callback;
+    std::mutex transmit_mutex;
+    std::condition_variable transmit_cv;
+
     // Statistics
     DeviceStats stats;
     std::mutex stats_mutex;
 
     ~Impl() {
-        // Ensure thread is stopped before destroying
+        // Ensure threads are stopped before destroying
         if (recv_thread_running.load()) {
             recv_thread_running.store(false);
             if (recv_thread && recv_thread->joinable()) {
                 recv_thread->join();
+            }
+        }
+
+        if (send_thread_running.load()) {
+            send_thread_running.store(false);
+            transmit_cv.notify_one();
+            if (send_thread && send_thread->joinable()) {
+                send_thread->join();
             }
         }
 
@@ -423,8 +440,9 @@ Result<DeviceSession> DeviceSession::create(const DeviceConfig& config) {
 void DeviceSession::close() {
     if (!m_impl) return;
 
-    // Stop receive thread first
+    // Stop both threads
     stopReceiveThread();
+    stopSendThread();
 
     // Close socket
     if (m_impl->socket != INVALID_SOCKET_VALUE) {
@@ -688,6 +706,95 @@ void DeviceSession::stopReceiveThread() {
 
 bool DeviceSession::isReceiveThreadRunning() const {
     return m_impl && m_impl->recv_thread_running.load();
+}
+
+///--------------------------------------------------------------------------------------------
+/// Send Thread (for transmit queue)
+///--------------------------------------------------------------------------------------------
+
+void DeviceSession::setTransmitCallback(TransmitCallback callback) {
+    std::lock_guard<std::mutex> lock(m_impl->transmit_mutex);
+    m_impl->transmit_callback = std::move(callback);
+}
+
+Result<void> DeviceSession::startSendThread() {
+    if (!isOpen()) {
+        return Result<void>::error("Session is not open");
+    }
+
+    if (m_impl->send_thread_running.load()) {
+        return Result<void>::error("Send thread is already running");
+    }
+
+    m_impl->send_thread_running.store(true);
+    m_impl->send_thread = std::make_unique<std::thread>([this]() {
+        cbPKT_GENERIC pkt;
+
+        while (m_impl->send_thread_running.load()) {
+            bool has_packets = false;
+
+            // Try to dequeue and send all available packets
+            {
+                std::lock_guard<std::mutex> lock(m_impl->transmit_mutex);
+                if (m_impl->transmit_callback) {
+                    while (m_impl->transmit_callback(pkt)) {
+                        has_packets = true;
+
+                        // Send the packet
+                        int bytes_sent = sendto(m_impl->socket,
+                                              (const char*)&pkt,
+                                              sizeof(cbPKT_GENERIC),
+                                              0,
+                                              (SOCKADDR*)&m_impl->send_addr,
+                                              sizeof(m_impl->send_addr));
+
+                        if (bytes_sent == SOCKET_ERROR_VALUE) {
+                            std::lock_guard<std::mutex> stats_lock(m_impl->stats_mutex);
+                            m_impl->stats.send_errors++;
+                        } else {
+                            std::lock_guard<std::mutex> stats_lock(m_impl->stats_mutex);
+                            m_impl->stats.packets_sent++;
+                            m_impl->stats.bytes_sent += bytes_sent;
+                        }
+                    }
+                }
+            }
+
+            if (has_packets) {
+                // Had packets - mark not waiting and check again quickly
+                m_impl->send_thread_waiting.store(false, std::memory_order_relaxed);
+                std::this_thread::yield();
+            } else {
+                // No packets - wait for notification or timeout
+                m_impl->send_thread_waiting.store(true, std::memory_order_release);
+
+                std::unique_lock<std::mutex> lock(m_impl->transmit_mutex);
+                m_impl->transmit_cv.wait_for(lock, std::chrono::milliseconds(10),
+                    [this] { return !m_impl->send_thread_running.load(); });
+            }
+        }
+    });
+
+    return Result<void>::ok();
+}
+
+void DeviceSession::stopSendThread() {
+    if (!m_impl->send_thread_running.load()) {
+        return;
+    }
+
+    m_impl->send_thread_running.store(false);
+    m_impl->transmit_cv.notify_one();
+
+    if (m_impl->send_thread && m_impl->send_thread->joinable()) {
+        m_impl->send_thread->join();
+    }
+
+    m_impl->send_thread.reset();
+}
+
+bool DeviceSession::isSendThreadRunning() const {
+    return m_impl && m_impl->send_thread_running.load();
 }
 
 ///--------------------------------------------------------------------------------------------

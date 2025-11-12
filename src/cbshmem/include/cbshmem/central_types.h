@@ -83,6 +83,26 @@ enum class InstrumentStatus : uint32_t {
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Transmit buffer for outgoing packets (simplified for Phase 2)
+///
+/// Ring buffer for packets waiting to be transmitted to device.
+/// Buffer stores raw packet data as uint32_t words (Central's format).
+///
+/// NOTE: We use a fixed-size buffer for simplicity. Central uses a variable-length buffer
+/// allocated at runtime, but for shared memory cross-platform compatibility, fixed size is easier.
+///
+constexpr uint32_t CENTRAL_cbXMTBUFFLEN = 8192;  ///< Buffer size in uint32_t words (32KB of packet data)
+
+struct CentralTransmitBuffer {
+    uint32_t transmitted;                       ///< How many packets have been sent
+    uint32_t headindex;                         ///< First empty position (write index)
+    uint32_t tailindex;                         ///< One past last emptied position (read index)
+    uint32_t last_valid_index;                  ///< Greatest valid starting index
+    uint32_t bufferlen;                         ///< Number of indices in buffer (CENTRAL_cbXMTBUFFLEN)
+    uint32_t buffer[CENTRAL_cbXMTBUFFLEN];      ///< Ring buffer for packet data
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Central-compatible configuration buffer
 ///
 /// CRITICAL: This structure MUST match Central's cbCFGBUFF layout exactly!
@@ -108,6 +128,11 @@ struct CentralConfigBuffer {
     // Channel configuration (shared across all instruments)
     cbPKT_CHANINFO chaninfo[CENTRAL_cbMAXCHANS];                        ///< Channel configuration
 
+    // Transmit buffer (for sending packets to device)
+    // NOTE: Embedded here for Phase 2 simplicity. Will move to separate shared memory
+    // segment in Phase 3 for full Central compatibility.
+    CentralTransmitBuffer xmt_buffer;                                   ///< Transmit queue
+
     // TODO: Add remaining fields from upstream cbCFGBUFF as needed:
     // - cbOPTIONTABLE optiontable
     // - cbCOLORTABLE colortable
@@ -129,18 +154,6 @@ struct CentralReceiveBuffer {
     uint32_t headwrap;                          ///< Head wrap counter
     uint32_t headindex;                         ///< Current head index
     uint32_t buffer[CENTRAL_cbRECBUFFLEN];      ///< Packet buffer
-};
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Transmit buffer for outgoing packets (simplified for Phase 2)
-///
-struct CentralTransmitBuffer {
-    uint32_t transmitted;       ///< How many packets have been sent
-    uint32_t headindex;         ///< First empty position
-    uint32_t tailindex;         ///< One past last emptied position
-    uint32_t last_valid_index;  ///< Greatest valid starting index
-    uint32_t bufferlen;         ///< Number of indices in buffer
-    // NOTE: Variable-length buffer follows (allocated separately)
 };
 
 } // namespace cbshmem
