@@ -84,19 +84,43 @@ SdkSession::~SdkSession() {
     }
 }
 
+// Helper function to map DeviceType to shared memory name
+// This ensures compatibility with Central's naming convention
+static std::string getSharedMemoryName(DeviceType type) {
+    switch (type) {
+        case DeviceType::LEGACY_NSP:
+            return "cbsdk_default";
+        case DeviceType::GEMINI_NSP:
+            return "cbsdk_gemini_nsp";
+        case DeviceType::GEMINI_HUB1:
+            return "cbsdk_gemini_hub1";
+        case DeviceType::GEMINI_HUB2:
+            return "cbsdk_gemini_hub2";
+        case DeviceType::GEMINI_HUB3:
+            return "cbsdk_gemini_hub3";
+        case DeviceType::NPLAY:
+            return "cbsdk_nplay";
+        default:
+            return "cbsdk_default";
+    }
+}
+
 Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     SdkSession session;
     session.m_impl->config = config;
+
+    // Automatically determine shared memory name from device type
+    std::string shmem_name = getSharedMemoryName(config.device_type);
 
     // Auto-detect mode: Try CLIENT first (attach to existing), fall back to STANDALONE (create new)
     bool is_standalone = false;
 
     // Try to attach to existing shared memory (CLIENT mode)
-    auto shmem_result = cbshmem::ShmemSession::create(config.shmem_name, cbshmem::Mode::CLIENT);
+    auto shmem_result = cbshmem::ShmemSession::create(shmem_name, cbshmem::Mode::CLIENT);
 
     if (shmem_result.isError()) {
         // No existing shared memory, create new (STANDALONE mode)
-        shmem_result = cbshmem::ShmemSession::create(config.shmem_name, cbshmem::Mode::STANDALONE);
+        shmem_result = cbshmem::ShmemSession::create(shmem_name, cbshmem::Mode::STANDALONE);
         if (shmem_result.isError()) {
             return Result<SdkSession>::error("Failed to create shared memory: " + shmem_result.error());
         }

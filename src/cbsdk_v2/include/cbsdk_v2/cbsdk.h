@@ -84,13 +84,9 @@ typedef enum {
 
 /// SDK configuration (C version of SdkConfig)
 typedef struct {
-    // Device type (automatically maps to correct address/port)
+    // Device type (automatically maps to correct address/port and shared memory name)
     // Used only when creating new shared memory (STANDALONE mode)
     cbsdk_device_type_t device_type;  ///< Device type to connect to
-
-    // Shared memory name
-    // SDK will automatically detect whether to create or attach
-    const char* shmem_name;           ///< Shared memory identifier
 
     // Callback thread configuration
     size_t callback_queue_depth;      ///< Packets to buffer (default: 16384)

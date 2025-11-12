@@ -119,7 +119,6 @@ void printStats(const cbsdk::SdkSession& session, const std::string& name, Times
 struct DeviceInfo {
     std::string name;
     cbsdk::DeviceType type;
-    std::string shmem_name;
     std::string ip_address;  // For ping-based verification
     std::unique_ptr<cbsdk::SdkSession> session;
     std::atomic<uint64_t> packet_count{0};
@@ -142,28 +141,24 @@ int main(int argc, char* argv[]) {
     auto nsp = std::make_unique<DeviceInfo>();
     nsp->name = "Gemini NSP";
     nsp->type = cbsdk::DeviceType::GEMINI_NSP;
-    nsp->shmem_name = "cbsdk_gemini_nsp";
     nsp->ip_address = "192.168.137.128";
     devices.push_back(std::move(nsp));
 
     auto hub1 = std::make_unique<DeviceInfo>();
     hub1->name = "Gemini Hub1";
     hub1->type = cbsdk::DeviceType::GEMINI_HUB1;
-    hub1->shmem_name = "cbsdk_gemini_hub1";
     hub1->ip_address = "192.168.137.200";
     devices.push_back(std::move(hub1));
 
     auto hub2 = std::make_unique<DeviceInfo>();
     hub2->name = "Gemini Hub2";
     hub2->type = cbsdk::DeviceType::GEMINI_HUB2;
-    hub2->shmem_name = "cbsdk_gemini_hub2";
     hub2->ip_address = "192.168.137.201";
     devices.push_back(std::move(hub2));
 
     auto hub3 = std::make_unique<DeviceInfo>();
     hub3->name = "Gemini Hub3";
     hub3->type = cbsdk::DeviceType::GEMINI_HUB3;
-    hub3->shmem_name = "cbsdk_gemini_hub3";
     hub3->ip_address = "192.168.137.202";
     devices.push_back(std::move(hub3));
 
@@ -173,7 +168,30 @@ int main(int argc, char* argv[]) {
         // Forcefully unlink all possible shared memory segments to ensure STANDALONE mode
         // POSIX requires shared memory names to start with "/"
         for (const auto& device : devices) {
-            std::string posix_name = "/" + device->shmem_name;
+            // Map device type to shared memory name (must match Central's naming convention)
+            std::string shmem_name;
+            switch (device->type) {
+                case cbsdk::DeviceType::LEGACY_NSP:
+                    shmem_name = "cbsdk_default";
+                    break;
+                case cbsdk::DeviceType::GEMINI_NSP:
+                    shmem_name = "cbsdk_gemini_nsp";
+                    break;
+                case cbsdk::DeviceType::GEMINI_HUB1:
+                    shmem_name = "cbsdk_gemini_hub1";
+                    break;
+                case cbsdk::DeviceType::GEMINI_HUB2:
+                    shmem_name = "cbsdk_gemini_hub2";
+                    break;
+                case cbsdk::DeviceType::GEMINI_HUB3:
+                    shmem_name = "cbsdk_gemini_hub3";
+                    break;
+                case cbsdk::DeviceType::NPLAY:
+                    shmem_name = "cbsdk_nplay";
+                    break;
+            }
+
+            std::string posix_name = "/" + shmem_name;
             shm_unlink(posix_name.c_str());  // Ignore errors
         }
 #endif
@@ -188,9 +206,6 @@ int main(int argc, char* argv[]) {
 
             cbsdk::SdkConfig config;
             config.device_type = device->type;
-            config.shmem_name = device->shmem_name;
-
-            std::cout << "  Creating session with shmem_name: " << config.shmem_name << "\n";
 
             auto result = cbsdk::SdkSession::create(config);
             if (result.isError()) {

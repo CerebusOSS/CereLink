@@ -171,13 +171,9 @@ enum class DeviceType {
 
 /// SDK configuration
 struct SdkConfig {
-    // Device type (automatically maps to correct address/port)
+    // Device type (automatically maps to correct address/port and shared memory name)
     // Used only when creating new shared memory (STANDALONE mode)
     DeviceType device_type = DeviceType::LEGACY_NSP;
-
-    // Shared memory name
-    // SDK will automatically detect whether to create (STANDALONE) or attach (CLIENT)
-    std::string shmem_name = "cbsdk_default";
 
     // Callback thread configuration
     size_t callback_queue_depth = 16384;      ///< Packets to buffer (as discussed)

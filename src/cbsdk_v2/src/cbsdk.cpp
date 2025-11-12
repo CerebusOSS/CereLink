@@ -67,10 +67,6 @@ static cbsdk::SdkConfig to_cpp_config(const cbsdk_config_t* c_config) {
             break;
     }
 
-    if (c_config->shmem_name) {
-        cpp_config.shmem_name = c_config->shmem_name;
-    }
-
     cpp_config.callback_queue_depth = c_config->callback_queue_depth;
     cpp_config.enable_realtime_priority = c_config->enable_realtime_priority;
     cpp_config.drop_on_overflow = c_config->drop_on_overflow;
@@ -118,7 +114,6 @@ extern "C" {
 cbsdk_config_t cbsdk_config_default(void) {
     cbsdk_config_t config;
     config.device_type = CBSDK_DEVICE_LEGACY_NSP;
-    config.shmem_name = "cbsdk_default";
     config.callback_queue_depth = 16384;
     config.enable_realtime_priority = false;
     config.drop_on_overflow = true;

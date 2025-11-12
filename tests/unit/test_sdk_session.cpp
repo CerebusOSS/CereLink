@@ -52,7 +52,6 @@ TEST_F(SdkSessionTest, Config_Default) {
 
 TEST_F(SdkSessionTest, Create_Standalone_Loopback) {
     SdkConfig config;
-    config.shmem_name = test_name;
     config.device_type = DeviceType::NPLAY;  // Loopback device
 
     auto result = SdkSession::create(config);
@@ -64,7 +63,6 @@ TEST_F(SdkSessionTest, Create_Standalone_Loopback) {
 
 TEST_F(SdkSessionTest, Create_MoveConstruction) {
     SdkConfig config;
-    config.shmem_name = test_name;
     config.device_type = DeviceType::NPLAY;
 
     auto result = SdkSession::create(config);
@@ -81,7 +79,6 @@ TEST_F(SdkSessionTest, Create_MoveConstruction) {
 
 TEST_F(SdkSessionTest, StartStop) {
     SdkConfig config;
-    config.shmem_name = test_name;
     config.device_type = DeviceType::NPLAY;
 
     auto result = SdkSession::create(config);
@@ -104,7 +101,6 @@ TEST_F(SdkSessionTest, StartStop) {
 
 TEST_F(SdkSessionTest, StartTwice_Error) {
     SdkConfig config;
-    config.shmem_name = test_name;
     config.device_type = DeviceType::NPLAY;
 
     auto result = SdkSession::create(config);
@@ -128,7 +124,6 @@ TEST_F(SdkSessionTest, StartTwice_Error) {
 
 TEST_F(SdkSessionTest, SetCallbacks) {
     SdkConfig config;
-    config.shmem_name = test_name;
     config.device_type = DeviceType::NPLAY;
 
     auto result = SdkSession::create(config);
@@ -155,7 +150,6 @@ TEST_F(SdkSessionTest, SetCallbacks) {
 TEST_F(SdkSessionTest, ReceivePackets_Loopback) {
     // Create SDK session (receiver)
     SdkConfig config;
-    config.shmem_name = test_name;
     config.device_type = DeviceType::NPLAY;
 
     auto result = SdkSession::create(config);
@@ -207,7 +201,6 @@ TEST_F(SdkSessionTest, ReceivePackets_Loopback) {
 
 TEST_F(SdkSessionTest, Statistics_InitiallyZero) {
     SdkConfig config;
-    config.shmem_name = test_name;
     config.device_type = DeviceType::NPLAY;
 
     auto result = SdkSession::create(config);
@@ -225,7 +218,6 @@ TEST_F(SdkSessionTest, Statistics_InitiallyZero) {
 
 TEST_F(SdkSessionTest, Statistics_ResetStats) {
     SdkConfig config;
-    config.shmem_name = test_name;
     config.device_type = DeviceType::NPLAY;
 
     auto result = SdkSession::create(config);
@@ -252,7 +244,6 @@ TEST_F(SdkSessionTest, Statistics_ResetStats) {
 
 TEST_F(SdkSessionTest, GetConfig) {
     SdkConfig config;
-    config.shmem_name = test_name;
     config.device_type = DeviceType::NPLAY;
     config.callback_queue_depth = 8192;
 
