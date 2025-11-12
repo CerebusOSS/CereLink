@@ -80,12 +80,6 @@ struct TimestampStats {
     }
 };
 
-// Helper function to check if device IP is reachable
-bool pingDevice(const std::string& ip_address) {
-    std::string cmd = "ping -c 1 -W 1 " + ip_address + " > /dev/null 2>&1";
-    return (system(cmd.c_str()) == 0);
-}
-
 void printStats(const cbsdk::SdkSession& session, const std::string& name, TimestampStats* ts_stats = nullptr) {
     auto stats = session.getStats();
 
@@ -119,7 +113,6 @@ void printStats(const cbsdk::SdkSession& session, const std::string& name, Times
 struct DeviceInfo {
     std::string name;
     cbsdk::DeviceType type;
-    std::string ip_address;  // For ping-based verification
     std::unique_ptr<cbsdk::SdkSession> session;
     std::atomic<uint64_t> packet_count{0};
     TimestampStats timestamps;
@@ -141,25 +134,21 @@ int main(int argc, char* argv[]) {
     auto nsp = std::make_unique<DeviceInfo>();
     nsp->name = "Gemini NSP";
     nsp->type = cbsdk::DeviceType::GEMINI_NSP;
-    nsp->ip_address = "192.168.137.128";
     devices.push_back(std::move(nsp));
 
     auto hub1 = std::make_unique<DeviceInfo>();
     hub1->name = "Gemini Hub1";
     hub1->type = cbsdk::DeviceType::GEMINI_HUB1;
-    hub1->ip_address = "192.168.137.200";
     devices.push_back(std::move(hub1));
 
     auto hub2 = std::make_unique<DeviceInfo>();
     hub2->name = "Gemini Hub2";
     hub2->type = cbsdk::DeviceType::GEMINI_HUB2;
-    hub2->ip_address = "192.168.137.201";
     devices.push_back(std::move(hub2));
 
     auto hub3 = std::make_unique<DeviceInfo>();
     hub3->name = "Gemini Hub3";
     hub3->type = cbsdk::DeviceType::GEMINI_HUB3;
-    hub3->ip_address = "192.168.137.202";
     devices.push_back(std::move(hub3));
 
     try {
