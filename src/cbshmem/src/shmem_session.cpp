@@ -30,15 +30,18 @@ namespace cbshmem {
 struct ShmemSession::Impl {
     Mode mode;
     std::string cfg_name;  // Config buffer name (e.g., "cbCFGbuffer")
+    std::string rec_name;  // Receive buffer name (e.g., "cbRECbuffer")
     std::string xmt_name;  // Transmit buffer name (e.g., "XmtGlobal")
     bool is_open;
 
-    // Platform-specific handles (separate segments for config and transmit)
+    // Platform-specific handles (separate segments for config, receive, and transmit)
 #ifdef _WIN32
     HANDLE cfg_file_mapping;
+    HANDLE rec_file_mapping;
     HANDLE xmt_file_mapping;
 #else
     int cfg_shm_fd;
+    int rec_shm_fd;
     int xmt_shm_fd;
 #endif
 
@@ -52,9 +55,11 @@ struct ShmemSession::Impl {
         , is_open(false)
 #ifdef _WIN32
         , cfg_file_mapping(nullptr)
+        , rec_file_mapping(nullptr)
         , xmt_file_mapping(nullptr)
 #else
         , cfg_shm_fd(-1)
+        , rec_shm_fd(-1)
         , xmt_shm_fd(-1)
 #endif
         , cfg_buffer(nullptr)
@@ -72,18 +77,25 @@ struct ShmemSession::Impl {
         // Unmap shared memory
 #ifdef _WIN32
         if (cfg_buffer) UnmapViewOfFile(cfg_buffer);
+        if (rec_buffer) UnmapViewOfFile(rec_buffer);
         if (xmt_buffer) UnmapViewOfFile(xmt_buffer);
         if (cfg_file_mapping) CloseHandle(cfg_file_mapping);
+        if (rec_file_mapping) CloseHandle(rec_file_mapping);
         if (xmt_file_mapping) CloseHandle(xmt_file_mapping);
         cfg_file_mapping = nullptr;
+        rec_file_mapping = nullptr;
         xmt_file_mapping = nullptr;
 #else
         // POSIX requires shared memory names to start with "/"
         std::string posix_cfg_name = (cfg_name[0] == '/') ? cfg_name : ("/" + cfg_name);
+        std::string posix_rec_name = (rec_name[0] == '/') ? rec_name : ("/" + rec_name);
         std::string posix_xmt_name = (xmt_name[0] == '/') ? xmt_name : ("/" + xmt_name);
 
         if (cfg_buffer) {
             munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+        }
+        if (rec_buffer) {
+            munmap(rec_buffer, sizeof(CentralReceiveBuffer));
         }
         if (xmt_buffer) {
             munmap(xmt_buffer, sizeof(CentralTransmitBuffer));
@@ -96,6 +108,13 @@ struct ShmemSession::Impl {
             }
         }
 
+        if (rec_shm_fd >= 0) {
+            ::close(rec_shm_fd);
+            if (mode == Mode::STANDALONE) {
+                shm_unlink(posix_rec_name.c_str());
+            }
+        }
+
         if (xmt_shm_fd >= 0) {
             ::close(xmt_shm_fd);
             if (mode == Mode::STANDALONE) {
@@ -104,6 +123,7 @@ struct ShmemSession::Impl {
         }
 
         cfg_shm_fd = -1;
+        rec_shm_fd = -1;
         xmt_shm_fd = -1;
 #endif
 
@@ -147,7 +167,39 @@ struct ShmemSession::Impl {
             return Result<void>::error("Failed to map config view of file");
         }
 
-        // Create transmit buffer segment (separate from config)
+        // Create receive buffer segment
+        rec_file_mapping = CreateFileMappingA(
+            INVALID_HANDLE_VALUE,
+            nullptr,
+            access,
+            0,
+            sizeof(CentralReceiveBuffer),
+            rec_name.c_str()
+        );
+
+        if (!rec_file_mapping) {
+            UnmapViewOfFile(cfg_buffer);
+            CloseHandle(cfg_file_mapping);
+            cfg_buffer = nullptr;
+            cfg_file_mapping = nullptr;
+            return Result<void>::error("Failed to create receive file mapping");
+        }
+
+        rec_buffer = static_cast<CentralReceiveBuffer*>(
+            MapViewOfFile(rec_file_mapping, map_access, 0, 0, sizeof(CentralReceiveBuffer))
+        );
+
+        if (!rec_buffer) {
+            UnmapViewOfFile(cfg_buffer);
+            CloseHandle(cfg_file_mapping);
+            CloseHandle(rec_file_mapping);
+            cfg_buffer = nullptr;
+            cfg_file_mapping = nullptr;
+            rec_file_mapping = nullptr;
+            return Result<void>::error("Failed to map receive view of file");
+        }
+
+        // Create transmit buffer segment (separate from config and receive)
         xmt_file_mapping = CreateFileMappingA(
             INVALID_HANDLE_VALUE,
             nullptr,
@@ -158,9 +210,13 @@ struct ShmemSession::Impl {
         );
 
         if (!xmt_file_mapping) {
+            UnmapViewOfFile(rec_buffer);
             UnmapViewOfFile(cfg_buffer);
+            CloseHandle(rec_file_mapping);
             CloseHandle(cfg_file_mapping);
+            rec_buffer = nullptr;
             cfg_buffer = nullptr;
+            rec_file_mapping = nullptr;
             cfg_file_mapping = nullptr;
             return Result<void>::error("Failed to create transmit file mapping");
         }
@@ -170,19 +226,25 @@ struct ShmemSession::Impl {
         );
 
         if (!xmt_buffer) {
+            UnmapViewOfFile(rec_buffer);
             UnmapViewOfFile(cfg_buffer);
-            CloseHandle(cfg_file_mapping);
             CloseHandle(xmt_file_mapping);
+            CloseHandle(rec_file_mapping);
+            CloseHandle(cfg_file_mapping);
+            xmt_buffer = nullptr;
+            rec_buffer = nullptr;
             cfg_buffer = nullptr;
-            cfg_file_mapping = nullptr;
             xmt_file_mapping = nullptr;
+            rec_file_mapping = nullptr;
+            cfg_file_mapping = nullptr;
             return Result<void>::error("Failed to map transmit view of file");
         }
 
 #else
-        // POSIX (macOS/Linux) implementation - create two separate shared memory segments
+        // POSIX (macOS/Linux) implementation - create three separate shared memory segments
         // POSIX requires shared memory names to start with "/"
         std::string posix_cfg_name = (cfg_name[0] == '/') ? cfg_name : ("/" + cfg_name);
+        std::string posix_rec_name = (rec_name[0] == '/') ? rec_name : ("/" + rec_name);
         std::string posix_xmt_name = (xmt_name[0] == '/') ? xmt_name : ("/" + xmt_name);
 
         int flags = (mode == Mode::STANDALONE) ? (O_CREAT | O_RDWR) : O_RDONLY;
@@ -192,6 +254,7 @@ struct ShmemSession::Impl {
         // In STANDALONE mode, unlink any existing shared memory first
         if (mode == Mode::STANDALONE) {
             shm_unlink(posix_cfg_name.c_str());  // Ignore errors if it doesn't exist
+            shm_unlink(posix_rec_name.c_str());
             shm_unlink(posix_xmt_name.c_str());
         }
 
@@ -221,12 +284,54 @@ struct ShmemSession::Impl {
             return Result<void>::error("Failed to map config shared memory");
         }
 
-        // Create/open transmit buffer segment
-        xmt_shm_fd = shm_open(posix_xmt_name.c_str(), flags, perms);
-        if (xmt_shm_fd < 0) {
+        // Create/open receive buffer segment
+        rec_shm_fd = shm_open(posix_rec_name.c_str(), flags, perms);
+        if (rec_shm_fd < 0) {
             munmap(cfg_buffer, sizeof(CentralConfigBuffer));
             ::close(cfg_shm_fd);
             cfg_buffer = nullptr;
+            cfg_shm_fd = -1;
+            return Result<void>::error("Failed to open receive shared memory: " + std::string(strerror(errno)));
+        }
+
+        if (mode == Mode::STANDALONE) {
+            if (ftruncate(rec_shm_fd, sizeof(CentralReceiveBuffer)) < 0) {
+                std::string err_msg = "Failed to set receive shared memory size: " + std::string(strerror(errno));
+                munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+                ::close(cfg_shm_fd);
+                ::close(rec_shm_fd);
+                cfg_buffer = nullptr;
+                cfg_shm_fd = -1;
+                rec_shm_fd = -1;
+                return Result<void>::error(err_msg);
+            }
+        }
+
+        rec_buffer = static_cast<CentralReceiveBuffer*>(
+            mmap(nullptr, sizeof(CentralReceiveBuffer), prot, MAP_SHARED, rec_shm_fd, 0)
+        );
+
+        if (rec_buffer == MAP_FAILED) {
+            munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+            ::close(cfg_shm_fd);
+            ::close(rec_shm_fd);
+            cfg_buffer = nullptr;
+            rec_buffer = nullptr;
+            cfg_shm_fd = -1;
+            rec_shm_fd = -1;
+            return Result<void>::error("Failed to map receive shared memory");
+        }
+
+        // Create/open transmit buffer segment
+        xmt_shm_fd = shm_open(posix_xmt_name.c_str(), flags, perms);
+        if (xmt_shm_fd < 0) {
+            munmap(rec_buffer, sizeof(CentralReceiveBuffer));
+            munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+            ::close(rec_shm_fd);
+            ::close(cfg_shm_fd);
+            rec_buffer = nullptr;
+            cfg_buffer = nullptr;
+            rec_shm_fd = -1;
             cfg_shm_fd = -1;
             return Result<void>::error("Failed to open transmit shared memory: " + std::string(strerror(errno)));
         }
@@ -234,10 +339,14 @@ struct ShmemSession::Impl {
         if (mode == Mode::STANDALONE) {
             if (ftruncate(xmt_shm_fd, sizeof(CentralTransmitBuffer)) < 0) {
                 std::string err_msg = "Failed to set transmit shared memory size: " + std::string(strerror(errno));
+                munmap(rec_buffer, sizeof(CentralReceiveBuffer));
                 munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+                ::close(rec_shm_fd);
                 ::close(cfg_shm_fd);
                 ::close(xmt_shm_fd);
+                rec_buffer = nullptr;
                 cfg_buffer = nullptr;
+                rec_shm_fd = -1;
                 cfg_shm_fd = -1;
                 xmt_shm_fd = -1;
                 return Result<void>::error(err_msg);
@@ -249,11 +358,15 @@ struct ShmemSession::Impl {
         );
 
         if (xmt_buffer == MAP_FAILED) {
+            munmap(rec_buffer, sizeof(CentralReceiveBuffer));
             munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+            ::close(rec_shm_fd);
             ::close(cfg_shm_fd);
             ::close(xmt_shm_fd);
+            rec_buffer = nullptr;
             cfg_buffer = nullptr;
             xmt_buffer = nullptr;
+            rec_shm_fd = -1;
             cfg_shm_fd = -1;
             xmt_shm_fd = -1;
             return Result<void>::error("Failed to map transmit shared memory");
@@ -270,6 +383,13 @@ struct ShmemSession::Impl {
             for (int i = 0; i < CENTRAL_cbMAXPROCS; ++i) {
                 cfg_buffer->instrument_status[i] = static_cast<uint32_t>(InstrumentStatus::INACTIVE);
             }
+
+            // Initialize receive buffer (in separate shared memory segment)
+            std::memset(rec_buffer, 0, sizeof(CentralReceiveBuffer));
+            rec_buffer->received = 0;
+            rec_buffer->lasttime = 0;
+            rec_buffer->headwrap = 0;
+            rec_buffer->headindex = 0;
 
             // Initialize transmit buffer (in separate shared memory segment)
             std::memset(xmt_buffer, 0, sizeof(CentralTransmitBuffer));
@@ -297,9 +417,10 @@ ShmemSession::~ShmemSession() = default;
 ShmemSession::ShmemSession(ShmemSession&& other) noexcept = default;
 ShmemSession& ShmemSession::operator=(ShmemSession&& other) noexcept = default;
 
-Result<ShmemSession> ShmemSession::create(const std::string& cfg_name, const std::string& xmt_name, Mode mode) {
+Result<ShmemSession> ShmemSession::create(const std::string& cfg_name, const std::string& rec_name, const std::string& xmt_name, Mode mode) {
     ShmemSession session;
     session.m_impl->cfg_name = cfg_name;
+    session.m_impl->rec_name = rec_name;
     session.m_impl->xmt_name = xmt_name;
     session.m_impl->mode = mode;
 

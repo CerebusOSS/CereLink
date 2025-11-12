@@ -115,10 +115,11 @@ public:
 
     /// @brief Create a new shared memory session
     /// @param cfg_name Config buffer shared memory name (e.g., "cbCFGbuffer")
+    /// @param rec_name Receive buffer shared memory name (e.g., "cbRECbuffer")
     /// @param xmt_name Transmit buffer shared memory name (e.g., "XmtGlobal")
     /// @param mode Operating mode (STANDALONE or CLIENT)
     /// @return Result containing ShmemSession on success, error message on failure
-    static Result<ShmemSession> create(const std::string& cfg_name, const std::string& xmt_name, Mode mode);
+    static Result<ShmemSession> create(const std::string& cfg_name, const std::string& rec_name, const std::string& xmt_name, Mode mode);
 
     /// @brief Destructor - closes shared memory and releases resources
     ~ShmemSession();
