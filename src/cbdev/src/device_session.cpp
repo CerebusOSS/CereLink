@@ -110,7 +110,7 @@ DeviceConfig DeviceConfig::forDevice(DeviceType type) {
         case DeviceType::NSP:
             // Legacy NSP: different ports for send/recv
             config.device_address = DeviceDefaults::NSP_ADDRESS;
-            config.client_address = DeviceDefaults::DEFAULT_CLIENT_ADDRESS;
+            config.client_address = "";  // Auto-detect
             config.recv_port = DeviceDefaults::LEGACY_NSP_RECV_PORT;
             config.send_port = DeviceDefaults::LEGACY_NSP_SEND_PORT;
             break;
@@ -118,7 +118,7 @@ DeviceConfig DeviceConfig::forDevice(DeviceType type) {
         case DeviceType::GEMINI:
             // Gemini NSP: same port for both send & recv
             config.device_address = DeviceDefaults::GEMINI_NSP_ADDRESS;
-            config.client_address = DeviceDefaults::DEFAULT_CLIENT_ADDRESS;
+            config.client_address = "";  // Auto-detect
             config.recv_port = DeviceDefaults::GEMINI_NSP_PORT;
             config.send_port = DeviceDefaults::GEMINI_NSP_PORT;
             break;
@@ -126,7 +126,7 @@ DeviceConfig DeviceConfig::forDevice(DeviceType type) {
         case DeviceType::HUB1:
             // Gemini Hub1: same port for both send & recv
             config.device_address = DeviceDefaults::GEMINI_HUB1_ADDRESS;
-            config.client_address = DeviceDefaults::DEFAULT_CLIENT_ADDRESS;
+            config.client_address = "";  // Auto-detect
             config.recv_port = DeviceDefaults::GEMINI_HUB1_PORT;
             config.send_port = DeviceDefaults::GEMINI_HUB1_PORT;
             break;
@@ -134,7 +134,7 @@ DeviceConfig DeviceConfig::forDevice(DeviceType type) {
         case DeviceType::HUB2:
             // Gemini Hub2: same port for both send & recv
             config.device_address = DeviceDefaults::GEMINI_HUB2_ADDRESS;
-            config.client_address = DeviceDefaults::DEFAULT_CLIENT_ADDRESS;
+            config.client_address = "";  // Auto-detect
             config.recv_port = DeviceDefaults::GEMINI_HUB2_PORT;
             config.send_port = DeviceDefaults::GEMINI_HUB2_PORT;
             break;
@@ -142,7 +142,7 @@ DeviceConfig DeviceConfig::forDevice(DeviceType type) {
         case DeviceType::HUB3:
             // Gemini Hub3: same port for both send & recv
             config.device_address = DeviceDefaults::GEMINI_HUB3_ADDRESS;
-            config.client_address = DeviceDefaults::DEFAULT_CLIENT_ADDRESS;
+            config.client_address = "";  // Auto-detect
             config.recv_port = DeviceDefaults::GEMINI_HUB3_PORT;
             config.send_port = DeviceDefaults::GEMINI_HUB3_PORT;
             break;
@@ -150,7 +150,7 @@ DeviceConfig DeviceConfig::forDevice(DeviceType type) {
         case DeviceType::NPLAY:
             // nPlayServer: loopback for both device and client
             config.device_address = DeviceDefaults::NPLAY_ADDRESS;
-            config.client_address = DeviceDefaults::NPLAY_ADDRESS;  // Use loopback, not 0.0.0.0
+            config.client_address = "127.0.0.1";  // Always use loopback for NPLAY
             config.recv_port = DeviceDefaults::NPLAY_PORT;
             config.send_port = DeviceDefaults::NPLAY_PORT;
             break;
@@ -233,6 +233,17 @@ DeviceSession::~DeviceSession() {
 Result<DeviceSession> DeviceSession::create(const DeviceConfig& config) {
     DeviceSession session;
     session.m_impl->config = config;
+
+    // Auto-detect client address if not specified
+    if (session.m_impl->config.client_address.empty()) {
+        if (session.m_impl->config.type == DeviceType::NPLAY) {
+            // NPLAY: Always use loopback
+            session.m_impl->config.client_address = "127.0.0.1";
+        } else {
+            // Other devices: Use platform-specific detection
+            session.m_impl->config.client_address = detectLocalIP();
+        }
+    }
 
 #ifdef _WIN32
     // Initialize Winsock 2.2
@@ -623,12 +634,43 @@ const DeviceConfig& DeviceSession::getConfig() const {
 
 std::string detectLocalIP() {
 #ifdef __APPLE__
-    // On macOS with multiple interfaces, recommend using 0.0.0.0 for best compatibility
+    // On macOS with multiple interfaces, use 0.0.0.0 (bind to all interfaces)
+    // macOS routing will handle interface selection via IP_BOUND_IF
     return "0.0.0.0";
 #else
-    // TODO: Implement adapter detection for Windows/Linux
-    // For now, return 0.0.0.0 as safe default
+    // On Windows/Linux: try to find local adapter on 192.168.137.x subnet
+    // This is the typical subnet for Cerebus devices
+
+#ifdef _WIN32
+    // Windows: Use GetAdaptersAddresses to find 192.168.137.x adapter
+    // For now, use 0.0.0.0 as safe default (binds to all interfaces)
+    // TODO: Implement Windows adapter detection
     return "0.0.0.0";
+#else
+    // Linux: Use getifaddrs to find 192.168.137.x adapter
+    struct ifaddrs *ifaddr, *ifa;
+    std::string result = "0.0.0.0";  // Default fallback
+
+    if (getifaddrs(&ifaddr) != -1) {
+        for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
+            if (ifa->ifa_addr == nullptr || ifa->ifa_addr->sa_family != AF_INET)
+                continue;
+
+            struct sockaddr_in* addr = (struct sockaddr_in*)ifa->ifa_addr;
+            char ip_str[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &addr->sin_addr, ip_str, INET_ADDRSTRLEN);
+
+            // Check if this is a 192.168.137.x address
+            if (std::strncmp(ip_str, "192.168.137.", 12) == 0) {
+                result = ip_str;
+                break;  // Found it!
+            }
+        }
+        freeifaddrs(ifaddr);
+    }
+
+    return result;
+#endif
 #endif
 }
 

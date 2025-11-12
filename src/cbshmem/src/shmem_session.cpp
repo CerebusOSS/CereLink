@@ -76,7 +76,9 @@ struct ShmemSession::Impl {
         if (shm_fd >= 0) {
             ::close(shm_fd);
             if (mode == Mode::STANDALONE) {
-                shm_unlink(name.c_str());
+                // POSIX requires shared memory names to start with "/"
+                std::string posix_name = (name[0] == '/') ? name : ("/" + name);
+                shm_unlink(posix_name.c_str());
             }
         }
         shm_fd = -1;
@@ -123,10 +125,18 @@ struct ShmemSession::Impl {
 
 #else
         // POSIX (macOS/Linux) implementation
+        // POSIX requires shared memory names to start with "/"
+        std::string posix_name = (name[0] == '/') ? name : ("/" + name);
+
         int flags = (mode == Mode::STANDALONE) ? (O_CREAT | O_RDWR) : O_RDONLY;
         mode_t perms = (mode == Mode::STANDALONE) ? 0644 : 0;
 
-        shm_fd = shm_open(name.c_str(), flags, perms);
+        // In STANDALONE mode, unlink any existing shared memory first
+        if (mode == Mode::STANDALONE) {
+            shm_unlink(posix_name.c_str());  // Ignore errors if it doesn't exist
+        }
+
+        shm_fd = shm_open(posix_name.c_str(), flags, perms);
         if (shm_fd < 0) {
             return Result<void>::error("Failed to open shared memory: " + std::string(strerror(errno)));
         }
@@ -134,9 +144,10 @@ struct ShmemSession::Impl {
         if (mode == Mode::STANDALONE) {
             // Set size for standalone mode
             if (ftruncate(shm_fd, sizeof(CentralConfigBuffer)) < 0) {
+                std::string err_msg = "Failed to set shared memory size: " + std::string(strerror(errno));
                 ::close(shm_fd);
                 shm_fd = -1;
-                return Result<void>::error("Failed to set shared memory size");
+                return Result<void>::error(err_msg);
             }
         }
 

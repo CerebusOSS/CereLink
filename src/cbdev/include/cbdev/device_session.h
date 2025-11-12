@@ -299,8 +299,8 @@ namespace DeviceDefaults {
     constexpr const char* GEMINI_HUB3_ADDRESS = "192.168.137.202"; // Gemini Hub3 (cbNET_UDP_ADDR_GEMINI_HUB3)
     constexpr const char* NPLAY_ADDRESS      = "127.0.0.1";        // nPlayServer (loopback)
 
-    // Client/Host addresses
-    constexpr const char* DEFAULT_CLIENT_ADDRESS = "192.168.137.199";  // Default host PC (cbNET_UDP_ADDR_HOST)
+    // Client/Host addresses (empty = auto-detect based on device type and platform)
+    constexpr const char* DEFAULT_CLIENT_ADDRESS = "";  // Auto-detect (was 192.168.137.199)
 
     // Ports
     constexpr uint16_t LEGACY_NSP_RECV_PORT   = 51001;  // cbNET_UDP_PORT_CNT

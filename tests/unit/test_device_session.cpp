@@ -45,7 +45,7 @@ TEST_F(DeviceSessionTest, DeviceConfig_Predefined_NSP) {
 
     EXPECT_EQ(config.type, DeviceType::NSP);
     EXPECT_EQ(config.device_address, "192.168.137.128");
-    EXPECT_EQ(config.client_address, "192.168.137.199");
+    EXPECT_EQ(config.client_address, "");  // Auto-detect
     EXPECT_EQ(config.recv_port, 51001);
     EXPECT_EQ(config.send_port, 51002);
 }
@@ -55,7 +55,7 @@ TEST_F(DeviceSessionTest, DeviceConfig_Predefined_Gemini) {
 
     EXPECT_EQ(config.type, DeviceType::GEMINI);
     EXPECT_EQ(config.device_address, "192.168.137.128");
-    EXPECT_EQ(config.client_address, "192.168.137.199");
+    EXPECT_EQ(config.client_address, "");  // Auto-detect
     EXPECT_EQ(config.recv_port, 51001);  // Same port for send & recv
     EXPECT_EQ(config.send_port, 51001);
 }
@@ -65,7 +65,7 @@ TEST_F(DeviceSessionTest, DeviceConfig_Predefined_GeminiHub1) {
 
     EXPECT_EQ(config.type, DeviceType::HUB1);
     EXPECT_EQ(config.device_address, "192.168.137.200");
-    EXPECT_EQ(config.client_address, "192.168.137.199");
+    EXPECT_EQ(config.client_address, "");  // Auto-detect
     EXPECT_EQ(config.recv_port, 51002);  // Same port for send & recv
     EXPECT_EQ(config.send_port, 51002);
 }

@@ -6,36 +6,42 @@ project(cbsdk_v2
     LANGUAGES CXX C
 )
 
-# Library sources (TODO: add when files are created)
+# Library sources
 set(CBSDK_V2_SOURCES
-    # sdk_session.cpp
-    # sdk_api.cpp
-    # mode_detection.cpp
-    # callback_manager.cpp
+    src/sdk_session.cpp
+    src/cbsdk.cpp
 )
 
-# For now, create an INTERFACE library placeholder
-add_library(cbsdk_v2 INTERFACE)
-
-# TODO: When sources exist, change to:
-# add_library(cbsdk_v2 SHARED ${CBSDK_V2_SOURCES})
+# Build as STATIC library
+add_library(cbsdk_v2 STATIC ${CBSDK_V2_SOURCES})
 
 target_include_directories(cbsdk_v2
-    INTERFACE
+    BEFORE PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        # upstream needed for protocol definitions
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/upstream>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 # Dependencies
 target_link_libraries(cbsdk_v2
-    INTERFACE
+    PUBLIC
         cbproto
         cbshmem
         cbdev
 )
 
 # C++17 for implementation, C compatible API
-target_compile_features(cbsdk_v2 INTERFACE cxx_std_17)
+target_compile_features(cbsdk_v2 PUBLIC cxx_std_17)
+
+# Platform-specific libraries
+if(WIN32)
+    target_link_libraries(cbsdk_v2 PRIVATE wsock32 ws2_32)
+elseif(APPLE)
+    target_link_libraries(cbsdk_v2 PRIVATE pthread)
+else()
+    target_link_libraries(cbsdk_v2 PRIVATE pthread)
+endif()
 
 # When compiled as SHARED:
 # target_compile_definitions(cbsdk_v2 PRIVATE CBSDK_V2_EXPORTS)

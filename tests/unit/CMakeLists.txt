@@ -91,3 +91,31 @@ target_include_directories(cbdev_tests
 gtest_discover_tests(cbdev_tests)
 
 message(STATUS "Unit tests configured for cbdev")
+
+# cbsdk_v2 tests
+add_executable(cbsdk_v2_tests
+    test_sdk_session.cpp
+    test_cbsdk_c_api.cpp
+)
+
+target_link_libraries(cbsdk_v2_tests
+    PRIVATE
+        cbsdk_v2
+        cbdev
+        cbproto
+        cbshmem
+        GTest::gtest_main
+)
+
+target_include_directories(cbsdk_v2_tests
+    BEFORE PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/cbsdk_v2/include
+        ${PROJECT_SOURCE_DIR}/src/cbdev/include
+        ${PROJECT_SOURCE_DIR}/src/cbshmem/include
+        ${PROJECT_SOURCE_DIR}/src/cbproto/include
+        ${PROJECT_SOURCE_DIR}/upstream
+)
+
+gtest_discover_tests(cbsdk_v2_tests)
+
+message(STATUS "Unit tests configured for cbsdk_v2")

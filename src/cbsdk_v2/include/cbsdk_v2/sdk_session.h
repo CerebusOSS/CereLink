@@ -1,0 +1,369 @@
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @file   sdk_session.h
+/// @author CereLink Development Team
+/// @date   2025-11-11
+///
+/// @brief  SDK session that orchestrates cbdev + cbshmem
+///
+/// This is the main SDK implementation that combines device communication (cbdev) with
+/// shared memory management (cbshmem), providing a clean API for receiving packets from
+/// Cerebus devices with user callbacks.
+///
+/// Architecture:
+///   Device → cbdev receive thread → cbshmem (fast!) → queue → callback thread → user callback
+///
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+#ifndef CBSDK_V2_SDK_SESSION_H
+#define CBSDK_V2_SDK_SESSION_H
+
+#include <string>
+#include <functional>
+#include <memory>
+#include <cstdint>
+#include <optional>
+#include <atomic>
+#include <array>
+
+// Protocol types (from upstream)
+extern "C" {
+    #include <cbproto/cbproto.h>
+}
+
+namespace cbsdk {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Result Template (consistent with cbshmem/cbdev)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+template<typename T>
+class Result {
+public:
+    static Result<T> ok(T value) {
+        Result<T> r;
+        r.m_ok = true;
+        r.m_value = std::move(value);
+        return r;
+    }
+
+    static Result<T> error(const std::string& msg) {
+        Result<T> r;
+        r.m_ok = false;
+        r.m_error = msg;
+        return r;
+    }
+
+    bool isOk() const { return m_ok; }
+    bool isError() const { return !m_ok; }
+
+    const T& value() const { return m_value.value(); }
+    T& value() { return m_value.value(); }
+    const std::string& error() const { return m_error; }
+
+private:
+    bool m_ok = false;
+    std::optional<T> m_value;
+    std::string m_error;
+};
+
+// Specialization for Result<void>
+template<>
+class Result<void> {
+public:
+    static Result<void> ok() {
+        Result<void> r;
+        r.m_ok = true;
+        return r;
+    }
+
+    static Result<void> error(const std::string& msg) {
+        Result<void> r;
+        r.m_ok = false;
+        r.m_error = msg;
+        return r;
+    }
+
+    bool isOk() const { return m_ok; }
+    bool isError() const { return !m_ok; }
+    const std::string& error() const { return m_error; }
+
+private:
+    bool m_ok = false;
+    std::string m_error;
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Lock-Free SPSC Queue (Single Producer, Single Consumer)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Lock-free ring buffer for passing packets from receive thread to callback thread
+/// Uses atomic operations for wait-free enqueue/dequeue
+template<typename T, size_t CAPACITY>
+class SPSCQueue {
+public:
+    SPSCQueue() : m_head(0), m_tail(0) {}
+
+    /// Try to push an item (returns false if queue is full)
+    bool push(const T& item) {
+        size_t current_tail = m_tail.load(std::memory_order_relaxed);
+        size_t next_tail = (current_tail + 1) % CAPACITY;
+
+        if (next_tail == m_head.load(std::memory_order_acquire)) {
+            return false;  // Queue full
+        }
+
+        m_buffer[current_tail] = item;
+        m_tail.store(next_tail, std::memory_order_release);
+        return true;
+    }
+
+    /// Try to pop an item (returns false if queue is empty)
+    bool pop(T& item) {
+        size_t current_head = m_head.load(std::memory_order_relaxed);
+
+        if (current_head == m_tail.load(std::memory_order_acquire)) {
+            return false;  // Queue empty
+        }
+
+        item = m_buffer[current_head];
+        m_head.store((current_head + 1) % CAPACITY, std::memory_order_release);
+        return true;
+    }
+
+    /// Get current size (approximate, may be stale)
+    size_t size() const {
+        size_t head = m_head.load(std::memory_order_relaxed);
+        size_t tail = m_tail.load(std::memory_order_relaxed);
+        if (tail >= head) {
+            return tail - head;
+        } else {
+            return CAPACITY - head + tail;
+        }
+    }
+
+    /// Get capacity
+    size_t capacity() const { return CAPACITY - 1; }  // One slot reserved for full detection
+
+    /// Check if empty (approximate)
+    bool empty() const {
+        return m_head.load(std::memory_order_relaxed) == m_tail.load(std::memory_order_relaxed);
+    }
+
+private:
+    std::array<T, CAPACITY> m_buffer;
+    alignas(64) std::atomic<size_t> m_head;  // Cache line alignment
+    alignas(64) std::atomic<size_t> m_tail;
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Configuration
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Device type for automatic address/port configuration
+enum class DeviceType {
+    LEGACY_NSP,   ///< Legacy NSP (192.168.137.128, ports 51001/51002)
+    GEMINI_NSP,   ///< Gemini NSP (192.168.137.128, port 51001 bidirectional)
+    GEMINI_HUB1,  ///< Gemini Hub 1 (192.168.137.200, port 51002 bidirectional)
+    GEMINI_HUB2,  ///< Gemini Hub 2 (192.168.137.201, port 51003 bidirectional)
+    GEMINI_HUB3,  ///< Gemini Hub 3 (192.168.137.202, port 51004 bidirectional)
+    NPLAY         ///< NPlay loopback (127.0.0.1, ports 51001/51002)
+};
+
+/// SDK configuration
+struct SdkConfig {
+    // Device type (automatically maps to correct address/port)
+    // Used only when creating new shared memory (STANDALONE mode)
+    DeviceType device_type = DeviceType::LEGACY_NSP;
+
+    // Shared memory name
+    // SDK will automatically detect whether to create (STANDALONE) or attach (CLIENT)
+    std::string shmem_name = "cbsdk_default";
+
+    // Callback thread configuration
+    size_t callback_queue_depth = 16384;      ///< Packets to buffer (as discussed)
+    bool enable_realtime_priority = false;    ///< Elevated thread priority
+    bool drop_on_overflow = true;             ///< Drop oldest on overflow (vs newest)
+
+    // Advanced options
+    int recv_buffer_size = 6000000;           ///< UDP receive buffer (6MB)
+    bool non_blocking = true;                 ///< Non-blocking sockets
+
+    // Optional custom device configuration (overrides device_type mapping)
+    // Used rarely for non-standard network configurations
+    std::optional<std::string> custom_device_address;   ///< Override device IP
+    std::optional<std::string> custom_client_address;   ///< Override client IP
+    std::optional<uint16_t> custom_device_port;         ///< Override device port
+    std::optional<uint16_t> custom_client_port;         ///< Override client port
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Statistics
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// SDK statistics
+struct SdkStats {
+    // Device statistics
+    uint64_t packets_received_from_device = 0;   ///< Packets from UDP socket
+    uint64_t bytes_received_from_device = 0;     ///< Bytes from UDP socket
+
+    // Shared memory statistics
+    uint64_t packets_stored_to_shmem = 0;        ///< Packets written to shmem
+
+    // Callback queue statistics
+    uint64_t packets_queued_for_callback = 0;    ///< Packets added to queue
+    uint64_t packets_delivered_to_callback = 0;  ///< Packets delivered to user
+    uint64_t packets_dropped = 0;                ///< Dropped due to queue overflow
+    uint64_t queue_current_depth = 0;            ///< Current queue usage
+    uint64_t queue_max_depth = 0;                ///< Peak queue usage
+
+    // Error counters
+    uint64_t shmem_store_errors = 0;             ///< Failed to store to shmem
+    uint64_t receive_errors = 0;                 ///< Socket receive errors
+
+    void reset() {
+        packets_received_from_device = 0;
+        bytes_received_from_device = 0;
+        packets_stored_to_shmem = 0;
+        packets_queued_for_callback = 0;
+        packets_delivered_to_callback = 0;
+        packets_dropped = 0;
+        queue_current_depth = 0;
+        queue_max_depth = 0;
+        shmem_store_errors = 0;
+        receive_errors = 0;
+    }
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Callback Types
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// User callback for received packets (runs on callback thread, can be slow)
+/// @param pkts Pointer to array of packets
+/// @param count Number of packets in array
+using PacketCallback = std::function<void(const cbPKT_GENERIC* pkts, size_t count)>;
+
+/// Error callback for queue overflow and other errors
+/// @param error_message Description of the error
+using ErrorCallback = std::function<void(const std::string& error_message)>;
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// SdkSession - Main API
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// SDK session that orchestrates device communication and shared memory
+///
+/// This class combines cbdev (device transport) and cbshmem (shared memory) into a unified
+/// API with a two-stage pipeline:
+///   1. Receive thread (cbdev) → stores to cbshmem (fast path, microseconds)
+///   2. Callback thread → delivers to user callback (can be slow)
+///
+/// Example usage:
+/// @code
+///   SdkConfig config;
+///   config.device_address = "192.168.137.128";
+///
+///   auto result = SdkSession::create(config);
+///   if (result.isOk()) {
+///       auto& session = result.value();
+///
+///       session.setPacketCallback([](const cbPKT_GENERIC* pkts, size_t count) {
+///           // Process packets (can be slow)
+///       });
+///
+///       session.setErrorCallback([](const std::string& error) {
+///           std::cerr << "Error: " << error << std::endl;
+///       });
+///
+///       session.start();
+///
+///       // ... do work ...
+///
+///       session.stop();
+///   }
+/// @endcode
+class SdkSession {
+public:
+    /// Non-copyable (owns resources)
+    SdkSession(const SdkSession&) = delete;
+    SdkSession& operator=(const SdkSession&) = delete;
+
+    /// Movable
+    SdkSession(SdkSession&&) noexcept;
+    SdkSession& operator=(SdkSession&&) noexcept;
+
+    /// Destructor - stops session and cleans up resources
+    ~SdkSession();
+
+    /// Create and initialize an SDK session
+    /// @param config SDK configuration
+    /// @return Result containing session on success, error message on failure
+    static Result<SdkSession> create(const SdkConfig& config);
+
+    ///--------------------------------------------------------------------------------------------
+    /// Session Control
+    ///--------------------------------------------------------------------------------------------
+
+    /// Start receiving packets from device
+    /// Starts both receive thread (cbdev) and callback thread
+    /// @return Result indicating success or error
+    Result<void> start();
+
+    /// Stop receiving packets
+    /// Stops both receive and callback threads, waits for clean shutdown
+    void stop();
+
+    /// Check if session is running
+    /// @return true if started and receiving packets
+    bool isRunning() const;
+
+    ///--------------------------------------------------------------------------------------------
+    /// Callbacks
+    ///--------------------------------------------------------------------------------------------
+
+    /// Set callback for received packets
+    /// Callback runs on dedicated callback thread (can be slow)
+    /// @param callback Function to call with received packets
+    void setPacketCallback(PacketCallback callback);
+
+    /// Set callback for errors (queue overflow, etc.)
+    /// @param callback Function to call when errors occur
+    void setErrorCallback(ErrorCallback callback);
+
+    ///--------------------------------------------------------------------------------------------
+    /// Statistics & Monitoring
+    ///--------------------------------------------------------------------------------------------
+
+    /// Get current statistics
+    /// @return Copy of current statistics
+    SdkStats getStats() const;
+
+    /// Reset statistics counters to zero
+    void resetStats();
+
+    ///--------------------------------------------------------------------------------------------
+    /// Configuration Access
+    ///--------------------------------------------------------------------------------------------
+
+    /// Get the configuration used to create this session
+    /// @return Reference to SDK configuration
+    const SdkConfig& getConfig() const;
+
+private:
+    /// Private constructor (use create() factory method)
+    SdkSession();
+
+    /// Callback from cbdev when packets are received (runs on receive thread - MUST BE FAST!)
+    void onPacketsReceivedFromDevice(const cbPKT_GENERIC* pkts, size_t count);
+
+    /// Callback thread loop (drains queue and invokes user callbacks)
+    void callbackThreadLoop();
+
+    /// Platform-specific implementation
+    struct Impl;
+    std::unique_ptr<Impl> m_impl;
+};
+
+} // namespace cbsdk
+
+#endif // CBSDK_V2_SDK_SESSION_H
