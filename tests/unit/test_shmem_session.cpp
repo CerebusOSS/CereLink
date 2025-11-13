@@ -43,7 +43,7 @@ int ShmemSessionTest::test_counter = 0;
 /// @{
 
 TEST_F(ShmemSessionTest, CreateStandalone) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk()) << "Failed to create standalone session: " << result.error();
 
     auto& session = result.value();
@@ -53,7 +53,7 @@ TEST_F(ShmemSessionTest, CreateStandalone) {
 
 TEST_F(ShmemSessionTest, CreateAndDestroy) {
     {
-        auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+        auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
         ASSERT_TRUE(result.isOk());
         EXPECT_TRUE(result.value().isOpen());
     }
@@ -61,7 +61,7 @@ TEST_F(ShmemSessionTest, CreateAndDestroy) {
 }
 
 TEST_F(ShmemSessionTest, MoveConstruction) {
-    auto result1 = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result1 = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result1.isOk());
 
     // Move construction
@@ -70,8 +70,8 @@ TEST_F(ShmemSessionTest, MoveConstruction) {
 }
 
 TEST_F(ShmemSessionTest, MoveAssignment) {
-    auto result1 = ShmemSession::create(test_name + "_1", test_name + "_1_rec", test_name + "_1_xmt", test_name + "_1_xmt_local", test_name + "_1_status", Mode::STANDALONE);
-    auto result2 = ShmemSession::create(test_name + "_2", test_name + "_2_rec", test_name + "_2_xmt", test_name + "_2_xmt_local", test_name + "_2_status", Mode::STANDALONE);
+    auto result1 = ShmemSession::create(test_name + "_1", test_name + "_1_rec", test_name + "_1_xmt", test_name + "_1_xmt_local", test_name + "_1_status", test_name + "_1_spk", test_name + "_1_signal", Mode::STANDALONE);
+    auto result2 = ShmemSession::create(test_name + "_2", test_name + "_2_rec", test_name + "_2_xmt", test_name + "_2_xmt_local", test_name + "_2_status", test_name + "_2_spk", test_name + "_2_signal", Mode::STANDALONE);
     ASSERT_TRUE(result1.isOk());
     ASSERT_TRUE(result2.isOk());
 
@@ -87,7 +87,7 @@ TEST_F(ShmemSessionTest, MoveAssignment) {
 /// @{
 
 TEST_F(ShmemSessionTest, InstrumentStatusInitiallyInactive) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -101,7 +101,7 @@ TEST_F(ShmemSessionTest, InstrumentStatusInitiallyInactive) {
 }
 
 TEST_F(ShmemSessionTest, SetInstrumentActive) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -123,7 +123,7 @@ TEST_F(ShmemSessionTest, SetInstrumentActive) {
 }
 
 TEST_F(ShmemSessionTest, GetFirstActiveInstrument) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -143,7 +143,7 @@ TEST_F(ShmemSessionTest, GetFirstActiveInstrument) {
 }
 
 TEST_F(ShmemSessionTest, MultipleActiveInstruments) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -169,7 +169,7 @@ TEST_F(ShmemSessionTest, MultipleActiveInstruments) {
 /// @{
 
 TEST_F(ShmemSessionTest, StorePacket_PROCINFO_Instrument0) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -202,7 +202,7 @@ TEST_F(ShmemSessionTest, StorePacket_PROCINFO_Instrument0) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_PROCINFO_Instrument2) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -236,7 +236,7 @@ TEST_F(ShmemSessionTest, StorePacket_PROCINFO_Instrument2) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_MultipleInstruments) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -266,7 +266,7 @@ TEST_F(ShmemSessionTest, StorePacket_MultipleInstruments) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_BANKINFO) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -295,7 +295,7 @@ TEST_F(ShmemSessionTest, StorePacket_BANKINFO) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_FILTINFO) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -330,7 +330,7 @@ TEST_F(ShmemSessionTest, StorePacket_FILTINFO) {
 /// @{
 
 TEST_F(ShmemSessionTest, GetProcInfo_NotFound) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -343,7 +343,7 @@ TEST_F(ShmemSessionTest, GetProcInfo_NotFound) {
 }
 
 TEST_F(ShmemSessionTest, SetAndGetProcInfo) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -367,7 +367,7 @@ TEST_F(ShmemSessionTest, SetAndGetProcInfo) {
 }
 
 TEST_F(ShmemSessionTest, InvalidInstrumentId) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -389,18 +389,18 @@ TEST_F(ShmemSessionTest, OperationsOnClosedSession) {
     // Create a session in a scope
     std::string name = test_name;
     {
-        auto result = ShmemSession::create(name, name + "_rec", name + "_xmt", name + "_xmt_local", name + "_status", Mode::STANDALONE);
+        auto result = ShmemSession::create(name, name + "_rec", name + "_xmt", name + "_xmt_local", name + "_status", name + "_spk", name + "_signal", Mode::STANDALONE);
         ASSERT_TRUE(result.isOk());
     }
     // Session is now closed
 
     // Try to create a new session with same name should work
-    auto result2 = ShmemSession::create(name, name + "_rec", name + "_xmt", name + "_xmt_local", name + "_status", Mode::STANDALONE);
+    auto result2 = ShmemSession::create(name, name + "_rec", name + "_xmt", name + "_xmt_local", name + "_status", name + "_spk", name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result2.isOk());
 }
 
 TEST_F(ShmemSessionTest, StorePacket_InvalidInstrument) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", Mode::STANDALONE);
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 

@@ -18,8 +18,12 @@
     #include <windows.h>
 #else
     #include <sys/mman.h>
+    #include <sys/time.h>
     #include <fcntl.h>
     #include <unistd.h>
+    #include <semaphore.h>
+    #include <time.h>
+    #include <errno.h>
 #endif
 
 namespace cbshmem {
@@ -29,12 +33,13 @@ namespace cbshmem {
 ///
 struct ShmemSession::Impl {
     Mode mode;
-    std::string cfg_name;        // Config buffer name (e.g., "cbCFGbuffer")
-    std::string rec_name;        // Receive buffer name (e.g., "cbRECbuffer")
-    std::string xmt_name;        // Transmit buffer name (e.g., "XmtGlobal")
-    std::string xmt_local_name;  // Local transmit buffer name (e.g., "XmtLocal")
-    std::string status_name;     // PC status buffer name (e.g., "cbSTATUSbuffer")
-    std::string spk_name;        // Spike cache buffer name (e.g., "cbSPKbuffer")
+    std::string cfg_name;            // Config buffer name (e.g., "cbCFGbuffer")
+    std::string rec_name;            // Receive buffer name (e.g., "cbRECbuffer")
+    std::string xmt_name;            // Transmit buffer name (e.g., "XmtGlobal")
+    std::string xmt_local_name;      // Local transmit buffer name (e.g., "XmtLocal")
+    std::string status_name;         // PC status buffer name (e.g., "cbSTATUSbuffer")
+    std::string spk_name;            // Spike cache buffer name (e.g., "cbSPKbuffer")
+    std::string signal_event_name;   // Signal event name (e.g., "cbSIGNALevent")
     bool is_open;
 
     // Platform-specific handles (separate segments for each buffer)
@@ -45,6 +50,7 @@ struct ShmemSession::Impl {
     HANDLE xmt_local_file_mapping;
     HANDLE status_file_mapping;
     HANDLE spk_file_mapping;
+    HANDLE signal_event;            // Named Event for data availability signaling
 #else
     int cfg_shm_fd;
     int rec_shm_fd;
@@ -52,6 +58,7 @@ struct ShmemSession::Impl {
     int xmt_local_shm_fd;
     int status_shm_fd;
     int spk_shm_fd;
+    sem_t* signal_event;            // Named semaphore for data availability signaling
 #endif
 
     // Pointers to shared memory buffers
@@ -72,6 +79,7 @@ struct ShmemSession::Impl {
         , xmt_local_file_mapping(nullptr)
         , status_file_mapping(nullptr)
         , spk_file_mapping(nullptr)
+        , signal_event(nullptr)
 #else
         , cfg_shm_fd(-1)
         , rec_shm_fd(-1)
@@ -79,6 +87,7 @@ struct ShmemSession::Impl {
         , xmt_local_shm_fd(-1)
         , status_shm_fd(-1)
         , spk_shm_fd(-1)
+        , signal_event(SEM_FAILED)
 #endif
         , cfg_buffer(nullptr)
         , rec_buffer(nullptr)
@@ -109,12 +118,14 @@ struct ShmemSession::Impl {
         if (xmt_local_file_mapping) CloseHandle(xmt_local_file_mapping);
         if (status_file_mapping) CloseHandle(status_file_mapping);
         if (spk_file_mapping) CloseHandle(spk_file_mapping);
+        if (signal_event) CloseHandle(signal_event);
         cfg_file_mapping = nullptr;
         rec_file_mapping = nullptr;
         xmt_file_mapping = nullptr;
         xmt_local_file_mapping = nullptr;
         status_file_mapping = nullptr;
         spk_file_mapping = nullptr;
+        signal_event = nullptr;
 #else
         // POSIX requires shared memory names to start with "/"
         std::string posix_cfg_name = (cfg_name[0] == '/') ? cfg_name : ("/" + cfg_name);
@@ -123,6 +134,7 @@ struct ShmemSession::Impl {
         std::string posix_xmt_local_name = (xmt_local_name[0] == '/') ? xmt_local_name : ("/" + xmt_local_name);
         std::string posix_status_name = (status_name[0] == '/') ? status_name : ("/" + status_name);
         std::string posix_spk_name = (spk_name[0] == '/') ? spk_name : ("/" + spk_name);
+        std::string posix_signal_name = (signal_event_name[0] == '/') ? signal_event_name : ("/" + signal_event_name);
 
         if (cfg_buffer) {
             munmap(cfg_buffer, sizeof(CentralConfigBuffer));
@@ -185,12 +197,21 @@ struct ShmemSession::Impl {
             }
         }
 
+        // Close signal event (named semaphore)
+        if (signal_event != SEM_FAILED) {
+            sem_close(signal_event);
+            if (mode == Mode::STANDALONE) {
+                sem_unlink(posix_signal_name.c_str());
+            }
+        }
+
         cfg_shm_fd = -1;
         rec_shm_fd = -1;
         xmt_shm_fd = -1;
         xmt_local_shm_fd = -1;
         status_shm_fd = -1;
         spk_shm_fd = -1;
+        signal_event = SEM_FAILED;
 #endif
 
         cfg_buffer = nullptr;
@@ -524,6 +545,43 @@ struct ShmemSession::Impl {
             return Result<void>::error("Failed to map spike buffer view of file");
         }
 
+        // Create/open signal event (7th: synchronization primitive)
+        if (mode == Mode::STANDALONE) {
+            // STANDALONE mode: Create the event (manual-reset, initially non-signaled)
+            signal_event = CreateEventA(nullptr, TRUE, FALSE, signal_event_name.c_str());
+        } else {
+            // CLIENT mode: Open existing event (SYNCHRONIZE access for waiting)
+            signal_event = OpenEventA(SYNCHRONIZE, FALSE, signal_event_name.c_str());
+        }
+
+        if (!signal_event) {
+            UnmapViewOfFile(spike_buffer);
+            UnmapViewOfFile(status_buffer);
+            UnmapViewOfFile(xmt_local_buffer);
+            UnmapViewOfFile(xmt_buffer);
+            UnmapViewOfFile(rec_buffer);
+            UnmapViewOfFile(cfg_buffer);
+            CloseHandle(spk_file_mapping);
+            CloseHandle(status_file_mapping);
+            CloseHandle(xmt_local_file_mapping);
+            CloseHandle(xmt_file_mapping);
+            CloseHandle(rec_file_mapping);
+            CloseHandle(cfg_file_mapping);
+            spike_buffer = nullptr;
+            status_buffer = nullptr;
+            xmt_local_buffer = nullptr;
+            xmt_buffer = nullptr;
+            rec_buffer = nullptr;
+            cfg_buffer = nullptr;
+            spk_file_mapping = nullptr;
+            status_file_mapping = nullptr;
+            xmt_local_file_mapping = nullptr;
+            xmt_file_mapping = nullptr;
+            rec_file_mapping = nullptr;
+            cfg_file_mapping = nullptr;
+            return Result<void>::error("Failed to create/open signal event");
+        }
+
 #else
         // POSIX (macOS/Linux) implementation - create six separate shared memory segments
         // POSIX requires shared memory names to start with "/"
@@ -533,6 +591,7 @@ struct ShmemSession::Impl {
         std::string posix_xmt_local_name = (xmt_local_name[0] == '/') ? xmt_local_name : ("/" + xmt_local_name);
         std::string posix_status_name = (status_name[0] == '/') ? status_name : ("/" + status_name);
         std::string posix_spk_name = (spk_name[0] == '/') ? spk_name : ("/" + spk_name);
+        std::string posix_signal_name = (signal_event_name[0] == '/') ? signal_event_name : ("/" + signal_event_name);
 
         int flags = (mode == Mode::STANDALONE) ? (O_CREAT | O_RDWR) : O_RDONLY;
         mode_t perms = (mode == Mode::STANDALONE) ? 0644 : 0;
@@ -883,6 +942,49 @@ struct ShmemSession::Impl {
             cfg_shm_fd = -1;
             return Result<void>::error("Failed to map spike cache shared memory");
         }
+
+        // Create/open signal event (7th: named semaphore for synchronization)
+        if (mode == Mode::STANDALONE) {
+            // STANDALONE mode: Create the semaphore (initial value 0 = blocked)
+            // First try to unlink any existing semaphore
+            sem_unlink(posix_signal_name.c_str());
+            signal_event = sem_open(posix_signal_name.c_str(), O_CREAT | O_EXCL, 0666, 0);
+            if (signal_event == SEM_FAILED) {
+                // If O_EXCL failed, try without it (semaphore already exists from crashed session)
+                signal_event = sem_open(posix_signal_name.c_str(), O_CREAT, 0666, 0);
+            }
+        } else {
+            // CLIENT mode: Open existing semaphore
+            signal_event = sem_open(posix_signal_name.c_str(), 0);
+        }
+
+        if (signal_event == SEM_FAILED) {
+            munmap(spike_buffer, sizeof(CentralSpikeBuffer));
+            munmap(status_buffer, sizeof(CentralPCStatus));
+            munmap(xmt_local_buffer, sizeof(CentralTransmitBufferLocal));
+            munmap(xmt_buffer, sizeof(CentralTransmitBuffer));
+            munmap(rec_buffer, sizeof(CentralReceiveBuffer));
+            munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+            ::close(spk_shm_fd);
+            ::close(status_shm_fd);
+            ::close(xmt_local_shm_fd);
+            ::close(xmt_shm_fd);
+            ::close(rec_shm_fd);
+            ::close(cfg_shm_fd);
+            spike_buffer = nullptr;
+            status_buffer = nullptr;
+            xmt_local_buffer = nullptr;
+            xmt_buffer = nullptr;
+            rec_buffer = nullptr;
+            cfg_buffer = nullptr;
+            spk_shm_fd = -1;
+            status_shm_fd = -1;
+            xmt_local_shm_fd = -1;
+            xmt_shm_fd = -1;
+            rec_shm_fd = -1;
+            cfg_shm_fd = -1;
+            return Result<void>::error("Failed to create/open signal semaphore: " + std::string(strerror(errno)));
+        }
 #endif
 
         // Initialize buffers in standalone mode
@@ -974,7 +1076,8 @@ ShmemSession& ShmemSession::operator=(ShmemSession&& other) noexcept = default;
 
 Result<ShmemSession> ShmemSession::create(const std::string& cfg_name, const std::string& rec_name,
                                            const std::string& xmt_name, const std::string& xmt_local_name,
-                                           const std::string& status_name, const std::string& spk_name, Mode mode) {
+                                           const std::string& status_name, const std::string& spk_name,
+                                           const std::string& signal_event_name, Mode mode) {
     ShmemSession session;
     session.m_impl->cfg_name = cfg_name;
     session.m_impl->rec_name = rec_name;
@@ -982,6 +1085,7 @@ Result<ShmemSession> ShmemSession::create(const std::string& cfg_name, const std
     session.m_impl->xmt_local_name = xmt_local_name;
     session.m_impl->status_name = status_name;
     session.m_impl->spk_name = spk_name;
+    session.m_impl->signal_event_name = signal_event_name;
     session.m_impl->mode = mode;
 
     auto result = session.m_impl->open();
@@ -1597,6 +1701,141 @@ Result<bool> ShmemSession::getRecentSpike(uint32_t channel, cbPKT_SPK& spike) co
     spike = cache.spkpkt[recent_idx];
 
     return Result<bool>::ok(true);  // Spike available
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Synchronization methods
+
+Result<bool> ShmemSession::waitForData(uint32_t timeout_ms) const {
+    if (!m_impl || !m_impl->is_open) {
+        return Result<bool>::error("Session is not open");
+    }
+
+#ifdef _WIN32
+    if (!m_impl->signal_event) {
+        return Result<bool>::error("Signal event not initialized");
+    }
+
+    DWORD result = WaitForSingleObject(m_impl->signal_event, timeout_ms);
+    if (result == WAIT_OBJECT_0) {
+        return Result<bool>::ok(true);   // Signal received
+    } else if (result == WAIT_TIMEOUT) {
+        return Result<bool>::ok(false);  // Timeout
+    } else {
+        return Result<bool>::error("WaitForSingleObject failed");
+    }
+
+#else
+    if (m_impl->signal_event == SEM_FAILED) {
+        return Result<bool>::error("Signal event not initialized");
+    }
+
+    // Use sem_timedwait for timeout support
+    timespec ts;
+#ifdef __APPLE__
+    // macOS doesn't have clock_gettime, use a workaround
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    ts.tv_sec = tv.tv_sec;
+    ts.tv_nsec = tv.tv_usec * 1000;
+#else
+    clock_gettime(CLOCK_REALTIME, &ts);
+#endif
+
+    // Add timeout
+    long ns = timeout_ms * 1000000L;
+    const long NANOSECONDS_PER_SEC = 1000000000L;
+    ts.tv_nsec += ns;
+    if (ts.tv_nsec >= NANOSECONDS_PER_SEC) {
+        ts.tv_sec += ts.tv_nsec / NANOSECONDS_PER_SEC;
+        ts.tv_nsec = ts.tv_nsec % NANOSECONDS_PER_SEC;
+    }
+
+#ifdef __APPLE__
+    // macOS doesn't have sem_timedwait, use sem_trywait with polling
+    // This is not ideal but works for our purposes
+    int retries = timeout_ms / 10;  // Poll every 10ms
+    for (int i = 0; i < retries; ++i) {
+        if (sem_trywait(m_impl->signal_event) == 0) {
+            return Result<bool>::ok(true);   // Signal received
+        }
+        usleep(10000);  // Sleep 10ms
+    }
+    // One final try
+    if (sem_trywait(m_impl->signal_event) == 0) {
+        return Result<bool>::ok(true);
+    }
+    return Result<bool>::ok(false);  // Timeout
+#else
+    int result = sem_timedwait(m_impl->signal_event, &ts);
+    if (result == 0) {
+        return Result<bool>::ok(true);   // Signal received
+    } else if (errno == ETIMEDOUT) {
+        return Result<bool>::ok(false);  // Timeout
+    } else {
+        return Result<bool>::error("sem_timedwait failed: " + std::string(strerror(errno)));
+    }
+#endif
+#endif
+}
+
+Result<void> ShmemSession::signalData() {
+    if (!m_impl || !m_impl->is_open) {
+        return Result<void>::error("Session is not open");
+    }
+
+#ifdef _WIN32
+    if (!m_impl->signal_event) {
+        return Result<void>::error("Signal event not initialized");
+    }
+
+    if (!SetEvent(m_impl->signal_event)) {
+        return Result<void>::error("SetEvent failed");
+    }
+    return Result<void>::ok();
+
+#else
+    if (m_impl->signal_event == SEM_FAILED) {
+        return Result<void>::error("Signal event not initialized");
+    }
+
+    if (sem_post(m_impl->signal_event) != 0) {
+        return Result<void>::error("sem_post failed: " + std::string(strerror(errno)));
+    }
+    return Result<void>::ok();
+#endif
+}
+
+Result<void> ShmemSession::resetSignal() {
+    if (!m_impl || !m_impl->is_open) {
+        return Result<void>::error("Session is not open");
+    }
+
+#ifdef _WIN32
+    if (!m_impl->signal_event) {
+        return Result<void>::error("Signal event not initialized");
+    }
+
+    if (!ResetEvent(m_impl->signal_event)) {
+        return Result<void>::error("ResetEvent failed");
+    }
+    return Result<void>::ok();
+
+#else
+    // On POSIX, semaphores are auto-reset by sem_wait/sem_trywait
+    // So this is a no-op for semaphores
+    // However, to drain any pending signals, we can call sem_trywait in a loop
+    if (m_impl->signal_event == SEM_FAILED) {
+        return Result<void>::error("Signal event not initialized");
+    }
+
+    // Drain all pending signals
+    while (sem_trywait(m_impl->signal_event) == 0) {
+        // Keep draining
+    }
+
+    return Result<void>::ok();
+#endif
 }
 
 } // namespace cbshmem

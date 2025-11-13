@@ -164,6 +164,28 @@ static std::string getStatusBufferName(DeviceType type) {
     }
 }
 
+// Helper function to get Central-compatible spike cache buffer name
+// Returns spike cache buffer name (e.g., "cbSPKbuffer" or "cbSPKbuffer1")
+static std::string getSpikeBufferName(DeviceType type) {
+    int instance = getInstanceNumber(type);
+    if (instance == 0) {
+        return "cbSPKbuffer";
+    } else {
+        return "cbSPKbuffer" + std::to_string(instance);
+    }
+}
+
+// Helper function to get Central-compatible signal event name
+// Returns signal event name (e.g., "cbSIGNALevent" or "cbSIGNALevent1")
+static std::string getSignalEventName(DeviceType type) {
+    int instance = getInstanceNumber(type);
+    if (instance == 0) {
+        return "cbSIGNALevent";
+    } else {
+        return "cbSIGNALevent" + std::to_string(instance);
+    }
+}
+
 Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     SdkSession session;
     session.m_impl->config = config;
@@ -174,16 +196,20 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     std::string xmt_name = getTransmitBufferName(config.device_type);
     std::string xmt_local_name = getLocalTransmitBufferName(config.device_type);
     std::string status_name = getStatusBufferName(config.device_type);
+    std::string spk_name = getSpikeBufferName(config.device_type);
+    std::string signal_event_name = getSignalEventName(config.device_type);
 
     // Auto-detect mode: Try CLIENT first (attach to existing), fall back to STANDALONE (create new)
     bool is_standalone = false;
 
     // Try to attach to existing shared memory (CLIENT mode)
-    auto shmem_result = cbshmem::ShmemSession::create(cfg_name, rec_name, xmt_name, xmt_local_name, status_name, cbshmem::Mode::CLIENT);
+    auto shmem_result = cbshmem::ShmemSession::create(cfg_name, rec_name, xmt_name, xmt_local_name,
+                                                       status_name, spk_name, signal_event_name, cbshmem::Mode::CLIENT);
 
     if (shmem_result.isError()) {
         // No existing shared memory, create new (STANDALONE mode)
-        shmem_result = cbshmem::ShmemSession::create(cfg_name, rec_name, xmt_name, xmt_local_name, status_name, cbshmem::Mode::STANDALONE);
+        shmem_result = cbshmem::ShmemSession::create(cfg_name, rec_name, xmt_name, xmt_local_name,
+                                                      status_name, spk_name, signal_event_name, cbshmem::Mode::STANDALONE);
         if (shmem_result.isError()) {
             return Result<SdkSession>::error("Failed to create shared memory: " + shmem_result.error());
         }

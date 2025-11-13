@@ -120,11 +120,13 @@ public:
     /// @param xmt_local_name Local transmit buffer shared memory name (e.g., "XmtLocal")
     /// @param status_name PC status buffer shared memory name (e.g., "cbSTATUSbuffer")
     /// @param spk_name Spike cache buffer shared memory name (e.g., "cbSPKbuffer")
+    /// @param signal_event_name Signal event name (e.g., "cbSIGNALevent")
     /// @param mode Operating mode (STANDALONE or CLIENT)
     /// @return Result containing ShmemSession on success, error message on failure
     static Result<ShmemSession> create(const std::string& cfg_name, const std::string& rec_name,
                                         const std::string& xmt_name, const std::string& xmt_local_name,
-                                        const std::string& status_name, const std::string& spk_name, Mode mode);
+                                        const std::string& status_name, const std::string& spk_name,
+                                        const std::string& signal_event_name, Mode mode);
 
     /// @brief Destructor - closes shared memory and releases resources
     ~ShmemSession();
@@ -369,6 +371,43 @@ public:
     /// @param spike Output parameter to receive spike packet
     /// @return Result<bool> - true if spike available, false if cache empty
     Result<bool> getRecentSpike(uint32_t channel, cbPKT_SPK& spike) const;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name Data Synchronization (Signal Event)
+    /// @{
+
+    /// @brief Wait for data availability signal
+    ///
+    /// Blocks until Central signals new data is available, or timeout occurs.
+    /// This is the shared memory equivalent of cbWaitforData().
+    ///
+    /// @param timeout_ms Timeout in milliseconds (default 250ms)
+    /// @return Result<bool> - true if signal received, false if timeout
+    Result<bool> waitForData(uint32_t timeout_ms = 250) const;
+
+    /// @brief Signal that new data is available
+    ///
+    /// Used by STANDALONE mode to notify CLIENT processes that new data
+    /// has been written to shared memory buffers.
+    ///
+    /// On Windows: SetEvent() to signal manual-reset event
+    /// On POSIX: sem_post() to increment semaphore
+    ///
+    /// @return Result indicating success or failure
+    Result<void> signalData();
+
+    /// @brief Reset the data signal
+    ///
+    /// Used by STANDALONE mode after clients have consumed data.
+    /// Only applicable to Windows (manual-reset events).
+    ///
+    /// On Windows: ResetEvent() to clear the event
+    /// On POSIX: No-op (semaphore is auto-reset by sem_wait)
+    ///
+    /// @return Result indicating success or failure
+    Result<void> resetSignal();
 
     /// @}
 
