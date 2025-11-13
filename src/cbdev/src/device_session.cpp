@@ -747,9 +747,9 @@ Result<void> DeviceSession::startSendThread() {
                         has_packets = true;
 
                         // Calculate actual packet size from header
-                        // Packet size in bytes = (dlen + 2) * 4
-                        // dlen is in dwords, +2 accounts for time and chid fields
-                        size_t packet_size = (pkt.cbpkt_header.dlen + 2) * 4;
+                        // Packet size in bytes = sizeof(header) + (dlen * 4)
+                        // With 64-bit PROCTIME, header is 16 bytes (4 dwords)
+                        size_t packet_size = sizeof(cbPKT_HEADER) + (pkt.cbpkt_header.dlen * 4);
 
                         // Send the packet (only actual size, not full cbPKT_GENERIC)
                         int bytes_sent = sendto(m_impl->socket,

@@ -238,9 +238,9 @@ struct ShmemSession::Impl {
         }
 
         // Calculate packet size in uint32_t words
-        // packet header is 2 uint32_t words (time, chid/type/dlen)
-        // dlen is in uint32_t words
-        uint32_t pkt_size_words = 2 + pkt.cbpkt_header.dlen;
+        // packet header is cbPKT_HEADER_32SIZE words (4 words with 64-bit PROCTIME)
+        // dlen is payload in uint32_t words
+        uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
 
         // Check if packet fits in buffer
         if (pkt_size_words > CENTRAL_cbRECBUFFLEN) {
@@ -1380,9 +1380,9 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
     CentralTransmitBuffer* xmt = m_impl->xmt_buffer;
 
     // Calculate packet size in uint32_t words
-    // packet header is 2 uint32_t words (time, chid/type/dlen)
-    // dlen is in uint32_t words
-    uint32_t pkt_size_words = 2 + pkt.cbpkt_header.dlen;
+    // packet header is cbPKT_HEADER_32SIZE words (4 words with 64-bit PROCTIME)
+    // dlen is payload in uint32_t words
+    uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
 
     // Check if there's enough space in the ring buffer
     uint32_t head = xmt->headindex;
@@ -1438,24 +1438,32 @@ Result<bool> ShmemSession::dequeuePacket(cbPKT_GENERIC& pkt) {
 
     uint32_t buflen = xmt->bufferlen;
 
-    // Read packet header (2 uint32_t words)
+    // Read packet header (4 uint32_t words = 16 bytes)
+    // Header contains: time (2 dwords: 0-1), chid/type (dword 2), dlen/instrument/reserved (dword 3)
+    // Note: PROCTIME is uint64_t (8 bytes) unless CBPROTO_311 is defined
     uint32_t* pkt_data = reinterpret_cast<uint32_t*>(&pkt);
 
-    if (tail + 2 <= buflen) {
+    if (tail + 4 <= buflen) {
         // Header doesn't wrap
         pkt_data[0] = xmt->buffer[tail];
         pkt_data[1] = xmt->buffer[tail + 1];
+        pkt_data[2] = xmt->buffer[tail + 2];
+        pkt_data[3] = xmt->buffer[tail + 3];
     } else {
         // Header wraps around
         pkt_data[0] = xmt->buffer[tail];
         pkt_data[1] = xmt->buffer[(tail + 1) % buflen];
+        pkt_data[2] = xmt->buffer[(tail + 2) % buflen];
+        pkt_data[3] = xmt->buffer[(tail + 3) % buflen];
     }
 
     // Now we know the packet size from dlen
-    uint32_t pkt_size_words = 2 + pkt.cbpkt_header.dlen;
+    // Total packet size = header + payload = cbPKT_HEADER_32SIZE + dlen
+    uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
 
-    // Read the rest of the packet
-    for (uint32_t i = 0; i < pkt_size_words; ++i) {
+    // Read the rest of the packet (starting from word 4, since we already read the header)
+    tail = (tail + 4) % buflen;  // Advance past the 4-word header we already read
+    for (uint32_t i = 4; i < pkt_size_words; ++i) {
         pkt_data[i] = xmt->buffer[tail];
         tail = (tail + 1) % buflen;
     }
@@ -1491,9 +1499,9 @@ Result<void> ShmemSession::enqueueLocalPacket(const cbPKT_GENERIC& pkt) {
     CentralTransmitBufferLocal* xmt_local = m_impl->xmt_local_buffer;
 
     // Calculate packet size in uint32_t words
-    // packet header is 2 uint32_t words (time, chid/type/dlen)
-    // dlen is in uint32_t words
-    uint32_t pkt_size_words = 2 + pkt.cbpkt_header.dlen;
+    // packet header is cbPKT_HEADER_32SIZE words (4 words with 64-bit PROCTIME)
+    // dlen is payload in uint32_t words
+    uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
 
     // Check if there's enough space in the ring buffer
     uint32_t head = xmt_local->headindex;
@@ -1549,24 +1557,32 @@ Result<bool> ShmemSession::dequeueLocalPacket(cbPKT_GENERIC& pkt) {
 
     uint32_t buflen = xmt_local->bufferlen;
 
-    // Read packet header (2 uint32_t words)
+    // Read packet header (4 uint32_t words = 16 bytes)
+    // Header contains: time (2 dwords: 0-1), chid/type (dword 2), dlen/instrument/reserved (dword 3)
+    // Note: PROCTIME is uint64_t (8 bytes) unless CBPROTO_311 is defined
     uint32_t* pkt_data = reinterpret_cast<uint32_t*>(&pkt);
 
-    if (tail + 2 <= buflen) {
+    if (tail + 4 <= buflen) {
         // Header doesn't wrap
         pkt_data[0] = xmt_local->buffer[tail];
         pkt_data[1] = xmt_local->buffer[tail + 1];
+        pkt_data[2] = xmt_local->buffer[tail + 2];
+        pkt_data[3] = xmt_local->buffer[tail + 3];
     } else {
         // Header wraps around
         pkt_data[0] = xmt_local->buffer[tail];
         pkt_data[1] = xmt_local->buffer[(tail + 1) % buflen];
+        pkt_data[2] = xmt_local->buffer[(tail + 2) % buflen];
+        pkt_data[3] = xmt_local->buffer[(tail + 3) % buflen];
     }
 
     // Now we know the packet size from dlen
-    uint32_t pkt_size_words = 2 + pkt.cbpkt_header.dlen;
+    // Total packet size = header + payload = cbPKT_HEADER_32SIZE + dlen
+    uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
 
-    // Read the rest of the packet
-    for (uint32_t i = 0; i < pkt_size_words; ++i) {
+    // Read the rest of the packet (starting from word 4, since we already read the header)
+    tail = (tail + 4) % buflen;  // Advance past the 4-word header we already read
+    for (uint32_t i = 4; i < pkt_size_words; ++i) {
         pkt_data[i] = xmt_local->buffer[tail];
         tail = (tail + 1) % buflen;
     }

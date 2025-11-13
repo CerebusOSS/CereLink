@@ -465,7 +465,7 @@ Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque,
     sysinfo.cbpkt_header.time = 1;
     sysinfo.cbpkt_header.chid = 0x8000;  // cbPKTCHAN_CONFIGURATION
     sysinfo.cbpkt_header.type = 0x92;    // cbPKTTYPE_SYSSETRUNLEV
-    sysinfo.cbpkt_header.dlen = ((sizeof(cbPKT_SYSINFO)/4) - 2);  // cbPKTDLEN_SYSINFO
+    sysinfo.cbpkt_header.dlen = cbPKTDLEN_SYSINFO;  // Use macro (accounts for 64-bit PROCTIME)
     sysinfo.cbpkt_header.instrument = 0;
 
     // Fill payload
