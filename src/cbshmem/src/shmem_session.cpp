@@ -69,6 +69,10 @@ struct ShmemSession::Impl {
     CentralPCStatus* status_buffer;
     CentralSpikeBuffer* spike_buffer;
 
+    // Receive buffer read tracking (for CLIENT mode reading)
+    uint32_t rec_tailindex;      // Our read position in receive buffer
+    uint32_t rec_tailwrap;       // Our wrap counter
+
     Impl()
         : mode(Mode::STANDALONE)
         , is_open(false)
@@ -95,6 +99,8 @@ struct ShmemSession::Impl {
         , xmt_local_buffer(nullptr)
         , status_buffer(nullptr)
         , spike_buffer(nullptr)
+        , rec_tailindex(0)
+        , rec_tailwrap(0)
     {}
 
     ~Impl() {
@@ -1836,6 +1842,130 @@ Result<void> ShmemSession::resetSignal() {
 
     return Result<void>::ok();
 #endif
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Receive buffer reading methods
+
+Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_packets, size_t& packets_read) {
+    if (!m_impl || !m_impl->is_open) {
+        return Result<void>::error("Session is not open");
+    }
+
+    if (!m_impl->rec_buffer) {
+        return Result<void>::error("Receive buffer not initialized");
+    }
+
+    if (!packets || max_packets == 0) {
+        return Result<void>::error("Invalid parameters");
+    }
+
+    packets_read = 0;
+
+    // Read current writer position (volatile reads)
+    uint32_t head_index = m_impl->rec_buffer->headindex;
+    uint32_t head_wrap = m_impl->rec_buffer->headwrap;
+
+    // Check if there's new data available
+    if (m_impl->rec_tailwrap == head_wrap && m_impl->rec_tailindex == head_index) {
+        // No new data
+        return Result<void>::ok();
+    }
+
+    // Read packets until we catch up to head or reach max_packets
+    while (packets_read < max_packets) {
+        // Check if we've caught up
+        if (m_impl->rec_tailwrap == head_wrap && m_impl->rec_tailindex == head_index) {
+            break;
+        }
+
+        // Check for buffer overrun (writer lapped us)
+        if ((m_impl->rec_tailwrap + 1 == head_wrap && m_impl->rec_tailindex < head_index) ||
+            (m_impl->rec_tailwrap + 1 < head_wrap)) {
+            // We've been lapped - skip to current head position to recover
+            m_impl->rec_tailindex = head_index;
+            m_impl->rec_tailwrap = head_wrap;
+            return Result<void>::error("Receive buffer overrun - data lost");
+        }
+
+        // Read packet size (first dword is packet size in dwords)
+        uint32_t pkt_size_dwords = m_impl->rec_buffer->buffer[m_impl->rec_tailindex];
+
+        if (pkt_size_dwords == 0 || pkt_size_dwords > (sizeof(cbPKT_GENERIC) / sizeof(uint32_t))) {
+            // Invalid packet size - skip this position
+            m_impl->rec_tailindex++;
+            if (m_impl->rec_tailindex >= CENTRAL_cbRECBUFFLEN) {
+                m_impl->rec_tailindex = 0;
+                m_impl->rec_tailwrap++;
+            }
+            continue;
+        }
+
+        // Check if packet would wrap around buffer
+        uint32_t end_index = m_impl->rec_tailindex + pkt_size_dwords;
+
+        if (end_index <= CENTRAL_cbRECBUFFLEN) {
+            // Packet doesn't wrap - copy directly
+            std::memcpy(&packets[packets_read],
+                       &m_impl->rec_buffer->buffer[m_impl->rec_tailindex],
+                       pkt_size_dwords * sizeof(uint32_t));
+        } else {
+            // Packet wraps around - copy in two parts
+            uint32_t first_part_size = CENTRAL_cbRECBUFFLEN - m_impl->rec_tailindex;
+            uint32_t second_part_size = pkt_size_dwords - first_part_size;
+
+            std::memcpy(&packets[packets_read],
+                       &m_impl->rec_buffer->buffer[m_impl->rec_tailindex],
+                       first_part_size * sizeof(uint32_t));
+
+            std::memcpy(reinterpret_cast<uint32_t*>(&packets[packets_read]) + first_part_size,
+                       &m_impl->rec_buffer->buffer[0],
+                       second_part_size * sizeof(uint32_t));
+        }
+
+        packets_read++;
+
+        // Advance tail pointer
+        m_impl->rec_tailindex += pkt_size_dwords;
+        if (m_impl->rec_tailindex >= CENTRAL_cbRECBUFFLEN) {
+            m_impl->rec_tailindex -= CENTRAL_cbRECBUFFLEN;
+            m_impl->rec_tailwrap++;
+        }
+    }
+
+    return Result<void>::ok();
+}
+
+Result<void> ShmemSession::getReceiveBufferStats(uint32_t& received, uint32_t& available) const {
+    if (!m_impl || !m_impl->is_open) {
+        return Result<void>::error("Session is not open");
+    }
+
+    if (!m_impl->rec_buffer) {
+        return Result<void>::error("Receive buffer not initialized");
+    }
+
+    received = m_impl->rec_buffer->received;
+
+    // Calculate available packets (approximate - based on position difference)
+    uint32_t head_index = m_impl->rec_buffer->headindex;
+    uint32_t head_wrap = m_impl->rec_buffer->headwrap;
+
+    if (m_impl->rec_tailwrap == head_wrap) {
+        if (head_index >= m_impl->rec_tailindex) {
+            available = head_index - m_impl->rec_tailindex;
+        } else {
+            available = 0;  // Head behind tail (shouldn't happen)
+        }
+    } else if (m_impl->rec_tailwrap + 1 == head_wrap) {
+        // One wrap difference
+        available = (CENTRAL_cbRECBUFFLEN - m_impl->rec_tailindex) + head_index;
+    } else {
+        // Multiple wraps - buffer overrun
+        available = 0;
+    }
+
+    return Result<void>::ok();
 }
 
 } // namespace cbshmem

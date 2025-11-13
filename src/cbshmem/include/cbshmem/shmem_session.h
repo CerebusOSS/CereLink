@@ -375,6 +375,32 @@ public:
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
+    /// @name Receive Buffer Access (Ring Buffer for Incoming Packets)
+    /// @{
+
+    /// @brief Read available packets from receive buffer
+    ///
+    /// Reads packets that have been written since last read.
+    /// Uses ring buffer with wrap-around tracking.
+    ///
+    /// @param packets Output buffer to receive packets (must be pre-allocated)
+    /// @param max_packets Maximum number of packets to read
+    /// @param packets_read Output: actual number of packets read
+    /// @return Result indicating success or failure
+    Result<void> readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_packets, size_t& packets_read);
+
+    /// @brief Get current receive buffer statistics
+    ///
+    /// Returns information about the receive buffer state for monitoring.
+    ///
+    /// @param received Total packets received by writer
+    /// @param available Packets available to read (not yet consumed)
+    /// @return Result indicating success or failure
+    Result<void> getReceiveBufferStats(uint32_t& received, uint32_t& available) const;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////
     /// @name Data Synchronization (Signal Event)
     /// @{
 
