@@ -43,6 +43,10 @@ struct SdkSession::Impl {
     std::mutex callback_mutex;
     std::condition_variable callback_cv;
 
+    // Shared memory receive thread (CLIENT mode only)
+    std::unique_ptr<std::thread> shmem_receive_thread;
+    std::atomic<bool> shmem_receive_thread_running{false};
+
     // User callbacks
     PacketCallback packet_callback;
     ErrorCallback error_callback;
@@ -62,6 +66,12 @@ struct SdkSession::Impl {
             callback_cv.notify_one();
             if (callback_thread && callback_thread->joinable()) {
                 callback_thread->join();
+            }
+        }
+        if (shmem_receive_thread_running.load()) {
+            shmem_receive_thread_running.store(false);
+            if (shmem_receive_thread && shmem_receive_thread->joinable()) {
+                shmem_receive_thread->join();
             }
         }
     }
@@ -280,14 +290,17 @@ Result<void> SdkSession::start() {
         return Result<void>::error("Session is already running");
     }
 
-    // Start callback thread first
-    m_impl->callback_thread_running.store(true);
-    m_impl->callback_thread = std::make_unique<std::thread>([this]() {
-        callbackThreadLoop();
-    });
-
     // Set up device callbacks (if in STANDALONE mode)
     if (m_impl->device_session.has_value()) {
+        // STANDALONE mode - start callback thread + device threads
+        // In STANDALONE mode, we need the callback thread to decouple fast UDP receive from slow user callbacks
+
+        // Start callback thread
+        m_impl->callback_thread_running.store(true);
+        m_impl->callback_thread = std::make_unique<std::thread>([this]() {
+            callbackThreadLoop();
+        });
+
         // Packet receive callback
         m_impl->device_session->setPacketCallback([this](const cbPKT_GENERIC* pkts, size_t count) {
             onPacketsReceivedFromDevice(pkts, count);
@@ -327,6 +340,16 @@ Result<void> SdkSession::start() {
             }
             return Result<void>::error("Failed to start device send thread: " + send_result.error());
         }
+    } else {
+        // CLIENT mode - start shared memory receive thread only
+        // In CLIENT mode, we don't need a separate callback thread because reading from
+        // cbRECbuffer is not time-critical (200MB buffer provides ample buffering)
+        // This eliminates an extra data copy and thread overhead
+
+        m_impl->shmem_receive_thread_running.store(true);
+        m_impl->shmem_receive_thread = std::make_unique<std::thread>([this]() {
+            shmemReceiveThreadLoop();
+        });
     }
 
     m_impl->is_running.store(true);
@@ -340,10 +363,18 @@ void SdkSession::stop() {
 
     m_impl->is_running.store(false);
 
-    // Stop device threads
+    // Stop device threads (if STANDALONE mode)
     if (m_impl->device_session.has_value()) {
         m_impl->device_session->stopReceiveThread();
         m_impl->device_session->stopSendThread();
+    }
+
+    // Stop shared memory receive thread (if CLIENT mode)
+    if (m_impl->shmem_receive_thread_running.load()) {
+        m_impl->shmem_receive_thread_running.store(false);
+        if (m_impl->shmem_receive_thread && m_impl->shmem_receive_thread->joinable()) {
+            m_impl->shmem_receive_thread->join();
+        }
     }
 
     // Stop callback thread
@@ -481,9 +512,76 @@ void SdkSession::onPacketsReceivedFromDevice(const cbPKT_GENERIC* pkts, size_t c
         }
     }
 
+    // Signal CLIENT processes that new data is available (STANDALONE mode only)
+    // This wakes up any CLIENT processes waiting in waitForData()
+    m_impl->shmem_session->signalData();
+
     // Wake callback thread if it's waiting
     if (m_impl->callback_thread_waiting.load(std::memory_order_relaxed)) {
         m_impl->callback_cv.notify_one();
+    }
+}
+
+void SdkSession::shmemReceiveThreadLoop() {
+    // This is the shared memory receive thread (CLIENT mode only)
+    // Waits for signal from STANDALONE, reads packets from cbRECbuffer, invokes user callback directly
+    //
+    // Note: In CLIENT mode, we don't need a separate callback dispatcher thread because:
+    // 1. Reading from cbRECbuffer is not time-critical (unlike UDP receive which must be fast)
+    // 2. The 200MB buffer provides ample buffering even if callbacks are slow
+    // 3. This avoids an extra data copy through packet_queue
+
+    constexpr size_t MAX_BATCH = 128;  // Read up to 128 packets at a time
+    cbPKT_GENERIC packets[MAX_BATCH];
+
+    while (m_impl->shmem_receive_thread_running.load()) {
+        // Wait for signal from STANDALONE (efficient, no polling!)
+        auto wait_result = m_impl->shmem_session->waitForData(250);  // 250ms timeout
+        if (wait_result.isError()) {
+            // Error waiting - invoke error callback
+            std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
+            if (m_impl->error_callback) {
+                m_impl->error_callback("Error waiting for shared memory signal: " + wait_result.error());
+            }
+            continue;
+        }
+
+        if (!wait_result.value()) {
+            // Timeout - no signal received, loop again
+            continue;
+        }
+
+        // Signal received! Read available packets from cbRECbuffer
+        size_t packets_read = 0;
+        auto read_result = m_impl->shmem_session->readReceiveBuffer(packets, MAX_BATCH, packets_read);
+        if (read_result.isError()) {
+            // Buffer overrun or other error
+            {
+                std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
+                m_impl->stats.shmem_store_errors++;  // Reuse this stat for read errors
+            }
+
+            // Invoke error callback
+            std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
+            if (m_impl->error_callback) {
+                m_impl->error_callback("Error reading from shared memory: " + read_result.error());
+            }
+            continue;
+        }
+
+        if (packets_read > 0) {
+            // Update stats
+            {
+                std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
+                m_impl->stats.packets_delivered_to_callback += packets_read;
+            }
+
+            // Invoke user callback directly (no queueing, no extra copy!)
+            std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
+            if (m_impl->packet_callback) {
+                m_impl->packet_callback(packets, packets_read);
+            }
+        }
     }
 }
 
