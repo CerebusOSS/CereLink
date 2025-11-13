@@ -119,11 +119,12 @@ public:
     /// @param xmt_name Transmit buffer shared memory name (e.g., "XmtGlobal")
     /// @param xmt_local_name Local transmit buffer shared memory name (e.g., "XmtLocal")
     /// @param status_name PC status buffer shared memory name (e.g., "cbSTATUSbuffer")
+    /// @param spk_name Spike cache buffer shared memory name (e.g., "cbSPKbuffer")
     /// @param mode Operating mode (STANDALONE or CLIENT)
     /// @return Result containing ShmemSession on success, error message on failure
     static Result<ShmemSession> create(const std::string& cfg_name, const std::string& rec_name,
                                         const std::string& xmt_name, const std::string& xmt_local_name,
-                                        const std::string& status_name, Mode mode);
+                                        const std::string& status_name, const std::string& spk_name, Mode mode);
 
     /// @brief Destructor - closes shared memory and releases resources
     ~ShmemSession();
@@ -341,6 +342,33 @@ public:
     /// @param is_gemini true for Gemini system, false otherwise
     /// @return Result indicating success or failure
     Result<void> setGeminiSystem(bool is_gemini);
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name Spike Cache Buffer Access
+    /// @{
+
+    /// @brief Get spike cache for a specific channel
+    ///
+    /// The spike cache stores the most recent spikes for each channel,
+    /// allowing tools like Raster to quickly access recent spikes without
+    /// scanning the entire receive buffer.
+    ///
+    /// @param channel Channel number (0-based)
+    /// @param cache Output parameter to receive spike cache
+    /// @return Result indicating success or failure
+    Result<void> getSpikeCache(uint32_t channel, CentralSpikeCache& cache) const;
+
+    /// @brief Get most recent spike packet from cache
+    ///
+    /// Returns the most recently cached spike for a channel. This is faster
+    /// than scanning the receive buffer.
+    ///
+    /// @param channel Channel number (0-based)
+    /// @param spike Output parameter to receive spike packet
+    /// @return Result<bool> - true if spike available, false if cache empty
+    Result<bool> getRecentSpike(uint32_t channel, cbPKT_SPK& spike) const;
 
     /// @}
 
