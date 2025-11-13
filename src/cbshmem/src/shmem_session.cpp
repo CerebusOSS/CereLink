@@ -29,26 +29,34 @@ namespace cbshmem {
 ///
 struct ShmemSession::Impl {
     Mode mode;
-    std::string cfg_name;  // Config buffer name (e.g., "cbCFGbuffer")
-    std::string rec_name;  // Receive buffer name (e.g., "cbRECbuffer")
-    std::string xmt_name;  // Transmit buffer name (e.g., "XmtGlobal")
+    std::string cfg_name;        // Config buffer name (e.g., "cbCFGbuffer")
+    std::string rec_name;        // Receive buffer name (e.g., "cbRECbuffer")
+    std::string xmt_name;        // Transmit buffer name (e.g., "XmtGlobal")
+    std::string xmt_local_name;  // Local transmit buffer name (e.g., "XmtLocal")
+    std::string status_name;     // PC status buffer name (e.g., "cbSTATUSbuffer")
     bool is_open;
 
-    // Platform-specific handles (separate segments for config, receive, and transmit)
+    // Platform-specific handles (separate segments for each buffer)
 #ifdef _WIN32
     HANDLE cfg_file_mapping;
     HANDLE rec_file_mapping;
     HANDLE xmt_file_mapping;
+    HANDLE xmt_local_file_mapping;
+    HANDLE status_file_mapping;
 #else
     int cfg_shm_fd;
     int rec_shm_fd;
     int xmt_shm_fd;
+    int xmt_local_shm_fd;
+    int status_shm_fd;
 #endif
 
     // Pointers to shared memory buffers
     CentralConfigBuffer* cfg_buffer;
     CentralReceiveBuffer* rec_buffer;
     CentralTransmitBuffer* xmt_buffer;
+    CentralTransmitBufferLocal* xmt_local_buffer;
+    CentralPCStatus* status_buffer;
 
     Impl()
         : mode(Mode::STANDALONE)
@@ -57,14 +65,20 @@ struct ShmemSession::Impl {
         , cfg_file_mapping(nullptr)
         , rec_file_mapping(nullptr)
         , xmt_file_mapping(nullptr)
+        , xmt_local_file_mapping(nullptr)
+        , status_file_mapping(nullptr)
 #else
         , cfg_shm_fd(-1)
         , rec_shm_fd(-1)
         , xmt_shm_fd(-1)
+        , xmt_local_shm_fd(-1)
+        , status_shm_fd(-1)
 #endif
         , cfg_buffer(nullptr)
         , rec_buffer(nullptr)
         , xmt_buffer(nullptr)
+        , xmt_local_buffer(nullptr)
+        , status_buffer(nullptr)
     {}
 
     ~Impl() {
@@ -79,17 +93,25 @@ struct ShmemSession::Impl {
         if (cfg_buffer) UnmapViewOfFile(cfg_buffer);
         if (rec_buffer) UnmapViewOfFile(rec_buffer);
         if (xmt_buffer) UnmapViewOfFile(xmt_buffer);
+        if (xmt_local_buffer) UnmapViewOfFile(xmt_local_buffer);
+        if (status_buffer) UnmapViewOfFile(status_buffer);
         if (cfg_file_mapping) CloseHandle(cfg_file_mapping);
         if (rec_file_mapping) CloseHandle(rec_file_mapping);
         if (xmt_file_mapping) CloseHandle(xmt_file_mapping);
+        if (xmt_local_file_mapping) CloseHandle(xmt_local_file_mapping);
+        if (status_file_mapping) CloseHandle(status_file_mapping);
         cfg_file_mapping = nullptr;
         rec_file_mapping = nullptr;
         xmt_file_mapping = nullptr;
+        xmt_local_file_mapping = nullptr;
+        status_file_mapping = nullptr;
 #else
         // POSIX requires shared memory names to start with "/"
         std::string posix_cfg_name = (cfg_name[0] == '/') ? cfg_name : ("/" + cfg_name);
         std::string posix_rec_name = (rec_name[0] == '/') ? rec_name : ("/" + rec_name);
         std::string posix_xmt_name = (xmt_name[0] == '/') ? xmt_name : ("/" + xmt_name);
+        std::string posix_xmt_local_name = (xmt_local_name[0] == '/') ? xmt_local_name : ("/" + xmt_local_name);
+        std::string posix_status_name = (status_name[0] == '/') ? status_name : ("/" + status_name);
 
         if (cfg_buffer) {
             munmap(cfg_buffer, sizeof(CentralConfigBuffer));
@@ -99,6 +121,12 @@ struct ShmemSession::Impl {
         }
         if (xmt_buffer) {
             munmap(xmt_buffer, sizeof(CentralTransmitBuffer));
+        }
+        if (xmt_local_buffer) {
+            munmap(xmt_local_buffer, sizeof(CentralTransmitBufferLocal));
+        }
+        if (status_buffer) {
+            munmap(status_buffer, sizeof(CentralPCStatus));
         }
 
         if (cfg_shm_fd >= 0) {
@@ -122,14 +150,32 @@ struct ShmemSession::Impl {
             }
         }
 
+        if (xmt_local_shm_fd >= 0) {
+            ::close(xmt_local_shm_fd);
+            if (mode == Mode::STANDALONE) {
+                shm_unlink(posix_xmt_local_name.c_str());
+            }
+        }
+
+        if (status_shm_fd >= 0) {
+            ::close(status_shm_fd);
+            if (mode == Mode::STANDALONE) {
+                shm_unlink(posix_status_name.c_str());
+            }
+        }
+
         cfg_shm_fd = -1;
         rec_shm_fd = -1;
         xmt_shm_fd = -1;
+        xmt_local_shm_fd = -1;
+        status_shm_fd = -1;
 #endif
 
         cfg_buffer = nullptr;
         rec_buffer = nullptr;
         xmt_buffer = nullptr;
+        xmt_local_buffer = nullptr;
+        status_buffer = nullptr;
         is_open = false;
     }
 
@@ -284,12 +330,120 @@ struct ShmemSession::Impl {
             return Result<void>::error("Failed to map transmit view of file");
         }
 
+        // Create local transmit buffer segment (separate from global transmit)
+        xmt_local_file_mapping = CreateFileMappingA(
+            INVALID_HANDLE_VALUE,
+            nullptr,
+            access,
+            0,
+            sizeof(CentralTransmitBufferLocal),
+            xmt_local_name.c_str()
+        );
+
+        if (!xmt_local_file_mapping) {
+            UnmapViewOfFile(xmt_buffer);
+            UnmapViewOfFile(rec_buffer);
+            UnmapViewOfFile(cfg_buffer);
+            CloseHandle(xmt_file_mapping);
+            CloseHandle(rec_file_mapping);
+            CloseHandle(cfg_file_mapping);
+            xmt_buffer = nullptr;
+            rec_buffer = nullptr;
+            cfg_buffer = nullptr;
+            xmt_file_mapping = nullptr;
+            rec_file_mapping = nullptr;
+            cfg_file_mapping = nullptr;
+            return Result<void>::error("Failed to create local transmit file mapping");
+        }
+
+        xmt_local_buffer = static_cast<CentralTransmitBufferLocal*>(
+            MapViewOfFile(xmt_local_file_mapping, map_access, 0, 0, sizeof(CentralTransmitBufferLocal))
+        );
+
+        if (!xmt_local_buffer) {
+            UnmapViewOfFile(xmt_buffer);
+            UnmapViewOfFile(rec_buffer);
+            UnmapViewOfFile(cfg_buffer);
+            CloseHandle(xmt_local_file_mapping);
+            CloseHandle(xmt_file_mapping);
+            CloseHandle(rec_file_mapping);
+            CloseHandle(cfg_file_mapping);
+            xmt_local_buffer = nullptr;
+            xmt_buffer = nullptr;
+            rec_buffer = nullptr;
+            cfg_buffer = nullptr;
+            xmt_local_file_mapping = nullptr;
+            xmt_file_mapping = nullptr;
+            rec_file_mapping = nullptr;
+            cfg_file_mapping = nullptr;
+            return Result<void>::error("Failed to map local transmit view of file");
+        }
+
+        // Create PC status buffer segment
+        status_file_mapping = CreateFileMappingA(
+            INVALID_HANDLE_VALUE,
+            nullptr,
+            access,
+            0,
+            sizeof(CentralPCStatus),
+            status_name.c_str()
+        );
+
+        if (!status_file_mapping) {
+            UnmapViewOfFile(xmt_local_buffer);
+            UnmapViewOfFile(xmt_buffer);
+            UnmapViewOfFile(rec_buffer);
+            UnmapViewOfFile(cfg_buffer);
+            CloseHandle(xmt_local_file_mapping);
+            CloseHandle(xmt_file_mapping);
+            CloseHandle(rec_file_mapping);
+            CloseHandle(cfg_file_mapping);
+            xmt_local_buffer = nullptr;
+            xmt_buffer = nullptr;
+            rec_buffer = nullptr;
+            cfg_buffer = nullptr;
+            xmt_local_file_mapping = nullptr;
+            xmt_file_mapping = nullptr;
+            rec_file_mapping = nullptr;
+            cfg_file_mapping = nullptr;
+            return Result<void>::error("Failed to create status file mapping");
+        }
+
+        status_buffer = static_cast<CentralPCStatus*>(
+            MapViewOfFile(status_file_mapping, map_access, 0, 0, sizeof(CentralPCStatus))
+        );
+
+        if (!status_buffer) {
+            UnmapViewOfFile(xmt_local_buffer);
+            UnmapViewOfFile(xmt_buffer);
+            UnmapViewOfFile(rec_buffer);
+            UnmapViewOfFile(cfg_buffer);
+            CloseHandle(status_file_mapping);
+            CloseHandle(xmt_local_file_mapping);
+            CloseHandle(xmt_file_mapping);
+            CloseHandle(rec_file_mapping);
+            CloseHandle(cfg_file_mapping);
+            status_buffer = nullptr;
+            xmt_local_buffer = nullptr;
+            xmt_buffer = nullptr;
+            rec_buffer = nullptr;
+            cfg_buffer = nullptr;
+            status_file_mapping = nullptr;
+            xmt_local_file_mapping = nullptr;
+            xmt_file_mapping = nullptr;
+            rec_file_mapping = nullptr;
+            cfg_file_mapping = nullptr;
+            return Result<void>::error("Failed to map status view of file");
+        }
+
 #else
-        // POSIX (macOS/Linux) implementation - create three separate shared memory segments
+        // POSIX (macOS/Linux) implementation - create five separate shared memory segments
         // POSIX requires shared memory names to start with "/"
         std::string posix_cfg_name = (cfg_name[0] == '/') ? cfg_name : ("/" + cfg_name);
         std::string posix_rec_name = (rec_name[0] == '/') ? rec_name : ("/" + rec_name);
         std::string posix_xmt_name = (xmt_name[0] == '/') ? xmt_name : ("/" + xmt_name);
+        std::string posix_xmt_local_name = (xmt_local_name[0] == '/') ? xmt_local_name : ("/" + xmt_local_name);
+        std::string posix_status_name = (status_name[0] == '/') ? status_name : ("/" + status_name);
 
         int flags = (mode == Mode::STANDALONE) ? (O_CREAT | O_RDWR) : O_RDONLY;
         mode_t perms = (mode == Mode::STANDALONE) ? 0644 : 0;
@@ -300,6 +454,8 @@ struct ShmemSession::Impl {
             shm_unlink(posix_cfg_name.c_str());  // Ignore errors if it doesn't exist
             shm_unlink(posix_rec_name.c_str());
             shm_unlink(posix_xmt_name.c_str());
+            shm_unlink(posix_xmt_local_name.c_str());
+            shm_unlink(posix_status_name.c_str());
         }
 
         // Create/open config buffer segment
@@ -415,6 +571,142 @@ struct ShmemSession::Impl {
             xmt_shm_fd = -1;
             return Result<void>::error("Failed to map transmit shared memory");
         }
+
+        // Create/open local transmit buffer segment
+        xmt_local_shm_fd = shm_open(posix_xmt_local_name.c_str(), flags, perms);
+        if (xmt_local_shm_fd < 0) {
+            munmap(xmt_buffer, sizeof(CentralTransmitBuffer));
+            munmap(rec_buffer, sizeof(CentralReceiveBuffer));
+            munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+            ::close(xmt_shm_fd);
+            ::close(rec_shm_fd);
+            ::close(cfg_shm_fd);
+            xmt_buffer = nullptr;
+            rec_buffer = nullptr;
+            cfg_buffer = nullptr;
+            xmt_shm_fd = -1;
+            rec_shm_fd = -1;
+            cfg_shm_fd = -1;
+            return Result<void>::error("Failed to open local transmit shared memory: " + std::string(strerror(errno)));
+        }
+
+        if (mode == Mode::STANDALONE) {
+            if (ftruncate(xmt_local_shm_fd, sizeof(CentralTransmitBufferLocal)) < 0) {
+                std::string err_msg = "Failed to set local transmit shared memory size: " + std::string(strerror(errno));
+                munmap(xmt_buffer, sizeof(CentralTransmitBuffer));
+                munmap(rec_buffer, sizeof(CentralReceiveBuffer));
+                munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+                ::close(xmt_local_shm_fd);
+                ::close(xmt_shm_fd);
+                ::close(rec_shm_fd);
+                ::close(cfg_shm_fd);
+                xmt_buffer = nullptr;
+                rec_buffer = nullptr;
+                cfg_buffer = nullptr;
+                xmt_local_shm_fd = -1;
+                xmt_shm_fd = -1;
+                rec_shm_fd = -1;
+                cfg_shm_fd = -1;
+                return Result<void>::error(err_msg);
+            }
+        }
+
+        xmt_local_buffer = static_cast<CentralTransmitBufferLocal*>(
+            mmap(nullptr, sizeof(CentralTransmitBufferLocal), prot, MAP_SHARED, xmt_local_shm_fd, 0)
+        );
+
+        if (xmt_local_buffer == MAP_FAILED) {
+            munmap(xmt_buffer, sizeof(CentralTransmitBuffer));
+            munmap(rec_buffer, sizeof(CentralReceiveBuffer));
+            munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+            ::close(xmt_local_shm_fd);
+            ::close(xmt_shm_fd);
+            ::close(rec_shm_fd);
+            ::close(cfg_shm_fd);
+            xmt_local_buffer = nullptr;
+            xmt_buffer = nullptr;
+            rec_buffer = nullptr;
+            cfg_buffer = nullptr;
+            xmt_local_shm_fd = -1;
+            xmt_shm_fd = -1;
+            rec_shm_fd = -1;
+            cfg_shm_fd = -1;
+            return Result<void>::error("Failed to map local transmit shared memory");
+        }
+
+        // Create/open status buffer segment
+        status_shm_fd = shm_open(posix_status_name.c_str(), flags, perms);
+        if (status_shm_fd < 0) {
+            munmap(xmt_local_buffer, sizeof(CentralTransmitBufferLocal));
+            munmap(xmt_buffer, sizeof(CentralTransmitBuffer));
+            munmap(rec_buffer, sizeof(CentralReceiveBuffer));
+            munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+            ::close(xmt_local_shm_fd);
+            ::close(xmt_shm_fd);
+            ::close(rec_shm_fd);
+            ::close(cfg_shm_fd);
+            xmt_local_buffer = nullptr;
+            xmt_buffer = nullptr;
+            rec_buffer = nullptr;
+            cfg_buffer = nullptr;
+            xmt_local_shm_fd = -1;
+            xmt_shm_fd = -1;
+            rec_shm_fd = -1;
+            cfg_shm_fd = -1;
+            return Result<void>::error("Failed to open status shared memory: " + std::string(strerror(errno)));
+        }
+
+        if (mode == Mode::STANDALONE) {
+            if (ftruncate(status_shm_fd, sizeof(CentralPCStatus)) < 0) {
+                std::string err_msg = "Failed to set status shared memory size: " + std::string(strerror(errno));
+                munmap(xmt_local_buffer, sizeof(CentralTransmitBufferLocal));
+                munmap(xmt_buffer, sizeof(CentralTransmitBuffer));
+                munmap(rec_buffer, sizeof(CentralReceiveBuffer));
+                munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+                ::close(status_shm_fd);
+                ::close(xmt_local_shm_fd);
+                ::close(xmt_shm_fd);
+                ::close(rec_shm_fd);
+                ::close(cfg_shm_fd);
+                xmt_local_buffer = nullptr;
+                xmt_buffer = nullptr;
+                rec_buffer = nullptr;
+                cfg_buffer = nullptr;
+                status_shm_fd = -1;
+                xmt_local_shm_fd = -1;
+                xmt_shm_fd = -1;
+                rec_shm_fd = -1;
+                cfg_shm_fd = -1;
+                return Result<void>::error(err_msg);
+            }
+        }
+
+        status_buffer = static_cast<CentralPCStatus*>(
+            mmap(nullptr, sizeof(CentralPCStatus), prot, MAP_SHARED, status_shm_fd, 0)
+        );
+
+        if (status_buffer == MAP_FAILED) {
+            munmap(xmt_local_buffer, sizeof(CentralTransmitBufferLocal));
+            munmap(xmt_buffer, sizeof(CentralTransmitBuffer));
+            munmap(rec_buffer, sizeof(CentralReceiveBuffer));
+            munmap(cfg_buffer, sizeof(CentralConfigBuffer));
+            ::close(status_shm_fd);
+            ::close(xmt_local_shm_fd);
+            ::close(xmt_shm_fd);
+            ::close(rec_shm_fd);
+            ::close(cfg_shm_fd);
+            status_buffer = nullptr;
+            xmt_local_buffer = nullptr;
+            xmt_buffer = nullptr;
+            rec_buffer = nullptr;
+            cfg_buffer = nullptr;
+            status_shm_fd = -1;
+            xmt_local_shm_fd = -1;
+            xmt_shm_fd = -1;
+            rec_shm_fd = -1;
+            cfg_shm_fd = -1;
+            return Result<void>::error("Failed to map status shared memory");
+        }
 #endif
 
         // Initialize buffers in standalone mode
@@ -442,6 +734,34 @@ struct ShmemSession::Impl {
             xmt_buffer->tailindex = 0;
             xmt_buffer->last_valid_index = CENTRAL_cbXMT_GLOBAL_BUFFLEN - 1;
             xmt_buffer->bufferlen = CENTRAL_cbXMT_GLOBAL_BUFFLEN;
+
+            // Initialize local transmit buffer (in separate shared memory segment)
+            std::memset(xmt_local_buffer, 0, sizeof(CentralTransmitBufferLocal));
+            xmt_local_buffer->transmitted = 0;
+            xmt_local_buffer->headindex = 0;
+            xmt_local_buffer->tailindex = 0;
+            xmt_local_buffer->last_valid_index = CENTRAL_cbXMT_LOCAL_BUFFLEN - 1;
+            xmt_local_buffer->bufferlen = CENTRAL_cbXMT_LOCAL_BUFFLEN;
+
+            // Initialize status buffer (in separate shared memory segment)
+            std::memset(status_buffer, 0, sizeof(CentralPCStatus));
+            status_buffer->m_iBlockRecording = 0;
+            status_buffer->m_nPCStatusFlags = 0;
+            status_buffer->m_nNumFEChans = CENTRAL_cbNUM_FE_CHANS;
+            status_buffer->m_nNumAnainChans = CENTRAL_cbNUM_ANAIN_CHANS;
+            status_buffer->m_nNumAnalogChans = CENTRAL_cbNUM_ANALOG_CHANS;
+            status_buffer->m_nNumAoutChans = CENTRAL_cbNUM_ANAOUT_CHANS;
+            status_buffer->m_nNumAudioChans = CENTRAL_cbNUM_AUDOUT_CHANS;
+            status_buffer->m_nNumAnalogoutChans = CENTRAL_cbNUM_ANALOGOUT_CHANS;
+            status_buffer->m_nNumDiginChans = CENTRAL_cbNUM_DIGIN_CHANS;
+            status_buffer->m_nNumSerialChans = CENTRAL_cbNUM_SERIAL_CHANS;
+            status_buffer->m_nNumDigoutChans = CENTRAL_cbNUM_DIGOUT_CHANS;
+            status_buffer->m_nNumTotalChans = CENTRAL_cbMAXCHANS;
+            for (int i = 0; i < CENTRAL_cbMAXPROCS; ++i) {
+                status_buffer->m_nNspStatus[i] = NSPStatus::NSP_INIT;
+                status_buffer->m_nNumNTrodesPerInstrument[i] = 0;
+            }
+            status_buffer->m_nGeminiSystem = 0;
         }
 
         is_open = true;
@@ -461,11 +781,15 @@ ShmemSession::~ShmemSession() = default;
 ShmemSession::ShmemSession(ShmemSession&& other) noexcept = default;
 ShmemSession& ShmemSession::operator=(ShmemSession&& other) noexcept = default;
 
-Result<ShmemSession> ShmemSession::create(const std::string& cfg_name, const std::string& rec_name, const std::string& xmt_name, Mode mode) {
+Result<ShmemSession> ShmemSession::create(const std::string& cfg_name, const std::string& rec_name,
+                                           const std::string& xmt_name, const std::string& xmt_local_name,
+                                           const std::string& status_name, Mode mode) {
     ShmemSession session;
     session.m_impl->cfg_name = cfg_name;
     session.m_impl->rec_name = rec_name;
     session.m_impl->xmt_name = xmt_name;
+    session.m_impl->xmt_local_name = xmt_local_name;
+    session.m_impl->status_name = status_name;
     session.m_impl->mode = mode;
 
     auto result = session.m_impl->open();
@@ -847,6 +1171,192 @@ bool ShmemSession::hasTransmitPackets() const {
     }
 
     return m_impl->xmt_buffer->headindex != m_impl->xmt_buffer->tailindex;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Local Transmit Queue Operations (IPC-only packets)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+Result<void> ShmemSession::enqueueLocalPacket(const cbPKT_GENERIC& pkt) {
+    if (!m_impl || !m_impl->is_open) {
+        return Result<void>::error("Session is not open");
+    }
+
+    if (!m_impl->xmt_local_buffer) {
+        return Result<void>::error("Local transmit buffer not initialized");
+    }
+
+    CentralTransmitBufferLocal* xmt_local = m_impl->xmt_local_buffer;
+
+    // Calculate packet size in uint32_t words
+    // packet header is 2 uint32_t words (time, chid/type/dlen)
+    // dlen is in uint32_t words
+    uint32_t pkt_size_words = 2 + pkt.cbpkt_header.dlen;
+
+    // Check if there's enough space in the ring buffer
+    uint32_t head = xmt_local->headindex;
+    uint32_t tail = xmt_local->tailindex;
+    uint32_t buflen = xmt_local->bufferlen;
+
+    // Calculate available space
+    uint32_t used;
+    if (head >= tail) {
+        used = head - tail;
+    } else {
+        used = buflen - tail + head;
+    }
+
+    uint32_t available = buflen - used - 1;  // -1 to distinguish full from empty
+
+    if (available < pkt_size_words) {
+        return Result<void>::error("Local transmit buffer full");
+    }
+
+    // Copy packet data to buffer (as uint32_t words)
+    const uint32_t* pkt_data = reinterpret_cast<const uint32_t*>(&pkt);
+
+    for (uint32_t i = 0; i < pkt_size_words; ++i) {
+        xmt_local->buffer[head] = pkt_data[i];
+        head = (head + 1) % buflen;
+    }
+
+    // Update head index
+    xmt_local->headindex = head;
+
+    return Result<void>::ok();
+}
+
+Result<bool> ShmemSession::dequeueLocalPacket(cbPKT_GENERIC& pkt) {
+    if (!m_impl || !m_impl->is_open) {
+        return Result<bool>::error("Session is not open");
+    }
+
+    if (!m_impl->xmt_local_buffer) {
+        return Result<bool>::error("Local transmit buffer not initialized");
+    }
+
+    CentralTransmitBufferLocal* xmt_local = m_impl->xmt_local_buffer;
+
+    uint32_t head = xmt_local->headindex;
+    uint32_t tail = xmt_local->tailindex;
+
+    // Check if queue is empty
+    if (head == tail) {
+        return Result<bool>::ok(false);  // Queue is empty
+    }
+
+    uint32_t buflen = xmt_local->bufferlen;
+
+    // Read packet header (2 uint32_t words)
+    uint32_t* pkt_data = reinterpret_cast<uint32_t*>(&pkt);
+
+    if (tail + 2 <= buflen) {
+        // Header doesn't wrap
+        pkt_data[0] = xmt_local->buffer[tail];
+        pkt_data[1] = xmt_local->buffer[tail + 1];
+    } else {
+        // Header wraps around
+        pkt_data[0] = xmt_local->buffer[tail];
+        pkt_data[1] = xmt_local->buffer[(tail + 1) % buflen];
+    }
+
+    // Now we know the packet size from dlen
+    uint32_t pkt_size_words = 2 + pkt.cbpkt_header.dlen;
+
+    // Read the rest of the packet
+    for (uint32_t i = 0; i < pkt_size_words; ++i) {
+        pkt_data[i] = xmt_local->buffer[tail];
+        tail = (tail + 1) % buflen;
+    }
+
+    // Update tail index
+    xmt_local->tailindex = tail;
+    xmt_local->transmitted++;
+
+    return Result<bool>::ok(true);  // Successfully dequeued
+}
+
+bool ShmemSession::hasLocalTransmitPackets() const {
+    if (!m_impl || !m_impl->is_open || !m_impl->xmt_local_buffer) {
+        return false;
+    }
+
+    return m_impl->xmt_local_buffer->headindex != m_impl->xmt_local_buffer->tailindex;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// PC Status Buffer Access
+
+Result<uint32_t> ShmemSession::getNumTotalChans() const {
+    if (!m_impl || !m_impl->is_open) {
+        return Result<uint32_t>::error("Session is not open");
+    }
+
+    if (!m_impl->status_buffer) {
+        return Result<uint32_t>::error("Status buffer not initialized");
+    }
+
+    return Result<uint32_t>::ok(m_impl->status_buffer->m_nNumTotalChans);
+}
+
+Result<NSPStatus> ShmemSession::getNspStatus(cbproto::InstrumentId id) const {
+    if (!m_impl || !m_impl->is_open) {
+        return Result<NSPStatus>::error("Session is not open");
+    }
+
+    if (!m_impl->status_buffer) {
+        return Result<NSPStatus>::error("Status buffer not initialized");
+    }
+
+    uint32_t index = id.toIndex();  // Convert 1-based InstrumentId to 0-based array index
+    if (index >= CENTRAL_cbMAXPROCS) {
+        return Result<NSPStatus>::error("Invalid instrument ID");
+    }
+
+    return Result<NSPStatus>::ok(m_impl->status_buffer->m_nNspStatus[index]);
+}
+
+Result<void> ShmemSession::setNspStatus(cbproto::InstrumentId id, NSPStatus status) {
+    if (!m_impl || !m_impl->is_open) {
+        return Result<void>::error("Session is not open");
+    }
+
+    if (!m_impl->status_buffer) {
+        return Result<void>::error("Status buffer not initialized");
+    }
+
+    uint32_t index = id.toIndex();  // Convert 1-based InstrumentId to 0-based array index
+    if (index >= CENTRAL_cbMAXPROCS) {
+        return Result<void>::error("Invalid instrument ID");
+    }
+
+    m_impl->status_buffer->m_nNspStatus[index] = status;
+    return Result<void>::ok();
+}
+
+Result<bool> ShmemSession::isGeminiSystem() const {
+    if (!m_impl || !m_impl->is_open) {
+        return Result<bool>::error("Session is not open");
+    }
+
+    if (!m_impl->status_buffer) {
+        return Result<bool>::error("Status buffer not initialized");
+    }
+
+    return Result<bool>::ok(m_impl->status_buffer->m_nGeminiSystem != 0);
+}
+
+Result<void> ShmemSession::setGeminiSystem(bool is_gemini) {
+    if (!m_impl || !m_impl->is_open) {
+        return Result<void>::error("Session is not open");
+    }
+
+    if (!m_impl->status_buffer) {
+        return Result<void>::error("Status buffer not initialized");
+    }
+
+    m_impl->status_buffer->m_nGeminiSystem = is_gemini ? 1 : 0;
+    return Result<void>::ok();
 }
 
 } // namespace cbshmem

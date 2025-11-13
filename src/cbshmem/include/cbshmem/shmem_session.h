@@ -117,9 +117,13 @@ public:
     /// @param cfg_name Config buffer shared memory name (e.g., "cbCFGbuffer")
     /// @param rec_name Receive buffer shared memory name (e.g., "cbRECbuffer")
     /// @param xmt_name Transmit buffer shared memory name (e.g., "XmtGlobal")
+    /// @param xmt_local_name Local transmit buffer shared memory name (e.g., "XmtLocal")
+    /// @param status_name PC status buffer shared memory name (e.g., "cbSTATUSbuffer")
     /// @param mode Operating mode (STANDALONE or CLIENT)
     /// @return Result containing ShmemSession on success, error message on failure
-    static Result<ShmemSession> create(const std::string& cfg_name, const std::string& rec_name, const std::string& xmt_name, Mode mode);
+    static Result<ShmemSession> create(const std::string& cfg_name, const std::string& rec_name,
+                                        const std::string& xmt_name, const std::string& xmt_local_name,
+                                        const std::string& status_name, Mode mode);
 
     /// @brief Destructor - closes shared memory and releases resources
     ~ShmemSession();
@@ -276,6 +280,67 @@ public:
     /// @brief Check if transmit queue has packets waiting
     /// @return true if queue has packets, false if empty
     bool hasTransmitPackets() const;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name Local Transmit Queue (IPC-only packets)
+    /// @{
+
+    /// @brief Enqueue a packet to local transmit buffer (IPC only, not sent to device)
+    ///
+    /// Writes packet to XmtLocal buffer for local client communication.
+    /// These packets are NOT sent to the device - they're only visible to
+    /// local processes via shared memory.
+    ///
+    /// This is the shared memory equivalent of cbSendLoopbackPacket().
+    ///
+    /// @param pkt Packet to enqueue for local IPC
+    /// @return Result indicating success or failure (buffer full returns error)
+    Result<void> enqueueLocalPacket(const cbPKT_GENERIC& pkt);
+
+    /// @brief Dequeue a packet from the local transmit buffer
+    ///
+    /// Used by local clients to receive IPC-only packets.
+    /// Returns error if queue is empty.
+    ///
+    /// @param pkt Output parameter to receive dequeued packet
+    /// @return Result<bool> - true if packet was dequeued, false if queue empty
+    Result<bool> dequeueLocalPacket(cbPKT_GENERIC& pkt);
+
+    /// @brief Check if local transmit queue has packets waiting
+    /// @return true if queue has packets, false if empty
+    bool hasLocalTransmitPackets() const;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name PC Status Buffer Access
+    /// @{
+
+    /// @brief Get total number of channels in the system
+    /// @return Total channel count
+    Result<uint32_t> getNumTotalChans() const;
+
+    /// @brief Get NSP status for specified instrument
+    /// @param id Instrument ID (1-based)
+    /// @return NSP status (INIT, NOIPADDR, NOREPLY, FOUND, INVALID)
+    Result<NSPStatus> getNspStatus(cbproto::InstrumentId id) const;
+
+    /// @brief Set NSP status for specified instrument
+    /// @param id Instrument ID (1-based)
+    /// @param status NSP status to set
+    /// @return Result indicating success or failure
+    Result<void> setNspStatus(cbproto::InstrumentId id, NSPStatus status);
+
+    /// @brief Check if system is configured as Gemini
+    /// @return true if Gemini system, false otherwise
+    Result<bool> isGeminiSystem() const;
+
+    /// @brief Set Gemini system flag
+    /// @param is_gemini true for Gemini system, false otherwise
+    /// @return Result indicating success or failure
+    Result<void> setGeminiSystem(bool is_gemini);
 
     /// @}
 
