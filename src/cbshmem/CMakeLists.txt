@@ -15,20 +15,15 @@ set(CBSHMEM_SOURCES
 add_library(cbshmem STATIC ${CBSHMEM_SOURCES})
 
 target_include_directories(cbshmem
-    BEFORE PUBLIC  # BEFORE ensures these come before dependency includes
+    PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        # TODO: Phase 3 - Remove upstream when all packet types extracted to cbproto
-        # NOTE: upstream MUST come BEFORE cbproto in include order to resolve <cbproto/cbproto.h> correctly
-        # The wrapper upstream_protocol.h relies on this ordering
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/upstream>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 # Dependencies
-# NOTE: cbproto is listed AFTER the include_directories so its include path comes later
 target_link_libraries(cbshmem
     PUBLIC
-        cbproto
+        cbproto  # Protocol definitions
 )
 
 # C++17 required

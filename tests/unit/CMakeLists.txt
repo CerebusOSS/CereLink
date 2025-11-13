@@ -55,13 +55,7 @@ target_link_libraries(cbshmem_tests
         GTest::gtest_main
 )
 
-target_include_directories(cbshmem_tests
-    BEFORE PRIVATE  # BEFORE to ensure our paths come first
-        # upstream MUST come before cbproto to resolve <cbproto/cbproto.h> correctly
-        ${PROJECT_SOURCE_DIR}/upstream
-        ${PROJECT_SOURCE_DIR}/src/cbshmem/include
-        ${PROJECT_SOURCE_DIR}/src/cbproto/include
-)
+# Include directories inherited from cbshmem and cbproto targets
 
 gtest_discover_tests(cbshmem_tests)
 

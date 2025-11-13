@@ -11,7 +11,7 @@
 
 #include <gtest/gtest.h>
 #include <cbshmem/shmem_session.h>
-#include <cbshmem/upstream_protocol.h>  // For packet types and cbNSP1-4 constants
+#include <cbproto/cbproto.h>       // For packet types and cbNSP1-4 constants
 #include <cbproto/instrument_id.h>
 #include <cstring>
 

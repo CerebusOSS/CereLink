@@ -11,7 +11,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "cbdev/device_session.h"
-#include "cbshmem/upstream_protocol.h"  // For cbPKT_GENERIC
+#include <cbproto/cbproto.h>  // For cbPKT_GENERIC
 #include <cstring>
 #include <thread>
 #include <atomic>
@@ -402,12 +402,14 @@ Result<DeviceSession> DeviceSession::create(const DeviceConfig& config) {
 
     if (bind(session.m_impl->socket, (SOCKADDR*)&session.m_impl->recv_addr,
             sizeof(session.m_impl->recv_addr)) != 0) {
+        int bind_error = errno;  // Capture errno immediately
         closeSocket(session.m_impl->socket);
 #ifdef _WIN32
         WSACleanup();
 #endif
         return Result<DeviceSession>::error("Failed to bind socket to " +
-            config.client_address + ":" + std::to_string(config.recv_port));
+            config.client_address + ":" + std::to_string(config.recv_port) +
+            " (errno: " + std::to_string(bind_error) + " - " + std::strerror(bind_error) + ")");
     }
 
     // Set up send address (device side)
@@ -728,8 +730,6 @@ Result<void> DeviceSession::startSendThread() {
 
     m_impl->send_thread_running.store(true);
     m_impl->send_thread = std::make_unique<std::thread>([this]() {
-        cbPKT_GENERIC pkt;
-
         while (m_impl->send_thread_running.load()) {
             bool has_packets = false;
 
@@ -737,13 +737,24 @@ Result<void> DeviceSession::startSendThread() {
             {
                 std::lock_guard<std::mutex> lock(m_impl->transmit_mutex);
                 if (m_impl->transmit_callback) {
-                    while (m_impl->transmit_callback(pkt)) {
+                    while (true) {
+                        cbPKT_GENERIC pkt;
+                        std::memset(&pkt, 0, sizeof(pkt));  // Zero-initialize before use
+
+                        if (!m_impl->transmit_callback(pkt)) {
+                            break;  // No more packets
+                        }
                         has_packets = true;
 
-                        // Send the packet
+                        // Calculate actual packet size from header
+                        // Packet size in bytes = (dlen + 2) * 4
+                        // dlen is in dwords, +2 accounts for time and chid fields
+                        size_t packet_size = (pkt.cbpkt_header.dlen + 2) * 4;
+
+                        // Send the packet (only actual size, not full cbPKT_GENERIC)
                         int bytes_sent = sendto(m_impl->socket,
                                               (const char*)&pkt,
-                                              sizeof(cbPKT_GENERIC),
+                                              packet_size,
                                               0,
                                               (SOCKADDR*)&m_impl->send_addr,
                                               sizeof(m_impl->send_addr));

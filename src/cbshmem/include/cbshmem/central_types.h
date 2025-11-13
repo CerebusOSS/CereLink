@@ -18,10 +18,8 @@
 // Include InstrumentId from protocol module
 #include <cbproto/instrument_id.h>
 
-// TODO: Phase 3 - Extract all packet types to cbproto
-// For now, we need the packet structure definitions from upstream.
-// We use a wrapper header to avoid conflicts with cbproto's minimal cbproto.h
-#include <cbshmem/upstream_protocol.h>
+// Include packet structure definitions from cbproto
+#include <cbproto/cbproto.h>
 
 #include <cstdint>
 

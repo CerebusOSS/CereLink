@@ -15,18 +15,15 @@ set(CBDEV_SOURCES
 add_library(cbdev STATIC ${CBDEV_SOURCES})
 
 target_include_directories(cbdev
-    BEFORE PUBLIC  # BEFORE to control include order (similar to cbshmem)
+    PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        # upstream needed for protocol definitions
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/upstream>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 # Dependencies
 target_link_libraries(cbdev
     PUBLIC
-        cbproto
-        cbshmem  # Needs cbshmem for upstream_protocol.h wrapper
+        cbproto  # Protocol definitions
 )
 
 # C++17 required

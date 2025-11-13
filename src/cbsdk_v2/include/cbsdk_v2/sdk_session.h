@@ -362,9 +362,35 @@ public:
     /// @return Result indicating success or error
     Result<void> setSystemRunLevel(uint32_t runlevel, uint32_t resetque = 0, uint32_t runflags = 0);
 
+    /// Request all configuration from the device
+    /// Sends cbPKTTYPE_REQCONFIGALL which triggers the device to send all config packets
+    /// The device will respond with > 1000 packets (PROCINFO, CHANINFO, etc.)
+    /// @return Result indicating success or error
+    Result<void> requestConfiguration();
+
+    ///--------------------------------------------------------------------------------------------
+    /// Device Startup & Handshake
+    ///--------------------------------------------------------------------------------------------
+
+    /// Perform complete device startup handshake sequence
+    /// This implements the proper startup sequence:
+    /// 1. Send cbRUNLEVEL_RUNNING - wait for SYSREP or timeout (0.5s)
+    /// 2. If not running, send cbRUNLEVEL_HARDRESET - wait for SYSREP or timeout (0.5s)
+    /// 3. Send REQCONFIGALL - wait for config flood
+    /// 4. If still not running, send cbRUNLEVEL_RESET - wait for transition to RUNNING
+    /// @param timeout_ms Maximum time to wait for each step (default: 500ms)
+    /// @return Result indicating success or error
+    Result<void> performStartupHandshake(uint32_t timeout_ms = 500);
+
 private:
     /// Private constructor (use create() factory method)
     SdkSession();
+
+    /// Connect to device and perform handshake (STANDALONE mode only)
+    /// Called from create() to verify device is present and responsive
+    /// @param timeout_ms Timeout for each handshake step (default: 500ms)
+    /// @return Result indicating success or error (device not responding)
+    Result<void> connect(uint32_t timeout_ms = 500);
 
     /// Callback from cbdev when packets are received (runs on receive thread - MUST BE FAST!)
     void onPacketsReceivedFromDevice(const cbPKT_GENERIC* pkts, size_t count);

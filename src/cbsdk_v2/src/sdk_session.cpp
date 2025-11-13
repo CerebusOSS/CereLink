@@ -59,6 +59,13 @@ struct SdkSession::Impl {
     // Running state
     std::atomic<bool> is_running{false};
 
+    // Device handshake state (for connect() method)
+    std::atomic<uint32_t> device_runlevel{0};      // Current runlevel from SYSREP
+    std::atomic<bool> received_sysrep{false};       // Have we received any SYSREP?
+    std::atomic<uint64_t> packets_received{0};      // Total packets received
+    std::mutex handshake_mutex;
+    std::condition_variable handshake_cv;
+
     ~Impl() {
         // Ensure threads are stopped
         if (callback_thread_running.load()) {
@@ -280,6 +287,19 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
             return Result<SdkSession>::error("Failed to create device session: " + dev_result.error());
         }
         session.m_impl->device_session = std::move(dev_result.value());
+
+        // Start the session (starts receive/send threads)
+        auto start_result = session.start();
+        if (start_result.isError()) {
+            return Result<SdkSession>::error("Failed to start session: " + start_result.error());
+        }
+
+        // Connect to device and verify it's responding (with handshake)
+        auto connect_result = session.connect(500);  // 500ms timeout per step
+        if (connect_result.isError()) {
+            session.stop();  // Clean up threads
+            return Result<SdkSession>::error("Device not responding: " + connect_result.error());
+        }
     }
 
     return Result<SdkSession>::ok(std::move(session));
@@ -460,9 +480,147 @@ Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque,
     return sendPacket(pkt);
 }
 
+Result<void> SdkSession::requestConfiguration() {
+    // Create REQCONFIGALL packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+
+    // Fill header
+    pkt.cbpkt_header.time = 1;
+    pkt.cbpkt_header.chid = 0x8000;  // cbPKTCHAN_CONFIGURATION
+    pkt.cbpkt_header.type = 0x88;    // cbPKTTYPE_REQCONFIGALL
+    pkt.cbpkt_header.dlen = 0;       // No payload
+    pkt.cbpkt_header.instrument = 0;
+
+    return sendPacket(pkt);
+}
+
+Result<void> SdkSession::performStartupHandshake(uint32_t timeout_ms) {
+    // This implements the complete device startup sequence
+
+    // TODO: This is a stub implementation that needs proper state machine with:
+    // 1. SYSREP packet tracking to monitor runlevel changes
+    // 2. Timeout handling for each step
+    // 3. Proper sequencing with waits
+    //
+    // For now, we'll just send the basic sequence without waiting
+
+    // Step 1: Send cbRUNLEVEL_RUNNING
+    auto result = setSystemRunLevel(cbRUNLEVEL_RUNNING);
+    if (result.isError()) {
+        return result;
+    }
+
+    // TODO: Wait for SYSREP or timeout
+    std::this_thread::sleep_for(std::chrono::milliseconds(timeout_ms));
+
+    // Step 2: Send cbRUNLEVEL_HARDRESET (if device not running)
+    result = setSystemRunLevel(cbRUNLEVEL_HARDRESET);
+    if (result.isError()) {
+        return result;
+    }
+
+    // TODO: Wait for SYSREP or timeout
+    std::this_thread::sleep_for(std::chrono::milliseconds(timeout_ms));
+
+    // Step 3: Request all configuration
+    result = requestConfiguration();
+    if (result.isError()) {
+        return result;
+    }
+
+    // TODO: Wait for config flood (> 1000 packets ending with SYSREP)
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+    // Step 4: Send cbRUNLEVEL_RESET (if still not running)
+    result = setSystemRunLevel(cbRUNLEVEL_RESET);
+    if (result.isError()) {
+        return result;
+    }
+
+    // TODO: Wait for device to transition to RUNNING
+    std::this_thread::sleep_for(std::chrono::milliseconds(timeout_ms));
+
+    return Result<void>::ok();
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Private Methods
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+Result<void> SdkSession::connect(uint32_t timeout_ms) {
+    // Connect to device and perform handshake to verify it's present and responsive
+    // This is called from create() in STANDALONE mode only
+    //
+    // Handshake sequence:
+    // 1. Send cbRUNLEVEL_RUNNING - wait for SYSREP or timeout (0.5s)
+    // 2. If not running, send cbRUNLEVEL_HARDRESET - wait (0.5s)
+    // 3. Send REQCONFIGALL - wait for config flood (should see many packets)
+    // 4. Verify device is responding (check packet count)
+
+    // Reset handshake state
+    m_impl->packets_received.store(0, std::memory_order_relaxed);
+    m_impl->received_sysrep.store(false, std::memory_order_relaxed);
+    m_impl->device_runlevel.store(0, std::memory_order_relaxed);
+
+    // Helper lambda to wait for SYSREP with timeout
+    auto waitForSysrep = [this](uint32_t timeout_ms) -> bool {
+        std::unique_lock<std::mutex> lock(m_impl->handshake_mutex);
+        return m_impl->handshake_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms),
+            [this] { return m_impl->received_sysrep.load(std::memory_order_acquire); });
+    };
+
+    // Step 1: Send cbRUNLEVEL_RUNNING to check if device is already running
+    auto result = setSystemRunLevel(cbRUNLEVEL_RUNNING);
+    if (result.isError()) {
+        return Result<void>::error("Failed to send RUNNING command: " + result.error());
+    }
+
+    // Wait for SYSREP response
+    if (!waitForSysrep(timeout_ms)) {
+        // No response - device might be in deep standby, try HARDRESET
+        goto try_hardreset;
+    }
+
+    // Got SYSREP - check if device is running
+    if (m_impl->device_runlevel.load(std::memory_order_acquire) == cbRUNLEVEL_RUNNING) {
+        // Device is already running - request config and we're done
+        goto request_config;
+    }
+
+try_hardreset:
+    // Step 2: Device not running - send HARDRESET
+    m_impl->received_sysrep.store(false, std::memory_order_relaxed);
+    result = setSystemRunLevel(cbRUNLEVEL_HARDRESET);
+    if (result.isError()) {
+        return Result<void>::error("Failed to send HARDRESET command: " + result.error());
+    }
+
+    // Wait for SYSREP response
+    if (!waitForSysrep(timeout_ms)) {
+        return Result<void>::error("Device not responding to HARDRESET (no SYSREP received)");
+    }
+
+request_config:
+    // Step 3: Request all configuration
+    result = requestConfiguration();
+    if (result.isError()) {
+        return Result<void>::error("Failed to send REQCONFIGALL: " + result.error());
+    }
+
+    // Wait for config packets (should receive many packets - >1000)
+    // We'll wait timeout_ms and check if we got a reasonable number of packets
+    std::this_thread::sleep_for(std::chrono::milliseconds(timeout_ms));
+
+    // Step 4: Verify device is responding by checking packet count
+    uint64_t packet_count = m_impl->packets_received.load(std::memory_order_relaxed);
+    if (packet_count == 0) {
+        return Result<void>::error("Device not responding (no packets received)");
+    }
+
+    // Success - device is connected and responding
+    return Result<void>::ok();
+}
 
 void SdkSession::onPacketsReceivedFromDevice(const cbPKT_GENERIC* pkts, size_t count) {
     // This runs on the cbdev receive thread - MUST BE FAST!
@@ -470,11 +628,24 @@ void SdkSession::onPacketsReceivedFromDevice(const cbPKT_GENERIC* pkts, size_t c
     for (size_t i = 0; i < count; ++i) {
         const auto& pkt = pkts[i];
 
+        // Track total packets received (for connect() verification)
+        m_impl->packets_received.fetch_add(1, std::memory_order_relaxed);
+
         // Update stats (atomic or quick increment)
         {
             std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
             m_impl->stats.packets_received_from_device++;
             // bytes_received tracked by cbdev
+        }
+
+        // Track SYSREP packets for handshake state machine
+        // SYSREP type is 0x10-0x1F (cbPKTTYPE_SYSREP*)
+        if ((pkt.cbpkt_header.type & 0xF0) == 0x10) {
+            // This is a SYSREP packet - extract runlevel from cbPKT_SYSINFO structure
+            const cbPKT_SYSINFO* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
+            m_impl->device_runlevel.store(sysinfo->runlevel, std::memory_order_release);
+            m_impl->received_sysrep.store(true, std::memory_order_release);
+            m_impl->handshake_cv.notify_all();  // Wake up connect() if waiting
         }
 
         // Store to shared memory (FAST PATH - just memcpy)
