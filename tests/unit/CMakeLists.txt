@@ -77,7 +77,6 @@ target_link_libraries(cbdev_tests
 target_include_directories(cbdev_tests
     BEFORE PRIVATE
         ${PROJECT_SOURCE_DIR}/src/cbdev/include
-        ${PROJECT_SOURCE_DIR}/upstream
         ${PROJECT_SOURCE_DIR}/src/cbshmem/include
         ${PROJECT_SOURCE_DIR}/src/cbproto/include
 )

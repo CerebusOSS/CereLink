@@ -235,6 +235,25 @@ public:
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
+    /// @name Configuration Buffer Direct Access
+    /// @{
+
+    /// @brief Get direct pointer to configuration buffer
+    ///
+    /// Provides direct access to the shared memory config buffer for zero-copy
+    /// operations. Used by SdkSession to connect DeviceSession's config buffer
+    /// to shared memory.
+    ///
+    /// @return Pointer to configuration buffer, or nullptr if not available
+    cbConfigBuffer* getConfigBuffer();
+
+    /// @brief Get direct pointer to configuration buffer (const version)
+    /// @return Const pointer to configuration buffer, or nullptr if not available
+    const cbConfigBuffer* getConfigBuffer() const;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////
     /// @name Packet Routing (THE KEY FIX)
     /// @{
 

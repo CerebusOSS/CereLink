@@ -404,10 +404,9 @@ void DeviceSession::parseConfigPacket(const cbPKT_GENERIC& pkt) {
             // Note: Central calls UpdateBasisModel() for additional processing
             // For now, store directly with validation
             const auto* basis_pkt = reinterpret_cast<const cbPKT_FS_BASIS*>(&pkt);
-            uint32_t nChan = basis_pkt->chan;
 
             // Validate channel number (1-based in packet)
-            if (nChan > 0 && nChan <= cbCONFIG_MAXCHANS) {
+            if (const uint32_t nChan = basis_pkt->chan; nChan > 0 && nChan <= cbCONFIG_MAXCHANS) {
                 m_impl->m_cfg_ptr->isSortingOptions.asBasis[nChan - 1] = *basis_pkt;
             }
         }
@@ -683,6 +682,10 @@ Result<DeviceSession> DeviceSession::create(const DeviceConfig& config) {
     }
 #endif
 
+    // Initialize internal config buffer (standalone mode)
+    // If using cbsdk, this will be replaced with external buffer via setConfigBuffer()
+    session.setConfigBuffer(nullptr);
+
     return Result<DeviceSession>::ok(std::move(session));
 }
 
@@ -869,12 +872,15 @@ Result<void> DeviceSession::startReceiveThread() {
             // SYSREP packets have type 0x10-0x1F (cbPKTTYPE_SYSREP base is 0x10)
             for (size_t i = 0; i < count; ++i) {
                 const auto& pkt = packets[i];
-                if ((pkt.cbpkt_header.type & 0xF0) == 0x10) {
+                if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
                     const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
                     m_impl->device_runlevel.store(sysinfo->runlevel, std::memory_order_release);
                     m_impl->received_sysrep.store(true, std::memory_order_release);
                     m_impl->handshake_cv.notify_all();
                 }
+
+                // Parse config packets and update config buffer
+                parseConfigPacket(pkt);
             }
 
             // Deliver packets if we received any

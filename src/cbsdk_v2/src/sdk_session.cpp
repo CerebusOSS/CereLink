@@ -281,6 +281,10 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
         }
         session.m_impl->device_session = std::move(dev_result.value());
 
+        // Connect device's config buffer to shmem's buffer (zero-copy)
+        // DeviceSession will write config packets directly to shared memory
+        session.m_impl->device_session->setConfigBuffer(session.m_impl->shmem_session->getConfigBuffer());
+
         // Start the session (starts receive/send threads)
         // Start session (for STANDALONE mode, this also connects to device and performs handshake)
         auto start_result = session.start();

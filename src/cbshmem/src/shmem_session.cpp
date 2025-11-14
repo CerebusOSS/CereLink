@@ -1296,6 +1296,23 @@ Result<void> ShmemSession::setChanInfo(uint32_t channel, const cbPKT_CHANINFO& i
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Configuration Buffer Direct Access
+
+cbConfigBuffer* ShmemSession::getConfigBuffer() {
+    if (!isOpen()) {
+        return nullptr;
+    }
+    return m_impl->cfg_buffer;
+}
+
+const cbConfigBuffer* ShmemSession::getConfigBuffer() const {
+    if (!isOpen()) {
+        return nullptr;
+    }
+    return m_impl->cfg_buffer;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Packet Routing (THE KEY FIX!)
 
 Result<void> ShmemSession::storePacket(const cbPKT_GENERIC& pkt) {
