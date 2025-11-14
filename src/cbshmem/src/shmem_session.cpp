@@ -1309,42 +1309,76 @@ Result<void> ShmemSession::storePacket(const cbPKT_GENERIC& pkt) {
         // (In production, might want to track this as a stat)
     }
 
-    // Extract instrument ID from packet header
-    cbproto::InstrumentId id = cbproto::InstrumentId::fromPacketField(pkt.cbpkt_header.instrument);
-
-    if (!id.isValid()) {
-        return Result<void>::error("Invalid instrument ID in packet");
-    }
-
-    // THE KEY FIX: ALWAYS use packet.instrument as index (mode-independent!)
-    uint8_t idx = id.toIndex();
-
     // ADDITIONALLY update config buffer for configuration packets
     // (This maintains the config "database" for query operations)
-    uint16_t pkt_type = pkt.cbpkt_header.type;
 
-    if (pkt_type == cbPKTTYPE_PROCREP) {
-        // Store processor info
-        std::memcpy(&m_impl->cfg_buffer->procinfo[idx], &pkt, sizeof(cbPKT_PROCINFO));
-
-        // Mark instrument as active when we receive its PROCINFO
-        m_impl->cfg_buffer->instrument_status[idx] = static_cast<uint32_t>(InstrumentStatus::ACTIVE);
-
-    } else if (pkt_type == cbPKTTYPE_BANKREP) {
-        // Store bank info
-        const cbPKT_BANKINFO* bank_pkt = reinterpret_cast<const cbPKT_BANKINFO*>(&pkt);
-        if (bank_pkt->bank < CENTRAL_cbMAXBANKS) {
-            std::memcpy(&m_impl->cfg_buffer->bankinfo[idx][bank_pkt->bank], &pkt, sizeof(cbPKT_BANKINFO));
+    // Helper lambda to check if packet needs config buffer storage (and thus instrument ID validation)
+    // Based on Central's InstNetwork.cpp logic - only packets actually stored to config buffer need valid instrument IDs
+    auto isConfigPacket = [](const cbPKT_HEADER& header) -> bool {
+        // Config packets are sent on the configuration channel
+        if (header.chid != cbPKTCHAN_CONFIGURATION) {
+            return false;
         }
 
-    } else if (pkt_type == cbPKTTYPE_FILTREP) {
-        // Store filter info
-        const cbPKT_FILTINFO* filt_pkt = reinterpret_cast<const cbPKT_FILTINFO*>(&pkt);
-        if (filt_pkt->filt < CENTRAL_cbMAXFILTS) {
-            std::memcpy(&m_impl->cfg_buffer->filtinfo[idx][filt_pkt->filt], &pkt, sizeof(cbPKT_FILTINFO));
+        uint16_t type = header.type;
+
+        // Channel config packets (0x40-0x4F range)
+        if ((type & 0xF0) == cbPKTTYPE_CHANREP) return true;
+
+        // System config packets (0x10-0x1F range)
+        if ((type & 0xF0) == cbPKTTYPE_SYSREP) return true;
+
+        // Other specific config packet types that Central stores
+        switch (type) {
+            case cbPKTTYPE_PROCREP:
+            case cbPKTTYPE_BANKREP:
+            case cbPKTTYPE_FILTREP:
+            case cbPKTTYPE_GROUPREP:
+            // TODO: Add ADAPTFILTREP, REFELECFILTREP when their constants are available
+                return true;
+            default:
+                return false;
         }
+    };
+
+    // Only validate instrument ID for config packets that need to be stored
+    if (isConfigPacket(pkt.cbpkt_header)) {
+        uint16_t pkt_type = pkt.cbpkt_header.type;
+        // Extract instrument ID from packet header
+        cbproto::InstrumentId id = cbproto::InstrumentId::fromPacketField(pkt.cbpkt_header.instrument);
+
+        if (!id.isValid()) {
+            // Invalid instrument ID for config packet - skip storing to config buffer
+            // but still return ok since we already wrote to receive buffer
+            return Result<void>::ok();
+        }
+
+        // Use packet.instrument as index (mode-independent!)
+        uint8_t idx = id.toIndex();
+
+        if (pkt_type == cbPKTTYPE_PROCREP) {
+            // Store processor info
+            std::memcpy(&m_impl->cfg_buffer->procinfo[idx], &pkt, sizeof(cbPKT_PROCINFO));
+
+            // Mark instrument as active when we receive its PROCINFO
+            m_impl->cfg_buffer->instrument_status[idx] = static_cast<uint32_t>(InstrumentStatus::ACTIVE);
+
+        } else if (pkt_type == cbPKTTYPE_BANKREP) {
+            // Store bank info
+            const cbPKT_BANKINFO* bank_pkt = reinterpret_cast<const cbPKT_BANKINFO*>(&pkt);
+            if (bank_pkt->bank < CENTRAL_cbMAXBANKS) {
+                std::memcpy(&m_impl->cfg_buffer->bankinfo[idx][bank_pkt->bank], &pkt, sizeof(cbPKT_BANKINFO));
+            }
+
+        } else if (pkt_type == cbPKTTYPE_FILTREP) {
+            // Store filter info
+            const cbPKT_FILTINFO* filt_pkt = reinterpret_cast<const cbPKT_FILTINFO*>(&pkt);
+            if (filt_pkt->filt < CENTRAL_cbMAXFILTS) {
+                std::memcpy(&m_impl->cfg_buffer->filtinfo[idx][filt_pkt->filt], &pkt, sizeof(cbPKT_FILTINFO));
+            }
+        }
+        // TODO: Add more config packet types as needed (GROUPINFO, ADAPTFILTINFO, REFELECFILTINFO, etc.)
     }
-    // TODO: Add more config packet types as needed (CHANINFO, GROUPINFO, etc.)
 
     return Result<void>::ok();
 }

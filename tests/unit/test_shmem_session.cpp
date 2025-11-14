@@ -176,6 +176,7 @@ TEST_F(ShmemSessionTest, StorePacket_PROCINFO_Instrument0) {
     // Create PROCINFO packet for instrument 0 (cbNSP1 = 1)
     cbPKT_GENERIC pkt;
     std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     pkt.cbpkt_header.instrument = 0;  // 0-based in packet (represents cbNSP1)
     pkt.cbpkt_header.type = cbPKTTYPE_PROCREP;
     pkt.cbpkt_header.dlen = cbPKTDLEN_PROCINFO;
@@ -209,6 +210,7 @@ TEST_F(ShmemSessionTest, StorePacket_PROCINFO_Instrument2) {
     // Create PROCINFO packet for instrument 2 (cbNSP3 = 3)
     cbPKT_GENERIC pkt;
     std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     pkt.cbpkt_header.instrument = 2;  // 0-based in packet (represents cbNSP3)
     pkt.cbpkt_header.type = cbPKTTYPE_PROCREP;
     pkt.cbpkt_header.dlen = cbPKTDLEN_PROCINFO;
@@ -244,6 +246,7 @@ TEST_F(ShmemSessionTest, StorePacket_MultipleInstruments) {
     for (uint8_t inst : {0, 1, 3}) {
         cbPKT_GENERIC pkt;
         std::memset(&pkt, 0, sizeof(pkt));
+        pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
         pkt.cbpkt_header.instrument = inst;
         pkt.cbpkt_header.type = cbPKTTYPE_PROCREP;
         pkt.cbpkt_header.dlen = cbPKTDLEN_PROCINFO;
@@ -273,6 +276,7 @@ TEST_F(ShmemSessionTest, StorePacket_BANKINFO) {
     // Create BANKINFO packet
     cbPKT_GENERIC pkt;
     std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     pkt.cbpkt_header.instrument = 1;  // cbNSP2
     pkt.cbpkt_header.type = cbPKTTYPE_BANKREP;
     pkt.cbpkt_header.dlen = cbPKTDLEN_BANKINFO;
@@ -302,6 +306,7 @@ TEST_F(ShmemSessionTest, StorePacket_FILTINFO) {
     // Create FILTINFO packet
     cbPKT_GENERIC pkt;
     std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     pkt.cbpkt_header.instrument = 0;  // cbNSP1
     pkt.cbpkt_header.type = cbPKTTYPE_FILTREP;
     pkt.cbpkt_header.dlen = cbPKTDLEN_FILTINFO;
@@ -404,15 +409,24 @@ TEST_F(ShmemSessionTest, StorePacket_InvalidInstrument) {
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
-    // Create packet with invalid instrument ID
+    // Create config packet with invalid instrument ID
+    // This should succeed (packet written to receive buffer) but skip config buffer update
     cbPKT_GENERIC pkt;
     std::memset(&pkt, 0, sizeof(pkt));
     pkt.cbpkt_header.instrument = 255;  // Way out of range
     pkt.cbpkt_header.type = cbPKTTYPE_PROCREP;
 
     auto store_result = session.storePacket(pkt);
-    EXPECT_TRUE(store_result.isError());
-    EXPECT_NE(store_result.error().find("Invalid"), std::string::npos);
+    EXPECT_TRUE(store_result.isOk()) << "Packet should be stored to receive buffer even with invalid instrument ID";
+
+    // Create non-config packet with invalid instrument ID - should also succeed
+    cbPKT_GENERIC lnc_pkt;
+    std::memset(&lnc_pkt, 0, sizeof(lnc_pkt));
+    lnc_pkt.cbpkt_header.instrument = 83;  // Invalid ID
+    lnc_pkt.cbpkt_header.type = 0x28;      // cbPKTTYPE_LNCREP
+
+    auto lnc_result = session.storePacket(lnc_pkt);
+    EXPECT_TRUE(lnc_result.isOk()) << "Non-config packet should succeed regardless of instrument ID";
 }
 
 /// @}
