@@ -48,6 +48,10 @@ typedef uint32_t PROCTIME;
 typedef uint64_t PROCTIME;
 #endif
 
+/// @brief Analog-to-digital data type
+/// Used for continuous data samples in cbPKT_GROUP
+typedef int16_t A2D_DATA;
+
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -103,7 +107,7 @@ typedef uint64_t PROCTIME;
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Network Configuration
 ///
-/// Ground truth from upstream/cbproto/cbproto.h lines 193-196
+/// Ground truth from upstream/cbproto/cbproto.h lines 193-211
 /// @{
 
 #define cbNET_UDP_ADDR_INST     "192.168.137.1"     ///< Cerebus default address
@@ -111,6 +115,27 @@ typedef uint64_t PROCTIME;
 #define cbNET_UDP_ADDR_BCAST    "192.168.137.255"   ///< NSP default broadcast address
 #define cbNET_UDP_PORT_BCAST    51002               ///< Neuroflow Data Port
 #define cbNET_UDP_PORT_CNT      51001               ///< Neuroflow Control Port
+
+// Maximum UDP datagram size used to transport cerebus packets, taken from MTU size
+#define cbCER_UDP_SIZE_MAX      58080               ///< Note that multiple packets may reside in one udp datagram as aggregate
+
+// Gemini network configuration
+#define cbNET_TCP_PORT_GEMINI       51005             ///< Neuroflow Data Port
+#define cbNET_TCP_ADDR_GEMINI_HUB   "192.168.137.200" ///< NSP default control address
+
+#define cbNET_UDP_ADDR_HOST         "192.168.137.199"   ///< Cerebus (central) default address
+#define cbNET_UDP_ADDR_GEMINI_NSP   "192.168.137.128"   ///< NSP default control address
+#define cbNET_UDP_ADDR_GEMINI_HUB   "192.168.137.200"   ///< HUB default control address
+#define cbNET_UDP_ADDR_GEMINI_HUB2  "192.168.137.201"   ///< HUB2 default control address
+#define cbNET_UDP_ADDR_GEMINI_HUB3  "192.168.137.202"   ///< HUB3 default control address
+#define cbNET_UDP_PORT_GEMINI_NSP   51001               ///< Gemini NSP Port
+#define cbNET_UDP_PORT_GEMINI_HUB   51002               ///< Gemini HUB Port
+#define cbNET_UDP_PORT_GEMINI_HUB2  51003               ///< Gemini HUB2 Port
+#define cbNET_UDP_PORT_GEMINI_HUB3  51004               ///< Gemini HUB3 Port
+
+// Protocol types
+#define PROTOCOL_UDP        0   ///< UDP protocol
+#define PROTOCOL_TCP        1   ///< TCP protocol
 
 /// @}
 
@@ -227,6 +252,22 @@ typedef struct {
     int16_t  max;   ///< maximum value for the hoop window
 } cbHOOP;
 
+/// @brief Adaptation type enumeration
+///
+/// To control and keep track of how long an element of spike sorting has been adapting.
+enum ADAPT_TYPE {
+    ADAPT_NEVER,    ///< 0 - do not adapt at all
+    ADAPT_ALWAYS,   ///< 1 - always adapt
+    ADAPT_TIMED     ///< 2 - adapt if timer not timed out
+};
+
+/// @brief Adaptive Control structure
+typedef struct {
+    uint32_t nMode;           ///< 0-do not adapt at all, 1-always adapt, 2-adapt if timer not timed out
+    float fTimeOutMinutes;    ///< how many minutes until time out
+    float fElapsedMinutes;    ///< the amount of time that has elapsed
+} cbAdaptControl;
+
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -270,36 +311,161 @@ typedef struct {
 /// @{
 
 // System packets
-#define cbPKTTYPE_SYSHEARTBEAT          0x00
-#define cbPKTTYPE_SYSPROTOCOLMONITOR    0x01
+#define cbPKTTYPE_SYSHEARTBEAT          0x00    ///< System heartbeat packet
+#define cbPKTTYPE_SYSPROTOCOLMONITOR    0x01    ///< Protocol monitoring packet
+#define cbPKTTYPE_PREVREPSTREAM         0x02    ///< Preview reply stream
+#define cbPKTTYPE_PREVREP               0x03    ///< Preview reply
+#define cbPKTTYPE_PREVREPLNC            0x04    ///< Preview reply LNC
 #define cbPKTTYPE_REPCONFIGALL          0x08    ///< Response that NSP got your request
-#define cbPKTTYPE_SYSREP                0x10
-#define cbPKTTYPE_SYSREPSPKLEN          0x11
-#define cbPKTTYPE_SYSREPRUNLEV          0x12
+#define cbPKTTYPE_SYSREP                0x10    ///< System reply
+#define cbPKTTYPE_SYSREPSPKLEN          0x11    ///< System reply spike length
+#define cbPKTTYPE_SYSREPRUNLEV          0x12    ///< System reply runlevel
+
+// Processor, bank, and filter information packets
+#define cbPKTTYPE_PROCREP               0x21    ///< Processor information reply
+#define cbPKTTYPE_BANKREP               0x22    ///< Bank information reply
+#define cbPKTTYPE_FILTREP               0x23    ///< Filter information reply
+#define cbPKTTYPE_CHANRESETREP          0x24    ///< Channel reset reply
+#define cbPKTTYPE_ADAPTFILTREP          0x25    ///< Adaptive filter reply
+#define cbPKTTYPE_REFELECFILTREP        0x26    ///< Reference electrode filter reply
+#define cbPKTTYPE_REPNTRODEINFO         0x27    ///< N-Trode information reply
+#define cbPKTTYPE_LNCREP                0x28    ///< LNC reply
+#define cbPKTTYPE_VIDEOSYNCHREP         0x29    ///< Video sync reply
+
+// Sample group and configuration packets
+#define cbPKTTYPE_GROUPREP              0x30    ///< Sample group information reply
+#define cbPKTTYPE_COMMENTREP            0x31    ///< Comment reply
+#define cbPKTTYPE_NMREP                 0x32    ///< NeuroMotive (NM) reply
+#define cbPKTTYPE_WAVEFORMREP           0x33    ///< Waveform reply
+#define cbPKTTYPE_STIMULATIONREP        0x34    ///< Stimulation reply
+
+// Channel information packets - Reply (0x40-0x4F)
+#define cbPKTTYPE_CHANREP               0x40    ///< Channel information reply
+#define cbPKTTYPE_CHANREPLABEL          0x41    ///< Channel label reply
+#define cbPKTTYPE_CHANREPSCALE          0x42    ///< Channel scale reply
+#define cbPKTTYPE_CHANREPDOUT           0x43    ///< Channel digital output reply
+#define cbPKTTYPE_CHANREPDINP           0x44    ///< Channel digital input reply
+#define cbPKTTYPE_CHANREPAOUT           0x45    ///< Channel analog output reply
+#define cbPKTTYPE_CHANREPDISP           0x46    ///< Channel display reply
+#define cbPKTTYPE_CHANREPAINP           0x47    ///< Channel analog input reply
+#define cbPKTTYPE_CHANREPSMP            0x48    ///< Channel sampling reply
+#define cbPKTTYPE_CHANREPSPK            0x49    ///< Channel spike reply
+#define cbPKTTYPE_CHANREPSPKTHR         0x4A    ///< Channel spike threshold reply
+#define cbPKTTYPE_CHANREPSPKHPS         0x4B    ///< Channel spike hoops reply
+#define cbPKTTYPE_CHANREPUNITOVERRIDES  0x4C    ///< Channel unit overrides reply
+#define cbPKTTYPE_CHANREPNTRODEGROUP    0x4D    ///< Channel n-trode group reply
+#define cbPKTTYPE_CHANREPREJECTAMPLITUDE 0x4E   ///< Channel reject amplitude reply
+#define cbPKTTYPE_CHANREPAUTOTHRESHOLD  0x4F    ///< Channel auto threshold reply
+
+// Spike sorting packets - Reply (0x50-0x5F)
+#define cbPKTTYPE_SS_MODELALLREP        0x50    ///< Spike sorting model all reply
+#define cbPKTTYPE_SS_MODELREP           0x51    ///< Spike sorting model reply
+#define cbPKTTYPE_SS_DETECTREP          0x52    ///< Spike sorting detect reply
+#define cbPKTTYPE_SS_ARTIF_REJECTREP    0x53    ///< Spike sorting artifact reject reply
+#define cbPKTTYPE_SS_NOISE_BOUNDARYREP  0x54    ///< Spike sorting noise boundary reply
+#define cbPKTTYPE_SS_STATISTICSREP      0x55    ///< Spike sorting statistics reply
+#define cbPKTTYPE_SS_RESETREP           0x56    ///< Spike sorting reset reply
+#define cbPKTTYPE_SS_STATUSREP          0x57    ///< Spike sorting status reply
+#define cbPKTTYPE_SS_RESET_MODEL_REP    0x58    ///< Spike sorting reset model reply
+#define cbPKTTYPE_SS_RECALCREP          0x59    ///< Spike sorting recalculate reply
+#define cbPKTTYPE_FS_BASISREP           0x5B    ///< Feature space basis reply
+#define cbPKTTYPE_NPLAYREP              0x5C    ///< NPlay reply
+#define cbPKTTYPE_SET_DOUTREP           0x5D    ///< Set digital output reply
+#define cbPKTTYPE_TRIGGERREP            0x5E    ///< Trigger reply
+#define cbPKTTYPE_VIDEOTRACKREP         0x5F    ///< Video track reply
+
+// File and configuration packets - Reply (0x60-0x6F)
+#define cbPKTTYPE_REPFILECFG            0x61    ///< File configuration reply
+#define cbPKTTYPE_REPUNITSELECTION      0x62    ///< Unit selection reply
+#define cbPKTTYPE_LOGREP                0x63    ///< Log reply
+#define cbPKTTYPE_REPPATIENTINFO        0x64    ///< Patient info reply
+#define cbPKTTYPE_REPIMPEDANCE          0x65    ///< Impedance reply
+#define cbPKTTYPE_REPINITIMPEDANCE      0x66    ///< Initial impedance reply
+#define cbPKTTYPE_REPPOLL               0x67    ///< Poll reply
+#define cbPKTTYPE_REPMAPFILE            0x68    ///< Map file reply
+
+// Update packets
+#define cbPKTTYPE_UPDATEREP             0x71    ///< Update reply
+
+// Preview packets - Set
+#define cbPKTTYPE_PREVSETSTREAM         0x82    ///< Preview set stream
+#define cbPKTTYPE_PREVSET               0x83    ///< Preview set
+#define cbPKTTYPE_PREVSETLNC            0x84    ///< Preview set LNC
+
+// System packets - Request (0x88-0x9F)
 #define cbPKTTYPE_REQCONFIGALL          0x88    ///< Request for ALL configuration information
-#define cbPKTTYPE_SYSSET                0x90
-#define cbPKTTYPE_SYSSETSPKLEN          0x91
-#define cbPKTTYPE_SYSSETRUNLEV          0x92
+#define cbPKTTYPE_SYSSET                0x90    ///< System set
+#define cbPKTTYPE_SYSSETSPKLEN          0x91    ///< System set spike length
+#define cbPKTTYPE_SYSSETRUNLEV          0x92    ///< System set runlevel
 
-// Processor and bank information packets
-#define cbPKTTYPE_PROCREP               0x21
-#define cbPKTTYPE_BANKREP               0x22
+// Filter and configuration packets - Set (0xA0-0xAF)
+#define cbPKTTYPE_FILTSET               0xA3    ///< Filter set
+#define cbPKTTYPE_CHANRESET             0xA4    ///< Channel reset
+#define cbPKTTYPE_ADAPTFILTSET          0xA5    ///< Adaptive filter set
+#define cbPKTTYPE_REFELECFILTSET        0xA6    ///< Reference electrode filter set
+#define cbPKTTYPE_SETNTRODEINFO         0xA7    ///< N-Trode information set
+#define cbPKTTYPE_LNCSET                0xA8    ///< LNC set
+#define cbPKTTYPE_VIDEOSYNCHSET         0xA9    ///< Video sync set
 
-// Filter information packets
-#define cbPKTTYPE_FILTREP               0x23
-#define cbPKTTYPE_FILTSET               0xA3
+// Sample group and waveform packets - Set (0xB0-0xBF)
+#define cbPKTTYPE_GROUPSET              0xB0    ///< Sample group set
+#define cbPKTTYPE_COMMENTSET            0xB1    ///< Comment set
+#define cbPKTTYPE_NMSET                 0xB2    ///< NeuroMotive set
+#define cbPKTTYPE_WAVEFORMSET           0xB3    ///< Waveform set
+#define cbPKTTYPE_STIMULATIONSET        0xB4    ///< Stimulation set
 
-// Sample group information packets
-#define cbPKTTYPE_GROUPREP              0x30
-#define cbPKTTYPE_GROUPSET              0xB0
+// Channel information packets - Set (0xC0-0xCF)
+#define cbPKTTYPE_CHANSET               0xC0    ///< Channel information set
+#define cbPKTTYPE_CHANSETLABEL          0xC1    ///< Channel label set
+#define cbPKTTYPE_CHANSETSCALE          0xC2    ///< Channel scale set
+#define cbPKTTYPE_CHANSETDOUT           0xC3    ///< Channel digital output set
+#define cbPKTTYPE_CHANSETDINP           0xC4    ///< Channel digital input set
+#define cbPKTTYPE_CHANSETAOUT           0xC5    ///< Channel analog output set
+#define cbPKTTYPE_CHANSETDISP           0xC6    ///< Channel display set
+#define cbPKTTYPE_CHANSETAINP           0xC7    ///< Channel analog input set
+#define cbPKTTYPE_CHANSETSMP            0xC8    ///< Channel sampling set
+#define cbPKTTYPE_CHANSETSPK            0xC9    ///< Channel spike set
+#define cbPKTTYPE_CHANSETSPKTHR         0xCA    ///< Channel spike threshold set
+#define cbPKTTYPE_CHANSETSPKHPS         0xCB    ///< Channel spike hoops set
+#define cbPKTTYPE_CHANSETUNITOVERRIDES  0xCC    ///< Channel unit overrides set
+#define cbPKTTYPE_CHANSETNTRODEGROUP    0xCD    ///< Channel n-trode group set
+#define cbPKTTYPE_CHANSETREJECTAMPLITUDE 0xCE   ///< Channel reject amplitude set
+#define cbPKTTYPE_CHANSETAUTOTHRESHOLD  0xCF    ///< Channel auto threshold set
 
-// Channel information packets
-#define cbPKTTYPE_CHANREP               0x40
-#define cbPKTTYPE_CHANSET               0xC0
+// Spike sorting packets - Set (0xD0-0xDF)
+#define cbPKTTYPE_SS_MODELALLSET        0xD0    ///< Spike sorting model all set
+#define cbPKTTYPE_SS_MODELSET           0xD1    ///< Spike sorting model set
+#define cbPKTTYPE_SS_DETECTSET          0xD2    ///< Spike sorting detect set
+#define cbPKTTYPE_SS_ARTIF_REJECTSET    0xD3    ///< Spike sorting artifact reject set
+#define cbPKTTYPE_SS_NOISE_BOUNDARYSET  0xD4    ///< Spike sorting noise boundary set
+#define cbPKTTYPE_SS_STATISTICSSET      0xD5    ///< Spike sorting statistics set
+#define cbPKTTYPE_SS_RESETSET           0xD6    ///< Spike sorting reset set
+#define cbPKTTYPE_SS_STATUSSET          0xD7    ///< Spike sorting status set
+#define cbPKTTYPE_SS_RESET_MODEL_SET    0xD8    ///< Spike sorting reset model set
+#define cbPKTTYPE_SS_RECALCSET          0xD9    ///< Spike sorting recalculate set
+#define cbPKTTYPE_FS_BASISSET           0xDB    ///< Feature space basis set
+#define cbPKTTYPE_NPLAYSET              0xDC    ///< NPlay set
+#define cbPKTTYPE_SET_DOUTSET           0xDD    ///< Set digital output set
+#define cbPKTTYPE_TRIGGERSET            0xDE    ///< Trigger set
+#define cbPKTTYPE_VIDEOTRACKSET         0xDF    ///< Video track set
 
-// Unit selection packets
-#define cbPKTTYPE_REPUNITSELECTION      0x62
-#define cbPKTTYPE_SETUNITSELECTION      0xE2
+// Packet type masks and conversion constants
+#define cbPKTTYPE_MASKED_REFLECTED              0xE0    ///< Masked reflected packet type
+#define cbPKTTYPE_COMPARE_MASK_REFLECTED        0xF0    ///< Compare mask for reflected packets
+#define cbPKTTYPE_REFLECTED_CONVERSION_MASK     0x7F    ///< Reflected conversion mask
+
+// File and configuration packets - Set (0xE0-0xEF)
+#define cbPKTTYPE_SETFILECFG            0xE1    ///< File configuration set
+#define cbPKTTYPE_SETUNITSELECTION      0xE2    ///< Unit selection set
+#define cbPKTTYPE_LOGSET                0xE3    ///< Log set
+#define cbPKTTYPE_SETPATIENTINFO        0xE4    ///< Patient info set
+#define cbPKTTYPE_SETIMPEDANCE          0xE5    ///< Impedance set
+#define cbPKTTYPE_SETINITIMPEDANCE      0xE6    ///< Initial impedance set
+#define cbPKTTYPE_SETPOLL               0xE7    ///< Poll set
+#define cbPKTTYPE_SETMAPFILE            0xE8    ///< Map file set
+
+// Update packets - Set
+#define cbPKTTYPE_UPDATESET             0xF1    ///< Update set
 
 /// @}
 
@@ -308,6 +474,183 @@ typedef struct {
 /// @{
 
 #define cbPKTCHAN_CONFIGURATION         0x8000  ///< Channel # to mean configuration
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Channel Capability Flags
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 554-562
+/// These flags define the capabilities of each channel
+/// @{
+
+#define cbCHAN_EXISTS       0x00000001  ///< Channel id is allocated
+#define cbCHAN_CONNECTED    0x00000002  ///< Channel is connected and mapped and ready to use
+#define cbCHAN_ISOLATED     0x00000004  ///< Channel is electrically isolated
+#define cbCHAN_AINP         0x00000100  ///< Channel has analog input capabilities
+#define cbCHAN_AOUT         0x00000200  ///< Channel has analog output capabilities
+#define cbCHAN_DINP         0x00000400  ///< Channel has digital input capabilities
+#define cbCHAN_DOUT         0x00000800  ///< Channel has digital output capabilities
+#define cbCHAN_GYRO         0x00001000  ///< Channel has gyroscope/accelerometer/magnetometer/temperature capabilities
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Digital Input Capability and Option Flags
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 569-590
+/// @{
+
+#define  cbDINP_SERIALMASK   0x000000FF  ///< Bit mask used to detect RS232 Serial Baud Rates
+#define  cbDINP_BAUD2400     0x00000001  ///< RS232 Serial Port operates at 2400   (n-8-1)
+#define  cbDINP_BAUD9600     0x00000002  ///< RS232 Serial Port operates at 9600   (n-8-1)
+#define  cbDINP_BAUD19200    0x00000004  ///< RS232 Serial Port operates at 19200  (n-8-1)
+#define  cbDINP_BAUD38400    0x00000008  ///< RS232 Serial Port operates at 38400  (n-8-1)
+#define  cbDINP_BAUD57600    0x00000010  ///< RS232 Serial Port operates at 57600  (n-8-1)
+#define  cbDINP_BAUD115200   0x00000020  ///< RS232 Serial Port operates at 115200 (n-8-1)
+#define  cbDINP_1BIT         0x00000100  ///< Port has a single input bit (eg single BNC input)
+#define  cbDINP_8BIT         0x00000200  ///< Port has 8 input bits
+#define  cbDINP_16BIT        0x00000400  ///< Port has 16 input bits
+#define  cbDINP_32BIT        0x00000800  ///< Port has 32 input bits
+#define  cbDINP_ANYBIT       0x00001000  ///< Capture the port value when any bit changes.
+#define  cbDINP_WRDSTRB      0x00002000  ///< Capture the port when a word-write line is strobed
+#define  cbDINP_PKTCHAR      0x00004000  ///< Capture packets using an End of Packet Character
+#define  cbDINP_PKTSTRB      0x00008000  ///< Capture packets using an End of Packet Logic Input
+#define  cbDINP_MONITOR      0x00010000  ///< Port controls other ports or system events
+#define  cbDINP_REDGE        0x00020000  ///< Capture the port value when any bit changes lo-2-hi (rising edge)
+#define  cbDINP_FEDGE        0x00040000  ///< Capture the port value when any bit changes hi-2-lo (falling edge)
+#define  cbDINP_STRBANY      0x00080000  ///< Capture packets using 8-bit strobe/8-bit any Input
+#define  cbDINP_STRBRIS      0x00100000  ///< Capture packets using 8-bit strobe/8-bit rising edge Input
+#define  cbDINP_STRBFAL      0x00200000  ///< Capture packets using 8-bit strobe/8-bit falling edge Input
+#define  cbDINP_MASK         (cbDINP_ANYBIT | cbDINP_WRDSTRB | cbDINP_PKTCHAR | cbDINP_PKTSTRB | cbDINP_MONITOR | cbDINP_REDGE | cbDINP_FEDGE | cbDINP_STRBANY | cbDINP_STRBRIS | cbDINP_STRBFAL)
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Digital Output Capability and Option Flags
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 599-630
+/// @{
+
+#define  cbDOUT_SERIALMASK          0x000000FF  ///< Port operates as an RS232 Serial Connection
+#define  cbDOUT_BAUD2400            0x00000001  ///< Serial Port operates at 2400   (n-8-1)
+#define  cbDOUT_BAUD9600            0x00000002  ///< Serial Port operates at 9600   (n-8-1)
+#define  cbDOUT_BAUD19200           0x00000004  ///< Serial Port operates at 19200  (n-8-1)
+#define  cbDOUT_BAUD38400           0x00000008  ///< Serial Port operates at 38400  (n-8-1)
+#define  cbDOUT_BAUD57600           0x00000010  ///< Serial Port operates at 57600  (n-8-1)
+#define  cbDOUT_BAUD115200          0x00000020  ///< Serial Port operates at 115200 (n-8-1)
+#define  cbDOUT_1BIT                0x00000100  ///< Port has a single output bit (eg single BNC output)
+#define  cbDOUT_8BIT                0x00000200  ///< Port has 8 output bits
+#define  cbDOUT_16BIT               0x00000400  ///< Port has 16 output bits
+#define  cbDOUT_32BIT               0x00000800  ///< Port has 32 output bits
+#define  cbDOUT_VALUE               0x00010000  ///< Port can be manually configured
+#define  cbDOUT_TRACK               0x00020000  ///< Port should track the most recently selected channel
+#define  cbDOUT_FREQUENCY           0x00040000  ///< Port can output a frequency
+#define  cbDOUT_TRIGGERED           0x00080000  ///< Port can be triggered
+#define  cbDOUT_MONITOR_UNIT0       0x01000000  ///< Can monitor unit 0 = UNCLASSIFIED
+#define  cbDOUT_MONITOR_UNIT1       0x02000000  ///< Can monitor unit 1
+#define  cbDOUT_MONITOR_UNIT2       0x04000000  ///< Can monitor unit 2
+#define  cbDOUT_MONITOR_UNIT3       0x08000000  ///< Can monitor unit 3
+#define  cbDOUT_MONITOR_UNIT4       0x10000000  ///< Can monitor unit 4
+#define  cbDOUT_MONITOR_UNIT5       0x20000000  ///< Can monitor unit 5
+#define  cbDOUT_MONITOR_UNIT_ALL    0x3F000000  ///< Can monitor ALL units
+#define  cbDOUT_MONITOR_SHIFT_TO_FIRST_UNIT 24  ///< This tells us how many bit places to get to unit 1
+
+// Trigger types for Digital Output channels
+#define  cbDOUT_TRIGGER_NONE            0   ///< instant software trigger
+#define  cbDOUT_TRIGGER_DINPRISING      1   ///< digital input rising edge trigger
+#define  cbDOUT_TRIGGER_DINPFALLING     2   ///< digital input falling edge trigger
+#define  cbDOUT_TRIGGER_SPIKEUNIT       3   ///< spike unit
+#define  cbDOUT_TRIGGER_NM              4   ///< comment RGBA color (A being big byte)
+#define  cbDOUT_TRIGGER_RECORDINGSTART  5   ///< recording start trigger
+#define  cbDOUT_TRIGGER_EXTENSION       6   ///< extension trigger
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Analog Input Capability and Option Flags
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 696-723
+/// @{
+
+#define  cbAINP_RAWPREVIEW          0x00000001      ///< Generate scrolling preview data for the raw channel
+#define  cbAINP_LNC                 0x00000002      ///< Line Noise Cancellation
+#define  cbAINP_LNCPREVIEW          0x00000004      ///< Retrieve the LNC correction waveform
+#define  cbAINP_SMPSTREAM           0x00000010      ///< stream the analog input stream directly to disk
+#define  cbAINP_SMPFILTER           0x00000020      ///< Digitally filter the analog input stream
+#define  cbAINP_RAWSTREAM           0x00000040      ///< Raw data stream available
+#define  cbAINP_SPKSTREAM           0x00000100      ///< Spike Stream is available
+#define  cbAINP_SPKFILTER           0x00000200      ///< Selectable Filters
+#define  cbAINP_SPKPREVIEW          0x00000400      ///< Generate scrolling preview of the spike channel
+#define  cbAINP_SPKPROC             0x00000800      ///< Channel is able to do online spike processing
+#define  cbAINP_OFFSET_CORRECT_CAP  0x00001000      ///< Offset correction mode (0-disabled 1-enabled)
+
+#define  cbAINP_LNC_OFF             0x00000000      ///< Line Noise Cancellation disabled
+#define  cbAINP_LNC_RUN_HARD        0x00000001      ///< Hardware-based LNC running and adapting according to the adaptation const
+#define  cbAINP_LNC_RUN_SOFT        0x00000002      ///< Software-based LNC running and adapting according to the adaptation const
+#define  cbAINP_LNC_HOLD            0x00000004      ///< LNC running, but not adapting
+#define  cbAINP_LNC_MASK            0x00000007      ///< Mask for LNC Flags
+#define  cbAINP_REFELEC_LFPSPK      0x00000010      ///< Apply reference electrode to LFP & Spike
+#define  cbAINP_REFELEC_SPK         0x00000020      ///< Apply reference electrode to Spikes only
+#define  cbAINP_REFELEC_MASK        0x00000030      ///< Mask for Reference Electrode flags
+#define  cbAINP_RAWSTREAM_ENABLED   0x00000040      ///< Raw data stream enabled
+#define  cbAINP_OFFSET_CORRECT      0x00000100      ///< Offset correction mode (0-disabled 1-enabled)
+
+// Preview request packet identifiers
+#define cbAINPPREV_LNC    0x81
+#define cbAINPPREV_STREAM 0x82
+#define cbAINPPREV_ALL    0x83
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Analog Input Spike Processing Flags
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 728-749
+/// @{
+
+#define  cbAINPSPK_EXTRACT      0x00000001  ///< Time-stamp and packet to first superthreshold peak
+#define  cbAINPSPK_REJART       0x00000002  ///< Reject around clipped signals on multiple channels
+#define  cbAINPSPK_REJCLIP      0x00000004  ///< Reject clipped signals on the channel
+#define  cbAINPSPK_ALIGNPK      0x00000008  ///<
+#define  cbAINPSPK_REJAMPL      0x00000010  ///< Reject based on amplitude
+#define  cbAINPSPK_THRLEVEL     0x00000100  ///< Analog level threshold detection
+#define  cbAINPSPK_THRENERGY    0x00000200  ///< Energy threshold detection
+#define  cbAINPSPK_THRAUTO      0x00000400  ///< Auto threshold detection
+#define  cbAINPSPK_SPREADSORT   0x00001000  ///< Enable Auto spread Sorting
+#define  cbAINPSPK_CORRSORT     0x00002000  ///< Enable Auto Histogram Correlation Sorting
+#define  cbAINPSPK_PEAKMAJSORT  0x00004000  ///< Enable Auto Histogram Peak Major Sorting
+#define  cbAINPSPK_PEAKFISHSORT 0x00008000  ///< Enable Auto Histogram Peak Fisher Sorting
+#define  cbAINPSPK_HOOPSORT     0x00010000  ///< Enable Manual Hoop Sorting
+#define  cbAINPSPK_PCAMANSORT   0x00020000  ///< Enable Manual PCA Sorting
+#define  cbAINPSPK_PCAKMEANSORT 0x00040000  ///< Enable K-means PCA Sorting
+#define  cbAINPSPK_PCAEMSORT    0x00080000  ///< Enable EM-clustering PCA Sorting
+#define  cbAINPSPK_PCADBSORT    0x00100000  ///< Enable DBSCAN PCA Sorting
+#define  cbAINPSPK_AUTOSORT     (cbAINPSPK_SPREADSORT | cbAINPSPK_CORRSORT | cbAINPSPK_PEAKMAJSORT | cbAINPSPK_PEAKFISHSORT) ///< old auto sorting methods
+#define  cbAINPSPK_NOSORT       0x00000000  ///< No sorting
+#define  cbAINPSPK_PCAAUTOSORT  (cbAINPSPK_PCAKMEANSORT | cbAINPSPK_PCAEMSORT | cbAINPSPK_PCADBSORT)  ///< All PCA sorting auto algorithms
+#define  cbAINPSPK_PCASORT      (cbAINPSPK_PCAMANSORT | cbAINPSPK_PCAAUTOSORT)  ///< All PCA sorting algorithms
+#define  cbAINPSPK_ALLSORT      (cbAINPSPK_AUTOSORT | cbAINPSPK_HOOPSORT | cbAINPSPK_PCASORT) ///< All sorting algorithms
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Analog Output Capability Flags
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 768-778
+/// @{
+
+#define  cbAOUT_AUDIO        0x00000001  ///< Channel is physically optimized for audio output
+#define  cbAOUT_SCALE        0x00000002  ///< Output a static value
+#define  cbAOUT_TRACK        0x00000004  ///< Output a static value
+#define  cbAOUT_STATIC       0x00000008  ///< Output a static value
+#define  cbAOUT_MONITORRAW   0x00000010  ///< Monitor an analog signal line - RAW data
+#define  cbAOUT_MONITORLNC   0x00000020  ///< Monitor an analog signal line - Line Noise Cancelation
+#define  cbAOUT_MONITORSMP   0x00000040  ///< Monitor an analog signal line - Continuous
+#define  cbAOUT_MONITORSPK   0x00000080  ///< Monitor an analog signal line - spike
+#define  cbAOUT_STIMULATE    0x00000100  ///< Stimulation waveform functions are available.
+#define  cbAOUT_WAVEFORM     0x00000200  ///< Custom Waveform
+#define  cbAOUT_EXTENSION    0x00000400  ///< Output Waveform from Extension
 
 /// @}
 
@@ -537,6 +880,42 @@ typedef struct {
     int16_t  wave[cbMAX_PNTS];    ///< datapoints of each sample of the waveform. Room for all possible points collected
     ///< wave must be the last item in the structure because it can be variable length to a max of cbMAX_PNTS
 } cbPKT_SPK;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Continuous Data Packets
+/// @{
+
+/// @brief Data packet - Sample Group data packet
+///
+/// This packet contains each sample for the specified group. The group is specified in the type member of the
+/// header. Groups are currently 1=500S/s, 2=1kS/s, 3=2kS/s, 4=10kS/s, 5=30kS/s, 6=raw (30kS/s no filter). The
+/// list of channels associated with each group is transmitted using the cbPKT_GROUPINFO when the list of channels
+/// changes. cbpkt_header.chid is always zero. cbpkt_header.type is the group number
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+    A2D_DATA data[cbNUM_ANALOG_CHANS];    ///< variable length address list
+} cbPKT_GROUP;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Digital Input/Output Data Packets
+/// @{
+
+#define DINP_EVENT_ANYBIT   0x00000001  ///< Digital input event: any bit changed
+#define DINP_EVENT_STROBE   0x00000002  ///< Digital input event: strobe detected
+
+/// @brief Data packet - Digital input data value
+///
+/// This packet is sent when a digital input value has met the criteria set in Hardware Configuration.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+    uint32_t valueRead;         ///< data read from the digital input port
+    uint32_t bitsChanged;       ///< bits that have changed from the last packet sent
+    uint32_t eventType;         ///< type of event, eg DINP_EVENT_ANYBIT, DINP_EVENT_STROBE
+} cbPKT_DINP;
 
 /// @}
 
