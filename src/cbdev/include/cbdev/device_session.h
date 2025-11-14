@@ -293,6 +293,37 @@ public:
     /// @return Reference to device configuration
     [[nodiscard]] const DeviceConfig& getConfig() const;
 
+    ///--------------------------------------------------------------------------------------------
+    /// Device Startup & Handshake
+    ///--------------------------------------------------------------------------------------------
+
+    /// Send a runlevel command packet to the device
+    /// @param runlevel Desired runlevel (cbRUNLEVEL_*)
+    /// @param resetque Channel for reset to queue on (default: 0)
+    /// @param runflags Lock recording after reset (default: 0)
+    /// @return Result indicating success or error
+    Result<void> setSystemRunLevel(uint32_t runlevel, uint32_t resetque = 0, uint32_t runflags = 0);
+
+    /// Request all configuration from the device
+    /// Sends cbPKTTYPE_REQCONFIGALL which triggers the device to send all config packets
+    /// The device will respond with > 1000 packets (PROCINFO, CHANINFO, etc.)
+    /// @return Result indicating success or error
+    Result<void> requestConfiguration();
+
+    /// Perform complete device startup handshake sequence
+    /// Transitions the device from any state to RUNNING. Call this after create() to start the device.
+    ///
+    /// Startup sequence:
+    /// 1. Quick presence check (100ms) - fails fast if device not reachable
+    /// 2. Check if device is already running
+    /// 3. If not running, send cbRUNLEVEL_HARDRESET - wait for STANDBY
+    /// 4. Send REQCONFIGALL - request all configuration
+    /// 5. Send cbRUNLEVEL_RESET - transition to RUNNING
+    ///
+    /// @param timeout_ms Maximum time to wait for each step (default: 500ms)
+    /// @return Result indicating success or error (clear message if device not reachable)
+    Result<void> performStartupHandshake(uint32_t timeout_ms = 500);
+
 private:
     /// Private constructor (use create() factory method)
     DeviceSession();
