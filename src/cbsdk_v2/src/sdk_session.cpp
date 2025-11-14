@@ -318,19 +318,114 @@ Result<void> SdkSession::start() {
 
         // Start callback thread
         m_impl->callback_thread_running.store(true);
-        m_impl->callback_thread = std::make_unique<std::thread>([this]() {
-            callbackThreadLoop();
+        // Capture raw pointer to Impl so thread remains valid even if session is moved
+        Impl* impl = m_impl.get();
+        m_impl->callback_thread = std::make_unique<std::thread>([impl]() {
+            // This is the callback thread - runs user callbacks (can be slow)
+            constexpr size_t MAX_BATCH = 16;  // Opportunistic batching
+            cbPKT_GENERIC packets[MAX_BATCH];
+
+            while (impl->callback_thread_running.load()) {
+                size_t count = 0;
+
+                // Drain all available packets from queue (non-blocking)
+                while (count < MAX_BATCH && impl->packet_queue.pop(packets[count])) {
+                    count++;
+                }
+
+                if (count > 0) {
+                    // We have packets - mark not waiting and invoke callback
+                    impl->callback_thread_waiting.store(false, std::memory_order_relaxed);
+
+                    // Update stats
+                    {
+                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                        impl->stats.packets_delivered_to_callback += count;
+                    }
+
+                    // Invoke user callback (can be slow!)
+                    std::lock_guard<std::mutex> lock(impl->user_callback_mutex);
+                    if (impl->packet_callback) {
+                        impl->packet_callback(packets, count);
+                    }
+                } else {
+                    // No packets available - wait for notification
+                    impl->callback_thread_waiting.store(true, std::memory_order_release);
+
+                    std::unique_lock<std::mutex> lock(impl->callback_mutex);
+                    impl->callback_cv.wait_for(lock, std::chrono::milliseconds(1),
+                        [impl] { return !impl->callback_thread_running.load() || !impl->packet_queue.empty(); });
+                }
+            }
         });
 
-        // Packet receive callback
-        m_impl->device_session->setPacketCallback([this](const cbPKT_GENERIC* pkts, size_t count) {
-            onPacketsReceivedFromDevice(pkts, count);
+        // Packet receive callback - capture impl to survive session moves
+        m_impl->device_session->setPacketCallback([impl](const cbPKT_GENERIC* pkts, size_t count) {
+            // This runs on the cbdev receive thread - MUST BE FAST!
+            for (size_t i = 0; i < count; ++i) {
+                const auto& pkt = pkts[i];
+
+                // Track total packets received (for connect() verification)
+                impl->packets_received.fetch_add(1, std::memory_order_relaxed);
+
+                // Update stats
+                {
+                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                    impl->stats.packets_received_from_device++;
+                }
+
+                // Track SYSREP packets for handshake state machine
+                if ((pkt.cbpkt_header.type & 0xF0) == 0x10) {
+                    const cbPKT_SYSINFO* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
+                    impl->device_runlevel.store(sysinfo->runlevel, std::memory_order_release);
+                    impl->received_sysrep.store(true, std::memory_order_release);
+                    impl->handshake_cv.notify_all();
+                }
+
+                // Store to shared memory
+                auto result = impl->shmem_session->storePacket(pkt);
+                if (result.isOk()) {
+                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                    impl->stats.packets_stored_to_shmem++;
+                } else {
+                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                    impl->stats.shmem_store_errors++;
+                }
+
+                // Queue for callback
+                if (impl->packet_queue.push(pkt)) {
+                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                    impl->stats.packets_queued_for_callback++;
+                    size_t current_depth = impl->packet_queue.size();
+                    if (current_depth > impl->stats.queue_max_depth) {
+                        impl->stats.queue_max_depth = current_depth;
+                    }
+                } else {
+                    // Queue overflow
+                    {
+                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                        impl->stats.packets_dropped++;
+                    }
+                    std::lock_guard<std::mutex> lock(impl->user_callback_mutex);
+                    if (impl->error_callback) {
+                        impl->error_callback("Packet queue overflow - dropping packets");
+                    }
+                }
+            }
+
+            // Signal CLIENT processes that new data is available
+            impl->shmem_session->signalData();
+
+            // Wake callback thread if waiting
+            if (impl->callback_thread_waiting.load(std::memory_order_relaxed)) {
+                impl->callback_cv.notify_one();
+            }
         });
 
-        // Transmit callback (for send thread to dequeue packets from shared memory)
-        m_impl->device_session->setTransmitCallback([this](cbPKT_GENERIC& pkt) -> bool {
+        // Transmit callback - capture impl to survive session moves
+        m_impl->device_session->setTransmitCallback([impl](cbPKT_GENERIC& pkt) -> bool {
             // Dequeue packet from shared memory transmit buffer
-            auto result = m_impl->shmem_session->dequeuePacket(pkt);
+            auto result = impl->shmem_session->dequeuePacket(pkt);
             if (result.isError()) {
                 return false;  // Error - treat as empty
             }
@@ -653,77 +748,6 @@ request_config:
     return Result<void>::ok();
 }
 
-void SdkSession::onPacketsReceivedFromDevice(const cbPKT_GENERIC* pkts, size_t count) {
-    // This runs on the cbdev receive thread - MUST BE FAST!
-
-    for (size_t i = 0; i < count; ++i) {
-        const auto& pkt = pkts[i];
-
-        // Track total packets received (for connect() verification)
-        m_impl->packets_received.fetch_add(1, std::memory_order_relaxed);
-
-        // Update stats (atomic or quick increment)
-        {
-            std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
-            m_impl->stats.packets_received_from_device++;
-            // bytes_received tracked by cbdev
-        }
-
-        // Track SYSREP packets for handshake state machine
-        // SYSREP type is 0x10-0x1F (cbPKTTYPE_SYSREP*)
-        if ((pkt.cbpkt_header.type & 0xF0) == 0x10) {
-            // This is a SYSREP packet - extract runlevel from cbPKT_SYSINFO structure
-            const cbPKT_SYSINFO* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
-            m_impl->device_runlevel.store(sysinfo->runlevel, std::memory_order_release);
-            m_impl->received_sysrep.store(true, std::memory_order_release);
-            m_impl->handshake_cv.notify_all();  // Wake up connect() if waiting
-        }
-
-        // Store to shared memory (FAST PATH - just memcpy)
-        auto result = m_impl->shmem_session->storePacket(pkt);
-        if (result.isOk()) {
-            std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
-            m_impl->stats.packets_stored_to_shmem++;
-        } else {
-            std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
-            m_impl->stats.shmem_store_errors++;
-        }
-
-        // Queue for callback (lock-free push)
-        if (m_impl->packet_queue.push(pkt)) {
-            std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
-            m_impl->stats.packets_queued_for_callback++;
-
-            // Track peak queue depth
-            size_t current_depth = m_impl->packet_queue.size();
-            if (current_depth > m_impl->stats.queue_max_depth) {
-                m_impl->stats.queue_max_depth = current_depth;
-            }
-        } else {
-            // Queue overflow! Drop packet and invoke error callback
-            {
-                std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
-                m_impl->stats.packets_dropped++;
-            }
-
-            // Invoke error callback (if set)
-            std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
-            if (m_impl->error_callback) {
-                m_impl->error_callback("Packet queue overflow - dropping packets");
-            }
-        }
-    }
-
-    // Signal CLIENT processes that new data is available (STANDALONE mode only)
-    // This wakes up any CLIENT processes waiting in waitForData()
-    m_impl->shmem_session->signalData();
-
-    // Wake callback thread if it's waiting
-    if (m_impl->callback_thread_waiting.load(std::memory_order_relaxed)) {
-        m_impl->callback_cv.notify_one();
-    }
-}
-
 void SdkSession::shmemReceiveThreadLoop() {
     // This is the shared memory receive thread (CLIENT mode only)
     // Waits for signal from STANDALONE, reads packets from cbRECbuffer, invokes user callback directly
@@ -783,46 +807,6 @@ void SdkSession::shmemReceiveThreadLoop() {
             if (m_impl->packet_callback) {
                 m_impl->packet_callback(packets, packets_read);
             }
-        }
-    }
-}
-
-void SdkSession::callbackThreadLoop() {
-    // This is the callback thread - runs user callbacks (can be slow)
-
-    constexpr size_t MAX_BATCH = 16;  // Opportunistic batching
-    cbPKT_GENERIC packets[MAX_BATCH];
-
-    while (m_impl->callback_thread_running.load()) {
-        size_t count = 0;
-
-        // Drain all available packets from queue (non-blocking)
-        while (count < MAX_BATCH && m_impl->packet_queue.pop(packets[count])) {
-            count++;
-        }
-
-        if (count > 0) {
-            // We have packets - mark not waiting and invoke callback
-            m_impl->callback_thread_waiting.store(false, std::memory_order_relaxed);
-
-            // Update stats
-            {
-                std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
-                m_impl->stats.packets_delivered_to_callback += count;
-            }
-
-            // Invoke user callback (can be slow!)
-            std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
-            if (m_impl->packet_callback) {
-                m_impl->packet_callback(packets, count);
-            }
-        } else {
-            // No packets available - wait for notification
-            m_impl->callback_thread_waiting.store(true, std::memory_order_release);
-
-            std::unique_lock<std::mutex> lock(m_impl->callback_mutex);
-            m_impl->callback_cv.wait_for(lock, std::chrono::milliseconds(1),
-                [this] { return !m_impl->packet_queue.empty() || !m_impl->callback_thread_running.load(); });
         }
     }
 }

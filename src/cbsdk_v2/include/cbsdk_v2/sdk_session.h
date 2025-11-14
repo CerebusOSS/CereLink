@@ -393,14 +393,8 @@ private:
     /// @return Result indicating success or error (device not responding)
     Result<void> connect(uint32_t timeout_ms = 500);
 
-    /// Callback from cbdev when packets are received (runs on receive thread - MUST BE FAST!)
-    void onPacketsReceivedFromDevice(const cbPKT_GENERIC* pkts, size_t count);
-
     /// Shared memory receive thread loop (CLIENT mode only - reads from cbRECbuffer)
     void shmemReceiveThreadLoop();
-
-    /// Callback thread loop (drains queue and invokes user callbacks)
-    void callbackThreadLoop();
 
     /// Platform-specific implementation
     struct Impl;
