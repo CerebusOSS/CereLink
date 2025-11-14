@@ -1285,28 +1285,6 @@ typedef struct
 
 /// @}
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @name Spike Sorting Combined Structure
-///
-/// Ground truth from upstream/cbhwlib/cbhwlib.h lines 1012-1025
-/// @{
-
-typedef struct {
-    // ***** THESE MUST BE 1ST IN THE STRUCTURE WITH MODELSET LAST OF THESE ***
-    // ***** SEE WriteCCFNoPrompt() ***
-    cbPKT_FS_BASIS          asBasis[cbMAXCHANS];    ///< All of the PCA basis values
-    cbPKT_SS_MODELSET       asSortModel[cbMAXCHANS][cbMAXUNITS + 2];    ///< All of the model (rules) for spike sorting
-
-    //////// These are spike sorting options
-    cbPKT_SS_DETECT         pktDetect;        ///< parameters dealing with actual detection
-    cbPKT_SS_ARTIF_REJECT   pktArtifReject;   ///< artifact rejection
-    cbPKT_SS_NOISE_BOUNDARY pktNoiseBoundary[cbMAXCHANS]; ///< where o'where are the noise boundaries
-    cbPKT_SS_STATISTICS     pktStatistics;    ///< information about statistics
-    cbPKT_SS_STATUS         pktStatus;        ///< Spike sorting status
-
-} cbSPIKE_SORTING;
-
-/// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Video and Tracking (NeuroMotive)

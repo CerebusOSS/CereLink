@@ -110,6 +110,33 @@ enum class InstrumentStatus : uint32_t {
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Spike Sorting Combined Structure (Config Buffer Version)
+///
+/// This structure aggregates all spike sorting configuration across all channels.
+/// This is NOT a packet structure - it's a config storage structure used by Central
+/// to maintain the complete spike sorting state.
+///
+/// IMPORTANT: Uses cbCONFIG_MAXCHANS (multi-device, 848 channels) not cbMAXCHANS (single-device, 256 channels)
+///
+/// Ground truth from upstream/cbhwlib/cbhwlib.h lines 1012-1025
+/// Modified to use config buffer channel counts
+///
+typedef struct {
+    // ***** THESE MUST BE 1ST IN THE STRUCTURE WITH MODELSET LAST OF THESE ***
+    // ***** SEE WriteCCFNoPrompt() ***
+    cbPKT_FS_BASIS          asBasis[cbCONFIG_MAXCHANS];                     ///< All PCA basis values (config buffer size)
+    cbPKT_SS_MODELSET       asSortModel[cbCONFIG_MAXCHANS][cbMAXUNITS + 2]; ///< All spike sorting models (config buffer size)
+
+    //////// Spike sorting options (not channel-specific)
+    cbPKT_SS_DETECT         pktDetect;                         ///< Detection parameters
+    cbPKT_SS_ARTIF_REJECT   pktArtifReject;                   ///< Artifact rejection
+    cbPKT_SS_NOISE_BOUNDARY pktNoiseBoundary[cbCONFIG_MAXCHANS]; ///< Noise boundaries (config buffer size)
+    cbPKT_SS_STATISTICS     pktStatistics;                    ///< Statistics information
+    cbPKT_SS_STATUS         pktStatus;                        ///< Spike sorting status
+
+} cbSPIKE_SORTING;
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Device configuration buffer
 ///
 /// This structure stores the complete configuration state for up to 4 instruments (NSPs).
