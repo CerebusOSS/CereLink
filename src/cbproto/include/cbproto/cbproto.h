@@ -15,6 +15,7 @@
 
 // Core protocol types and constants (C-compatible)
 #include "types.h"
+#include "config_buffer.h"
 
 // C++-only utilities
 #ifdef __cplusplus

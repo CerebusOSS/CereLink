@@ -213,6 +213,11 @@ struct DeviceSession::Impl {
     std::mutex handshake_mutex;
     std::condition_variable handshake_cv;
 
+    // Configuration buffer (internal or external)
+    cbConfigBuffer* m_cfg_ptr = nullptr;              // Points to internal or external buffer
+    std::unique_ptr<cbConfigBuffer> m_cfg_owned;      // Internal storage (standalone mode)
+    std::mutex cfg_mutex;                             // Thread-safe access to config buffer
+
     ~Impl() {
         // Ensure threads are stopped before destroying
         if (recv_thread_running.load()) {
@@ -243,6 +248,242 @@ struct DeviceSession::Impl {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // DeviceSession Implementation
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+void DeviceSession::parseConfigPacket(const cbPKT_GENERIC& pkt) {
+    // Early exit if no config buffer is set
+    if (!m_impl->m_cfg_ptr) {
+        return;
+    }
+
+    // Lock config buffer for thread-safe access
+    std::lock_guard<std::mutex> lock(m_impl->cfg_mutex);
+
+    // Helper lambda to check if packet needs config buffer storage (and thus instrument ID validation)
+    // Based on Central's InstNetwork.cpp logic - only packets actually stored to config buffer need valid instrument IDs
+    auto isConfigPacket = [](const cbPKT_HEADER& header) -> bool {
+        // Config packets are sent on the configuration channel
+        if (header.chid != cbPKTCHAN_CONFIGURATION) {
+            return false;
+        }
+
+        uint16_t type = header.type;
+
+        // Channel config packets (0x40-0x4F range)
+        if ((type & 0xF0) == cbPKTTYPE_CHANREP) return true;
+
+        // System config packets (0x10-0x1F range)
+        if ((type & 0xF0) == cbPKTTYPE_SYSREP) return true;
+
+        // Other specific config packet types that Central stores
+        switch (type) {
+            case cbPKTTYPE_GROUPREP:
+            case cbPKTTYPE_FILTREP:
+            case cbPKTTYPE_PROCREP:
+            case cbPKTTYPE_BANKREP:
+            case cbPKTTYPE_ADAPTFILTREP:
+            case cbPKTTYPE_REFELECFILTREP:
+            case cbPKTTYPE_SS_MODELREP:
+            case cbPKTTYPE_SS_STATUSREP:
+            case cbPKTTYPE_SS_DETECTREP:
+            case cbPKTTYPE_SS_ARTIF_REJECTREP:
+            case cbPKTTYPE_SS_NOISE_BOUNDARYREP:
+            case cbPKTTYPE_SS_STATISTICSREP:
+            case cbPKTTYPE_FS_BASISREP:
+            case cbPKTTYPE_LNCREP:
+            case cbPKTTYPE_REPFILECFG:
+            case cbPKTTYPE_REPNTRODEINFO:
+            case cbPKTTYPE_NMREP:
+            case cbPKTTYPE_WAVEFORMREP:
+            case cbPKTTYPE_NPLAYREP:
+                return true;
+            default:
+                return false;
+        }
+    };
+
+    // Only validate instrument ID for config packets that need to be stored
+    if (isConfigPacket(pkt.cbpkt_header)) {
+        const uint16_t pkt_type = pkt.cbpkt_header.type;
+        // Extract instrument ID from packet header
+        const cbproto::InstrumentId id = cbproto::InstrumentId::fromPacketField(pkt.cbpkt_header.instrument);
+
+        if (!id.isValid()) {
+            // Invalid instrument ID for config packet - skip storing to config buffer
+            return;
+        }
+
+        // Use packet.instrument as index (mode-independent!)
+        const uint8_t idx = id.toIndex();
+
+        if ((pkt_type & 0xF0) == cbPKTTYPE_CHANREP) {
+            // Channel info packets (0x40-0x4F range)
+            const auto* chan_pkt = reinterpret_cast<const cbPKT_CHANINFO*>(&pkt);
+            // Channel index is 1-based in packet, but chaninfo array is 0-based
+            if (chan_pkt->chan > 0 && chan_pkt->chan <= cbCONFIG_MAXCHANS) {
+                std::memcpy(&m_impl->m_cfg_ptr->chaninfo[chan_pkt->chan - 1], &pkt, sizeof(cbPKT_CHANINFO));
+            }
+        }
+        else if ((pkt_type & 0xF0) == cbPKTTYPE_SYSREP) {
+            // System info packets (0x10-0x1F range) - all store to same sysinfo
+            std::memcpy(&m_impl->m_cfg_ptr->sysinfo, &pkt, sizeof(cbPKT_SYSINFO));
+        }
+        else if (pkt_type == cbPKTTYPE_GROUPREP) {
+            // Store sample group info (group index is 1-based in packet)
+            const auto* group_pkt = reinterpret_cast<const cbPKT_GROUPINFO*>(&pkt);
+            if (group_pkt->group > 0 && group_pkt->group <= cbCONFIG_MAXGROUPS) {
+                std::memcpy(&m_impl->m_cfg_ptr->groupinfo[idx][group_pkt->group - 1], &pkt, sizeof(cbPKT_GROUPINFO));
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_FILTREP) {
+            // Store filter info (filter index is 1-based in packet)
+            const auto* filt_pkt = reinterpret_cast<const cbPKT_FILTINFO*>(&pkt);
+            if (filt_pkt->filt > 0 && filt_pkt->filt <= cbCONFIG_MAXFILTS) {
+                std::memcpy(&m_impl->m_cfg_ptr->filtinfo[idx][filt_pkt->filt - 1], &pkt, sizeof(cbPKT_FILTINFO));
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_PROCREP) {
+            // Store processor info
+            std::memcpy(&m_impl->m_cfg_ptr->procinfo[idx], &pkt, sizeof(cbPKT_PROCINFO));
+
+            // Mark instrument as active when we receive its PROCINFO
+            m_impl->m_cfg_ptr->instrument_status[idx] = static_cast<uint32_t>(InstrumentStatus::ACTIVE);
+        }
+        else if (pkt_type == cbPKTTYPE_BANKREP) {
+            // Store bank info (bank index is 1-based in packet)
+            const auto* bank_pkt = reinterpret_cast<const cbPKT_BANKINFO*>(&pkt);
+            if (bank_pkt->bank > 0 && bank_pkt->bank <= cbCONFIG_MAXBANKS) {
+                std::memcpy(&m_impl->m_cfg_ptr->bankinfo[idx][bank_pkt->bank - 1], &pkt, sizeof(cbPKT_BANKINFO));
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_ADAPTFILTREP) {
+            // Store adaptive filter info (per-instrument)
+            m_impl->m_cfg_ptr->adaptinfo[idx] = *reinterpret_cast<const cbPKT_ADAPTFILTINFO*>(&pkt);
+        }
+        else if (pkt_type == cbPKTTYPE_REFELECFILTREP) {
+            // Store reference electrode filter info (per-instrument)
+            m_impl->m_cfg_ptr->refelecinfo[idx] = *reinterpret_cast<const cbPKT_REFELECFILTINFO*>(&pkt);
+        }
+        else if (pkt_type == cbPKTTYPE_SS_STATUSREP) {
+            // Store spike sorting status (system-wide, in isSortingOptions)
+            m_impl->m_cfg_ptr->isSortingOptions.pktStatus = *reinterpret_cast<const cbPKT_SS_STATUS*>(&pkt);
+        }
+        else if (pkt_type == cbPKTTYPE_SS_DETECTREP) {
+            // Store spike detection parameters (system-wide)
+            m_impl->m_cfg_ptr->isSortingOptions.pktDetect = *reinterpret_cast<const cbPKT_SS_DETECT*>(&pkt);
+        }
+        else if (pkt_type == cbPKTTYPE_SS_ARTIF_REJECTREP) {
+            // Store artifact rejection parameters (system-wide)
+            m_impl->m_cfg_ptr->isSortingOptions.pktArtifReject = *reinterpret_cast<const cbPKT_SS_ARTIF_REJECT*>(&pkt);
+        }
+        else if (pkt_type == cbPKTTYPE_SS_NOISE_BOUNDARYREP) {
+            // Store noise boundary (per-channel, 1-based in packet)
+            const auto* noise_pkt = reinterpret_cast<const cbPKT_SS_NOISE_BOUNDARY*>(&pkt);
+            if (noise_pkt->chan > 0 && noise_pkt->chan <= cbCONFIG_MAXCHANS) {
+                m_impl->m_cfg_ptr->isSortingOptions.pktNoiseBoundary[noise_pkt->chan - 1] = *noise_pkt;
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_SS_STATISTICSREP) {
+            // Store spike sorting statistics (system-wide)
+            m_impl->m_cfg_ptr->isSortingOptions.pktStatistics = *reinterpret_cast<const cbPKT_SS_STATISTICS*>(&pkt);
+        }
+        else if (pkt_type == cbPKTTYPE_SS_MODELREP) {
+            // Store spike sorting model (per-channel, per-unit)
+            // Note: Central calls UpdateSortModel() which validates and constrains unit numbers
+            // For now, store directly with validation
+            const auto* model_pkt = reinterpret_cast<const cbPKT_SS_MODELSET*>(&pkt);
+            uint32_t nChan = model_pkt->chan;
+            uint32_t nUnit = model_pkt->unit_number;
+
+            // Validate channel and unit numbers (0-based in packet)
+            if (nChan < cbCONFIG_MAXCHANS && nUnit < (cbMAXUNITS + 2)) {
+                m_impl->m_cfg_ptr->isSortingOptions.asSortModel[nChan][nUnit] = *model_pkt;
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_FS_BASISREP) {
+            // Store feature space basis (per-channel)
+            // Note: Central calls UpdateBasisModel() for additional processing
+            // For now, store directly with validation
+            const auto* basis_pkt = reinterpret_cast<const cbPKT_FS_BASIS*>(&pkt);
+            uint32_t nChan = basis_pkt->chan;
+
+            // Validate channel number (1-based in packet)
+            if (nChan > 0 && nChan <= cbCONFIG_MAXCHANS) {
+                m_impl->m_cfg_ptr->isSortingOptions.asBasis[nChan - 1] = *basis_pkt;
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_LNCREP) {
+            // Store line noise cancellation info (per-instrument)
+            std::memcpy(&m_impl->m_cfg_ptr->isLnc[idx], &pkt, sizeof(cbPKT_LNC));
+        }
+        else if (pkt_type == cbPKTTYPE_REPFILECFG) {
+            // Store file configuration info (only for specific options)
+            const auto* file_pkt = reinterpret_cast<const cbPKT_FILECFG*>(&pkt);
+            if (file_pkt->options == cbFILECFG_OPT_REC ||
+                file_pkt->options == cbFILECFG_OPT_STOP ||
+                file_pkt->options == cbFILECFG_OPT_TIMEOUT) {
+                m_impl->m_cfg_ptr->fileinfo = *file_pkt;
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_REPNTRODEINFO) {
+            // Store n-trode information (1-based in packet)
+            const auto* ntrode_pkt = reinterpret_cast<const cbPKT_NTRODEINFO*>(&pkt);
+            if (ntrode_pkt->ntrode > 0 && ntrode_pkt->ntrode <= cbMAXNTRODES) {
+                m_impl->m_cfg_ptr->isNTrodeInfo[ntrode_pkt->ntrode - 1] = *ntrode_pkt;
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_WAVEFORMREP) {
+            // Store analog output waveform configuration
+            // Based on Central's logic (InstNetwork.cpp:415)
+            const auto* wave_pkt = reinterpret_cast<const cbPKT_AOUT_WAVEFORM*>(&pkt);
+
+            // Validate channel number (0-based) and trigger number (0-based)
+            if (wave_pkt->chan < AOUT_NUM_GAIN_CHANS && wave_pkt->trigNum < cbMAX_AOUT_TRIGGER) {
+                m_impl->m_cfg_ptr->isWaveform[wave_pkt->chan][wave_pkt->trigNum] = *wave_pkt;
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_NPLAYREP) {
+            // Store nPlay information
+            m_impl->m_cfg_ptr->isNPlay = *reinterpret_cast<const cbPKT_NPLAY*>(&pkt);
+        }
+        else if (pkt_type == cbPKTTYPE_NMREP) {
+            // Store NeuroMotive (video/tracking) information
+            // Based on Central's logic (InstNetwork.cpp:367-397)
+            const auto* nm_pkt = reinterpret_cast<const cbPKT_NM*>(&pkt);
+
+            if (nm_pkt->mode == cbNM_MODE_SETVIDEOSOURCE) {
+                // Video source configuration (1-based index in flags field)
+                if (nm_pkt->flags > 0 && nm_pkt->flags <= cbMAXVIDEOSOURCE) {
+                    std::memcpy(m_impl->m_cfg_ptr->isVideoSource[nm_pkt->flags - 1].name,
+                                nm_pkt->name, cbLEN_STR_LABEL);
+                    m_impl->m_cfg_ptr->isVideoSource[nm_pkt->flags - 1].fps =
+                        static_cast<float>(nm_pkt->value) / 1000.0f;
+                }
+            }
+            else if (nm_pkt->mode == cbNM_MODE_SETTRACKABLE) {
+                // Trackable object configuration (1-based index in flags field)
+                if (nm_pkt->flags > 0 && nm_pkt->flags <= cbMAXTRACKOBJ) {
+                    std::memcpy(m_impl->m_cfg_ptr->isTrackObj[nm_pkt->flags - 1].name,
+                                nm_pkt->name, cbLEN_STR_LABEL);
+                    m_impl->m_cfg_ptr->isTrackObj[nm_pkt->flags - 1].type =
+                        static_cast<uint16_t>(nm_pkt->value & 0xff);
+                    m_impl->m_cfg_ptr->isTrackObj[nm_pkt->flags - 1].pointCount =
+                        static_cast<uint16_t>((nm_pkt->value >> 16) & 0xff);
+                }
+            }
+            // Note: cbNM_MODE_SETRPOS does not exist in upstream cbproto.h
+            // If reset functionality is needed, it should be implemented using a different mode
+            /*
+            else if (nm_pkt->mode == cbNM_MODE_SETRPOS) {
+                // Clear all trackable objects
+                std::memset(m_impl->m_cfg_ptr->isTrackObj, 0, sizeof(m_impl->m_cfg_ptr->isTrackObj));
+                std::memset(m_impl->m_cfg_ptr->isVideoSource, 0, sizeof(m_impl->m_cfg_ptr->isVideoSource));
+            }
+            */
+        }
+
+        // All recognized config packet types now have storage
+    }
+}
 
 DeviceSession::DeviceSession()
     : m_impl(std::make_unique<Impl>()) {
@@ -955,6 +1196,37 @@ Result<void> DeviceSession::connect(const uint32_t timeout_ms) {
     }
 
     return Result<void>::ok();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Configuration Buffer Management
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+void DeviceSession::setConfigBuffer(cbConfigBuffer* external_buffer) {
+    std::lock_guard<std::mutex> lock(m_impl->cfg_mutex);
+
+    if (external_buffer) {
+        // Use external buffer (shared memory mode)
+        m_impl->m_cfg_ptr = external_buffer;
+        m_impl->m_cfg_owned.reset();  // Release internal buffer if any
+    } else {
+        // Create internal buffer (standalone mode)
+        if (!m_impl->m_cfg_owned) {
+            m_impl->m_cfg_owned = std::make_unique<cbConfigBuffer>();
+            std::memset(m_impl->m_cfg_owned.get(), 0, sizeof(cbConfigBuffer));
+        }
+        m_impl->m_cfg_ptr = m_impl->m_cfg_owned.get();
+    }
+}
+
+cbConfigBuffer* DeviceSession::getConfigBuffer() {
+    std::lock_guard<std::mutex> lock(m_impl->cfg_mutex);
+    return m_impl->m_cfg_ptr;
+}
+
+const cbConfigBuffer* DeviceSession::getConfigBuffer() const {
+    std::lock_guard<std::mutex> lock(m_impl->cfg_mutex);
+    return m_impl->m_cfg_ptr;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

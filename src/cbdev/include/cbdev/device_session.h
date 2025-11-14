@@ -335,6 +335,29 @@ public:
     /// @return Result indicating success or error
     Result<void> connect(uint32_t timeout_ms = 500);
 
+    ///--------------------------------------------------------------------------------------------
+    /// Device Configuration Buffer
+    ///--------------------------------------------------------------------------------------------
+
+    /// Provide an external configuration buffer for storage
+    /// When using cbsdk (SdkSession), this allows DeviceSession to write config directly to
+    /// shared memory without copying. When nullptr (default), DeviceSession uses internal storage.
+    /// @param external_buffer Pointer to external config buffer (or nullptr for internal)
+    void setConfigBuffer(cbConfigBuffer* external_buffer);
+
+    /// Get the configuration buffer (internal or external)
+    /// @return Pointer to the config buffer being used
+    cbConfigBuffer* getConfigBuffer();
+
+    /// Get the configuration buffer (const version)
+    /// @return Const pointer to the config buffer being used
+    [[nodiscard]] const cbConfigBuffer* getConfigBuffer() const;
+
+    /// Parse a configuration packet and update the config buffer
+    /// This is called internally by the receive thread when config packets arrive.
+    /// @param pkt The packet to parse
+    void parseConfigPacket(const cbPKT_GENERIC& pkt);
+
 private:
     /// Private constructor (use create() factory method)
     DeviceSession();

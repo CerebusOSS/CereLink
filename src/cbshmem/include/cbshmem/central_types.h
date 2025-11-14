@@ -121,61 +121,22 @@ struct CentralTransmitBuffer {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Central-compatible configuration buffer
 ///
-/// CRITICAL: This structure MUST match Central's cbCFGBUFF layout exactly!
-/// All arrays are sized using CENTRAL_* constants (cbMAXPROCS=4, etc.)
+/// This is now an alias to cbConfigBuffer (defined in cbproto/config_buffer.h).
+/// The structure maintains Central's cbCFGBUFF layout compatibility.
 ///
-/// This structure now includes all major fields from upstream cbCFGBUFF except hwndCentral
-/// (which is platform/bitness specific and only used by Central's UI).
+/// The CENTRAL_* constants are kept for backward compatibility in this module,
+/// while cbConfigBuffer uses cbCONFIG_* constants (which have the same values).
 ///
-struct CentralConfigBuffer {
-    uint32_t version;           ///< Buffer structure version
-    uint32_t sysflags;          ///< System-wide flags
+/// Static asserts below verify the constants match.
+///
+using CentralConfigBuffer = cbConfigBuffer;
 
-    // Instrument status (not in upstream, but needed for multi-client tracking)
-    uint32_t instrument_status[CENTRAL_cbMAXPROCS];  ///< Active status for each instrument
-
-    // Configuration packets
-    cbPKT_SYSINFO  sysinfo;                                             ///< System information
-    cbPKT_PROCINFO procinfo[CENTRAL_cbMAXPROCS];                        ///< Processor info (indexed by instrument!)
-    cbPKT_BANKINFO bankinfo[CENTRAL_cbMAXPROCS][CENTRAL_cbMAXBANKS];    ///< Bank info
-    cbPKT_GROUPINFO groupinfo[CENTRAL_cbMAXPROCS][CENTRAL_cbMAXGROUPS]; ///< Sample group info
-    cbPKT_FILTINFO filtinfo[CENTRAL_cbMAXPROCS][CENTRAL_cbMAXFILTS];    ///< Filter info
-
-    // Channel configuration (shared across all instruments)
-    cbPKT_CHANINFO chaninfo[CENTRAL_cbMAXCHANS];                        ///< Channel configuration
-
-    // Adaptive and reference electrode filtering (per-instrument)
-    cbPKT_ADAPTFILTINFO adaptinfo[CENTRAL_cbMAXPROCS];                  ///< Adaptive filter settings
-    cbPKT_REFELECFILTINFO refelecinfo[CENTRAL_cbMAXPROCS];              ///< Reference electrode filter settings
-
-    // Spike sorting configuration
-    cbSPIKE_SORTING isSortingOptions;                                   ///< Spike sorting parameters
-
-    // Line noise cancellation (per-instrument)
-    cbPKT_LNC isLnc[CENTRAL_cbMAXPROCS];                                ///< Line noise cancellation settings
-
-    // File recording status
-    cbPKT_FILECFG fileinfo;                                             ///< File recording configuration
-
-    // N-Trode configuration (stereotrode, tetrode, etc.)
-    cbPKT_NTRODEINFO isNTrodeInfo[cbMAXNTRODES];                        ///< N-Trode information
-
-    // Analog output waveform configuration
-    cbPKT_AOUT_WAVEFORM isWaveform[AOUT_NUM_GAIN_CHANS][cbMAX_AOUT_TRIGGER]; ///< Waveform parameters
-
-    // nPlay file playback configuration
-    cbPKT_NPLAY isNPlay;                                                ///< nPlay information
-
-    // Video tracking (NeuroMotive)
-    cbVIDEOSOURCE isVideoSource[cbMAXVIDEOSOURCE];                      ///< Video source configuration
-    cbTRACKOBJ isTrackObj[cbMAXTRACKOBJ];                               ///< Trackable objects
-
-    // Central application UI configuration
-    cbOPTIONTABLE optiontable;                                          ///< Option table (32 32-bit values)
-    cbCOLORTABLE colortable;                                            ///< Color table (96 32-bit values)
-
-    // Note: hwndCentral (HANDLE) is omitted - it's platform/bitness specific and only used by Central
-};
+// Verify that CENTRAL_* constants match cbCONFIG_* constants
+static_assert(CENTRAL_cbMAXPROCS == cbCONFIG_MAXPROCS, "CENTRAL_cbMAXPROCS must equal cbCONFIG_MAXPROCS");
+static_assert(CENTRAL_cbMAXGROUPS == cbCONFIG_MAXGROUPS, "CENTRAL_cbMAXGROUPS must equal cbCONFIG_MAXGROUPS");
+static_assert(CENTRAL_cbMAXFILTS == cbCONFIG_MAXFILTS, "CENTRAL_cbMAXFILTS must equal cbCONFIG_MAXFILTS");
+static_assert(CENTRAL_cbMAXCHANS == cbCONFIG_MAXCHANS, "CENTRAL_cbMAXCHANS must equal cbCONFIG_MAXCHANS");
+static_assert(CENTRAL_cbMAXBANKS == cbCONFIG_MAXBANKS, "CENTRAL_cbMAXBANKS must equal cbCONFIG_MAXBANKS");
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Local transmit buffer (IPC-only packets)
