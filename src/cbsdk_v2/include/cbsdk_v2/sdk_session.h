@@ -374,11 +374,16 @@ public:
     ///--------------------------------------------------------------------------------------------
 
     /// Perform complete device startup handshake sequence
-    /// This implements the proper startup sequence:
-    /// 1. Send cbRUNLEVEL_RUNNING - wait for SYSREP or timeout (0.5s)
-    /// 2. If not running, send cbRUNLEVEL_HARDRESET - wait for SYSREP or timeout (0.5s)
-    /// 3. Send REQCONFIGALL - wait for config flood
-    /// 4. If still not running, send cbRUNLEVEL_RESET - wait for transition to RUNNING
+    /// Transitions the device from any state to RUNNING. This is automatically called during
+    /// create() when config.auto_run = true. Users can call this manually after create()
+    /// with config.auto_run = false to start the device on demand.
+    ///
+    /// Startup sequence:
+    /// 1. Send cbRUNLEVEL_RUNNING - check if device is already running
+    /// 2. If not running, send cbRUNLEVEL_HARDRESET - wait for STANDBY
+    /// 3. Send REQCONFIGALL - request all configuration
+    /// 4. Send cbRUNLEVEL_RESET - transition to RUNNING
+    ///
     /// @param timeout_ms Maximum time to wait for each step (default: 500ms)
     /// @return Result indicating success or error
     Result<void> performStartupHandshake(uint32_t timeout_ms = 500);
@@ -387,9 +392,11 @@ private:
     /// Private constructor (use create() factory method)
     SdkSession();
 
-    /// Connect to device and perform handshake (STANDALONE mode only)
-    /// Called from create() to verify device is present and responsive
-    /// @param timeout_ms Timeout for each handshake step (default: 500ms)
+    /// Connect to device and verify it's responding (STANDALONE mode only)
+    /// Called from create() to verify device is present
+    /// - If config.auto_run = true: calls performStartupHandshake() to fully start device
+    /// - If config.auto_run = false: just sends REQCONFIGALL to verify presence
+    /// @param timeout_ms Timeout for verification (default: 500ms)
     /// @return Result indicating success or error (device not responding)
     Result<void> connect(uint32_t timeout_ms = 500);
 

@@ -64,7 +64,7 @@ TEST_F(SdkSessionTest, Create_Standalone_Loopback) {
     auto result = SdkSession::create(config);
     ASSERT_TRUE(result.isOk()) << "Error: " << result.error();
 
-    auto session = std::move(result).value();  // Move session out of Result
+    auto session = std::move(result.value());  // Move session out of Result
     EXPECT_TRUE(session.isRunning());  // Session is started, just not in full auto-run mode
 }
 
