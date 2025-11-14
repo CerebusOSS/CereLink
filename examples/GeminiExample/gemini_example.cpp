@@ -201,7 +201,7 @@ int main(int argc, char* argv[]) {
         // === Try to connect to all Gemini devices ===
         std::cout << "\nScanning for Gemini devices...\n\n";
 
-        std::vector<DeviceInfo*> connected_devices;
+        std::vector<DeviceInfo*> active_devices;
 
         for (auto& device : devices) {
             std::cout << "Trying " << device->name << "...\n";
@@ -211,11 +211,10 @@ int main(int argc, char* argv[]) {
 
             auto result = cbsdk::SdkSession::create(config);
             if (result.isError()) {
-                std::cout << "  Failed to create session: " << result.error() << "\n";
+                std::cout << "  ✗ Failed: " << result.error() << "\n\n";
                 continue;
             }
 
-            std::cout << "  Session created successfully\n";
             device->session = std::make_unique<cbsdk::SdkSession>(std::move(result.value()));
 
             // Set up packet callback
@@ -256,62 +255,18 @@ int main(int argc, char* argv[]) {
                 std::cerr << "[" << name << " ERROR] " << error << "\n";
             });
 
-            // Start the session
-            auto start_result = device->session->start();
-            if (start_result.isError()) {
-                std::cout << "  Failed to start: " << start_result.error() << "\n";
-                device->session.reset();
-                continue;
-            }
-
-            std::cout << "  Session started successfully\n";
-            connected_devices.push_back(device.get());
-        }
-
-        if (connected_devices.empty()) {
-            std::cerr << "\nNo sessions could be created!\n";
-            return 1;
-        }
-
-        // === Verify which devices are actually receiving data ===
-        std::cout << "\nVerifying devices (waiting 1 second for packets)...\n";
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-
-        std::vector<DeviceInfo*> active_devices;
-        for (auto* dev : connected_devices) {
-            if (dev->packet_count.load() > 0) {
-                std::cout << "  ✓ " << dev->name << " - receiving data\n";
-                active_devices.push_back(dev);
-            } else {
-                std::cout << "  ✗ " << dev->name << " - no data (device not present)\n";
-                // Stop session for inactive device
-                dev->session->stop();
-                dev->session.reset();
-            }
+            std::cout << "  ✓ Connected and running\n\n";
+            active_devices.push_back(device.get());
         }
 
         if (active_devices.empty()) {
-            std::cerr << "\nNo active Gemini devices detected!\n";
+            std::cerr << "No Gemini devices found!\n";
             return 1;
         }
 
-        std::cout << "\n=== Found " << active_devices.size() << " active device(s) ===\n";
+        std::cout << "=== Found " << active_devices.size() << " device(s) ===\n";
         for (const auto* dev : active_devices) {
             std::cout << "  - " << dev->name << "\n";
-        }
-
-        // Update connected_devices to only include active ones
-        connected_devices = active_devices;
-
-        // === Send runlevel command to transition devices to RUNNING state ===
-        std::cout << "\nSending cbRUNLEVEL_RUNNING command to active devices...\n";
-        for (auto* dev : connected_devices) {
-            auto result = dev->session->setSystemRunLevel(cbRUNLEVEL_RUNNING);
-            if (result.isOk()) {
-                std::cout << "  ✓ " << dev->name << " - runlevel command sent\n";
-            } else {
-                std::cout << "  ✗ " << dev->name << " - failed: " << result.error() << "\n";
-            }
         }
         std::cout << "\nPress Ctrl+C to stop...\n\n";
 
@@ -329,7 +284,7 @@ int main(int argc, char* argv[]) {
 
                 // Print packet counts and rates
                 std::cout << "\n=== Packet Counts ===\n";
-                for (auto* dev : connected_devices) {
+                for (auto* dev : active_devices) {
                     uint64_t current_count = dev->packet_count.load();
                     double rate = (current_count - dev->last_count) / elapsed_sec;
                     std::cout << dev->name << ": " << current_count << " packets ("
@@ -337,7 +292,7 @@ int main(int argc, char* argv[]) {
                 }
 
                 // Print detailed statistics for each device
-                for (auto* dev : connected_devices) {
+                for (auto* dev : active_devices) {
                     printStats(*dev->session, dev->name, &dev->timestamps);
                 }
 
@@ -345,7 +300,7 @@ int main(int argc, char* argv[]) {
 
                 // Update for next iteration
                 last_print = now;
-                for (auto* dev : connected_devices) {
+                for (auto* dev : active_devices) {
                     dev->last_count = dev->packet_count.load();
                 }
             }
@@ -353,18 +308,18 @@ int main(int argc, char* argv[]) {
 
         // === Clean Shutdown ===
         std::cout << "\nStopping sessions...\n";
-        for (auto* dev : connected_devices) {
+        for (auto* dev : active_devices) {
             dev->session->stop();
         }
 
         // Final statistics
         std::cout << "\n=== Final Statistics ===\n";
         std::cout << "Total packets received:\n";
-        for (auto* dev : connected_devices) {
+        for (auto* dev : active_devices) {
             std::cout << "  " << dev->name << ": " << dev->packet_count.load() << "\n";
         }
 
-        for (auto* dev : connected_devices) {
+        for (auto* dev : active_devices) {
             printStats(*dev->session, dev->name + " (Final)", &dev->timestamps);
         }
 
