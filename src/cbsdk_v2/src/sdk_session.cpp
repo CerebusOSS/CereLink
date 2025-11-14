@@ -596,16 +596,20 @@ Result<void> SdkSession::performStartupHandshake(uint32_t timeout_ms) {
     // This can be called by the user after create() with auto_run = false
     //
     // Sequence:
-    // 1. Send cbRUNLEVEL_RUNNING - check if device is already running
-    // 2. If not running, send cbRUNLEVEL_HARDRESET - wait for STANDBY
-    // 3. Send REQCONFIGALL - wait for config flood ending with SYSREP
-    // 4. Send cbRUNLEVEL_RESET - wait for device to transition to RUNNING
+    // 1. Quick device presence check (100ms timeout) - fail fast if device not on network
+    // 2. Send cbRUNLEVEL_RUNNING - check if device is already running
+    // 3. If not running, send cbRUNLEVEL_HARDRESET - wait for STANDBY
+    // 4. Send REQCONFIGALL - wait for config flood ending with SYSREP
+    // 5. Send cbRUNLEVEL_RESET - wait for device to transition to RUNNING
 
     // Reset handshake state
     m_impl->received_sysrep.store(false, std::memory_order_relaxed);
     m_impl->device_runlevel.store(0, std::memory_order_relaxed);
 
     Result<void> result;
+
+    // Quick presence check - use shorter timeout to fail fast for non-existent devices
+    const uint32_t presence_check_timeout = std::min(100u, timeout_ms);
 
     // Helper lambda to wait for SYSREP with optional expected runlevel
     // If expected_runlevel is provided, waits for that specific runlevel
@@ -627,26 +631,25 @@ Result<void> SdkSession::performStartupHandshake(uint32_t timeout_ms) {
             });
     };
 
-    // Step 1: Send cbRUNLEVEL_RUNNING to check if device is already running
+    // Step 1: Quick presence check - send cbRUNLEVEL_RUNNING with short timeout
     result = setSystemRunLevel(cbRUNLEVEL_RUNNING);
     if (result.isError()) {
         return Result<void>::error("Failed to send RUNNING command: " + result.error());
     }
 
-    // Wait for SYSREP response (any runlevel)
-    if (!waitForSysrep(timeout_ms)) {
-        // No response - device might be in deep standby, try HARDRESET
-        goto try_hardreset;
+    // Wait for SYSREP response with short timeout - fail fast if device not reachable
+    if (!waitForSysrep(presence_check_timeout)) {
+        // No response - device not on network
+        return Result<void>::error("Device not reachable (no response to initial probe - check network connection and IP address)");
     }
 
-    // Got SYSREP - check if device is already running
+    // Step 2: Got response - check if device is already running
     if (m_impl->device_runlevel.load(std::memory_order_acquire) == cbRUNLEVEL_RUNNING) {
         // Device is already running - request config and we're done
         goto request_config;
     }
 
-try_hardreset:
-    // Step 2: Device not running - send HARDRESET
+    // Step 3: Device responded but not running - send HARDRESET
     m_impl->received_sysrep.store(false, std::memory_order_relaxed);
     result = setSystemRunLevel(cbRUNLEVEL_HARDRESET);
     if (result.isError()) {
@@ -659,7 +662,7 @@ try_hardreset:
     }
 
 request_config:
-    // Step 3: Request all configuration (always performed)
+    // Step 4: Request all configuration (always performed)
     m_impl->received_sysrep.store(false, std::memory_order_relaxed);
     result = requestConfiguration();
     if (result.isError()) {
@@ -672,7 +675,7 @@ request_config:
         return Result<void>::error("Device not responding to REQCONFIGALL (no final SYSREP received)");
     }
 
-    // Step 4: Get current runlevel and transition to RUNNING if needed
+    // Step 5: Get current runlevel and transition to RUNNING if needed
     uint32_t current_runlevel = m_impl->device_runlevel.load(std::memory_order_acquire);
 
     if (current_runlevel != cbRUNLEVEL_RUNNING) {

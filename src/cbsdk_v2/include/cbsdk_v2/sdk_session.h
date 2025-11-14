@@ -379,13 +379,14 @@ public:
     /// with config.auto_run = false to start the device on demand.
     ///
     /// Startup sequence:
-    /// 1. Send cbRUNLEVEL_RUNNING - check if device is already running
-    /// 2. If not running, send cbRUNLEVEL_HARDRESET - wait for STANDBY
-    /// 3. Send REQCONFIGALL - request all configuration
-    /// 4. Send cbRUNLEVEL_RESET - transition to RUNNING
+    /// 1. Quick presence check (100ms) - fails fast if device not reachable
+    /// 2. Check if device is already running
+    /// 3. If not running, send cbRUNLEVEL_HARDRESET - wait for STANDBY
+    /// 4. Send REQCONFIGALL - request all configuration
+    /// 5. Send cbRUNLEVEL_RESET - transition to RUNNING
     ///
     /// @param timeout_ms Maximum time to wait for each step (default: 500ms)
-    /// @return Result indicating success or error
+    /// @return Result indicating success or error (clear message if device not reachable)
     Result<void> performStartupHandshake(uint32_t timeout_ms = 500);
 
 private:
