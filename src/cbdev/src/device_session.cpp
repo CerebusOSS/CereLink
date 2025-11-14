@@ -118,7 +118,7 @@ DeviceConfig DeviceConfig::forDevice(DeviceType type) {
             config.send_port = DeviceDefaults::LEGACY_NSP_SEND_PORT;
             break;
 
-        case DeviceType::GEMINI:
+        case DeviceType::GEMINI_NSP:
             // Gemini NSP: same port for both send & recv
             config.device_address = DeviceDefaults::GEMINI_NSP_ADDRESS;
             config.client_address = "";  // Auto-detect

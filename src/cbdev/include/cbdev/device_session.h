@@ -19,11 +19,7 @@
 #include <cstdint>
 #include <optional>
 
-// Include protocol definitions
-// Note: This creates dependency on upstream protocol, but cbdev needs packet types anyway
-extern "C" {
-    #include <cbproto/cbproto.h>
-}
+#include <cbproto/cbproto.h>
 
 namespace cbdev {
 
@@ -94,7 +90,7 @@ private:
 /// Device type enumeration
 enum class DeviceType {
     NSP,        ///< Neural Signal Processor (legacy)
-    GEMINI,     ///< Gemini NSP
+    GEMINI_NSP,     ///< Gemini NSP
     HUB1,       ///< Hub 1 (legacy addressing)
     HUB2,       ///< Hub 2 (legacy addressing)
     HUB3,       ///< Hub 3 (legacy addressing)

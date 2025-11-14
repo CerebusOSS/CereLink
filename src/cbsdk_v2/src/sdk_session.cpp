@@ -244,7 +244,7 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
                 dev_type = cbdev::DeviceType::NSP;
                 break;
             case DeviceType::GEMINI_NSP:
-                dev_type = cbdev::DeviceType::GEMINI;
+                dev_type = cbdev::DeviceType::GEMINI_NSP;
                 break;
             case DeviceType::GEMINI_HUB1:
                 dev_type = cbdev::DeviceType::HUB1;

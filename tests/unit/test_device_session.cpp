@@ -51,9 +51,9 @@ TEST_F(DeviceSessionTest, DeviceConfig_Predefined_NSP) {
 }
 
 TEST_F(DeviceSessionTest, DeviceConfig_Predefined_Gemini) {
-    auto config = DeviceConfig::forDevice(DeviceType::GEMINI);
+    auto config = DeviceConfig::forDevice(DeviceType::GEMINI_NSP);
 
-    EXPECT_EQ(config.type, DeviceType::GEMINI);
+    EXPECT_EQ(config.type, DeviceType::GEMINI_NSP);
     EXPECT_EQ(config.device_address, "192.168.137.128");
     EXPECT_EQ(config.client_address, "");  // Auto-detect
     EXPECT_EQ(config.recv_port, 51001);  // Same port for send & recv
