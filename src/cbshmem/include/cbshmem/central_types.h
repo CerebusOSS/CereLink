@@ -124,8 +124,8 @@ struct CentralTransmitBuffer {
 /// CRITICAL: This structure MUST match Central's cbCFGBUFF layout exactly!
 /// All arrays are sized using CENTRAL_* constants (cbMAXPROCS=4, etc.)
 ///
-/// Note: We're using a simplified version for Phase 2. Additional fields from upstream
-/// will be added as needed in later phases.
+/// This structure now includes all major fields from upstream cbCFGBUFF except hwndCentral
+/// (which is platform/bitness specific and only used by Central's UI).
 ///
 struct CentralConfigBuffer {
     uint32_t version;           ///< Buffer structure version
@@ -144,14 +144,37 @@ struct CentralConfigBuffer {
     // Channel configuration (shared across all instruments)
     cbPKT_CHANINFO chaninfo[CENTRAL_cbMAXCHANS];                        ///< Channel configuration
 
-    // TODO: Add remaining fields from upstream cbCFGBUFF as needed:
-    // - cbOPTIONTABLE optiontable
-    // - cbCOLORTABLE colortable
-    // - cbPKT_ADAPTFILTINFO adaptinfo
-    // - cbPKT_REFELECFILTINFO refelecinfo
-    // - cbSPIKE_SORTING isSortingOptions
-    // - cbPKT_NTRODEINFO isNTrodeInfo
-    // - etc.
+    // Adaptive and reference electrode filtering (per-instrument)
+    cbPKT_ADAPTFILTINFO adaptinfo[CENTRAL_cbMAXPROCS];                  ///< Adaptive filter settings
+    cbPKT_REFELECFILTINFO refelecinfo[CENTRAL_cbMAXPROCS];              ///< Reference electrode filter settings
+
+    // Spike sorting configuration
+    cbSPIKE_SORTING isSortingOptions;                                   ///< Spike sorting parameters
+
+    // Line noise cancellation (per-instrument)
+    cbPKT_LNC isLnc[CENTRAL_cbMAXPROCS];                                ///< Line noise cancellation settings
+
+    // File recording status
+    cbPKT_FILECFG fileinfo;                                             ///< File recording configuration
+
+    // N-Trode configuration (stereotrode, tetrode, etc.)
+    cbPKT_NTRODEINFO isNTrodeInfo[cbMAXNTRODES];                        ///< N-Trode information
+
+    // Analog output waveform configuration
+    cbPKT_AOUT_WAVEFORM isWaveform[AOUT_NUM_GAIN_CHANS][cbMAX_AOUT_TRIGGER]; ///< Waveform parameters
+
+    // nPlay file playback configuration
+    cbPKT_NPLAY isNPlay;                                                ///< nPlay information
+
+    // Video tracking (NeuroMotive)
+    cbVIDEOSOURCE isVideoSource[cbMAXVIDEOSOURCE];                      ///< Video source configuration
+    cbTRACKOBJ isTrackObj[cbMAXTRACKOBJ];                               ///< Trackable objects
+
+    // Central application UI configuration
+    cbOPTIONTABLE optiontable;                                          ///< Option table (32 32-bit values)
+    cbCOLORTABLE colortable;                                            ///< Color table (96 32-bit values)
+
+    // Note: hwndCentral (HANDLE) is omitted - it's platform/bitness specific and only used by Central
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

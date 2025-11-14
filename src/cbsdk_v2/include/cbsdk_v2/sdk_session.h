@@ -26,9 +26,7 @@
 #include <array>
 
 // Protocol types (from upstream)
-extern "C" {
-    #include <cbproto/cbproto.h>
-}
+#include <cbproto/cbproto.h>
 
 namespace cbsdk {
 

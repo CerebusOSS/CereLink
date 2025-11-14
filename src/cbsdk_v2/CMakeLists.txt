@@ -18,8 +18,6 @@ add_library(cbsdk_v2 STATIC ${CBSDK_V2_SOURCES})
 target_include_directories(cbsdk_v2
     BEFORE PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        # upstream needed for protocol definitions
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/upstream>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 

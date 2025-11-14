@@ -79,6 +79,9 @@ typedef int16_t A2D_DATA;
 #define cbMAXUNITS      5   ///< Maximum number of sorted units per channel
 #define cbMAXNTRODES    (cbNUM_ANALOG_CHANS / 2)  ///< Maximum n-trodes (stereotrode minimum)
 #define cbMAX_PNTS      128 ///< Maximum spike waveform points
+#define cbMAXVIDEOSOURCE 1  ///< Maximum number of video sources
+#define cbMAXTRACKOBJ   20  ///< Maximum number of trackable objects
+#define cbMAX_AOUT_TRIGGER 5 ///< Maximum number of per-channel (analog output, or digital output) triggers
 
 /// @}
 
@@ -97,6 +100,11 @@ typedef int16_t A2D_DATA;
 #define cbNUM_DIGIN_CHANS       (1 * cbMAXPROCS)    ///< Digital input channels
 #define cbNUM_SERIAL_CHANS      (1 * cbMAXPROCS)    ///< Serial input channels
 #define cbNUM_DIGOUT_CHANS      (4 * cbMAXPROCS)    ///< Digital output channels
+
+/// @brief Number of analog/audio output channels with gain
+/// This is the number of AOUT channels with gain. Conveniently, the 4 Analog Outputs
+/// and the 2 Audio Outputs are right next to each other in the channel numbering sequence.
+#define AOUT_NUM_GAIN_CHANS     (cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS)
 
 /// @brief Total number of channels
 #define cbMAXCHANS  (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS + \
@@ -956,6 +964,634 @@ typedef struct
     int32_t  lastchan;         ///< Which channel was clicked last.
     uint16_t   abyUnitSelections[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - sizeof(int32_t))];     ///< one for each channel, channels are 0 based here, shows units selected
 } cbPKT_UNIT_SELECTION;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Adaptive Filtering
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1310-1333
+/// @{
+
+#define cbPKTTYPE_ADAPTFILTREP  0x25        ///< NSP->PC response
+#define cbPKTTYPE_ADAPTFILTSET  0xA5        ///< PC->NSP request
+#define cbPKTDLEN_ADAPTFILTINFO ((sizeof(cbPKT_ADAPTFILTINFO) / 4) - cbPKT_HEADER_32SIZE)
+
+// Adaptive filter settings
+#define ADAPT_FILT_DISABLED     0
+#define ADAPT_FILT_ALL          1
+#define ADAPT_FILT_SPIKES       2
+
+/// @brief PKT Set:0xA5 Rep:0x25 - Adaptive filtering
+///
+/// This sets the parameters for the adaptive filtering.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t chan;           ///< Ignored
+
+    uint32_t nMode;          ///< 0=disabled, 1=filter continuous & spikes, 2=filter spikes
+    float  dLearningRate;  ///< speed at which adaptation happens. Very small. e.g. 5e-12
+    uint32_t nRefChan1;      ///< The first reference channel (1 based).
+    uint32_t nRefChan2;      ///< The second reference channel (1 based).
+
+} cbPKT_ADAPTFILTINFO;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Reference Electrode Filtering
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1335-1355
+/// @{
+
+#define cbPKTTYPE_REFELECFILTREP  0x26        ///< NSP->PC response
+#define cbPKTTYPE_REFELECFILTSET  0xA6        ///< PC->NSP request
+#define cbPKTDLEN_REFELECFILTINFO ((sizeof(cbPKT_REFELECFILTINFO) / 4) - cbPKT_HEADER_32SIZE)
+
+// Reference electrode filter settings
+#define REFELEC_FILT_DISABLED   0
+#define REFELEC_FILT_ALL        1
+#define REFELEC_FILT_SPIKES     2
+
+/// @brief PKT Set:0xA6 Rep:0x26 - Reference Electrode Information.
+///
+/// This configures a channel to be referenced by another channel.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t chan;           ///< Ignored
+
+    uint32_t nMode;          ///< 0=disabled, 1=filter continuous & spikes, 2=filter spikes
+    uint32_t nRefChan;       ///< The reference channel (1 based).
+} cbPKT_REFELECFILTINFO;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Line Noise Cancellation
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1910-1926
+/// @{
+
+#define cbPKTTYPE_LNCREP       0x28        ///< NSP->PC response
+#define cbPKTTYPE_LNCSET       0xA8        ///< PC->NSP request
+#define cbPKTDLEN_LNC ((sizeof(cbPKT_LNC) / 4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xA8 Rep:0x28 - Line Noise Cancellation
+///
+/// This packet holds the Line Noise Cancellation parameters
+typedef struct
+{
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t lncFreq;        ///< Nominal line noise frequency to be canceled  (in Hz)
+    uint32_t lncRefChan;     ///< Reference channel for lnc synch (1-based)
+    uint32_t lncGlobalMode;  ///< reserved
+} cbPKT_LNC;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name File Configuration
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1550-1584
+/// @{
+
+// file config options
+#define cbFILECFG_OPT_NONE          0x00000000  ///< Launch File dialog, set file info, start or stop recording
+#define cbFILECFG_OPT_KEEPALIVE     0x00000001  ///< Keep-alive message
+#define cbFILECFG_OPT_REC           0x00000002  ///< Recording is in progress
+#define cbFILECFG_OPT_STOP          0x00000003  ///< Recording stopped
+#define cbFILECFG_OPT_NMREC         0x00000004  ///< NeuroMotive recording status
+#define cbFILECFG_OPT_CLOSE         0x00000005  ///< Close file application
+#define cbFILECFG_OPT_SYNCH         0x00000006  ///< Recording datetime
+#define cbFILECFG_OPT_OPEN          0x00000007  ///< Launch File dialog, do not set or do anything
+#define cbFILECFG_OPT_TIMEOUT       0x00000008  ///< Keep alive not received so it timed out
+#define cbFILECFG_OPT_PAUSE         0x00000009  ///< Recording paused
+
+// file save configuration packet
+#define cbPKTTYPE_REPFILECFG 0x61
+#define cbPKTTYPE_SETFILECFG 0xE1
+#define cbPKTDLEN_FILECFG ((sizeof(cbPKT_FILECFG)/4) - cbPKT_HEADER_32SIZE)
+#define cbPKTDLEN_FILECFGSHORT (cbPKTDLEN_FILECFG - ((sizeof(char)*3*cbLEN_STR_COMMENT)/4)) ///< used for keep-alive messages
+
+/// @brief PKT Set:0xE1 Rep:0x61 - File configuration packet
+///
+/// File recording can be started or stopped externally using this packet.  It also contains a timeout mechanism to notify
+/// if file isn't still recording.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t options;         ///< cbFILECFG_OPT_*
+    uint32_t duration;
+    uint32_t recording;      ///< If cbFILECFG_OPT_NONE this option starts/stops recording remotely
+    uint32_t extctrl;        ///< If cbFILECFG_OPT_REC this is split number (0 for non-TOC)
+                           ///< If cbFILECFG_OPT_STOP this is error code (0 means no error)
+
+    char   username[cbLEN_STR_COMMENT];     ///< name of computer issuing the packet
+    union {
+        char   filename[cbLEN_STR_COMMENT]; ///< filename to record to
+        char   datetime[cbLEN_STR_COMMENT]; ///<
+    };
+    char   comment[cbLEN_STR_COMMENT];  ///< comment to include in the file
+} cbPKT_FILECFG;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Spike Sorting Packets
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1690-1849
+/// @{
+
+// Spike sorting algorithm identifiers
+#define cbAUTOALG_NONE                 0   ///< No sorting
+#define cbAUTOALG_SPREAD               1   ///< Auto spread
+#define cbAUTOALG_HIST_CORR_MAJ        2   ///< Auto Hist Correlation
+#define cbAUTOALG_HIST_PEAK_COUNT_MAJ  3   ///< Auto Hist Peak Maj
+#define cbAUTOALG_HIST_PEAK_COUNT_FISH 4   ///< Auto Hist Peak Fish
+#define cbAUTOALG_PCA                  5   ///< Manual PCA
+#define cbAUTOALG_HOOPS                6   ///< Manual Hoops
+#define cbAUTOALG_PCA_KMEANS           7   ///< K-means PCA
+#define cbAUTOALG_PCA_EM               8   ///< EM-clustering PCA
+#define cbAUTOALG_PCA_DBSCAN           9   ///< DBSCAN PCA
+
+// Spike sorting mode commands
+#define cbAUTOALG_MODE_SETTING         0   ///< Change the settings and leave sorting the same (PC->NSP request)
+#define cbAUTOALG_MODE_APPLY           1   ///< Change settings and apply this sorting to all channels (PC->NSP request)
+
+// SS Model constants
+#define cbPKTTYPE_SS_MODELREP      0x51        ///< NSP->PC response
+#define cbPKTTYPE_SS_MODELSET      0xD1        ///< PC->NSP request
+#define cbPKTDLEN_SS_MODELSET ((sizeof(cbPKT_SS_MODELSET) / 4) - cbPKT_HEADER_32SIZE)
+#define MAX_REPEL_POINTS 3
+
+/// @brief PKT Set:0xD1 Rep:0x51 - Get the spike sorting model for a single channel (Histogram Peak Count)
+///
+/// The system replys with the model of a specific channel.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t chan;           ///< actual channel id of the channel being configured (0 based)
+    uint32_t unit_number;    ///< unit label (0 based, 0 is noise cluster)
+    uint32_t valid;          ///< 1 = valid unit, 0 = not a unit, in other words just deleted when NSP -> PC
+    uint32_t inverted;       ///< 0 = not inverted, 1 = inverted
+
+    // Block statistics (change from block to block)
+    int32_t  num_samples;    ///< non-zero value means that the block stats are valid
+    float  mu_x[2];
+    float  Sigma_x[2][2];
+    float  determinant_Sigma_x;
+    ///// Only needed if we are using a Bayesian classification model
+    float  Sigma_x_inv[2][2];
+    float  log_determinant_Sigma_x;
+    /////
+    float  subcluster_spread_factor_numerator;
+    float  subcluster_spread_factor_denominator;
+    float  mu_e;
+    float  sigma_e_squared;
+} cbPKT_SS_MODELSET;
+
+// SS Detect constants
+#define cbPKTTYPE_SS_DETECTREP  0x52        ///< NSP->PC response
+#define cbPKTTYPE_SS_DETECTSET  0xD2        ///< PC->NSP request
+#define cbPKTDLEN_SS_DETECT ((sizeof(cbPKT_SS_DETECT) / 4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xD2 Rep:0x52 - Auto threshold parameters
+///
+/// Set the auto threshold parameters
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    float  fThreshold;     ///< current detection threshold
+    float  fMultiplier;    ///< multiplier
+} cbPKT_SS_DETECT;
+
+// SS Artifact Reject constants
+#define cbPKTTYPE_SS_ARTIF_REJECTREP  0x53        ///< NSP->PC response
+#define cbPKTTYPE_SS_ARTIF_REJECTSET  0xD3        ///< PC->NSP request
+#define cbPKTDLEN_SS_ARTIF_REJECT ((sizeof(cbPKT_SS_ARTIF_REJECT) / 4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xD3 Rep:0x53 - Artifact reject
+///
+/// Sets the artifact rejection parameters.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t nMaxSimulChans;     ///< how many channels can fire exactly at the same time???
+    uint32_t nRefractoryCount;   ///< for how many samples (30 kHz) is a neuron refractory, so can't re-trigger
+} cbPKT_SS_ARTIF_REJECT;
+
+// SS Noise Boundary constants
+#define cbPKTTYPE_SS_NOISE_BOUNDARYREP  0x54        ///< NSP->PC response
+#define cbPKTTYPE_SS_NOISE_BOUNDARYSET  0xD4        ///< PC->NSP request
+#define cbPKTDLEN_SS_NOISE_BOUNDARY ((sizeof(cbPKT_SS_NOISE_BOUNDARY) / 4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xD4 Rep:0x54 - Noise boundary
+///
+/// Sets the noise boundary parameters
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t chan;        ///< which channel we belong to
+    float  afc[3];      ///< the center of the ellipsoid
+    float  afS[3][3];   ///< an array of the axes for the ellipsoid
+} cbPKT_SS_NOISE_BOUNDARY;
+
+// SS Statistics constants
+#define cbPKTTYPE_SS_STATISTICSREP  0x55        ///< NSP->PC response
+#define cbPKTTYPE_SS_STATISTICSSET  0xD5        ///< PC->NSP request
+#define cbPKTDLEN_SS_STATISTICS ((sizeof(cbPKT_SS_STATISTICS) / 4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xD5 Rep:0x55 - Spike sourting statistics (Histogram peak count)
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t nUpdateSpikes;  ///< update rate in spike counts
+
+    uint32_t nAutoalg;       ///< sorting algorithm (0=none 1=spread, 2=hist_corr_maj, 3=hist_peak_count_maj, 4=hist_peak_count_maj_fisher, 5=pca, 6=hoops)
+    uint32_t nMode;          ///< cbAUTOALG_MODE_SETTING,
+
+    float  fMinClusterPairSpreadFactor;       ///< larger number = more apt to combine 2 clusters into 1
+    float  fMaxSubclusterSpreadFactor;        ///< larger number = less apt to split because of 2 clusers
+
+    float  fMinClusterHistCorrMajMeasure;     ///< larger number = more apt to split 1 cluster into 2
+    float  fMaxClusterPairHistCorrMajMeasure; ///< larger number = less apt to combine 2 clusters into 1
+
+    float  fClusterHistValleyPercentage;      ///< larger number = less apt to split nearby clusters
+    float  fClusterHistClosePeakPercentage;   ///< larger number = less apt to split nearby clusters
+    float  fClusterHistMinPeakPercentage;     ///< larger number = less apt to split separated clusters
+
+    uint32_t nWaveBasisSize;                     ///< number of wave to collect to calculate the basis,
+                                                ///< must be greater than spike length
+    uint32_t nWaveSampleSize;                    ///< number of samples sorted with the same basis before re-calculating the basis
+                                                ///< 0=manual re-calculation
+                                                ///< nWaveBasisSize * nWaveSampleSize is the number of waves/spikes to run against
+                                                ///< the same PCA basis before next
+} cbPKT_SS_STATISTICS;
+
+// SS Status constants
+#define cbPKTTYPE_SS_STATUSREP  0x57        ///< NSP->PC response
+#define cbPKTTYPE_SS_STATUSSET  0xD7        ///< PC->NSP request
+#define cbPKTDLEN_SS_STATUS ((sizeof(cbPKT_SS_STATUS) / 4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xD7 Rep:0x57 - Spike sorting status (Histogram peak count)
+///
+/// This packet contains the status of the automatic spike sorting.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    cbAdaptControl cntlUnitStats;   ///<
+    cbAdaptControl cntlNumUnits;    ///<
+} cbPKT_SS_STATUS;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Feature Space Basis
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1889-1909
+/// @{
+
+// Feature space commands and status changes
+#define cbPCA_RECALC_START             0    ///< PC ->NSP start recalculation
+#define cbPCA_RECALC_STOPPED           1    ///< NSP->PC  finished recalculation
+#define cbPCA_COLLECTION_STARTED       2    ///< NSP->PC  waveform collection started
+#define cbBASIS_CHANGE                 3    ///< Change the basis of feature space
+#define cbUNDO_BASIS_CHANGE            4
+#define cbREDO_BASIS_CHANGE            5
+#define cbINVALIDATE_BASIS             6
+
+#define cbPKTTYPE_FS_BASISREP       0x5B        ///< NSP->PC response
+#define cbPKTTYPE_FS_BASISSET       0xDB        ///< PC->NSP request
+#define cbPKTDLEN_FS_BASIS ((sizeof(cbPKT_FS_BASIS) / 4) - cbPKT_HEADER_32SIZE)
+#define cbPKTDLEN_FS_BASISSHORT (cbPKTDLEN_FS_BASIS - ((sizeof(float)* cbMAX_PNTS * 3)/4))
+
+/// @brief PKT Set:0xDB Rep:0x5B - Feature Space Basis
+///
+/// This packet holds the calculated basis of the feature space from NSP to Central
+/// Or it has the previous basis retrieved and transmitted by central to NSP
+typedef struct
+{
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t chan;           ///< 1-based channel number
+    uint32_t mode;           ///< cbBASIS_CHANGE, cbUNDO_BASIS_CHANGE, cbREDO_BASIS_CHANGE, cbINVALIDATE_BASIS ...
+    uint32_t fs;             ///< Feature space: cbAUTOALG_PCA
+    /// basis must be the last item in the structure because it can be variable length to a max of cbMAX_PNTS
+    float  basis[cbMAX_PNTS][3];    ///< Room for all possible points collected
+} cbPKT_FS_BASIS;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Spike Sorting Combined Structure
+///
+/// Ground truth from upstream/cbhwlib/cbhwlib.h lines 1012-1025
+/// @{
+
+typedef struct {
+    // ***** THESE MUST BE 1ST IN THE STRUCTURE WITH MODELSET LAST OF THESE ***
+    // ***** SEE WriteCCFNoPrompt() ***
+    cbPKT_FS_BASIS          asBasis[cbMAXCHANS];    ///< All of the PCA basis values
+    cbPKT_SS_MODELSET       asSortModel[cbMAXCHANS][cbMAXUNITS + 2];    ///< All of the model (rules) for spike sorting
+
+    //////// These are spike sorting options
+    cbPKT_SS_DETECT         pktDetect;        ///< parameters dealing with actual detection
+    cbPKT_SS_ARTIF_REJECT   pktArtifReject;   ///< artifact rejection
+    cbPKT_SS_NOISE_BOUNDARY pktNoiseBoundary[cbMAXCHANS]; ///< where o'where are the noise boundaries
+    cbPKT_SS_STATISTICS     pktStatistics;    ///< information about statistics
+    cbPKT_SS_STATUS         pktStatus;        ///< Spike sorting status
+
+} cbSPIKE_SORTING;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Video and Tracking (NeuroMotive)
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 493-511
+/// @{
+
+/// @brief NeuroMotive video source
+typedef struct {
+    char    name[cbLEN_STR_LABEL];  ///< filename of the video file
+    float   fps;                    ///< nominal record fps
+} cbVIDEOSOURCE;
+
+// Track object types
+#define cbTRACKOBJ_TYPE_UNDEFINED  0  ///< Undefined track object type
+#define cbTRACKOBJ_TYPE_2DMARKERS  1  ///< 2D marker tracking
+#define cbTRACKOBJ_TYPE_2DBLOB     2  ///< 2D blob tracking
+#define cbTRACKOBJ_TYPE_3DMARKERS  3  ///< 3D marker tracking
+#define cbTRACKOBJ_TYPE_2DBOUNDARY 4  ///< 2D boundary tracking
+#define cbTRACKOBJ_TYPE_1DSIZE     5  ///< 1D size tracking
+
+/// @brief Track object structure for NeuroMotive
+typedef struct {
+    char     name[cbLEN_STR_LABEL];  ///< name of the object
+    uint16_t type;                   ///< trackable type (cbTRACKOBJ_TYPE_*)
+    uint16_t pointCount;             ///< maximum number of points
+} cbTRACKOBJ;
+
+// NeuroMotive status
+#define cbNM_STATUS_IDLE                0  ///< NeuroMotive is idle
+#define cbNM_STATUS_EXIT                1  ///< NeuroMotive is exiting
+#define cbNM_STATUS_REC                 2  ///< NeuroMotive is recording
+#define cbNM_STATUS_PLAY                3  ///< NeuroMotive is playing video file
+#define cbNM_STATUS_CAP                 4  ///< NeuroMotive is capturing from camera
+#define cbNM_STATUS_STOP                5  ///< NeuroMotive is stopping
+#define cbNM_STATUS_PAUSED              6  ///< NeuroMotive is paused
+#define cbNM_STATUS_COUNT               7  ///< This is the count of status options
+
+// NeuroMotive commands and status changes (cbPKT_NM.mode)
+#define cbNM_MODE_NONE                  0  ///< No command
+#define cbNM_MODE_CONFIG                1  ///< Ask NeuroMotive for configuration
+#define cbNM_MODE_SETVIDEOSOURCE        2  ///< Configure video source
+#define cbNM_MODE_SETTRACKABLE          3  ///< Configure trackable
+#define cbNM_MODE_STATUS                4  ///< NeuroMotive status reporting (cbNM_STATUS_*)
+#define cbNM_MODE_TSCOUNT               5  ///< Timestamp count (value is the period with 0 to disable this mode)
+#define cbNM_MODE_SYNCHCLOCK            6  ///< Start (or stop) synchronization clock (fps*1000 specified by value, zero fps to stop capture)
+#define cbNM_MODE_ASYNCHCLOCK           7  ///< Asynchronous clock
+
+#define cbNM_FLAG_NONE                  0  ///< No flags
+
+#define cbPKTTYPE_NMREP   0x32  ///< NSP->PC response
+#define cbPKTTYPE_NMSET   0xB2  ///< PC->NSP request
+#define cbPKTDLEN_NM  ((sizeof(cbPKT_NM)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xB2 Rep:0x32 - NeuroMotive packet structure
+///
+/// Used for video tracking and NeuroMotive configuration
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t mode;        ///< cbNM_MODE_* command to NeuroMotive or Central
+    uint32_t flags;       ///< cbNM_FLAG_* status of NeuroMotive
+    uint32_t value;       ///< value assigned to this mode
+    union {
+        uint32_t opt[cbLEN_STR_LABEL / 4]; ///< Additional options for this mode
+        char   name[cbLEN_STR_LABEL];      ///< name associated with this mode
+    };
+} cbPKT_NM;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name N-Trode Information
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1357-1375
+/// @{
+
+// N-Trode feature space modes
+enum cbNTRODEINFO_FS_MODE {
+    cbNTRODEINFO_FS_PEAK,      ///< Feature space based on peak
+    cbNTRODEINFO_FS_VALLEY,    ///< Feature space based on valley
+    cbNTRODEINFO_FS_AMPLITUDE, ///< Feature space based on amplitude
+    cbNTRODEINFO_FS_COUNT      ///< Number of feature space modes
+};
+
+#define cbPKTTYPE_REPNTRODEINFO      0x27        ///< NSP->PC response
+#define cbPKTTYPE_SETNTRODEINFO      0xA7        ///< PC->NSP request
+#define cbPKTDLEN_NTRODEINFO         ((sizeof(cbPKT_NTRODEINFO) / 4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xA7 Rep:0x27 - N-Trode information packets
+///
+/// Sets information about an N-Trode.  The user can change the name, number of sites, sites (channels)
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t ntrode;         ///< ntrode with which we are working (1-based)
+    char   label[cbLEN_STR_LABEL];   ///< Label of the Ntrode (null terminated if < 16 characters)
+    cbMANUALUNITMAPPING ellipses[cbMAXSITEPLOTS][cbMAXUNITS];  ///< unit mapping
+    uint16_t nSite;          ///< number channels in this NTrode ( 0 <= nSite <= cbMAXSITES)
+    uint16_t fs;             ///< NTrode feature space cbNTRODEINFO_FS_*
+    uint16_t nChan[cbMAXSITES];  ///< group of channels in this NTrode
+} cbPKT_NTRODEINFO;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Analog Output Waveform
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1943-2008
+/// @{
+
+#define cbMAX_WAVEFORM_PHASES  ((cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - 24) / 4)   ///< Maximum number of phases in a waveform
+
+/// @brief Analog output waveform data
+///
+/// Contains the parameters to define a waveform for Analog Output channels
+typedef struct
+{
+    int16_t   offset;         ///< DC offset
+    union {
+        struct {
+            uint16_t sineFrequency;  ///< sine wave Hz
+            int16_t  sineAmplitude;  ///< sine amplitude
+        };
+        struct {
+            uint16_t seq;            ///< Wave sequence number (for file playback)
+            uint16_t seqTotal;       ///< total number of sequences
+            uint16_t phases;         ///< Number of valid phases in this wave (maximum is cbMAX_WAVEFORM_PHASES)
+            uint16_t duration[cbMAX_WAVEFORM_PHASES];     ///< array of durations for each phase
+            int16_t  amplitude[cbMAX_WAVEFORM_PHASES];    ///< array of amplitude for each phase
+        };
+    };
+} cbWaveformData;
+
+// Signal generator waveform type
+#define cbWAVEFORM_MODE_NONE          0   ///< waveform is disabled
+#define cbWAVEFORM_MODE_PARAMETERS    1   ///< waveform is a repeated sequence
+#define cbWAVEFORM_MODE_SINE          2   ///< waveform is a sinusoids
+
+// Signal generator waveform trigger type
+#define cbWAVEFORM_TRIGGER_NONE              0   ///< instant software trigger
+#define cbWAVEFORM_TRIGGER_DINPREG           1   ///< digital input rising edge trigger
+#define cbWAVEFORM_TRIGGER_DINPFEG           2   ///< digital input falling edge trigger
+#define cbWAVEFORM_TRIGGER_SPIKEUNIT         3   ///< spike unit
+#define cbWAVEFORM_TRIGGER_COMMENTCOLOR      4   ///< comment RGBA color (A being big byte)
+#define cbWAVEFORM_TRIGGER_RECORDINGSTART    5   ///< recording start trigger
+#define cbWAVEFORM_TRIGGER_EXTENSION         6   ///< extension trigger
+
+// AOUT signal generator waveform data
+#define cbPKTTYPE_WAVEFORMREP       0x33        ///< NSP->PC response
+#define cbPKTTYPE_WAVEFORMSET       0xB3        ///< PC->NSP request
+#define cbPKTDLEN_WAVEFORM   ((sizeof(cbPKT_AOUT_WAVEFORM)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xB3 Rep:0x33 - AOUT waveform
+///
+/// This sets a user defined waveform for one or multiple Analog & Audio Output channels.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint16_t chan;        ///< which analog output/audio output channel (1-based, will equal chan from GetDoutCaps)
+
+    /// Each file may contain multiple sequences.
+    /// Each sequence consists of phases
+    /// Each phase is defined by amplitude and duration
+
+    /// Waveform parameter information
+    uint16_t  mode;              ///< Can be any of cbWAVEFORM_MODE_*
+    uint32_t  repeats;           ///< Number of repeats (0 means forever)
+    uint8_t   trig;              ///< Can be any of cbWAVEFORM_TRIGGER_*
+    uint8_t   trigInst;          ///< Instrument the trigChan belongs
+    uint16_t  trigChan;          ///< Depends on trig:
+                                 ///  for cbWAVEFORM_TRIGGER_DINP* 1-based trigChan (1-16) is digin1, (17-32) is digin2, ...
+                                 ///  for cbWAVEFORM_TRIGGER_SPIKEUNIT 1-based trigChan (1-156) is channel number
+                                 ///  for cbWAVEFORM_TRIGGER_COMMENTCOLOR trigChan is A->B in A->B->G->R
+    uint16_t  trigValue;         ///< Trigger value (spike unit, G-R comment color, ...)
+    uint8_t   trigNum;           ///< trigger number (0-based) (can be up to cbMAX_AOUT_TRIGGER-1)
+    uint8_t   active;            ///< status of trigger
+    cbWaveformData wave;         ///< Actual waveform data
+} cbPKT_AOUT_WAVEFORM;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name nPlay Configuration
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 916-965
+/// @{
+
+// Audio commands "val"
+#define cbAUDIO_CMD_NONE             0   ///< PC->NPLAY query audio status
+
+// nPlay file version (first byte NSx version, second byte NEV version)
+#define cbNPLAY_FILE_NS21            1   ///< NSX 2.1 file
+#define cbNPLAY_FILE_NS22            2   ///< NSX 2.2 file
+#define cbNPLAY_FILE_NS30            3   ///< NSX 3.0 file
+#define cbNPLAY_FILE_NEV21           (1 << 8)   ///< Nev 2.1 file
+#define cbNPLAY_FILE_NEV22           (2 << 8)   ///< Nev 2.2 file
+#define cbNPLAY_FILE_NEV23           (3 << 8)   ///< Nev 2.3 file
+#define cbNPLAY_FILE_NEV30           (4 << 8)   ///< Nev 3.0 file
+
+// nPlay commands and status changes (cbPKT_NPLAY.mode)
+#define cbNPLAY_FNAME_LEN            (cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - 40)   ///< length of the file name (with terminating null)
+#define cbNPLAY_MODE_NONE            0    ///< no command (parameters)
+#define cbNPLAY_MODE_PAUSE           1    ///< PC->NPLAY pause if "val" is non-zero, un-pause otherwise
+#define cbNPLAY_MODE_SEEK            2    ///< PC->NPLAY seek to time "val"
+#define cbNPLAY_MODE_CONFIG          3    ///< PC<->NPLAY request full config
+#define cbNPLAY_MODE_OPEN            4    ///< PC->NPLAY open new file in "val" for playback
+#define cbNPLAY_MODE_PATH            5    ///< PC->NPLAY use the directory path in fname
+#define cbNPLAY_MODE_CONFIGMAIN      6    ///< PC<->NPLAY request main config packet
+#define cbNPLAY_MODE_STEP            7    ///< PC<->NPLAY run "val" procTime steps and pause, then send cbNPLAY_FLAG_STEPPED
+#define cbNPLAY_MODE_SINGLE          8    ///< PC->NPLAY single mode if "val" is non-zero, wrap otherwise
+#define cbNPLAY_MODE_RESET           9    ///< PC->NPLAY reset nPlay
+#define cbNPLAY_MODE_NEVRESORT       10   ///< PC->NPLAY resort NEV if "val" is non-zero, do not if otherwise
+#define cbNPLAY_MODE_AUDIO_CMD       11   ///< PC->NPLAY perform audio command in "val" (cbAUDIO_CMD_*), with option "opt"
+
+#define cbNPLAY_FLAG_NONE            0x00  ///< no flag
+#define cbNPLAY_FLAG_CONF            0x01  ///< NPLAY->PC config packet ("val" is "fname" file index)
+#define cbNPLAY_FLAG_MAIN           (0x02 | cbNPLAY_FLAG_CONF)  ///< NPLAY->PC main config packet ("val" is file version)
+#define cbNPLAY_FLAG_DONE            0x02  ///< NPLAY->PC step command done
+
+// nPlay configuration packet(sent on restart together with config packet)
+#define cbPKTTYPE_NPLAYREP   0x5C ///< NPLAY->PC response
+#define cbPKTTYPE_NPLAYSET   0xDC ///< PC->NPLAY request
+#define cbPKTDLEN_NPLAY    ((sizeof(cbPKT_NPLAY)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xDC Rep:0x5C - nPlay configuration packet
+///
+/// Sent on restart together with config packet
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    union {
+        PROCTIME ftime;   ///< the total time of the file.
+        PROCTIME opt;     ///< optional value
+    };
+    PROCTIME stime;       ///< start time
+    PROCTIME etime;       ///< stime < end time < ftime
+    PROCTIME val;         ///< Used for current time to traverse, file index, file version, ...
+    uint16_t mode;        ///< cbNPLAY_MODE_* command to nPlay
+    uint16_t flags;       ///< cbNPLAY_FLAG_* status of nPlay
+    float speed;          ///< positive means fast forward, negative means rewind, 0 means go as fast as you can.
+    char  fname[cbNPLAY_FNAME_LEN];   ///< This is a String with the file name.
+} cbPKT_NPLAY;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Configuration Tables (Central/cbhwlib only)
+///
+/// Ground truth from upstream/cbhwlib/cbhwlib.h lines 906-931
+/// These are used in shared memory structures for Central application
+/// @{
+
+#ifndef COLORREF
+#define COLORREF uint32_t
+#endif
+
+/// @brief Color table for Central application
+///
+/// Used for display configuration in Central
+typedef struct {
+    COLORREF winrsvd[48];       ///< Reserved for Windows
+    COLORREF dispback;          ///< Display background color
+    COLORREF dispgridmaj;       ///< Display major grid color
+    COLORREF dispgridmin;       ///< Display minor grid color
+    COLORREF disptext;          ///< Display text color
+    COLORREF dispwave;          ///< Display waveform color
+    COLORREF dispwavewarn;      ///< Display waveform warning color
+    COLORREF dispwaveclip;      ///< Display waveform clipping color
+    COLORREF dispthresh;        ///< Display threshold color
+    COLORREF dispmultunit;      ///< Display multi-unit color
+    COLORREF dispunit[16];      ///< Display unit colors (0 = unclassified)
+    COLORREF dispnoise;         ///< Display noise color
+    COLORREF dispchansel[3];    ///< Display channel selection colors
+    COLORREF disptemp[5];       ///< Display temporary colors
+    COLORREF disprsvd[14];      ///< Reserved display colors
+} cbCOLORTABLE;
+
+/// @brief Option table for Central application
+///
+/// Used for configuration options in Central
+typedef struct {
+    float fRMSAutoThresholdDistance;    ///< multiplier to use for autothresholding when using RMS to guess noise
+    uint32_t reserved[31];              ///< Reserved for future use
+} cbOPTIONTABLE;
 
 /// @}
 
