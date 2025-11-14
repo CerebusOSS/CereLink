@@ -472,10 +472,14 @@ Result<void> DeviceSession::sendPacket(const cbPKT_GENERIC& pkt) {
         return Result<void>::error("Session is not open");
     }
 
+    // Calculate actual packet size from header
+    // dlen is in quadlets (4-byte units), so packet size = header + (dlen * 4)
+    const size_t packet_size = cbPKT_HEADER_SIZE + (pkt.cbpkt_header.dlen * 4);
+
     const int bytes_sent = sendto(
         m_impl->socket,
         (const char*)&pkt,
-        sizeof(cbPKT_GENERIC),
+        packet_size,
         0,
         reinterpret_cast<SOCKADDR *>(&m_impl->send_addr),
         sizeof(m_impl->send_addr)
@@ -625,7 +629,7 @@ Result<void> DeviceSession::startReceiveThread() {
             for (size_t i = 0; i < count; ++i) {
                 const auto& pkt = packets[i];
                 if ((pkt.cbpkt_header.type & 0xF0) == 0x10) {
-                    const cbPKT_SYSINFO* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
+                    const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
                     m_impl->device_runlevel.store(sysinfo->runlevel, std::memory_order_release);
                     m_impl->received_sysrep.store(true, std::memory_order_release);
                     m_impl->handshake_cv.notify_all();
@@ -784,15 +788,14 @@ const DeviceConfig& DeviceSession::getConfig() const {
 /// Device Startup & Handshake
 ///--------------------------------------------------------------------------------------------
 
-Result<void> DeviceSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags) {
+Result<void> DeviceSession::setSystemRunLevel(const uint32_t runlevel, const uint32_t resetque, const uint32_t runflags) {
     // Create runlevel command packet
-    cbPKT_SYSINFO sysinfo;
-    std::memset(&sysinfo, 0, sizeof(sysinfo));
+    cbPKT_SYSINFO sysinfo = {};
 
     // Fill header
     sysinfo.cbpkt_header.time = 1;
-    sysinfo.cbpkt_header.chid = 0x8000;  // cbPKTCHAN_CONFIGURATION
-    sysinfo.cbpkt_header.type = 0x92;    // cbPKTTYPE_SYSSETRUNLEV
+    sysinfo.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    sysinfo.cbpkt_header.type = cbPKTTYPE_SYSSETRUNLEV;
     sysinfo.cbpkt_header.dlen = cbPKTDLEN_SYSINFO;  // Use macro (accounts for 64-bit PROCTIME)
     sysinfo.cbpkt_header.instrument = 0;
 
@@ -810,20 +813,19 @@ Result<void> DeviceSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetq
 
 Result<void> DeviceSession::requestConfiguration() {
     // Create REQCONFIGALL packet
-    cbPKT_GENERIC pkt;
-    std::memset(&pkt, 0, sizeof(pkt));
+    cbPKT_GENERIC pkt = {};
 
     // Fill header
     pkt.cbpkt_header.time = 1;
-    pkt.cbpkt_header.chid = 0x8000;  // cbPKTCHAN_CONFIGURATION
-    pkt.cbpkt_header.type = 0x88;    // cbPKTTYPE_REQCONFIGALL
-    pkt.cbpkt_header.dlen = 0;       // No payload
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_REQCONFIGALL;
+    pkt.cbpkt_header.dlen = 0;  // No payload
     pkt.cbpkt_header.instrument = 0;
 
     return sendPacket(pkt);
 }
 
-Result<void> DeviceSession::performStartupHandshake(uint32_t timeout_ms) {
+Result<void> DeviceSession::performStartupHandshake(const uint32_t timeout_ms) {
     // Complete device startup sequence to transition device from any state to RUNNING
     //
     // Sequence:
@@ -837,33 +839,30 @@ Result<void> DeviceSession::performStartupHandshake(uint32_t timeout_ms) {
     m_impl->received_sysrep.store(false, std::memory_order_relaxed);
     m_impl->device_runlevel.store(0, std::memory_order_relaxed);
 
-    Result<void> result;
-
     // Quick presence check - use shorter timeout to fail fast for non-existent devices
     const uint32_t presence_check_timeout = std::min(100u, timeout_ms);
 
     // Helper lambda to wait for SYSREP with optional expected runlevel
     // If expected_runlevel is provided, waits for that specific runlevel
     // If not provided (0), waits for any SYSREP
-    auto waitForSysrep = [this](uint32_t timeout_ms, uint32_t expected_runlevel = 0) -> bool {
+    auto waitForSysrep = [this](const uint32_t timeout_ms_, uint32_t expected_runlevel = 0) -> bool {
         std::unique_lock<std::mutex> lock(m_impl->handshake_mutex);
-        return m_impl->handshake_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms),
+        return m_impl->handshake_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms_),
             [this, expected_runlevel] {
-                bool got_sysrep = m_impl->received_sysrep.load(std::memory_order_acquire);
-                if (!got_sysrep) {
+                if (!(m_impl->received_sysrep.load(std::memory_order_acquire))) {
                     return false;  // Haven't received SYSREP yet
                 }
                 if (expected_runlevel == 0) {
                     return true;  // Any SYSREP is acceptable
                 }
                 // Check if we got the expected runlevel
-                uint32_t current = m_impl->device_runlevel.load(std::memory_order_acquire);
+                const uint32_t current = m_impl->device_runlevel.load(std::memory_order_acquire);
                 return current == expected_runlevel;
             });
     };
 
     // Step 1: Quick presence check - send cbRUNLEVEL_RUNNING with short timeout
-    result = setSystemRunLevel(cbRUNLEVEL_RUNNING);
+    Result<void> result = setSystemRunLevel(cbRUNLEVEL_RUNNING);
     if (result.isError()) {
         return Result<void>::error("Failed to send RUNNING command: " + result.error());
     }
