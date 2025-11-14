@@ -208,66 +208,6 @@ TEST_F(DeviceSessionTest, SendPacket_AfterClose) {
 // Packet Receive Tests (Loopback)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(DeviceSessionTest, PollPacket_Timeout) {
-    // Use same port for send/recv to enable loopback
-    auto config = DeviceConfig::custom("127.0.0.1", "127.0.0.1", 51015, 51015);
-    config.non_blocking = true;
-    auto result = DeviceSession::create(config);
-    ASSERT_TRUE(result.isOk());
-
-    auto& session = result.value();
-
-    cbPKT_GENERIC pkt;
-    auto poll_result = session.pollPacket(pkt, 10);  // 10ms timeout
-    ASSERT_TRUE(poll_result.isOk());
-    EXPECT_FALSE(poll_result.value());  // Should timeout (no data)
-}
-
-TEST_F(DeviceSessionTest, SendAndReceive_Loopback) {
-    // Create two sessions on loopback for send/receive test
-    // Session 1: sends on 51016, receives on 51017
-    auto config1 = DeviceConfig::custom("127.0.0.1", "127.0.0.1", 51016, 51017);
-    config1.non_blocking = true;
-    auto result1 = DeviceSession::create(config1);
-    ASSERT_TRUE(result1.isOk());
-    auto& session1 = result1.value();
-
-    // Session 2: sends on 51017, receives on 51016
-    auto config2 = DeviceConfig::custom("127.0.0.1", "127.0.0.1", 51017, 51016);
-    config2.non_blocking = true;
-    auto result2 = DeviceSession::create(config2);
-    ASSERT_TRUE(result2.isOk());
-    auto& session2 = result2.value();
-
-    // Send packet from session1
-    cbPKT_GENERIC send_pkt;
-    std::memset(&send_pkt, 0, sizeof(send_pkt));
-    send_pkt.cbpkt_header.type = 0x42;
-    send_pkt.cbpkt_header.dlen = 0;
-
-    auto send_result = session1.sendPacket(send_pkt);
-    ASSERT_TRUE(send_result.isOk());
-
-    // Give time for packet to arrive
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-    // Receive packet on session2
-    cbPKT_GENERIC recv_pkt;
-    auto poll_result = session2.pollPacket(recv_pkt, 100);
-    ASSERT_TRUE(poll_result.isOk());
-    ASSERT_TRUE(poll_result.value());  // Packet should be available
-
-    // Verify packet contents
-    EXPECT_EQ(recv_pkt.cbpkt_header.type, 0x42);
-
-    // Check statistics
-    auto stats1 = session1.getStats();
-    EXPECT_EQ(stats1.packets_sent, 1);
-
-    auto stats2 = session2.getStats();
-    EXPECT_EQ(stats2.packets_received, 1);
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Callback Tests
 ///////////////////////////////////////////////////////////////////////////////////////////////////

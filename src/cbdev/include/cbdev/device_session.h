@@ -226,12 +226,6 @@ public:
     /// @return Result indicating success or error
     Result<void> sendPackets(const cbPKT_GENERIC* pkts, size_t count);
 
-    /// Poll for one packet (synchronous receive)
-    /// @param pkt Buffer to receive packet into
-    /// @param timeout_ms Timeout in milliseconds (0 = no wait, -1 = block forever)
-    /// @return Result<bool> - true if packet received, false if timeout/no data
-    Result<bool> pollPacket(cbPKT_GENERIC& pkt, int timeout_ms = 0);
-
     ///--------------------------------------------------------------------------------------------
     /// Callback-Based Receive
     ///--------------------------------------------------------------------------------------------
