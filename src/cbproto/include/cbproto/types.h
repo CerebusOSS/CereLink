@@ -703,6 +703,24 @@ typedef struct {
 
 #define cbPKTDLEN_SYSINFO       ((sizeof(cbPKT_SYSINFO)/4) - cbPKT_HEADER_32SIZE)
 
+/// @brief PKT Set:N/A  Rep:0x01 - System protocol monitor
+///
+/// Packets are sent via UDP. This packet is sent by the NSP periodically (approximately every 10ms)
+/// telling the client how many packets have been sent since the last cbPKT_SYSPROTOCOLMONITOR.
+/// The client can compare this with the number of packets it has received to detect packet loss.
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1048-1055
+///
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t sentpkts;    ///< Packets sent since last cbPKT_SYSPROTOCOLMONITOR (or 0 if timestamp=0)
+                          ///< The cbPKT_SYSPROTOCOLMONITOR packets are counted as well so this must be >= 1
+    uint32_t counter;     ///< Counter of cbPKT_SYSPROTOCOLMONITOR packets sent since beginning of NSP time
+} cbPKT_SYSPROTOCOLMONITOR;
+
+#define cbPKTDLEN_SYSPROTOCOLMONITOR    ((sizeof(cbPKT_SYSPROTOCOLMONITOR)/4) - cbPKT_HEADER_32SIZE)
+
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

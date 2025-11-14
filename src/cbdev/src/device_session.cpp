@@ -218,6 +218,11 @@ struct DeviceSession::Impl {
     std::unique_ptr<cbConfigBuffer> m_cfg_owned;      // Internal storage (standalone mode)
     std::mutex cfg_mutex;                             // Thread-safe access to config buffer
 
+    // Protocol monitor tracking (for dropped packet detection)
+    std::atomic<uint64_t> packets_since_monitor{0};   // Packets received since last protocol monitor
+    std::atomic<uint32_t> last_monitor_counter{0};    // Last protocol monitor counter value
+    std::atomic<bool> first_monitor_received{false};  // Have we received the first monitor packet?
+
     ~Impl() {
         // Ensure threads are stopped before destroying
         if (recv_thread_running.load()) {
@@ -868,16 +873,59 @@ Result<void> DeviceSession::startReceiveThread() {
                 m_impl->stats.bytes_received += bytes_recv;
             }
 
-            // Monitor for SYSREP packets (for handshake) BEFORE delivering to user callback
-            // SYSREP packets have type 0x10-0x1F (cbPKTTYPE_SYSREP base is 0x10)
+            // Internal parsing of packets BEFORE delivering to user callback
             for (size_t i = 0; i < count; ++i) {
                 const auto& pkt = packets[i];
+
+                // Check for SYSREP packets (e.g., startup handshake)
+                // SYSREP packets have type with base 0x10 (cbPKTTYPE_SYSREP)
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
                     const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
                     m_impl->device_runlevel.store(sysinfo->runlevel, std::memory_order_release);
                     m_impl->received_sysrep.store(true, std::memory_order_release);
                     m_impl->handshake_cv.notify_all();
                 }
+                else if (pkt.cbpkt_header.type == cbPKTTYPE_SYSPROTOCOLMONITOR) {
+                    // Parse protocol monitor packets - dropped packet detection
+                    const auto* monitor = reinterpret_cast<const cbPKT_SYSPROTOCOLMONITOR*>(&pkt);
+
+                    // Check for dropped packets on subsequent monitor packets
+                    if (m_impl->first_monitor_received.load()) {
+                        const uint64_t packets_received = m_impl->packets_since_monitor.load();
+
+                        // Detect packet loss
+                        if (const uint32_t packets_expected = monitor->sentpkts; packets_received != packets_expected) {
+                            const uint64_t dropped = (packets_expected > packets_received) ?
+                                             (packets_expected - packets_received) : 0;
+
+                            if (dropped > 0) {
+                                std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
+                                m_impl->stats.packets_dropped += dropped;
+
+                                // Log warning (can be made optional later)
+                                fprintf(stderr,
+                                    "[DeviceSession] Dropped packet detection: expected %u, received %llu, dropped %llu (total: %llu)\n",
+                                    packets_expected,
+                                    static_cast<unsigned long long>(packets_received),
+                                    static_cast<unsigned long long>(dropped),
+                                    static_cast<unsigned long long>(m_impl->stats.packets_dropped)
+                                );
+                            }
+                        }
+
+                        // Reset counter for next interval
+                        m_impl->packets_since_monitor.store(0);
+                    } else {
+                        // First monitor packet - just initialize
+                        m_impl->first_monitor_received.store(true);
+                        m_impl->packets_since_monitor.store(0);
+                    }
+
+                    m_impl->last_monitor_counter.store(monitor->counter);
+                }
+
+                // Increment packet counter (all packets count towards the next monitor check)
+                m_impl->packets_since_monitor.fetch_add(1);
 
                 // Parse config packets and update config buffer
                 parseConfigPacket(pkt);

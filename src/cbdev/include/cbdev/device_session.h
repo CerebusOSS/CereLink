@@ -140,11 +140,13 @@ struct DeviceStats {
     uint64_t bytes_received = 0;        ///< Total bytes received
     uint64_t send_errors = 0;           ///< Send operation failures
     uint64_t recv_errors = 0;           ///< Receive operation failures
+    uint64_t packets_dropped = 0;       ///< Dropped packets detected via protocol monitor
 
     void reset() {
         packets_sent = packets_received = 0;
         bytes_sent = bytes_received = 0;
         send_errors = recv_errors = 0;
+        packets_dropped = 0;
     }
 };
 
