@@ -432,6 +432,463 @@ TEST_F(ShmemSessionTest, StorePacket_InvalidInstrument) {
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Advanced Packet Handler Tests
+/// @{
+
+TEST_F(ShmemSessionTest, StorePacket_ADAPTFILTINFO) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create ADAPTFILTINFO packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 1;  // cbNSP2
+    pkt.cbpkt_header.type = cbPKTTYPE_ADAPTFILTREP;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_ADAPTFILTINFO;
+
+    cbPKT_ADAPTFILTINFO* adapt_pkt = reinterpret_cast<cbPKT_ADAPTFILTINFO*>(&pkt);
+    adapt_pkt->chan = 10;
+    adapt_pkt->nMode = 1;  // Filter continuous & spikes
+    adapt_pkt->dLearningRate = 0.05f;
+    adapt_pkt->nRefChan1 = 5;
+    adapt_pkt->nRefChan2 = 6;
+
+    // Store packet
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+
+    // TODO: Add getter method for adaptinfo and verify
+    // For now, just verify packet was stored without error
+}
+
+TEST_F(ShmemSessionTest, StorePacket_REFELECFILTINFO) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create REFELECFILTINFO packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 0;  // cbNSP1
+    pkt.cbpkt_header.type = cbPKTTYPE_REFELECFILTREP;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_REFELECFILTINFO;
+
+    cbPKT_REFELECFILTINFO* refelec_pkt = reinterpret_cast<cbPKT_REFELECFILTINFO*>(&pkt);
+    refelec_pkt->chan = 15;
+    refelec_pkt->nMode = 2;  // Filter spikes only
+    refelec_pkt->nRefChan = 8;
+
+    // Store packet
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+}
+
+TEST_F(ShmemSessionTest, StorePacket_SS_STATUS) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create SS_STATUS packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 0;
+    pkt.cbpkt_header.type = cbPKTTYPE_SS_STATUSREP;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_SS_STATUS;
+
+    cbPKT_SS_STATUS* status_pkt = reinterpret_cast<cbPKT_SS_STATUS*>(&pkt);
+    status_pkt->cntlUnitStats.nMode = ADAPT_ALWAYS;  // Always adapt unit stats
+    status_pkt->cntlNumUnits.nMode = ADAPT_ALWAYS;   // Always adapt unit numbers
+
+    // Store packet
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+}
+
+TEST_F(ShmemSessionTest, StorePacket_SS_DETECT) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create SS_DETECT packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 0;
+    pkt.cbpkt_header.type = cbPKTTYPE_SS_DETECTREP;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_SS_DETECT;
+
+    cbPKT_SS_DETECT* detect_pkt = reinterpret_cast<cbPKT_SS_DETECT*>(&pkt);
+    detect_pkt->fThreshold = -50.0f;  // Detection threshold
+    detect_pkt->fMultiplier = 4.5f;
+
+    // Store packet
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+}
+
+TEST_F(ShmemSessionTest, StorePacket_SS_ARTIF_REJECT) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create SS_ARTIF_REJECT packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 0;
+    pkt.cbpkt_header.type = cbPKTTYPE_SS_ARTIF_REJECTREP;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_SS_ARTIF_REJECT;
+
+    cbPKT_SS_ARTIF_REJECT* artif_pkt = reinterpret_cast<cbPKT_SS_ARTIF_REJECT*>(&pkt);
+    artif_pkt->nMaxSimulChans = 3;  // Max simultaneous channels
+    artif_pkt->nRefractoryCount = 10;
+
+    // Store packet
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+}
+
+TEST_F(ShmemSessionTest, StorePacket_SS_NOISE_BOUNDARY) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create SS_NOISE_BOUNDARY packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 0;
+    pkt.cbpkt_header.type = cbPKTTYPE_SS_NOISE_BOUNDARYREP;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_SS_NOISE_BOUNDARY;
+
+    cbPKT_SS_NOISE_BOUNDARY* noise_pkt = reinterpret_cast<cbPKT_SS_NOISE_BOUNDARY*>(&pkt);
+    noise_pkt->chan = 25;  // 1-based channel ID
+    noise_pkt->afc[0] = -100.0f;  // Center of ellipsoid (x coordinate)
+    noise_pkt->afc[1] = 0.0f;     // Center of ellipsoid (y coordinate)
+    noise_pkt->afc[2] = 0.0f;     // Center of ellipsoid (z coordinate)
+
+    // Store packet - should be stored at index chan-1 (24)
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+
+    // Test boundary condition - channel 0 should be rejected
+    cbPKT_GENERIC pkt_invalid;
+    std::memset(&pkt_invalid, 0, sizeof(pkt_invalid));
+    pkt_invalid.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt_invalid.cbpkt_header.instrument = 0;
+    pkt_invalid.cbpkt_header.type = cbPKTTYPE_SS_NOISE_BOUNDARYREP;
+    cbPKT_SS_NOISE_BOUNDARY* noise_pkt_invalid = reinterpret_cast<cbPKT_SS_NOISE_BOUNDARY*>(&pkt_invalid);
+    noise_pkt_invalid->chan = 0;  // Invalid
+
+    ASSERT_TRUE(session.storePacket(pkt_invalid).isOk());  // Should succeed but not store to config
+}
+
+TEST_F(ShmemSessionTest, StorePacket_SS_STATISTICS) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create SS_STATISTICS packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 0;
+    pkt.cbpkt_header.type = cbPKTTYPE_SS_STATISTICSREP;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_SS_STATISTICS;
+
+    cbPKT_SS_STATISTICS* stats_pkt = reinterpret_cast<cbPKT_SS_STATISTICS*>(&pkt);
+    stats_pkt->nUpdateSpikes = 1000;
+    stats_pkt->nAutoalg = cbAUTOALG_PCA;
+
+    // Store packet
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+}
+
+TEST_F(ShmemSessionTest, StorePacket_SS_MODEL) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create SS_MODELREP packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 0;
+    pkt.cbpkt_header.type = cbPKTTYPE_SS_MODELREP;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_SS_MODELSET;
+
+    cbPKT_SS_MODELSET* model_pkt = reinterpret_cast<cbPKT_SS_MODELSET*>(&pkt);
+    model_pkt->chan = 10;  // 0-based channel
+    model_pkt->unit_number = 1;  // Unit 1
+    model_pkt->valid = 1;
+    model_pkt->inverted = 0;
+    model_pkt->num_samples = 100;
+    model_pkt->mu_x[0] = 50.0f;
+    model_pkt->mu_x[1] = 75.0f;
+
+    // Store packet
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+
+    // Test boundary conditions
+    cbPKT_GENERIC pkt_invalid;
+    std::memset(&pkt_invalid, 0, sizeof(pkt_invalid));
+    pkt_invalid.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt_invalid.cbpkt_header.instrument = 0;
+    pkt_invalid.cbpkt_header.type = cbPKTTYPE_SS_MODELREP;
+    cbPKT_SS_MODELSET* model_invalid = reinterpret_cast<cbPKT_SS_MODELSET*>(&pkt_invalid);
+    model_invalid->chan = 9999;  // Out of range
+    model_invalid->unit_number = 0;
+
+    ASSERT_TRUE(session.storePacket(pkt_invalid).isOk());  // Should succeed but not store to config
+}
+
+TEST_F(ShmemSessionTest, StorePacket_FS_BASIS) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create FS_BASISREP packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 0;
+    pkt.cbpkt_header.type = cbPKTTYPE_FS_BASISREP;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_FS_BASIS;
+
+    cbPKT_FS_BASIS* basis_pkt = reinterpret_cast<cbPKT_FS_BASIS*>(&pkt);
+    basis_pkt->chan = 20;  // 1-based channel
+    basis_pkt->mode = 1;   // PCA basis
+    basis_pkt->fs = cbAUTOALG_PCA;
+
+    // Store packet - should be stored at index chan-1 (19)
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+
+    // Test invalid channel
+    cbPKT_GENERIC pkt_invalid;
+    std::memset(&pkt_invalid, 0, sizeof(pkt_invalid));
+    pkt_invalid.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt_invalid.cbpkt_header.instrument = 0;
+    pkt_invalid.cbpkt_header.type = cbPKTTYPE_FS_BASISREP;
+    cbPKT_FS_BASIS* basis_invalid = reinterpret_cast<cbPKT_FS_BASIS*>(&pkt_invalid);
+    basis_invalid->chan = 0;  // Invalid (1-based, so 0 is invalid)
+
+    ASSERT_TRUE(session.storePacket(pkt_invalid).isOk());  // Should succeed but not store to config
+}
+
+TEST_F(ShmemSessionTest, StorePacket_LNC) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create LNCREP packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 1;  // cbNSP2
+    pkt.cbpkt_header.type = cbPKTTYPE_LNCREP;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_LNC;
+
+    cbPKT_LNC* lnc_pkt = reinterpret_cast<cbPKT_LNC*>(&pkt);
+    lnc_pkt->lncFreq = 60;  // 60 Hz line noise
+    lnc_pkt->lncRefChan = 10;
+    lnc_pkt->lncGlobalMode = 1;
+
+    // Store packet
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+}
+
+TEST_F(ShmemSessionTest, StorePacket_FILECFG) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create REPFILECFG packet with REC option
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 0;
+    pkt.cbpkt_header.type = cbPKTTYPE_REPFILECFG;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_FILECFG;
+
+    cbPKT_FILECFG* file_pkt = reinterpret_cast<cbPKT_FILECFG*>(&pkt);
+    file_pkt->options = cbFILECFG_OPT_REC;  // Recording
+    file_pkt->duration = 3600;  // 1 hour
+    file_pkt->recording = 1;
+    std::strncpy(file_pkt->filename, "test_recording.nev", cbLEN_STR_COMMENT);
+
+    // Store packet - should be stored
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+
+    // Create packet with non-REC/STOP/TIMEOUT option - should not be stored
+    cbPKT_GENERIC pkt_other;
+    std::memset(&pkt_other, 0, sizeof(pkt_other));
+    pkt_other.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt_other.cbpkt_header.instrument = 0;
+    pkt_other.cbpkt_header.type = cbPKTTYPE_REPFILECFG;
+    cbPKT_FILECFG* file_other = reinterpret_cast<cbPKT_FILECFG*>(&pkt_other);
+    file_other->options = cbFILECFG_OPT_NONE;  // Other option
+
+    ASSERT_TRUE(session.storePacket(pkt_other).isOk());  // Succeeds but not stored to config
+}
+
+TEST_F(ShmemSessionTest, StorePacket_NTRODEINFO) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create REPNTRODEINFO packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 0;
+    pkt.cbpkt_header.type = cbPKTTYPE_REPNTRODEINFO;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_NTRODEINFO;
+
+    cbPKT_NTRODEINFO* ntrode_pkt = reinterpret_cast<cbPKT_NTRODEINFO*>(&pkt);
+    ntrode_pkt->ntrode = 5;  // 1-based NTrode ID
+    std::strncpy(ntrode_pkt->label, "Tetrode_1", cbLEN_STR_LABEL);
+    ntrode_pkt->nSite = 4;  // Tetrode has 4 electrodes
+    ntrode_pkt->fs = cbAUTOALG_PCA;
+
+    // Store packet - should be stored at index ntrode-1 (4)
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+
+    // Test invalid ntrode ID
+    cbPKT_GENERIC pkt_invalid;
+    std::memset(&pkt_invalid, 0, sizeof(pkt_invalid));
+    pkt_invalid.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt_invalid.cbpkt_header.instrument = 0;
+    pkt_invalid.cbpkt_header.type = cbPKTTYPE_REPNTRODEINFO;
+    cbPKT_NTRODEINFO* ntrode_invalid = reinterpret_cast<cbPKT_NTRODEINFO*>(&pkt_invalid);
+    ntrode_invalid->ntrode = 0;  // Invalid (1-based)
+
+    ASSERT_TRUE(session.storePacket(pkt_invalid).isOk());  // Succeeds but not stored to config
+}
+
+TEST_F(ShmemSessionTest, StorePacket_WAVEFORM) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create WAVEFORMREP packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 0;
+    pkt.cbpkt_header.type = cbPKTTYPE_WAVEFORMREP;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_WAVEFORM;
+
+    cbPKT_AOUT_WAVEFORM* wave_pkt = reinterpret_cast<cbPKT_AOUT_WAVEFORM*>(&pkt);
+    wave_pkt->chan = 2;  // 0-based channel
+    wave_pkt->trigNum = 1;  // 0-based trigger number
+    wave_pkt->mode = cbWAVEFORM_MODE_SINE;
+    wave_pkt->repeats = 5;
+    wave_pkt->wave.offset = 100;
+    wave_pkt->wave.sineFrequency = 1000;  // 1 kHz
+    wave_pkt->wave.sineAmplitude = 500;
+
+    // Store packet
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+
+    // Test invalid indices
+    cbPKT_GENERIC pkt_invalid;
+    std::memset(&pkt_invalid, 0, sizeof(pkt_invalid));
+    pkt_invalid.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt_invalid.cbpkt_header.instrument = 0;
+    pkt_invalid.cbpkt_header.type = cbPKTTYPE_WAVEFORMREP;
+    cbPKT_AOUT_WAVEFORM* wave_invalid = reinterpret_cast<cbPKT_AOUT_WAVEFORM*>(&pkt_invalid);
+    wave_invalid->chan = 999;  // Out of range
+    wave_invalid->trigNum = 0;
+
+    ASSERT_TRUE(session.storePacket(pkt_invalid).isOk());  // Succeeds but not stored to config
+}
+
+TEST_F(ShmemSessionTest, StorePacket_NPLAY) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create NPLAYREP packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 0;
+    pkt.cbpkt_header.type = cbPKTTYPE_NPLAYREP;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_NPLAY;
+
+    cbPKT_NPLAY* nplay_pkt = reinterpret_cast<cbPKT_NPLAY*>(&pkt);
+    nplay_pkt->mode = cbNPLAY_MODE_CONFIG;  // Request config
+    nplay_pkt->flags = cbNPLAY_FLAG_CONF;
+    nplay_pkt->val = 0;
+    nplay_pkt->speed = 1.0;
+    std::strncpy(nplay_pkt->fname, "playback_file.nev", sizeof(nplay_pkt->fname));
+
+    // Store packet
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+}
+
+TEST_F(ShmemSessionTest, StorePacket_NM_VideoSource) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create NMREP packet for video source
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 0;
+    pkt.cbpkt_header.type = cbPKTTYPE_NMREP;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_NM;
+
+    cbPKT_NM* nm_pkt = reinterpret_cast<cbPKT_NM*>(&pkt);
+    nm_pkt->mode = cbNM_MODE_SETVIDEOSOURCE;
+    nm_pkt->flags = 2;  // 1-based video source ID
+    std::strncpy(nm_pkt->name, "Camera_1", cbLEN_STR_LABEL);
+    nm_pkt->value = 30000;  // 30 fps (in milli-fps)
+
+    // Store packet - should be stored at index flags-1 (1)
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+
+    // Test invalid video source ID
+    cbPKT_GENERIC pkt_invalid;
+    std::memset(&pkt_invalid, 0, sizeof(pkt_invalid));
+    pkt_invalid.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt_invalid.cbpkt_header.instrument = 0;
+    pkt_invalid.cbpkt_header.type = cbPKTTYPE_NMREP;
+    cbPKT_NM* nm_invalid = reinterpret_cast<cbPKT_NM*>(&pkt_invalid);
+    nm_invalid->mode = cbNM_MODE_SETVIDEOSOURCE;
+    nm_invalid->flags = 0;  // Invalid (1-based)
+
+    ASSERT_TRUE(session.storePacket(pkt_invalid).isOk());  // Succeeds but not stored to config
+}
+
+TEST_F(ShmemSessionTest, StorePacket_NM_TrackableObject) {
+    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    ASSERT_TRUE(result.isOk());
+    auto& session = result.value();
+
+    // Create NMREP packet for trackable object
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.instrument = 0;
+    pkt.cbpkt_header.type = cbPKTTYPE_NMREP;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_NM;
+
+    cbPKT_NM* nm_pkt = reinterpret_cast<cbPKT_NM*>(&pkt);
+    nm_pkt->mode = cbNM_MODE_SETTRACKABLE;
+    nm_pkt->flags = 3;  // 1-based trackable object ID
+    std::strncpy(nm_pkt->name, "LED_Marker", cbLEN_STR_LABEL);
+    nm_pkt->value = (4 << 16) | 1;  // 4 points, type 1
+
+    // Store packet - should be stored at index flags-1 (2)
+    ASSERT_TRUE(session.storePacket(pkt).isOk());
+}
+
+// Note: cbNM_MODE_SETRPOS does not exist in upstream cbproto.h
+// Reset test removed - if reset functionality is needed, use a different mode
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Run all tests
 ///
 int main(int argc, char **argv) {

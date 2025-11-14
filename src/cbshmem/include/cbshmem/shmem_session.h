@@ -185,13 +185,13 @@ public:
 
     /// @brief Get bank information
     /// @param id Instrument ID (1-based)
-    /// @param bank Bank number (0-based)
+    /// @param bank Bank number (1-based, as used in cbPKT_BANKINFO)
     /// @return cbPKT_BANKINFO structure on success
     Result<cbPKT_BANKINFO> getBankInfo(cbproto::InstrumentId id, uint32_t bank) const;
 
     /// @brief Get filter information
     /// @param id Instrument ID (1-based)
-    /// @param filter Filter number (0-based)
+    /// @param filter Filter number (1-based, as used in cbPKT_FILTINFO)
     /// @return cbPKT_FILTINFO structure on success
     Result<cbPKT_FILTINFO> getFilterInfo(cbproto::InstrumentId id, uint32_t filter) const;
 

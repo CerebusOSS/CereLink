@@ -1185,12 +1185,13 @@ Result<cbPKT_BANKINFO> ShmemSession::getBankInfo(cbproto::InstrumentId id, uint3
         return Result<cbPKT_BANKINFO>::error("Invalid instrument ID");
     }
 
-    if (bank >= CENTRAL_cbMAXBANKS) {
-        return Result<cbPKT_BANKINFO>::error("Bank index out of range");
+    // Bank parameter is 1-based (matches cbPKT_BANKINFO.bank), convert to 0-based array index
+    if (bank == 0 || bank > CENTRAL_cbMAXBANKS) {
+        return Result<cbPKT_BANKINFO>::error("Bank number out of range");
     }
 
     uint8_t idx = id.toIndex();
-    return Result<cbPKT_BANKINFO>::ok(m_impl->cfg_buffer->bankinfo[idx][bank]);
+    return Result<cbPKT_BANKINFO>::ok(m_impl->cfg_buffer->bankinfo[idx][bank - 1]);
 }
 
 Result<cbPKT_FILTINFO> ShmemSession::getFilterInfo(cbproto::InstrumentId id, uint32_t filter) const {
@@ -1202,12 +1203,13 @@ Result<cbPKT_FILTINFO> ShmemSession::getFilterInfo(cbproto::InstrumentId id, uin
         return Result<cbPKT_FILTINFO>::error("Invalid instrument ID");
     }
 
-    if (filter >= CENTRAL_cbMAXFILTS) {
-        return Result<cbPKT_FILTINFO>::error("Filter index out of range");
+    // Filter parameter is 1-based (matches cbPKT_FILTINFO.filt), convert to 0-based array index
+    if (filter == 0 || filter > CENTRAL_cbMAXFILTS) {
+        return Result<cbPKT_FILTINFO>::error("Filter number out of range");
     }
 
     uint8_t idx = id.toIndex();
-    return Result<cbPKT_FILTINFO>::ok(m_impl->cfg_buffer->filtinfo[idx][filter]);
+    return Result<cbPKT_FILTINFO>::ok(m_impl->cfg_buffer->filtinfo[idx][filter - 1]);
 }
 
 Result<cbPKT_CHANINFO> ShmemSession::getChanInfo(uint32_t channel) const {
@@ -1330,11 +1332,25 @@ Result<void> ShmemSession::storePacket(const cbPKT_GENERIC& pkt) {
 
         // Other specific config packet types that Central stores
         switch (type) {
+            case cbPKTTYPE_GROUPREP:
+            case cbPKTTYPE_FILTREP:
             case cbPKTTYPE_PROCREP:
             case cbPKTTYPE_BANKREP:
-            case cbPKTTYPE_FILTREP:
-            case cbPKTTYPE_GROUPREP:
-            // TODO: Add ADAPTFILTREP, REFELECFILTREP when their constants are available
+            case cbPKTTYPE_ADAPTFILTREP:
+            case cbPKTTYPE_REFELECFILTREP:
+            case cbPKTTYPE_SS_MODELREP:
+            case cbPKTTYPE_SS_STATUSREP:
+            case cbPKTTYPE_SS_DETECTREP:
+            case cbPKTTYPE_SS_ARTIF_REJECTREP:
+            case cbPKTTYPE_SS_NOISE_BOUNDARYREP:
+            case cbPKTTYPE_SS_STATISTICSREP:
+            case cbPKTTYPE_FS_BASISREP:
+            case cbPKTTYPE_LNCREP:
+            case cbPKTTYPE_REPFILECFG:
+            case cbPKTTYPE_REPNTRODEINFO:
+            case cbPKTTYPE_NMREP:
+            case cbPKTTYPE_WAVEFORMREP:
+            case cbPKTTYPE_NPLAYREP:
                 return true;
             default:
                 return false;
@@ -1356,28 +1372,173 @@ Result<void> ShmemSession::storePacket(const cbPKT_GENERIC& pkt) {
         // Use packet.instrument as index (mode-independent!)
         uint8_t idx = id.toIndex();
 
-        if (pkt_type == cbPKTTYPE_PROCREP) {
+        if ((pkt_type & 0xF0) == cbPKTTYPE_CHANREP) {
+            // Channel info packets (0x40-0x4F range)
+            const auto* chan_pkt = reinterpret_cast<const cbPKT_CHANINFO*>(&pkt);
+            // Channel index is 1-based in packet, but chaninfo array is 0-based
+            if (chan_pkt->chan > 0 && chan_pkt->chan <= CENTRAL_cbMAXCHANS) {
+                std::memcpy(&m_impl->cfg_buffer->chaninfo[chan_pkt->chan - 1], &pkt, sizeof(cbPKT_CHANINFO));
+            }
+        }
+        else if ((pkt_type & 0xF0) == cbPKTTYPE_SYSREP) {
+            // System info packets (0x10-0x1F range) - all store to same sysinfo
+            std::memcpy(&m_impl->cfg_buffer->sysinfo, &pkt, sizeof(cbPKT_SYSINFO));
+        }
+        else if (pkt_type == cbPKTTYPE_GROUPREP) {
+            // Store sample group info (group index is 1-based in packet)
+            const auto* group_pkt = reinterpret_cast<const cbPKT_GROUPINFO*>(&pkt);
+            if (group_pkt->group > 0 && group_pkt->group <= CENTRAL_cbMAXGROUPS) {
+                std::memcpy(&m_impl->cfg_buffer->groupinfo[idx][group_pkt->group - 1], &pkt, sizeof(cbPKT_GROUPINFO));
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_FILTREP) {
+            // Store filter info (filter index is 1-based in packet)
+            const auto* filt_pkt = reinterpret_cast<const cbPKT_FILTINFO*>(&pkt);
+            if (filt_pkt->filt > 0 && filt_pkt->filt <= CENTRAL_cbMAXFILTS) {
+                std::memcpy(&m_impl->cfg_buffer->filtinfo[idx][filt_pkt->filt - 1], &pkt, sizeof(cbPKT_FILTINFO));
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_PROCREP) {
             // Store processor info
             std::memcpy(&m_impl->cfg_buffer->procinfo[idx], &pkt, sizeof(cbPKT_PROCINFO));
 
             // Mark instrument as active when we receive its PROCINFO
             m_impl->cfg_buffer->instrument_status[idx] = static_cast<uint32_t>(InstrumentStatus::ACTIVE);
-
-        } else if (pkt_type == cbPKTTYPE_BANKREP) {
-            // Store bank info
-            const cbPKT_BANKINFO* bank_pkt = reinterpret_cast<const cbPKT_BANKINFO*>(&pkt);
-            if (bank_pkt->bank < CENTRAL_cbMAXBANKS) {
-                std::memcpy(&m_impl->cfg_buffer->bankinfo[idx][bank_pkt->bank], &pkt, sizeof(cbPKT_BANKINFO));
-            }
-
-        } else if (pkt_type == cbPKTTYPE_FILTREP) {
-            // Store filter info
-            const cbPKT_FILTINFO* filt_pkt = reinterpret_cast<const cbPKT_FILTINFO*>(&pkt);
-            if (filt_pkt->filt < CENTRAL_cbMAXFILTS) {
-                std::memcpy(&m_impl->cfg_buffer->filtinfo[idx][filt_pkt->filt], &pkt, sizeof(cbPKT_FILTINFO));
+        }
+        else if (pkt_type == cbPKTTYPE_BANKREP) {
+            // Store bank info (bank index is 1-based in packet)
+            const auto* bank_pkt = reinterpret_cast<const cbPKT_BANKINFO*>(&pkt);
+            if (bank_pkt->bank > 0 && bank_pkt->bank <= CENTRAL_cbMAXBANKS) {
+                std::memcpy(&m_impl->cfg_buffer->bankinfo[idx][bank_pkt->bank - 1], &pkt, sizeof(cbPKT_BANKINFO));
             }
         }
-        // TODO: Add more config packet types as needed (GROUPINFO, ADAPTFILTINFO, REFELECFILTINFO, etc.)
+        else if (pkt_type == cbPKTTYPE_ADAPTFILTREP) {
+            // Store adaptive filter info (per-instrument)
+            m_impl->cfg_buffer->adaptinfo[idx] = *reinterpret_cast<const cbPKT_ADAPTFILTINFO*>(&pkt);
+        }
+        else if (pkt_type == cbPKTTYPE_REFELECFILTREP) {
+            // Store reference electrode filter info (per-instrument)
+            m_impl->cfg_buffer->refelecinfo[idx] = *reinterpret_cast<const cbPKT_REFELECFILTINFO*>(&pkt);
+        }
+        else if (pkt_type == cbPKTTYPE_SS_STATUSREP) {
+            // Store spike sorting status (system-wide, in isSortingOptions)
+            m_impl->cfg_buffer->isSortingOptions.pktStatus = *reinterpret_cast<const cbPKT_SS_STATUS*>(&pkt);
+        }
+        else if (pkt_type == cbPKTTYPE_SS_DETECTREP) {
+            // Store spike detection parameters (system-wide)
+            m_impl->cfg_buffer->isSortingOptions.pktDetect = *reinterpret_cast<const cbPKT_SS_DETECT*>(&pkt);
+        }
+        else if (pkt_type == cbPKTTYPE_SS_ARTIF_REJECTREP) {
+            // Store artifact rejection parameters (system-wide)
+            m_impl->cfg_buffer->isSortingOptions.pktArtifReject = *reinterpret_cast<const cbPKT_SS_ARTIF_REJECT*>(&pkt);
+        }
+        else if (pkt_type == cbPKTTYPE_SS_NOISE_BOUNDARYREP) {
+            // Store noise boundary (per-channel, 1-based in packet)
+            const auto* noise_pkt = reinterpret_cast<const cbPKT_SS_NOISE_BOUNDARY*>(&pkt);
+            if (noise_pkt->chan > 0 && noise_pkt->chan <= CENTRAL_cbMAXCHANS) {
+                m_impl->cfg_buffer->isSortingOptions.pktNoiseBoundary[noise_pkt->chan - 1] = *noise_pkt;
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_SS_STATISTICSREP) {
+            // Store spike sorting statistics (system-wide)
+            m_impl->cfg_buffer->isSortingOptions.pktStatistics = *reinterpret_cast<const cbPKT_SS_STATISTICS*>(&pkt);
+        }
+        else if (pkt_type == cbPKTTYPE_SS_MODELREP) {
+            // Store spike sorting model (per-channel, per-unit)
+            // Note: Central calls UpdateSortModel() which validates and constrains unit numbers
+            // For now, store directly with validation
+            const auto* model_pkt = reinterpret_cast<const cbPKT_SS_MODELSET*>(&pkt);
+            uint32_t nChan = model_pkt->chan;
+            uint32_t nUnit = model_pkt->unit_number;
+
+            // Validate channel and unit numbers (0-based in packet)
+            if (nChan < CENTRAL_cbMAXCHANS && nUnit < (cbMAXUNITS + 2)) {
+                m_impl->cfg_buffer->isSortingOptions.asSortModel[nChan][nUnit] = *model_pkt;
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_FS_BASISREP) {
+            // Store feature space basis (per-channel)
+            // Note: Central calls UpdateBasisModel() for additional processing
+            // For now, store directly with validation
+            const auto* basis_pkt = reinterpret_cast<const cbPKT_FS_BASIS*>(&pkt);
+            uint32_t nChan = basis_pkt->chan;
+
+            // Validate channel number (1-based in packet)
+            if (nChan > 0 && nChan <= CENTRAL_cbMAXCHANS) {
+                m_impl->cfg_buffer->isSortingOptions.asBasis[nChan - 1] = *basis_pkt;
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_LNCREP) {
+            // Store line noise cancellation info (per-instrument)
+            std::memcpy(&m_impl->cfg_buffer->isLnc[idx], &pkt, sizeof(cbPKT_LNC));
+        }
+        else if (pkt_type == cbPKTTYPE_REPFILECFG) {
+            // Store file configuration info (only for specific options)
+            const auto* file_pkt = reinterpret_cast<const cbPKT_FILECFG*>(&pkt);
+            if (file_pkt->options == cbFILECFG_OPT_REC ||
+                file_pkt->options == cbFILECFG_OPT_STOP ||
+                file_pkt->options == cbFILECFG_OPT_TIMEOUT) {
+                m_impl->cfg_buffer->fileinfo = *file_pkt;
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_REPNTRODEINFO) {
+            // Store n-trode information (1-based in packet)
+            const auto* ntrode_pkt = reinterpret_cast<const cbPKT_NTRODEINFO*>(&pkt);
+            if (ntrode_pkt->ntrode > 0 && ntrode_pkt->ntrode <= cbMAXNTRODES) {
+                m_impl->cfg_buffer->isNTrodeInfo[ntrode_pkt->ntrode - 1] = *ntrode_pkt;
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_WAVEFORMREP) {
+            // Store analog output waveform configuration
+            // Based on Central's logic (InstNetwork.cpp:415)
+            const auto* wave_pkt = reinterpret_cast<const cbPKT_AOUT_WAVEFORM*>(&pkt);
+
+            // Validate channel number (0-based) and trigger number (0-based)
+            if (wave_pkt->chan < AOUT_NUM_GAIN_CHANS && wave_pkt->trigNum < cbMAX_AOUT_TRIGGER) {
+                m_impl->cfg_buffer->isWaveform[wave_pkt->chan][wave_pkt->trigNum] = *wave_pkt;
+            }
+        }
+        else if (pkt_type == cbPKTTYPE_NPLAYREP) {
+            // Store nPlay information
+            m_impl->cfg_buffer->isNPlay = *reinterpret_cast<const cbPKT_NPLAY*>(&pkt);
+        }
+        else if (pkt_type == cbPKTTYPE_NMREP) {
+            // Store NeuroMotive (video/tracking) information
+            // Based on Central's logic (InstNetwork.cpp:367-397)
+            const auto* nm_pkt = reinterpret_cast<const cbPKT_NM*>(&pkt);
+
+            if (nm_pkt->mode == cbNM_MODE_SETVIDEOSOURCE) {
+                // Video source configuration (1-based index in flags field)
+                if (nm_pkt->flags > 0 && nm_pkt->flags <= cbMAXVIDEOSOURCE) {
+                    std::memcpy(m_impl->cfg_buffer->isVideoSource[nm_pkt->flags - 1].name,
+                                nm_pkt->name, cbLEN_STR_LABEL);
+                    m_impl->cfg_buffer->isVideoSource[nm_pkt->flags - 1].fps =
+                        static_cast<float>(nm_pkt->value) / 1000.0f;
+                }
+            }
+            else if (nm_pkt->mode == cbNM_MODE_SETTRACKABLE) {
+                // Trackable object configuration (1-based index in flags field)
+                if (nm_pkt->flags > 0 && nm_pkt->flags <= cbMAXTRACKOBJ) {
+                    std::memcpy(m_impl->cfg_buffer->isTrackObj[nm_pkt->flags - 1].name,
+                                nm_pkt->name, cbLEN_STR_LABEL);
+                    m_impl->cfg_buffer->isTrackObj[nm_pkt->flags - 1].type =
+                        static_cast<uint16_t>(nm_pkt->value & 0xff);
+                    m_impl->cfg_buffer->isTrackObj[nm_pkt->flags - 1].pointCount =
+                        static_cast<uint16_t>((nm_pkt->value >> 16) & 0xff);
+                }
+            }
+            // Note: cbNM_MODE_SETRPOS does not exist in upstream cbproto.h
+            // If reset functionality is needed, it should be implemented using a different mode
+            /*
+            else if (nm_pkt->mode == cbNM_MODE_SETRPOS) {
+                // Clear all trackable objects
+                std::memset(m_impl->cfg_buffer->isTrackObj, 0, sizeof(m_impl->cfg_buffer->isTrackObj));
+                std::memset(m_impl->cfg_buffer->isVideoSource, 0, sizeof(m_impl->cfg_buffer->isVideoSource));
+            }
+            */
+        }
+
+        // All recognized config packet types now have storage
     }
 
     return Result<void>::ok();
