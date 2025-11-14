@@ -183,6 +183,7 @@ struct SdkConfig {
     // Advanced options
     int recv_buffer_size = 6000000;           ///< UDP receive buffer (6MB)
     bool non_blocking = false;                ///< Non-blocking sockets (false = blocking, better for dedicated receive thread)
+    bool auto_run = true;                     ///< Automatically start device (full handshake). If false, only requests configuration.
 
     // Optional custom device configuration (overrides device_type mapping)
     // Used rarely for non-standard network configurations
