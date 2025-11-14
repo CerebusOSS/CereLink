@@ -115,6 +115,9 @@ struct DeviceConfig {
     bool non_blocking = false;      ///< Non-blocking socket (false = blocking, better for dedicated receive thread)
     int recv_buffer_size = 6000000; ///< Receive buffer size (6MB default)
 
+    // Connection options
+    bool autorun = true;            ///< Auto-start device on connect (true = performStartupHandshake, false = requestConfiguration only)
+
     /// Create configuration for a known device type
     static DeviceConfig forDevice(DeviceType type);
 
@@ -287,6 +290,10 @@ public:
     /// @return Reference to device configuration
     [[nodiscard]] const DeviceConfig& getConfig() const;
 
+    /// Set the autorun flag (must be called before connect())
+    /// @param autorun true to perform handshake on connect, false to just request config
+    void setAutorun(bool autorun);
+
     ///--------------------------------------------------------------------------------------------
     /// Device Startup & Handshake
     ///--------------------------------------------------------------------------------------------
@@ -317,6 +324,16 @@ public:
     /// @param timeout_ms Maximum time to wait for each step (default: 500ms)
     /// @return Result indicating success or error (clear message if device not reachable)
     Result<void> performStartupHandshake(uint32_t timeout_ms = 500);
+
+    /// Connect to device and start communication
+    /// Convenience method that combines:
+    /// 1. Start receive thread
+    /// 2. If config.autorun: performStartupHandshake() - fully start device to RUNNING
+    ///    Else: requestConfiguration() - just request config without changing runlevel
+    ///
+    /// @param timeout_ms Maximum time to wait for handshake steps (default: 500ms, ignored if autorun=false)
+    /// @return Result indicating success or error
+    Result<void> connect(uint32_t timeout_ms = 500);
 
 private:
     /// Private constructor (use create() factory method)

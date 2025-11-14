@@ -784,6 +784,10 @@ const DeviceConfig& DeviceSession::getConfig() const {
     return m_impl->config;
 }
 
+void DeviceSession::setAutorun(const bool autorun) {
+    m_impl->config.autorun = autorun;
+}
+
 ///--------------------------------------------------------------------------------------------
 /// Device Startup & Handshake
 ///--------------------------------------------------------------------------------------------
@@ -925,6 +929,31 @@ request_config:
     }
 
     // Success - device is now in RUNNING state
+    return Result<void>::ok();
+}
+
+Result<void> DeviceSession::connect(const uint32_t timeout_ms) {
+    // Step 1: Start receive thread
+    auto result = startReceiveThread();
+    if (result.isError()) {
+        return result;
+    }
+
+    // Step 2: Perform startup handshake or request configuration based on autorun flag
+    if (m_impl->config.autorun) {
+        // Fully start device to RUNNING state
+        result = performStartupHandshake(timeout_ms);
+        if (result.isError()) {
+            return Result<void>::error("Handshake failed: " + result.error());
+        }
+    } else {
+        // Just request configuration without changing runlevel
+        result = requestConfiguration();
+        if (result.isError()) {
+            return Result<void>::error("Failed to request configuration: " + result.error());
+        }
+    }
+
     return Result<void>::ok();
 }
 

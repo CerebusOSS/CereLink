@@ -391,14 +391,6 @@ private:
     /// Private constructor (use create() factory method)
     SdkSession();
 
-    /// Connect to device and verify it's responding (STANDALONE mode only)
-    /// Called from create() to verify device is present
-    /// - If config.auto_run = true: calls performStartupHandshake() to fully start device
-    /// - If config.auto_run = false: just sends REQCONFIGALL to verify presence
-    /// @param timeout_ms Timeout for verification (default: 500ms)
-    /// @return Result indicating success or error (device not responding)
-    Result<void> connect(uint32_t timeout_ms = 500);
-
     /// Shared memory receive thread loop (CLIENT mode only - reads from cbRECbuffer)
     void shmemReceiveThreadLoop();
 

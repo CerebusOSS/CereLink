@@ -282,17 +282,10 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
         session.m_impl->device_session = std::move(dev_result.value());
 
         // Start the session (starts receive/send threads)
+        // Start session (for STANDALONE mode, this also connects to device and performs handshake)
         auto start_result = session.start();
         if (start_result.isError()) {
             return Result<SdkSession>::error("Failed to start session: " + start_result.error());
-        }
-
-        // Connect to device and verify it's responding
-        // (performs handshake based on config.auto_run setting)
-        auto connect_result = session.connect(500);  // 500ms timeout per step
-        if (connect_result.isError()) {
-            session.stop();  // Clean up threads
-            return Result<SdkSession>::error("Device not responding: " + connect_result.error());
         }
     }
 
@@ -416,29 +409,32 @@ Result<void> SdkSession::start() {
             return result.value();  // Returns true if packet was dequeued, false if queue empty
         });
 
-        // Start device receive thread
-        auto recv_result = m_impl->device_session->startReceiveThread();
-        if (recv_result.isError()) {
+        // Set device autorun flag from our config
+        m_impl->device_session->setAutorun(m_impl->config.auto_run);
+
+        // Start device send thread
+        auto send_result = m_impl->device_session->startSendThread();
+        if (send_result.isError()) {
             // Clean up callback thread
             m_impl->callback_thread_running.store(false);
             m_impl->callback_cv.notify_one();
             if (m_impl->callback_thread && m_impl->callback_thread->joinable()) {
                 m_impl->callback_thread->join();
             }
-            return Result<void>::error("Failed to start device receive thread: " + recv_result.error());
+            return Result<void>::error("Failed to start device send thread: " + send_result.error());
         }
 
-        // Start device send thread
-        auto send_result = m_impl->device_session->startSendThread();
-        if (send_result.isError()) {
-            // Clean up receive thread and callback thread
-            m_impl->device_session->stopReceiveThread();
+        // Connect to device (starts receive thread + performs handshake/config request based on autorun flag)
+        auto connect_result = m_impl->device_session->connect();
+        if (connect_result.isError()) {
+            // Clean up send thread and callback thread
+            m_impl->device_session->stopSendThread();
             m_impl->callback_thread_running.store(false);
             m_impl->callback_cv.notify_one();
             if (m_impl->callback_thread && m_impl->callback_thread->joinable()) {
                 m_impl->callback_thread->join();
             }
-            return Result<void>::error("Failed to start device send thread: " + send_result.error());
+            return Result<void>::error("Failed to connect to device: " + connect_result.error());
         }
     } else {
         // CLIENT mode - start shared memory receive thread only
@@ -575,41 +571,6 @@ Result<void> SdkSession::performStartupHandshake(uint32_t timeout_ms) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Private Methods
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-Result<void> SdkSession::connect(uint32_t timeout_ms) {
-    // Connect to device and verify it's present and responsive
-    // This is called from create() in STANDALONE mode only
-    // Delegates to device_session for handshake logic
-
-    if (!m_impl->device_session.has_value()) {
-        return Result<void>::error("connect() requires device_session (STANDALONE mode)");
-    }
-
-    if (m_impl->config.auto_run) {
-        // Full startup handshake - get device to RUNNING state
-        auto result = m_impl->device_session->performStartupHandshake(timeout_ms);
-        if (result.isError()) {
-            return Result<void>::error("Startup handshake failed: " + result.error());
-        }
-    } else {
-        // Minimal check - just request configuration to verify device is present
-        // Device stays in whatever state it's currently in
-        auto result = m_impl->device_session->requestConfiguration();
-        if (result.isError()) {
-            return Result<void>::error("Failed to send REQCONFIGALL: " + result.error());
-        }
-
-        // Wait for SYSREP response - device_session handles the handshake state internally
-        // We need to poll pollPacket to get packets and trigger the handshake state update
-        // Actually, the receive thread should already be handling this. We just need to wait for the handshake CV
-        // But wait - we don't have access to device_session's handshake state!
-        // For now, just sleep briefly to allow device response
-        std::this_thread::sleep_for(std::chrono::milliseconds(timeout_ms));
-    }
-
-    // Success - device is connected and responding
-    return Result<void>::ok();
-}
 
 void SdkSession::shmemReceiveThreadLoop() {
     // This is the shared memory receive thread (CLIENT mode only)
