@@ -44,12 +44,12 @@ public:
         return r;
     }
 
-    bool isOk() const { return m_ok; }
-    bool isError() const { return !m_ok; }
+    [[nodiscard]] bool isOk() const { return m_ok; }
+    [[nodiscard]] bool isError() const { return !m_ok; }
 
     const T& value() const { return m_value.value(); }
     T& value() { return m_value.value(); }
-    const std::string& error() const { return m_error; }
+    [[nodiscard]] const std::string& error() const { return m_error; }
 
 private:
     bool m_ok = false;
@@ -74,9 +74,9 @@ public:
         return r;
     }
 
-    bool isOk() const { return m_ok; }
-    bool isError() const { return !m_ok; }
-    const std::string& error() const { return m_error; }
+    [[nodiscard]] bool isOk() const { return m_ok; }
+    [[nodiscard]] bool isError() const { return !m_ok; }
+    [[nodiscard]] const std::string& error() const { return m_error; }
 
 private:
     bool m_ok = false;
@@ -209,7 +209,7 @@ public:
 
     /// Check if session is open and ready for communication
     /// @return true if open and ready
-    bool isOpen() const;
+    [[nodiscard]] bool isOpen() const;
 
     ///--------------------------------------------------------------------------------------------
     /// Packet Operations
@@ -239,7 +239,7 @@ public:
     /// Set callback function for received packets
     /// Callback will be invoked from receive thread
     /// @param callback Function to call when packets are received
-    void setPacketCallback(PacketCallback callback);
+    void setPacketCallback(PacketCallback callback) const;
 
     /// Start asynchronous receive thread
     /// Packets will be delivered via callback set by setPacketCallback()
@@ -247,11 +247,11 @@ public:
     Result<void> startReceiveThread();
 
     /// Stop asynchronous receive thread
-    void stopReceiveThread();
+    void stopReceiveThread() const;
 
     /// Check if receive thread is running
     /// @return true if receive thread is active
-    bool isReceiveThreadRunning() const;
+    [[nodiscard]] bool isReceiveThreadRunning() const;
 
     ///--------------------------------------------------------------------------------------------
     /// Send Thread (for transmit queue)
@@ -260,19 +260,19 @@ public:
     /// Set callback function for transmit operations
     /// The send thread will periodically call this to get packets to send
     /// @param callback Function to call to dequeue packets for transmission
-    void setTransmitCallback(TransmitCallback callback);
+    void setTransmitCallback(TransmitCallback callback) const;
 
     /// Start asynchronous send thread
     /// Thread will periodically call transmit callback to get packets to send
     /// @return Result indicating success or error
-    Result<void> startSendThread();
+    [[nodiscard]] Result<void> startSendThread() const;
 
     /// Stop asynchronous send thread
-    void stopSendThread();
+    void stopSendThread() const;
 
     /// Check if send thread is running
     /// @return true if send thread is active
-    bool isSendThreadRunning() const;
+    [[nodiscard]] bool isSendThreadRunning() const;
 
     ///--------------------------------------------------------------------------------------------
     /// Statistics & Monitoring
@@ -280,7 +280,7 @@ public:
 
     /// Get current statistics
     /// @return Copy of current statistics
-    DeviceStats getStats() const;
+    [[nodiscard]] DeviceStats getStats() const;
 
     /// Reset statistics counters to zero
     void resetStats();
@@ -291,7 +291,7 @@ public:
 
     /// Get the configuration used to create this session
     /// @return Reference to device configuration
-    const DeviceConfig& getConfig() const;
+    [[nodiscard]] const DeviceConfig& getConfig() const;
 
 private:
     /// Private constructor (use create() factory method)

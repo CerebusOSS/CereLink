@@ -69,7 +69,7 @@ static unsigned int GetInterfaceIndexForIP(const char* ip_address) {
     if (ip_address == nullptr || std::strlen(ip_address) == 0)
         return 0;
 
-    struct ifaddrs *ifaddr, *ifa;
+    struct ifaddrs *ifaddr;
     unsigned int if_index = 0;
 
     if (getifaddrs(&ifaddr) == -1)
@@ -83,12 +83,12 @@ static unsigned int GetInterfaceIndexForIP(const char* ip_address) {
     }
 
     // Walk through linked list to find matching interface
-    for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
+    for (const struct ifaddrs *ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr == nullptr)
             continue;
 
         if (ifa->ifa_addr->sa_family == AF_INET) {
-            struct sockaddr_in *addr_in = (struct sockaddr_in *)ifa->ifa_addr;
+            auto *addr_in = reinterpret_cast<struct sockaddr_in *>(ifa->ifa_addr);
             if (addr_in->sin_addr.s_addr == target_addr.s_addr) {
                 if_index = if_nametoindex(ifa->ifa_name);
                 break;
@@ -186,8 +186,8 @@ DeviceConfig DeviceConfig::custom(const std::string& device_addr,
 struct DeviceSession::Impl {
     DeviceConfig config;
     SOCKET socket = INVALID_SOCKET_VALUE;
-    SOCKADDR_IN recv_addr;  // Address we bind to (client side)
-    SOCKADDR_IN send_addr;  // Address we send to (device side)
+    SOCKADDR_IN recv_addr{};  // Address we bind to (client side)
+    SOCKADDR_IN send_addr{};  // Address we send to (device side)
 
     // Receive thread
     std::unique_ptr<std::thread> recv_thread;
@@ -400,9 +400,9 @@ Result<DeviceSession> DeviceSession::create(const DeviceConfig& config) {
     session.m_impl->recv_addr.sin_len = sizeof(session.m_impl->recv_addr);
 #endif
 
-    if (bind(session.m_impl->socket, (SOCKADDR*)&session.m_impl->recv_addr,
+    if (bind(session.m_impl->socket, reinterpret_cast<SOCKADDR *>(&session.m_impl->recv_addr),
             sizeof(session.m_impl->recv_addr)) != 0) {
-        int bind_error = errno;  // Capture errno immediately
+        const int bind_error = errno;  // Capture errno immediately
         closeSocket(session.m_impl->socket);
 #ifdef _WIN32
         WSACleanup();
@@ -427,7 +427,7 @@ Result<DeviceSession> DeviceSession::create(const DeviceConfig& config) {
         config.client_address != "0.0.0.0" &&
         session.m_impl->recv_addr.sin_addr.s_addr != htonl(INADDR_ANY)) {
 
-        unsigned int if_index = GetInterfaceIndexForIP(config.client_address.c_str());
+        const unsigned int if_index = GetInterfaceIndexForIP(config.client_address.c_str());
         if (if_index > 0) {
             // Best effort - don't fail if this doesn't work
             setsockopt(session.m_impl->socket, IPPROTO_IP, IP_BOUND_IF,
@@ -466,12 +466,14 @@ Result<void> DeviceSession::sendPacket(const cbPKT_GENERIC& pkt) {
         return Result<void>::error("Session is not open");
     }
 
-    int bytes_sent = sendto(m_impl->socket,
-                           (const char*)&pkt,
-                           sizeof(cbPKT_GENERIC),
-                           0,
-                           (SOCKADDR*)&m_impl->send_addr,
-                           sizeof(m_impl->send_addr));
+    const int bytes_sent = sendto(
+        m_impl->socket,
+        (const char*)&pkt,
+        sizeof(cbPKT_GENERIC),
+        0,
+        reinterpret_cast<SOCKADDR *>(&m_impl->send_addr),
+        sizeof(m_impl->send_addr)
+    );
 
     if (bytes_sent == SOCKET_ERROR_VALUE) {
         std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
@@ -494,15 +496,14 @@ Result<void> DeviceSession::sendPacket(const cbPKT_GENERIC& pkt) {
     return Result<void>::ok();
 }
 
-Result<void> DeviceSession::sendPackets(const cbPKT_GENERIC* pkts, size_t count) {
+Result<void> DeviceSession::sendPackets(const cbPKT_GENERIC* pkts, const size_t count) {
     if (!pkts || count == 0) {
         return Result<void>::error("Invalid packet array");
     }
 
     // Send each packet individually
     for (size_t i = 0; i < count; ++i) {
-        auto result = sendPacket(pkts[i]);
-        if (result.isError()) {
+        if (auto result = sendPacket(pkts[i]); result.isError()) {
             return result;
         }
     }
@@ -510,7 +511,7 @@ Result<void> DeviceSession::sendPackets(const cbPKT_GENERIC* pkts, size_t count)
     return Result<void>::ok();
 }
 
-Result<bool> DeviceSession::pollPacket(cbPKT_GENERIC& pkt, int timeout_ms) {
+Result<bool> DeviceSession::pollPacket(cbPKT_GENERIC& pkt, const int timeout_ms) {
     if (!isOpen()) {
         return Result<bool>::error("Session is not open");
     }
@@ -525,8 +526,7 @@ Result<bool> DeviceSession::pollPacket(cbPKT_GENERIC& pkt, int timeout_ms) {
         tv.tv_sec = timeout_ms / 1000;
         tv.tv_usec = (timeout_ms % 1000) * 1000;
 
-        int ret = select(m_impl->socket + 1, &readfds, nullptr, nullptr, &tv);
-        if (ret == 0) {
+        if (const int ret = select(m_impl->socket + 1, &readfds, nullptr, nullptr, &tv); ret == 0) {
             // Timeout - no data available
             return Result<bool>::ok(false);
         } else if (ret < 0) {
@@ -580,7 +580,7 @@ Result<bool> DeviceSession::pollPacket(cbPKT_GENERIC& pkt, int timeout_ms) {
 /// Callback-Based Receive
 ///--------------------------------------------------------------------------------------------
 
-void DeviceSession::setPacketCallback(PacketCallback callback) {
+void DeviceSession::setPacketCallback(PacketCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
     m_impl->packet_callback = std::move(callback);
 }
@@ -645,10 +645,10 @@ Result<void> DeviceSession::startReceiveThread() {
 
             while (offset + HEADER_SIZE <= static_cast<size_t>(bytes_recv) && count < MAX_BATCH) {
                 // Peek at header to get packet size
-                cbPKT_HEADER* hdr = reinterpret_cast<cbPKT_HEADER*>(udp_buffer.get() + offset);
+                const auto* hdr = reinterpret_cast<cbPKT_HEADER*>(udp_buffer.get() + offset);
 
                 // Calculate actual packet size on wire: header + (dlen * 4 bytes)
-                size_t wire_pkt_size = HEADER_SIZE + (hdr->dlen * 4);
+                const size_t wire_pkt_size = HEADER_SIZE + (hdr->dlen * 4);
 
                 // Validate packet size
                 constexpr size_t MAX_DLEN = (MAX_PKT_SIZE - HEADER_SIZE) / 4;
@@ -692,7 +692,7 @@ Result<void> DeviceSession::startReceiveThread() {
     return Result<void>::ok();
 }
 
-void DeviceSession::stopReceiveThread() {
+void DeviceSession::stopReceiveThread() const {
     if (!m_impl->recv_thread_running.load()) {
         return;
     }
@@ -714,12 +714,12 @@ bool DeviceSession::isReceiveThreadRunning() const {
 /// Send Thread (for transmit queue)
 ///--------------------------------------------------------------------------------------------
 
-void DeviceSession::setTransmitCallback(TransmitCallback callback) {
+void DeviceSession::setTransmitCallback(TransmitCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->transmit_mutex);
     m_impl->transmit_callback = std::move(callback);
 }
 
-Result<void> DeviceSession::startSendThread() {
+Result<void> DeviceSession::startSendThread() const {
     if (!isOpen()) {
         return Result<void>::error("Session is not open");
     }
@@ -738,8 +738,7 @@ Result<void> DeviceSession::startSendThread() {
                 std::lock_guard<std::mutex> lock(m_impl->transmit_mutex);
                 if (m_impl->transmit_callback) {
                     while (true) {
-                        cbPKT_GENERIC pkt;
-                        std::memset(&pkt, 0, sizeof(pkt));  // Zero-initialize before use
+                        cbPKT_GENERIC pkt = {};
 
                         if (!m_impl->transmit_callback(pkt)) {
                             break;  // No more packets
@@ -749,15 +748,17 @@ Result<void> DeviceSession::startSendThread() {
                         // Calculate actual packet size from header
                         // Packet size in bytes = sizeof(header) + (dlen * 4)
                         // With 64-bit PROCTIME, header is 16 bytes (4 dwords)
-                        size_t packet_size = sizeof(cbPKT_HEADER) + (pkt.cbpkt_header.dlen * 4);
+                        const size_t packet_size = sizeof(cbPKT_HEADER) + (pkt.cbpkt_header.dlen * 4);
 
                         // Send the packet (only actual size, not full cbPKT_GENERIC)
-                        int bytes_sent = sendto(m_impl->socket,
-                                              (const char*)&pkt,
-                                              packet_size,
-                                              0,
-                                              (SOCKADDR*)&m_impl->send_addr,
-                                              sizeof(m_impl->send_addr));
+                        const int bytes_sent = sendto(
+                            m_impl->socket,
+                            (const char*)&pkt,
+                            packet_size,
+                            0,
+                            reinterpret_cast<SOCKADDR *>(&m_impl->send_addr),
+                            sizeof(m_impl->send_addr)
+                        );
 
                         if (bytes_sent == SOCKET_ERROR_VALUE) {
                             std::lock_guard<std::mutex> stats_lock(m_impl->stats_mutex);
@@ -789,7 +790,7 @@ Result<void> DeviceSession::startSendThread() {
     return Result<void>::ok();
 }
 
-void DeviceSession::stopSendThread() {
+void DeviceSession::stopSendThread() const {
     if (!m_impl->send_thread_running.load()) {
         return;
     }
