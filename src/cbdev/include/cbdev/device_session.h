@@ -210,7 +210,7 @@ public:
 
     /// Close the device session
     /// Stops receive thread if running and closes socket
-    void close();
+    void close() const;
 
     /// Check if session is open and ready for communication
     /// @return true if open and ready
@@ -284,7 +284,7 @@ public:
     [[nodiscard]] DeviceStats getStats() const;
 
     /// Reset statistics counters to zero
-    void resetStats();
+    void resetStats() const;
 
     ///--------------------------------------------------------------------------------------------
     /// Configuration Access
@@ -296,7 +296,7 @@ public:
 
     /// Set the autorun flag (must be called before connect())
     /// @param autorun true to perform handshake on connect, false to just request config
-    void setAutorun(bool autorun);
+    void setAutorun(bool autorun) const;
 
     ///--------------------------------------------------------------------------------------------
     /// Device Startup & Handshake
@@ -352,7 +352,7 @@ public:
     /// When using cbsdk (SdkSession), this allows DeviceSession to write config directly to
     /// shared memory without copying. When nullptr (default), DeviceSession uses internal storage.
     /// @param external_buffer Pointer to external config buffer (or nullptr for internal)
-    void setConfigBuffer(cbConfigBuffer* external_buffer);
+    void setConfigBuffer(cbConfigBuffer* external_buffer) const;
 
     /// Get the configuration buffer (internal or external)
     /// @return Pointer to the config buffer being used
@@ -365,7 +365,63 @@ public:
     /// Parse a configuration packet and update the config buffer
     /// This is called internally by the receive thread when config packets arrive.
     /// @param pkt The packet to parse
-    void parseConfigPacket(const cbPKT_GENERIC& pkt);
+    void parseConfigPacket(const cbPKT_GENERIC& pkt) const;
+
+    ///--------------------------------------------------------------------------------------------
+    /// Channel Configuration
+    ///--------------------------------------------------------------------------------------------
+
+    ///
+    uint32_t getSampleRate(uint32_t smpgroup);
+
+    /// Enable continuous output for a channel with specified sample group
+    /// 1-5 are mutually exclusive, 6 can be combined with any group other than 5
+    /// @param chid Channel ID (1-based)
+    /// @param smpgroup Sample group (1-6)
+    /// @return Result indicating success or error
+    Result<void> setChannelContinuous(uint32_t chid, uint32_t smpgroup);
+
+    /// Enable continuous output for all channels with specified sample group
+    /// 1-5 are mutually exclusive, 6 can be combined with any group other than 5
+    /// @param smpgroup Sample group (1-6)
+    /// @return Result indicating success or error
+    Result<void> setAllContinuous(uint32_t smpgroup);
+
+    /// Disable continuous output for a specific channel
+    /// @return Result indicating success or error
+    Result<void> disableChannelContinuous(uint32_t chid);
+
+    /// Disable continuous output for all channels
+    /// @return Result indicating success or error
+    Result<void> disableAllContinuous();
+
+    /// Disable spike output for all channels
+    /// @return Result indicating success or error
+    Result<void> enableChannelSpike(uint32_t chid);
+
+    /// Enable spike output for all channels
+    /// @return Result indicating success or error
+    Result<void> enableAllSpike();
+
+    /// Disable spike output for all channels
+    /// @return Result indicating success or error
+    Result<void> disableChannelSpike(uint32_t chid);
+
+    /// Disable spike output for all channels
+    /// @return Result indicating success or error
+    Result<void> disableAllSpike();
+
+    /// Disable both spike and continuous output for a channel
+    /// @param chid Channel ID (1-based)
+    /// @return Result indicating success or error
+    Result<void> disableChannel(uint32_t chid);
+
+    /// Disable all channels
+    /// @return Result indicating success or error
+    Result<void> disableAllChannels();
+
+    Result<void> getChanInfo(uint32_t chid, cbPKT_CHANINFO* pInfo) const;
+
 
 private:
     /// Private constructor (use create() factory method)
@@ -375,7 +431,7 @@ private:
     /// @param timeout_ms Maximum time to wait
     /// @param expected_runlevel If non-zero, wait for this specific runlevel
     /// @return true if SYSREP received (with expected runlevel if specified), false on timeout
-    bool waitForSysrep(uint32_t timeout_ms, uint32_t expected_runlevel = 0);
+    bool waitForSysrep(uint32_t timeout_ms, uint32_t expected_runlevel = 0) const;
 
     /// Platform-specific implementation
     struct Impl;
