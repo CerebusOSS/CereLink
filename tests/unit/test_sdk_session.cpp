@@ -49,7 +49,7 @@ TEST_F(SdkSessionTest, Config_Default) {
 
     EXPECT_EQ(config.device_type, DeviceType::LEGACY_NSP);
     EXPECT_EQ(config.callback_queue_depth, 16384);
-    EXPECT_TRUE(config.auto_run);  // Default is to auto-run (full handshake)
+    EXPECT_TRUE(config.autorun);  // Default is to auto-run (full handshake)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -59,7 +59,7 @@ TEST_F(SdkSessionTest, Config_Default) {
 TEST_F(SdkSessionTest, Create_Standalone_Loopback) {
     SdkConfig config;
     config.device_type = DeviceType::NPLAY;  // Loopback device
-    config.auto_run = false;  // Don't auto-run (test mode)
+    config.autorun = false;  // Don't auto-run (test mode)
 
     auto result = SdkSession::create(config);
     ASSERT_TRUE(result.isOk()) << "Error: " << result.error();
@@ -71,7 +71,7 @@ TEST_F(SdkSessionTest, Create_Standalone_Loopback) {
 TEST_F(SdkSessionTest, Create_MoveConstruction) {
     SdkConfig config;
     config.device_type = DeviceType::NPLAY;
-    config.auto_run = false;
+    config.autorun = false;
 
     auto result = SdkSession::create(config);
     ASSERT_TRUE(result.isOk());
@@ -88,7 +88,7 @@ TEST_F(SdkSessionTest, Create_MoveConstruction) {
 TEST_F(SdkSessionTest, StartStop) {
     SdkConfig config;
     config.device_type = DeviceType::NPLAY;
-    config.auto_run = false;
+    config.autorun = false;
 
     auto result = SdkSession::create(config);
     ASSERT_TRUE(result.isOk());
@@ -109,7 +109,7 @@ TEST_F(SdkSessionTest, StartStop) {
 TEST_F(SdkSessionTest, StartTwice_Error) {
     SdkConfig config;
     config.device_type = DeviceType::NPLAY;
-    config.auto_run = false;
+    config.autorun = false;
 
     auto result = SdkSession::create(config);
     ASSERT_TRUE(result.isOk());
@@ -133,7 +133,7 @@ TEST_F(SdkSessionTest, StartTwice_Error) {
 TEST_F(SdkSessionTest, SetCallbacks) {
     SdkConfig config;
     config.device_type = DeviceType::NPLAY;
-    config.auto_run = false;
+    config.autorun = false;
 
     auto result = SdkSession::create(config);
     ASSERT_TRUE(result.isOk());
@@ -160,7 +160,7 @@ TEST_F(SdkSessionTest, ReceivePackets_Loopback) {
     // Create SDK session (receiver)
     SdkConfig config;
     config.device_type = DeviceType::NPLAY;
-    config.auto_run = false;
+    config.autorun = false;
 
     auto result = SdkSession::create(config);
     ASSERT_TRUE(result.isOk());
@@ -211,7 +211,7 @@ TEST_F(SdkSessionTest, ReceivePackets_Loopback) {
 TEST_F(SdkSessionTest, Statistics_InitiallyZero) {
     SdkConfig config;
     config.device_type = DeviceType::NPLAY;
-    config.auto_run = false;
+    config.autorun = false;
 
     auto result = SdkSession::create(config);
     ASSERT_TRUE(result.isOk());
@@ -229,7 +229,7 @@ TEST_F(SdkSessionTest, Statistics_InitiallyZero) {
 TEST_F(SdkSessionTest, Statistics_ResetStats) {
     SdkConfig config;
     config.device_type = DeviceType::NPLAY;
-    config.auto_run = false;
+    config.autorun = false;
 
     auto result = SdkSession::create(config);
     ASSERT_TRUE(result.isOk());
@@ -257,7 +257,7 @@ TEST_F(SdkSessionTest, GetConfig) {
     SdkConfig config;
     config.device_type = DeviceType::NPLAY;
     config.callback_queue_depth = 8192;
-    config.auto_run = false;
+    config.autorun = false;
 
     auto result = SdkSession::create(config);
     ASSERT_TRUE(result.isOk()) << "Error: " << result.error();

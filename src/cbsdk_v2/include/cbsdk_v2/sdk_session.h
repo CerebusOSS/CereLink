@@ -181,7 +181,7 @@ struct SdkConfig {
     // Advanced options
     int recv_buffer_size = 6000000;           ///< UDP receive buffer (6MB)
     bool non_blocking = false;                ///< Non-blocking sockets (false = blocking, better for dedicated receive thread)
-    bool auto_run = true;                     ///< Automatically start device (full handshake). If false, only requests configuration.
+    bool autorun = true;                     ///< Automatically start device (full handshake). If false, only requests configuration.
 
     // Optional custom device configuration (overrides device_type mapping)
     // Used rarely for non-standard network configurations
@@ -373,8 +373,8 @@ public:
 
     /// Perform complete device startup handshake sequence
     /// Transitions the device from any state to RUNNING. This is automatically called during
-    /// create() when config.auto_run = true. Users can call this manually after create()
-    /// with config.auto_run = false to start the device on demand.
+    /// create() when config.autorun = true. Users can call this manually after create()
+    /// with config.autorun = false to start the device on demand.
     ///
     /// Startup sequence:
     /// 1. Quick presence check (100ms) - fails fast if device not reachable

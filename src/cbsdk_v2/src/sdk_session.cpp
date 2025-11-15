@@ -414,7 +414,7 @@ Result<void> SdkSession::start() {
         });
 
         // Set device autorun flag from our config
-        m_impl->device_session->setAutorun(m_impl->config.auto_run);
+        m_impl->device_session->setAutorun(m_impl->config.autorun);
 
         // Start device send thread
         auto send_result = m_impl->device_session->startSendThread();
