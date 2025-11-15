@@ -1087,7 +1087,26 @@ void DeviceSession::setAutorun(const bool autorun) {
 /// Device Startup & Handshake
 ///--------------------------------------------------------------------------------------------
 
-Result<void> DeviceSession::setSystemRunLevel(const uint32_t runlevel, const uint32_t resetque, const uint32_t runflags) {
+bool DeviceSession::waitForSysrep(const uint32_t timeout_ms, const uint32_t expected_runlevel) {
+    // Wait for SYSREP packet with optional expected runlevel
+    // If expected_runlevel is 0, accept any SYSREP
+    // If expected_runlevel is non-zero, wait for that specific runlevel
+    std::unique_lock<std::mutex> lock(m_impl->handshake_mutex);
+    return m_impl->handshake_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms),
+        [this, expected_runlevel] {
+            if (!m_impl->received_sysrep.load(std::memory_order_acquire)) {
+                return false;  // Haven't received SYSREP yet
+            }
+            if (expected_runlevel == 0) {
+                return true;  // Any SYSREP is acceptable
+            }
+            // Check if we got the expected runlevel
+            const uint32_t current = m_impl->device_runlevel.load(std::memory_order_acquire);
+            return current == expected_runlevel;
+        });
+}
+
+Result<void> DeviceSession::setSystemRunLevel(const uint32_t runlevel, const uint32_t resetque, const uint32_t runflags, const uint32_t wait_for_runlevel, const uint32_t timeout_ms) {
     // Create runlevel command packet
     cbPKT_SYSINFO sysinfo = {};
 
@@ -1107,10 +1126,28 @@ Result<void> DeviceSession::setSystemRunLevel(const uint32_t runlevel, const uin
     cbPKT_GENERIC pkt;
     std::memcpy(&pkt, &sysinfo, sizeof(sysinfo));
 
-    return sendPacket(pkt);
+    // Reset handshake state before sending
+    m_impl->received_sysrep.store(false, std::memory_order_relaxed);
+
+    // Send the packet
+    auto result = sendPacket(pkt);
+    if (result.isError()) {
+        return result;
+    }
+
+    // Wait for SYSREP response (synchronous behavior)
+    // wait_for_runlevel: 0 = any SYSREP, non-zero = wait for specific runlevel
+    if (!waitForSysrep(timeout_ms, wait_for_runlevel)) {
+        if (wait_for_runlevel != 0) {
+            return Result<void>::error("No SYSREP response with expected runlevel " + std::to_string(wait_for_runlevel));
+        }
+        return Result<void>::error("No SYSREP response received for setSystemRunLevel");
+    }
+
+    return Result<void>::ok();
 }
 
-Result<void> DeviceSession::requestConfiguration() {
+Result<void> DeviceSession::requestConfiguration(const uint32_t timeout_ms) {
     // Create REQCONFIGALL packet
     cbPKT_GENERIC pkt = {};
 
@@ -1121,7 +1158,22 @@ Result<void> DeviceSession::requestConfiguration() {
     pkt.cbpkt_header.dlen = 0;  // No payload
     pkt.cbpkt_header.instrument = 0;
 
-    return sendPacket(pkt);
+    // Reset handshake state before sending
+    m_impl->received_sysrep.store(false, std::memory_order_relaxed);
+
+    // Send the packet
+    auto result = sendPacket(pkt);
+    if (result.isError()) {
+        return result;
+    }
+
+    // Wait for final SYSREP packet from config flood (synchronous behavior)
+    // The device sends many config packets and finishes with a SYSREP containing current runlevel
+    if (!waitForSysrep(timeout_ms)) {
+        return Result<void>::error("No SYSREP response received for requestConfiguration");
+    }
+
+    return Result<void>::ok();
 }
 
 Result<void> DeviceSession::performStartupHandshake(const uint32_t timeout_ms) {
@@ -1141,33 +1193,9 @@ Result<void> DeviceSession::performStartupHandshake(const uint32_t timeout_ms) {
     // Quick presence check - use shorter timeout to fail fast for non-existent devices
     const uint32_t presence_check_timeout = std::min(100u, timeout_ms);
 
-    // Helper lambda to wait for SYSREP with optional expected runlevel
-    // If expected_runlevel is provided, waits for that specific runlevel
-    // If not provided (0), waits for any SYSREP
-    auto waitForSysrep = [this](const uint32_t timeout_ms_, uint32_t expected_runlevel = 0) -> bool {
-        std::unique_lock<std::mutex> lock(m_impl->handshake_mutex);
-        return m_impl->handshake_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms_),
-            [this, expected_runlevel] {
-                if (!(m_impl->received_sysrep.load(std::memory_order_acquire))) {
-                    return false;  // Haven't received SYSREP yet
-                }
-                if (expected_runlevel == 0) {
-                    return true;  // Any SYSREP is acceptable
-                }
-                // Check if we got the expected runlevel
-                const uint32_t current = m_impl->device_runlevel.load(std::memory_order_acquire);
-                return current == expected_runlevel;
-            });
-    };
-
-    // Step 1: Quick presence check - send cbRUNLEVEL_RUNNING with short timeout
-    Result<void> result = setSystemRunLevel(cbRUNLEVEL_RUNNING);
+    // Step 1: Quick presence check - send cbRUNLEVEL_RUNNING with short timeout to fail fast
+    Result<void> result = setSystemRunLevel(cbRUNLEVEL_RUNNING, 0, 0, 0, presence_check_timeout);
     if (result.isError()) {
-        return Result<void>::error("Failed to send RUNNING command: " + result.error());
-    }
-
-    // Wait for SYSREP response with short timeout - fail fast if device not reachable
-    if (!waitForSysrep(presence_check_timeout)) {
         // No response - device not on network
         return Result<void>::error("Device not reachable (no response to initial probe - check network connection and IP address)");
     }
@@ -1178,30 +1206,19 @@ Result<void> DeviceSession::performStartupHandshake(const uint32_t timeout_ms) {
         goto request_config;
     }
 
-    // Step 3: Device responded but not running - send HARDRESET
-    m_impl->received_sysrep.store(false, std::memory_order_relaxed);
-    result = setSystemRunLevel(cbRUNLEVEL_HARDRESET);
+    // Step 3: Device responded but not running - send HARDRESET and wait for STANDBY
+    // Device responds with HARDRESET, then STANDBY
+    result = setSystemRunLevel(cbRUNLEVEL_HARDRESET, 0, 0, cbRUNLEVEL_STANDBY, timeout_ms);
     if (result.isError()) {
         return Result<void>::error("Failed to send HARDRESET command: " + result.error());
     }
 
-    // Wait for device to respond with STANDBY (device responds with HARDRESET, then STANDBY)
-    if (!waitForSysrep(timeout_ms, cbRUNLEVEL_STANDBY)) {
-        return Result<void>::error("Device not responding to HARDRESET (no STANDBY runlevel received)");
-    }
-
 request_config:
     // Step 4: Request all configuration (always performed)
-    m_impl->received_sysrep.store(false, std::memory_order_relaxed);
-    result = requestConfiguration();
+    // requestConfiguration() waits internally for final SYSREP
+    result = requestConfiguration(timeout_ms);
     if (result.isError()) {
         return Result<void>::error("Failed to send REQCONFIGALL: " + result.error());
-    }
-
-    // Wait for final SYSREP packet from config flood
-    // The device sends many config packets and finishes with a SYSREP containing current runlevel
-    if (!waitForSysrep(timeout_ms)) {
-        return Result<void>::error("Device not responding to REQCONFIGALL (no final SYSREP received)");
     }
 
     // Step 5: Get current runlevel and transition to RUNNING if needed
@@ -1211,15 +1228,9 @@ request_config:
         // Send RESET to complete handshake
         // Device is in STANDBY (30) after REQCONFIGALL - send RESET which transitions to RUNNING (50)
         // The device responds first with RESET, then on next iteration with RUNNING
-        m_impl->received_sysrep.store(false, std::memory_order_relaxed);
-        result = setSystemRunLevel(cbRUNLEVEL_RESET);
+        result = setSystemRunLevel(cbRUNLEVEL_RESET, 0, 0, cbRUNLEVEL_RUNNING, timeout_ms);
         if (result.isError()) {
             return Result<void>::error("Failed to send RESET command: " + result.error());
-        }
-
-        // Wait for device to transition to RUNNING runlevel
-        if (!waitForSysrep(timeout_ms, cbRUNLEVEL_RUNNING)) {
-            return Result<void>::error("Device not responding to RESET command (no RUNNING runlevel received)");
         }
     }
 
@@ -1234,9 +1245,9 @@ Result<void> DeviceSession::connect(const uint32_t timeout_ms) {
         return result;
     }
 
-    // Step 2: Perform startup handshake or request configuration based on autorun flag
+    // Step 2: Perform startup handshake based on autorun flag
     if (m_impl->config.autorun) {
-        // Fully start device to RUNNING state
+        // Fully start device to RUNNING state (includes requestConfiguration)
         result = performStartupHandshake(timeout_ms);
         if (result.isError()) {
             return Result<void>::error("Handshake failed: " + result.error());

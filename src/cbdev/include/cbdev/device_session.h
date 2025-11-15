@@ -242,6 +242,8 @@ public:
 
     /// Start asynchronous receive thread
     /// Packets will be delivered via callback set by setPacketCallback()
+    /// NOTE: Prefer using connect() which starts receive thread,
+    /// optionally performs handshake, and requests configuration in one step.
     /// @return Result indicating success or error
     Result<void> startReceiveThread();
 
@@ -300,18 +302,23 @@ public:
     /// Device Startup & Handshake
     ///--------------------------------------------------------------------------------------------
 
-    /// Send a runlevel command packet to the device
+    /// Send a runlevel command packet to the device (synchronous)
+    /// Waits for SYSREP response before returning
     /// @param runlevel Desired runlevel (cbRUNLEVEL_*)
     /// @param resetque Channel for reset to queue on (default: 0)
     /// @param runflags Lock recording after reset (default: 0)
+    /// @param wait_for_runlevel If non-zero, wait for this specific runlevel (default: 0 = any SYSREP)
+    /// @param timeout_ms Maximum time to wait for response (default: 500ms)
     /// @return Result indicating success or error
-    Result<void> setSystemRunLevel(uint32_t runlevel, uint32_t resetque = 0, uint32_t runflags = 0);
+    Result<void> setSystemRunLevel(uint32_t runlevel, uint32_t resetque = 0, uint32_t runflags = 0, uint32_t wait_for_runlevel = 0, uint32_t timeout_ms = 500);
 
-    /// Request all configuration from the device
-    /// Sends cbPKTTYPE_REQCONFIGALL which triggers the device to send all config packets
-    /// The device will respond with > 1000 packets (PROCINFO, CHANINFO, etc.)
+    /// Request all configuration from the device (synchronous)
+    /// Sends cbPKTTYPE_REQCONFIGALL which triggers the device to send all config packets.
+    /// The device will respond with > 1000 packets (PROCINFO, CHANINFO, etc.) and finish with a SYSREP.
+    /// Waits for the final SYSREP response before returning.
+    /// @param timeout_ms Maximum time to wait for response (default: 500ms)
     /// @return Result indicating success or error
-    Result<void> requestConfiguration();
+    Result<void> requestConfiguration(uint32_t timeout_ms = 500);
 
     /// Perform complete device startup handshake sequence
     /// Transitions the device from any state to RUNNING. Call this after create() to start the device.
@@ -363,6 +370,12 @@ public:
 private:
     /// Private constructor (use create() factory method)
     DeviceSession();
+
+    /// Wait for SYSREP packet with optional expected runlevel
+    /// @param timeout_ms Maximum time to wait
+    /// @param expected_runlevel If non-zero, wait for this specific runlevel
+    /// @return true if SYSREP received (with expected runlevel if specified), false on timeout
+    bool waitForSysrep(uint32_t timeout_ms, uint32_t expected_runlevel = 0);
 
     /// Platform-specific implementation
     struct Impl;
