@@ -9,6 +9,7 @@ project(cbdev
 # Library sources
 set(CBDEV_SOURCES
     src/device_session.cpp
+    src/protocol_detector.cpp
 )
 
 # Build as STATIC library
