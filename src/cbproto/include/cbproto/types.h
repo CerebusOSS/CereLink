@@ -156,6 +156,7 @@ typedef int16_t A2D_DATA;
 #define cbLEN_STR_FILT_LABEL    16      ///< Length of filter label string
 #define cbLEN_STR_IDENT         64      ///< Length of identity string
 #define cbLEN_STR_COMMENT       256     ///< Length of comment string
+#define cbMAX_COMMENT           128     ///< Maximum comment length (must be multiple of 4)
 
 /// @}
 
@@ -197,6 +198,35 @@ typedef struct {
         uint32_t data_u32[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE) / 4];  ///< Data as uint32_t array
     };
 } cbPKT_GENERIC;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Old Packet Header and Generic (for CCF file compatibility)
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 385-420
+/// @{
+
+/// @brief Old Cerebus packet header data structure
+///
+/// This is used to read old CCF files
+typedef struct {
+    uint32_t time;    ///< system clock timestamp
+    uint16_t chid;    ///< channel identifier
+    uint8_t  type;    ///< packet type
+    uint8_t  dlen;    ///< length of data field in 32-bit chunks
+} cbPKT_HEADER_OLD;
+
+#define cbPKT_HEADER_SIZE_OLD       sizeof(cbPKT_HEADER_OLD)    ///< define the size of the old packet header in bytes
+
+/// @brief Old Generic Cerebus packet data structure (1024 bytes total)
+///
+/// This is used to read old CCF files
+typedef struct {
+    cbPKT_HEADER_OLD cbpkt_header;
+
+    uint32_t data[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE_OLD) / 4];   ///< data buffer (up to 1016 bytes)
+} cbPKT_GENERIC_OLD;
 
 /// @}
 
@@ -687,6 +717,18 @@ typedef struct {
 /// Ground truth from upstream/cbproto/cbproto.h
 /// @{
 
+#define cbPKTTYPE_SYSHEARTBEAT    0x00
+#define cbPKTDLEN_SYSHEARTBEAT    ((sizeof(cbPKT_SYSHEARTBEAT)/4) - cbPKT_HEADER_32SIZE)
+#define HEARTBEAT_MS              10
+
+/// @brief PKT Set:N/A  Rep:0x00 - System Heartbeat packet
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 903-914
+/// This is sent every 10ms
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+} cbPKT_SYSHEARTBEAT;
+
 /// @brief PKT Set:0x92 Rep:0x12 - System info
 ///
 /// Contains system information including the runlevel
@@ -702,6 +744,26 @@ typedef struct {
 } cbPKT_SYSINFO;
 
 #define cbPKTDLEN_SYSINFO       ((sizeof(cbPKT_SYSINFO)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief Old system info packet
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1086-1099
+/// Used for backward compatibility with old CCF files
+#define cbPKTDLEN_OLDSYSINFO       ((sizeof(cbPKT_OLDSYSINFO)/4) - 2)
+
+typedef struct {
+    uint32_t time;        ///< system clock timestamp
+    uint16_t chid;        ///< 0x8000
+    uint8_t type;      ///< PKTTYPE_SYS*
+    uint8_t dlen;      ///< cbPKT_OLDSYSINFODLEN
+
+    uint32_t sysfreq;     ///< System clock frequency in Hz
+    uint32_t spikelen;    ///< The length of the spike events
+    uint32_t spikepre;    ///< Spike pre-trigger samples
+    uint32_t resetque;    ///< The channel for the reset to que on
+    uint32_t runlevel;    ///< System runlevel
+    uint32_t runflags;
+} cbPKT_OLDSYSINFO;
 
 /// @brief PKT Set:N/A  Rep:0x01 - System protocol monitor
 ///
@@ -720,6 +782,79 @@ typedef struct {
 } cbPKT_SYSPROTOCOLMONITOR;
 
 #define cbPKTDLEN_SYSPROTOCOLMONITOR    ((sizeof(cbPKT_SYSPROTOCOLMONITOR)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xB1 Rep:0x31 - Comment annotation packet
+///
+/// This packet injects a comment into the data stream which gets recorded in the file and displayed on Raster.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  //!< packet header
+
+    struct {
+        uint8_t   charset;        //!< Character set (0 - ANSI, 1 - UTF16, 255 - NeuroMotive ANSI)
+        uint8_t   reserved[3];    //!< Reserved (must be 0)
+    } info;
+    PROCTIME timeStarted;       //!< Start time of when the user started typing the comment
+    uint32_t  rgba;               //!< rgba to color the comment
+    char   comment[cbMAX_COMMENT]; //!< Comment
+} cbPKT_COMMENT;
+
+#define cbPKTDLEN_COMMENT       ((sizeof(cbPKT_COMMENT)/4) - cbPKT_HEADER_32SIZE)
+#define cbPKTDLEN_COMMENTSHORT  (cbPKTDLEN_COMMENT - ((sizeof(uint8_t)*cbMAX_COMMENT)/4))
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Preview Packets
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 2039-2084
+/// @{
+
+// PCA collection states
+#define cbPCA_START_COLLECTION            0  ///< start collecting samples
+#define cbPCA_START_BASIS                 1  ///< start basis calculation
+#define cbPCA_MANUAL_LAST_SAMPLE          2  ///< the manual-only PCA, samples at zero, calculates PCA basis at 1 and stops at 2
+
+// Stream preview flags
+#define cbSTREAMPREV_NONE               0x00000000
+#define cbSTREAMPREV_PCABASIS_NONEMPTY  0x00000001
+
+#define cbPKTTYPE_PREVREPSTREAM  0x02
+#define cbPKTDLEN_PREVREPSTREAM  ((sizeof(cbPKT_STREAMPREV)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief Preview packet
+///
+/// Sends preview of various data points. This is sent every 10ms
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    int16_t  rawmin;      ///< minimum raw channel value over last preview period
+    int16_t  rawmax;      ///< maximum raw channel value over last preview period
+    int16_t  smpmin;      ///< minimum sample channel value over last preview period
+    int16_t  smpmax;      ///< maximum sample channel value over last preview period
+    int16_t  spkmin;      ///< minimum spike channel value over last preview period
+    int16_t  spkmax;      ///< maximum spike channel value over last preview period
+    uint32_t spkmos;      ///< mean of squares
+    uint32_t eventflag;   ///< flag to detail the units that happend in the last sample period
+    int16_t  envmin;      ///< minimum envelope channel value over the last preview period
+    int16_t  envmax;      ///< maximum envelope channel value over the last preview period
+    int32_t  spkthrlevel; ///< preview of spike threshold level
+    uint32_t nWaveNum;    ///< this tracks the number of waveforms collected in the WCM for each channel
+    uint32_t nSampleRows; ///< tracks number of sample vectors of waves
+    uint32_t nFlags;      ///< cbSTREAMPREV_*
+} cbPKT_STREAMPREV;
+
+#define cbPKTTYPE_PREVREPLNC    0x04
+#define cbPKTDLEN_PREVREPLNC    ((sizeof(cbPKT_LNCPREV)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief Preview packet - Line Noise preview
+///
+/// Sends a preview of the line noise waveform.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t freq;        ///< Estimated line noise frequency * 1000 (zero means not valid)
+    int16_t  wave[300];   ///< lnc cancellation waveform (downsampled by 2)
+} cbPKT_LNCPREV;
 
 /// @}
 
@@ -907,6 +1042,20 @@ typedef struct {
     ///< wave must be the last item in the structure because it can be variable length to a max of cbMAX_PNTS
 } cbPKT_SPK;
 
+/// @brief Gyro Data packet - Gyro input data value.
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 890-901
+/// This packet is sent when gyro data has changed.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint8_t gyroscope[4];       ///< X, Y, Z values read from the gyroscope, last byte set to zero
+    uint8_t accelerometer[4];   ///< X, Y, Z values read from the accelerometer, last byte set to zero
+    uint8_t magnetometer[4];    ///< X, Y, Z values read from the magnetometer, last byte set to zero
+    uint16_t temperature;       ///< temperature data
+    uint16_t reserved;          ///< set to zero
+} cbPKT_GYRO;
+
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -982,6 +1131,59 @@ typedef struct
     int32_t  lastchan;         ///< Which channel was clicked last.
     uint16_t   abyUnitSelections[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - sizeof(int32_t))];     ///< one for each channel, channels are 0 based here, shows units selected
 } cbPKT_UNIT_SELECTION;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Channel Reset
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1264-1308
+/// @{
+
+#define cbPKTTYPE_CHANRESETREP  0x24        ///< NSP->PC response...ignore all values
+#define cbPKTTYPE_CHANRESET     0xA4        ///< PC->NSP request
+#define cbPKTDLEN_CHANRESET ((sizeof(cbPKT_CHANRESET) / 4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xA4 Rep:0x24 - Channel reset packet
+///
+/// This resets various aspects of a channel.  For each member, 0 doesn't change the value, any non-zero value resets
+/// the property to factory defaults
+/// This is currently not used in the system.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t chan;           ///< actual channel id of the channel being configured
+
+    // For all of the values that follow
+    // 0 = NOT change value; nonzero = reset to factory defaults
+
+    uint8_t  label;          ///< Channel label
+    uint8_t  userflags;      ///< User flags for the channel state
+    uint8_t  position;       ///< reserved for future position information
+    uint8_t  scalin;         ///< user-defined scaling information
+    uint8_t  scalout;        ///< user-defined scaling information
+    uint8_t  doutopts;       ///< digital output options (composed of cbDOUT_* flags)
+    uint8_t  dinpopts;       ///< digital input options (composed of cbDINP_* flags)
+    uint8_t  aoutopts;       ///< analog output options
+    uint8_t  eopchar;        ///< the end of packet character
+    uint8_t  moninst;        ///< instrument number of channel to monitor
+    uint8_t  monchan;        ///< channel to monitor
+    uint8_t  outvalue;       ///< output value
+    uint8_t  ainpopts;       ///< analog input options (composed of cbAINP_* flags)
+    uint8_t  lncrate;        ///< line noise cancellation filter adaptation rate
+    uint8_t  smpfilter;      ///< continuous-time pathway filter id
+    uint8_t  smpgroup;       ///< continuous-time pathway sample group
+    uint8_t  smpdispmin;     ///< continuous-time pathway display factor
+    uint8_t  smpdispmax;     ///< continuous-time pathway display factor
+    uint8_t  spkfilter;      ///< spike pathway filter id
+    uint8_t  spkdispmax;     ///< spike pathway display factor
+    uint8_t  lncdispmax;     ///< Line Noise pathway display factor
+    uint8_t  spkopts;        ///< spike processing options
+    uint8_t  spkthrlevel;    ///< spike threshold level
+    uint8_t  spkthrlimit;    ///<
+    uint8_t  spkgroup;       ///< NTrodeGroup this electrode belongs to - 0 is single unit, non-0 indicates a multi-trode grouping
+    uint8_t  spkhoops;       ///< spike hoop sorting set
+} cbPKT_CHANRESET;
 
 /// @}
 
@@ -1071,6 +1273,31 @@ typedef struct
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Video Synchronization
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1113-1128
+/// @{
+
+#define cbPKTTYPE_VIDEOSYNCHREP   0x29  ///< NSP->PC response
+#define cbPKTTYPE_VIDEOSYNCHSET   0xA9  ///< PC->NSP request
+#define cbPKTDLEN_VIDEOSYNCH  ((sizeof(cbPKT_VIDEOSYNCH)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xA9 Rep:0x29 - Video/external synchronization packet.
+///
+/// This packet comes from NeuroMotive through network or RS232
+/// then is transmitted to the Central after spike or LFP packets to stamp them.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint16_t split;      ///< file split number of the video file
+    uint32_t frame;      ///< frame number in last video
+    uint32_t etime;      ///< capture elapsed time (in milliseconds)
+    uint16_t id;         ///< video source id
+} cbPKT_VIDEOSYNCH;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name File Configuration
 ///
 /// Ground truth from upstream/cbproto/cbproto.h lines 1550-1584
@@ -1118,6 +1345,162 @@ typedef struct {
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Log Packet
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1008-1037
+/// @{
+
+// Log modes
+#define cbLOG_MODE_NONE         0   ///< Normal log
+#define cbLOG_MODE_CRITICAL     1   ///< Critical log
+#define cbLOG_MODE_RPC          2   ///< PC->NSP: Remote Procedure Call (RPC)
+#define cbLOG_MODE_PLUGINFO     3   ///< NSP->PC: Plugin information
+#define cbLOG_MODE_RPC_RES      4   ///< NSP->PC: Remote Procedure Call Results
+#define cbLOG_MODE_PLUGINERR    5   ///< NSP->PC: Plugin error information
+#define cbLOG_MODE_RPC_END      6   ///< NSP->PC: Last RPC packet
+#define cbLOG_MODE_RPC_KILL     7   ///< PC->NSP: terminate last RPC
+#define cbLOG_MODE_RPC_INPUT    8   ///< PC->NSP: RPC command input
+#define cbLOG_MODE_UPLOAD_RES   9   ///< NSP->PC: Upload result
+#define cbLOG_MODE_ENDPLUGIN   10   ///< PC->NSP: Signal the plugin to end
+#define cbLOG_MODE_NSP_REBOOT  11   ///< PC->NSP: Reboot the NSP
+
+#define cbMAX_LOG          130  ///< Maximum log description
+#define cbPKTTYPE_LOGREP   0x63 ///< NPLAY->PC response
+#define cbPKTTYPE_LOGSET   0xE3 ///< PC->NPLAY request
+#define cbPKTDLEN_LOG    ((sizeof(cbPKT_LOG)/4) - cbPKT_HEADER_32SIZE)
+#define cbPKTDLEN_LOGSHORT    (cbPKTDLEN_LOG - ((sizeof(char)*cbMAX_LOG)/4)) ///< All but description
+
+/// @brief PKT Set:0xE3 Rep:0x63 - Log packet
+///
+/// Similar to the comment packet but used for internal NSP events and extension communication.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint16_t mode;        ///< log mode (cbLOG_MODE_*)
+    char   name[cbLEN_STR_LABEL];  ///< Logger source name (Computer name, Plugin name, ...)
+    char   desc[cbMAX_LOG];        ///< description of the change (will fill the rest of the packet)
+} cbPKT_LOG;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Patient Information
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1586-1605
+/// @{
+
+#define cbMAX_PATIENTSTRING  128     ///< Maximum patient string length
+
+#define cbPKTTYPE_REPPATIENTINFO 0x64
+#define cbPKTTYPE_SETPATIENTINFO 0xE4
+#define cbPKTDLEN_PATIENTINFO ((sizeof(cbPKT_PATIENTINFO)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xE4 Rep:0x64 - Patient information packet.
+///
+/// This can be used to externally set the patient information of a file.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    char   ID[cbMAX_PATIENTSTRING];         ///< Patient identification
+    char   firstname[cbMAX_PATIENTSTRING];  ///< Patient first name
+    char   lastname[cbMAX_PATIENTSTRING];   ///< Patient last name
+    uint32_t DOBMonth;    ///< Patient birth month
+    uint32_t DOBDay;      ///< Patient birth day
+    uint32_t DOBYear;     ///< Patient birth year
+} cbPKT_PATIENTINFO;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Impedance Packets (Deprecated)
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1607-1659
+/// @{
+
+#define cbPKTTYPE_REPIMPEDANCE   0x65
+#define cbPKTTYPE_SETIMPEDANCE   0xE5
+#define cbPKTDLEN_IMPEDANCE ((sizeof(cbPKT_IMPEDANCE)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief *Deprecated* Send impedance data
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    float  data[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE) / sizeof(float)];  ///< variable length address list
+} cbPKT_IMPEDANCE;
+
+#define cbPKTTYPE_REPINITIMPEDANCE   0x66
+#define cbPKTTYPE_SETINITIMPEDANCE   0xE6
+#define cbPKTDLEN_INITIMPEDANCE ((sizeof(cbPKT_INITIMPEDANCE)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief *Deprecated* Initiate impedance calculations
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t initiate;    ///< on set call -> 1 to start autoimpedance
+                        ///< on response -> 1 initiated
+} cbPKT_INITIMPEDANCE;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Poll Packet (Deprecated)
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1619-1645
+/// @{
+
+// Poll packet command
+#define cbPOLL_MODE_NONE            0   ///< no command (parameters)
+#define cbPOLL_MODE_APPSTATUS       1   ///< Poll or response to poll about the status of an application
+
+// Poll packet status flags
+#define cbPOLL_FLAG_NONE            0   ///< no flag (parameters)
+#define cbPOLL_FLAG_RESPONSE        1   ///< Response to the query
+
+// Extra information
+#define cbPOLL_EXT_NONE             0   ///< No extra information
+#define cbPOLL_EXT_EXISTS           1   ///< App exists
+#define cbPOLL_EXT_RUNNING          2   ///< App is running
+
+#define cbPKTTYPE_REPPOLL   0x67
+#define cbPKTTYPE_SETPOLL   0xE7
+#define cbPKTDLEN_POLL ((sizeof(cbPKT_POLL)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief *Deprecated* Poll for packet mechanism
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t  mode;          ///< any of cbPOLL_MODE_* commands
+    uint32_t  flags;         ///< any of the cbPOLL_FLAG_* status
+    uint32_t  extra;         ///< Extra parameters depending on flags and mode
+    char    appname[32];   ///< name of program to apply command specified by mode
+    char    username[256]; ///< return your computername
+    uint32_t  res[32];       ///< reserved for the future
+} cbPKT_POLL;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Map File Configuration
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1661-1673
+/// @{
+
+#define cbPKTTYPE_REPMAPFILE 0x68
+#define cbPKTTYPE_SETMAPFILE 0xE8
+#define cbPKTDLEN_MAPFILE ((sizeof(cbPKT_MAPFILE)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xE8 Rep:0x68 - Map file
+///
+/// Sets the mapfile for applications that use a mapfile so they all display similarly.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    char   filename[512];   ///< filename of the mapfile to use
+} cbPKT_MAPFILE;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Spike Sorting Packets
 ///
 /// Ground truth from upstream/cbproto/cbproto.h lines 1690-1849
@@ -1138,6 +1521,18 @@ typedef struct {
 // Spike sorting mode commands
 #define cbAUTOALG_MODE_SETTING         0   ///< Change the settings and leave sorting the same (PC->NSP request)
 #define cbAUTOALG_MODE_APPLY           1   ///< Change settings and apply this sorting to all channels (PC->NSP request)
+
+// SS Model All constants
+#define cbPKTTYPE_SS_MODELALLREP   0x50        ///< NSP->PC response
+#define cbPKTTYPE_SS_MODELALLSET   0xD0        ///< PC->NSP request
+#define cbPKTDLEN_SS_MODELALLSET ((sizeof(cbPKT_SS_MODELALLSET) / 4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xD0 Rep:0x50 - Get the spike sorting model for all channels (Histogram Peak Count)
+///
+/// This packet says, "Give me all of the model". In response, you will get a series of cbPKTTYPE_MODELREP
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+} cbPKT_SS_MODELALLSET;
 
 // SS Model constants
 #define cbPKTTYPE_SS_MODELREP      0x51        ///< NSP->PC response
@@ -1264,13 +1659,31 @@ typedef struct {
     cbAdaptControl cntlNumUnits;    ///<
 } cbPKT_SS_STATUS;
 
-/// @}
+// SS Reset constants
+#define cbPKTTYPE_SS_RESETREP       0x56        ///< NSP->PC response
+#define cbPKTTYPE_SS_RESETSET       0xD6        ///< PC->NSP request
+#define cbPKTDLEN_SS_RESET ((sizeof(cbPKT_SS_RESET) / 4) - cbPKT_HEADER_32SIZE)
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @name Feature Space Basis
+/// @brief PKT Set:0xD6 Rep:0x56 - Spike sorting reset
 ///
-/// Ground truth from upstream/cbproto/cbproto.h lines 1889-1909
-/// @{
+/// Send this packet to the NSP to tell it to reset all spike sorting to default values
+typedef struct
+{
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+} cbPKT_SS_RESET;
+
+// SS Reset Model constants
+#define cbPKTTYPE_SS_RESET_MODEL_REP    0x58        ///< NSP->PC response
+#define cbPKTTYPE_SS_RESET_MODEL_SET    0xD8        ///< PC->NSP request
+#define cbPKTDLEN_SS_RESET_MODEL ((sizeof(cbPKT_SS_RESET_MODEL) / 4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xD8 Rep:0x58 - Spike sorting reset model
+///
+/// Send this packet to the NSP to tell it to reset all spike sorting models
+typedef struct
+{
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+} cbPKT_SS_RESET_MODEL;
 
 // Feature space commands and status changes
 #define cbPCA_RECALC_START             0    ///< PC ->NSP start recalculation
@@ -1280,6 +1693,30 @@ typedef struct {
 #define cbUNDO_BASIS_CHANGE            4
 #define cbREDO_BASIS_CHANGE            5
 #define cbINVALIDATE_BASIS             6
+
+// SS Recalc constants
+#define cbPKTTYPE_SS_RECALCREP       0x59        ///< NSP->PC response
+#define cbPKTTYPE_SS_RECALCSET       0xD9        ///< PC->NSP request
+#define cbPKTDLEN_SS_RECALC ((sizeof(cbPKT_SS_RECALC) / 4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xD9 Rep:0x59 - Spike Sorting recalculate PCA
+///
+/// Send this packet to the NSP to tell it to re calculate all PCA Basis Vectors and Values
+typedef struct
+{
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t chan;           ///< 1 based channel we want to recalc (0 = All channels)
+    uint32_t mode;           ///< cbPCA_RECALC_START -> Start PCA basis, cbPCA_RECALC_STOPPED-> PCA basis stopped, cbPCA_COLLECTION_STARTED -> PCA waveform collection started
+} cbPKT_SS_RECALC;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Feature Space Basis
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1889-1909
+/// @{
 
 #define cbPKTTYPE_FS_BASISREP       0x5B        ///< NSP->PC response
 #define cbPKTTYPE_FS_BASISSET       0xDB        ///< PC->NSP request
@@ -1486,6 +1923,27 @@ typedef struct {
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Stimulation
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 2010-2022
+/// @{
+
+#define cbPKTTYPE_STIMULATIONREP       0x34        ///< NSP->PC response
+#define cbPKTTYPE_STIMULATIONSET       0xB4        ///< PC->NSP request
+#define cbPKTDLEN_STIMULATION   ((sizeof(cbPKT_STIMULATION)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xB4 Rep:0x34 - Stimulation command
+///
+/// This sets a user defined stimulation for stim/record headstages
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint8_t commandBytes[40];   ///< series of bytes to control stimulation
+} cbPKT_STIMULATION;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name nPlay Configuration
 ///
 /// Ground truth from upstream/cbproto/cbproto.h lines 916-965
@@ -1550,6 +2008,72 @@ typedef struct {
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Set Digital Output
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1928-1941
+/// @{
+
+#define cbPKTTYPE_SET_DOUTREP       0x5D        ///< NSP->PC response
+#define cbPKTTYPE_SET_DOUTSET       0xDD        ///< PC->NSP request
+#define cbPKTDLEN_SET_DOUT ((sizeof(cbPKT_SET_DOUT) / 4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xDD Rep:0x5D - Set Digital Output
+///
+/// Allows setting the digital output value if not assigned set to monitor a channel or timed waveform or triggered
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint16_t chan;        ///< which digital output channel (1 based, will equal chan from GetDoutCaps)
+    uint16_t value;       ///< Which value to set? zero = 0; non-zero = 1 (output is 1 bit)
+} cbPKT_SET_DOUT;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Trigger and Video Tracking
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 967-1005
+/// @{
+
+#define cbTRIGGER_MODE_UNDEFINED        0
+#define cbTRIGGER_MODE_BUTTONPRESS      1 ///< Patient button press event
+#define cbTRIGGER_MODE_EVENTRESET       2 ///< event reset
+
+#define cbPKTTYPE_TRIGGERREP   0x5E ///< NPLAY->PC response
+#define cbPKTTYPE_TRIGGERSET   0xDE ///< PC->NPLAY request
+#define cbPKTDLEN_TRIGGER    ((sizeof(cbPKT_TRIGGER)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief PKT Set:0xDE Rep:0x5E - Trigger Packet used for Cervello system
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint32_t mode;        ///< cbTRIGGER_MODE_*
+} cbPKT_TRIGGER;
+
+#define cbMAX_TRACKCOORDS (128) ///< Maximum number of coordinates (must be an even number)
+#define cbPKTTYPE_VIDEOTRACKREP   0x5F ///< NPLAY->PC response
+#define cbPKTTYPE_VIDEOTRACKSET   0xDF ///< PC->NPLAY request
+#define cbPKTDLEN_VIDEOTRACK    ((sizeof(cbPKT_VIDEOTRACK)/4) - cbPKT_HEADER_32SIZE)
+#define cbPKTDLEN_VIDEOTRACKSHORT (cbPKTDLEN_VIDEOTRACK - ((sizeof(uint16_t)*cbMAX_TRACKCOORDS)/4))
+
+/// @brief PKT Set:0xDF Rep:0x5F - Video tracking event packet
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    uint16_t parentID;    ///< parent ID
+    uint16_t nodeID;      ///< node ID (cross-referenced in the TrackObj header)
+    uint16_t nodeCount;   ///< Children count
+    uint16_t pointCount;  ///< number of points at this node
+    ///< this must be the last item in the structure because it can be variable length to a max of cbMAX_TRACKCOORDS
+    union {
+        uint16_t coords[cbMAX_TRACKCOORDS];
+        uint32_t sizes[cbMAX_TRACKCOORDS / 2];
+    };
+} cbPKT_VIDEOTRACK;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Configuration Tables (Central/cbhwlib only)
 ///
 /// Ground truth from upstream/cbhwlib/cbhwlib.h lines 906-931
@@ -1588,6 +2112,53 @@ typedef struct {
     float fRMSAutoThresholdDistance;    ///< multiplier to use for autothresholding when using RMS to guess noise
     uint32_t reserved[31];              ///< Reserved for future use
 } cbOPTIONTABLE;
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Firmware Update Packets
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 800-838
+/// @{
+
+#define cbRUNLEVEL_UPDATE   78
+#define cbPKTTYPE_UPDATESET 0xF1
+#define cbPKTTYPE_UPDATEREP 0x71
+#define cbPKTDLEN_UPDATE    (sizeof(cbPKT_UPDATE)/4)-2
+
+/// @brief PKT Set:0xF1 Rep:0x71 - Update Packet
+///
+/// Update the firmware of the NSP.  This will copy data received into files in a temporary location and if
+/// completed, on reboot will copy the files to the proper location to run.
+typedef struct {
+    cbPKT_HEADER cbpkt_header;  ///< packet header
+
+    char   filename[64];    ///< filename to be updated
+    uint32_t blockseq;        ///< sequence of the current block
+    uint32_t blockend;        ///< last block of the current file
+    uint32_t blocksiz;        ///< block size of the current block
+    uint8_t  block[512];      ///< block data
+} cbPKT_UPDATE;
+
+#define cbPKTDLEN_UPDATE_OLD    (sizeof(cbPKT_UPDATE_OLD)/4)-2
+
+/// @brief PKT Set:0xF1 Rep:0x71 - Old Update Packet
+///
+/// Update the firmware of the NSP.  This will copy data received into files in a temporary location and if
+/// completed, on reboot will copy the files to the proper location to run.
+///
+/// Since the NSP needs to work with old versions of the firmware, this packet retains the old header format.
+typedef struct {
+    uint32_t time;            ///< system clock timestamp
+    uint16_t chan;            ///< channel identifier
+    uint8_t  type;            ///< packet type
+    uint8_t  dlen;            ///< length of data field in 32-bit chunks
+    char   filename[64];    ///< filename to be updated
+    uint32_t blockseq;        ///< sequence of the current block
+    uint32_t blockend;        ///< last block of the current file
+    uint32_t blocksiz;        ///< block size of the current block
+    uint8_t  block[512];      ///< block data
+} cbPKT_UPDATE_OLD;
 
 /// @}
 
