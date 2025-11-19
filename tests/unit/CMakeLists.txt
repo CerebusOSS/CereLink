@@ -64,6 +64,8 @@ message(STATUS "Unit tests configured for cbshmem")
 # cbdev tests
 add_executable(cbdev_tests
     test_device_session.cpp
+    test_packet_translation.cpp
+    packet_test_helpers.cpp
 )
 
 target_link_libraries(cbdev_tests
