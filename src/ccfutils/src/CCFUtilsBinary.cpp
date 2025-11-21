@@ -13,7 +13,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#include "StdAfx.h"
+#include <ccfutils/compat/platform.h>
 #include "CCFUtilsBinary.h"
 #include <stddef.h>
 
@@ -40,7 +40,7 @@ CCFUtilsBinary::CCFUtilsBinary()
 // Purpose: Read binary CCF file version
 // Inputs:
 //   szFileName - the name of the file to read
-ccfResult CCFUtilsBinary::ReadVersion(LPCSTR szFileName)
+ccfResult CCFUtilsBinary::ReadVersion(const char* szFileName)
 {
     FILE * hSettingsFile = 0;
     ccfResult res = CCFRESULT_SUCCESS;
@@ -103,7 +103,7 @@ ccfResult CCFUtilsBinary::ReadVersion(LPCSTR szFileName)
 // Inputs:
 //   szFileName - the name of the file to read
 //   bConvert   - if convertion can happen
-ccfResult CCFUtilsBinary::ReadCCF(LPCSTR szFileName, bool bConvert)
+ccfResult CCFUtilsBinary::ReadCCF(const char* szFileName, bool bConvert)
 {
     ccfResult res = CCFRESULT_SUCCESS;
     // First read the version
@@ -1263,7 +1263,7 @@ void CCFUtilsBinary::ReadSpikeSortingPackets(cbPKT_GENERIC_CB2003_10 *pPkt)
 //           Do NOT prompt for the file to write out.
 // Inputs:
 //  szFileName - the name of the file to write
-ccfResult CCFUtilsBinary::WriteCCFNoPrompt(LPCSTR szFileName)
+ccfResult CCFUtilsBinary::WriteCCFNoPrompt(const char* szFileName)
 {
     m_szFileName = szFileName;
     // Open a file
@@ -1277,7 +1277,7 @@ ccfResult CCFUtilsBinary::WriteCCFNoPrompt(LPCSTR szFileName)
     fwrite(m_szConfigFileHeader, strlen(m_szConfigFileHeader), 1, hSettingsFile);
 
     char szVer[sizeof(m_szConfigFileVersion)] = {0};    // ANSI - all 0
-    _snprintf(szVer, sizeof(szVer) - 1, "%d.%d", cbVERSION_MAJOR, cbVERSION_MINOR);
+    snprintf(szVer, sizeof(szVer), "%d.%d", cbVERSION_MAJOR, cbVERSION_MINOR);
 
     fwrite(szVer, sizeof(szVer) - 1, 1, hSettingsFile);
 

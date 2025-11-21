@@ -19,7 +19,8 @@
 #ifndef CCFUTILSBINARY_H_INCLUDED
 #define CCFUTILSBINARY_H_INCLUDED
 
-#include "../include/cerelink/CCFUtils.h"
+#include <ccfutils/compat/platform.h>
+#include "../include/CCFUtils.h"
 #include <stdio.h>
 #include <cstring>
 
@@ -870,8 +871,8 @@ public:
 
 public:
     // Purpose: load the channel configuration from the file
-    ccf::ccfResult ReadCCF(LPCSTR szFileName, bool bConvert);
-    ccf::ccfResult ReadVersion(LPCSTR szFileName); // Read the version alone
+    ccf::ccfResult ReadCCF(const char* szFileName, bool bConvert);
+    ccf::ccfResult ReadVersion(const char* szFileName); // Read the version alone
     ccf::ccfResult SetProcInfo(const cbPROCINFO& isInfo);
 
 public:
@@ -882,7 +883,7 @@ protected:
     // Convert from old config (generic)
     virtual CCFUtils * Convert(CCFUtils * pOldConfig);
     // Keep old binary writing for possible backward porting
-    virtual ccf::ccfResult WriteCCFNoPrompt(LPCSTR szFileName);
+    virtual ccf::ccfResult WriteCCFNoPrompt(const char* szFileName);
 
 private:
     // Used as identifiers in the channel configuration files

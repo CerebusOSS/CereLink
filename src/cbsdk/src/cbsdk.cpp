@@ -9,8 +9,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "cbsdk_v2/cbsdk.h"
-#include "cbsdk_v2/sdk_session.h"
+#include "cbsdk/cbsdk.h"
+#include "cbsdk/sdk_session.h"
 #include <cstring>
 #include <memory>
 

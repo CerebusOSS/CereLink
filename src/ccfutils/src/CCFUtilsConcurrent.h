@@ -18,13 +18,14 @@
 #ifndef CCFUTILSCONCURRENT_H_INCLUDED
 #define CCFUTILSCONCURRENT_H_INCLUDED
 
-#include "../include/cerelink/CCFUtils.h"
+#include <ccfutils/compat/platform.h>
+#include "../include/CCFUtils.h"
 
 // Namespace for Cerebus Config Files
 namespace ccf
 {
-    void ConReadCCF(LPCSTR szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance);
-    void ConWriteCCF(LPCSTR szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance);
+    void ConReadCCF(const char* szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance);
+    void ConWriteCCF(const char* szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance);
 };
 
 

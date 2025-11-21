@@ -1,28 +1,28 @@
-# cbsdk_v2 - SDK Public API
+# cbsdk - SDK Public API
 # Orchestrates cbdev + cbshm to provide clean public C API
 
-project(cbsdk_v2
-    DESCRIPTION "CereLink SDK v2"
+project(cbsdk
+    DESCRIPTION "CereLink SDK"
     LANGUAGES CXX C
 )
 
 # Library sources
-set(CBSDK_V2_SOURCES
+set(CBSDK_SOURCES
     src/sdk_session.cpp
     src/cbsdk.cpp
 )
 
 # Build as STATIC library
-add_library(cbsdk_v2 STATIC ${CBSDK_V2_SOURCES})
+add_library(cbsdk STATIC ${CBSDK_SOURCES})
 
-target_include_directories(cbsdk_v2
+target_include_directories(cbsdk
     BEFORE PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 # Dependencies
-target_link_libraries(cbsdk_v2
+target_link_libraries(cbsdk
     PUBLIC
         cbproto
         cbshm
@@ -30,22 +30,22 @@ target_link_libraries(cbsdk_v2
 )
 
 # C++17 for implementation, C compatible API
-target_compile_features(cbsdk_v2 PUBLIC cxx_std_17)
+target_compile_features(cbsdk PUBLIC cxx_std_17)
 
 # Platform-specific libraries
 if(WIN32)
-    target_link_libraries(cbsdk_v2 PRIVATE wsock32 ws2_32)
+    target_link_libraries(cbsdk PRIVATE wsock32 ws2_32)
 elseif(APPLE)
-    target_link_libraries(cbsdk_v2 PRIVATE pthread)
+    target_link_libraries(cbsdk PRIVATE pthread)
 else()
-    target_link_libraries(cbsdk_v2 PRIVATE pthread)
+    target_link_libraries(cbsdk PRIVATE pthread)
 endif()
 
 # When compiled as SHARED:
-# target_compile_definitions(cbsdk_v2 PRIVATE CBSDK_V2_EXPORTS)
+# target_compile_definitions(cbsdk PRIVATE CBSDK_EXPORTS)
 
 # Installation
-install(TARGETS cbsdk_v2
+install(TARGETS cbsdk
     EXPORT CBSDKTargets
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

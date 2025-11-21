@@ -22,7 +22,7 @@
 //  implementation details such as Qt
 //
 
-#include "cbproto.h"
+#include <cbproto/cbproto.h>
 
 // Latest CCF structure
 typedef struct {
@@ -72,7 +72,7 @@ typedef enum _ccfResult
 };      // namespace ccf
 
 // CCF callback
-typedef void (* cbCCFCallback)(uint32_t nInstance, const ccf::ccfResult res, LPCSTR szFileName, const cbStateCCF state, const uint32_t nProgress);
+typedef void (* cbCCFCallback)(uint32_t nInstance, const ccf::ccfResult res, const char* szFileName, const cbStateCCF state, const uint32_t nProgress);
 
 class CCFUtils
 {
@@ -85,9 +85,9 @@ public:
     virtual ~CCFUtils();
 
 public:
-    virtual ccf::ccfResult ReadCCF(LPCSTR szFileName = nullptr, bool bConvert = false);
-    virtual ccf::ccfResult WriteCCFNoPrompt(LPCSTR szFileName);
-    virtual ccf::ccfResult ReadVersion(LPCSTR szFileName);
+    virtual ccf::ccfResult ReadCCF(const char* szFileName = nullptr, bool bConvert = false);
+    virtual ccf::ccfResult WriteCCFNoPrompt(const char* szFileName);
+    virtual ccf::ccfResult ReadVersion(const char* szFileName);
     int GetInternalVersion();
     int GetInternalOriginalVersion();
     bool IsBinaryOriginal();
@@ -111,7 +111,7 @@ protected:
     int m_nInternalVersion;  // internal version number
     int m_nInternalOriginalVersion;  // internal version of original data
     int m_nInstance; // Library instance for CCF operations
-    LPCSTR m_szFileName; // filename
+    const char* m_szFileName; // filename
     bool m_bAutoSort; // Compatibility flag for auto sort
     bool m_bBinaryOriginal; // if original file is binary
 };

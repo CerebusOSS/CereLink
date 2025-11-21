@@ -36,7 +36,7 @@ using namespace ccf;
 //   pCCF        - where to take an extra copy of the CCF upon successful reading
 void ReadCCFHelper(std::string strFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance)
 {
-    LPCSTR szFileName = strFileName.c_str();
+    const char* szFileName = strFileName.c_str();
     if (pCallbackFn)
         pCallbackFn(nInstance, CCFRESULT_SUCCESS, szFileName, CCFSTATE_THREADREAD, 0);
     CCFUtils config(false, pCCF, pCallbackFn, nInstance);
@@ -49,7 +49,7 @@ void ReadCCFHelper(std::string strFileName, cbCCF * pCCF, cbCCFCallback pCallbac
 
 // Author & Date: Ehsan Azar       10 June 2012
 // Purpose: Wrapper to run ReadCCFHelper in a thread
-void ccf::ConReadCCF(LPCSTR szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance)
+void ccf::ConReadCCF(const char* szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance)
 {
     std::string strFileName = szFileName == NULL ? "" : std::string(szFileName);
     // Launch detached thread (std::async future destruction was synchronizing and negating concurrency)
@@ -67,7 +67,7 @@ void ccf::ConReadCCF(LPCSTR szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn,
 //   pCallbackFn - the progress reporting function
 void WriteCCFHelper(std::string strFileName, cbCCF ccf, cbCCFCallback pCallbackFn, uint32_t nInstance)
 {
-    LPCSTR szFileName = strFileName.c_str();
+    const char* szFileName = strFileName.c_str();
     if (pCallbackFn)
         pCallbackFn(nInstance, CCFRESULT_SUCCESS, szFileName, CCFSTATE_THREADWRITE, 0);
     // If valid ccf is passed, use it as initial data, otherwise use NULL to have it read from NSP
@@ -79,7 +79,7 @@ void WriteCCFHelper(std::string strFileName, cbCCF ccf, cbCCFCallback pCallbackF
 
 // Author & Date: Ehsan Azar       10 June 2012
 // Purpose: Wrapper to run WriteCCFHelper in a thread
-void ccf::ConWriteCCF(LPCSTR szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance)
+void ccf::ConWriteCCF(const char* szFileName, cbCCF * pCCF, cbCCFCallback pCallbackFn, uint32_t nInstance)
 {
     std::string strFileName = szFileName == NULL ? "" : std::string(szFileName);
     cbCCF ccf;

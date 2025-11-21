@@ -40,15 +40,15 @@ public:
 
 public:
     // Purpose: load the channel configuration from the file
-    ccf::ccfResult ReadCCF(LPCSTR szFileName, bool bConvert);
-    ccf::ccfResult ReadVersion(LPCSTR szFileName); // Read the version alone
+    ccf::ccfResult ReadCCF(const char* szFileName, bool bConvert);
+    ccf::ccfResult ReadVersion(const char* szFileName); // Read the version alone
     ccf::ccfResult SetProcInfo(const cbPROCINFO& isInfo);
 
 protected:
     // Convert from old config (generic)
     virtual CCFUtils * Convert(CCFUtils * pOldConfig);
     // Write to file as XML v1
-    virtual ccf::ccfResult WriteCCFNoPrompt(LPCSTR szFileName);
+    virtual ccf::ccfResult WriteCCFNoPrompt(const char* szFileName);
 
 private:
     // Convert from old data format (specific)

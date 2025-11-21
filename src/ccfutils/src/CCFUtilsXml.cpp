@@ -13,12 +13,12 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#include "StdAfx.h"
+#include <ccfutils/compat/platform.h>
+#include <ccfutils/compat/debug.h>
+#include <cbproto/BmiVersion.h>
 #include "CCFUtilsXml.h"
 #include "CCFUtilsXmlItemsGenerate.h"
 #include "CCFUtilsXmlItemsParse.h"
-#include "debugmacs.h"
-#include "../central/BmiVersion.h"
 #include <iostream>
 #include <algorithm>
 #include <chrono>
@@ -29,7 +29,6 @@
 #ifndef WIN32
 #include <unistd.h>
 #endif
-#include "../include/cerelink/cbhwlib.h"
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -60,7 +59,7 @@ ccfResult CCFUtilsXml_v1::SetProcInfo(const cbPROCINFO& isInfo) {
 // Inputs:
 //   szFileName - the name of the file to read
 //   bConvert   - if convertion can happen
-ccfResult CCFUtilsXml_v1::ReadCCF(LPCSTR szFileName, bool bConvert)
+ccfResult CCFUtilsXml_v1::ReadCCF(const char* szFileName, bool bConvert)
 {
     ccfResult res = CCFRESULT_SUCCESS;
     m_szFileName = szFileName;
@@ -151,7 +150,7 @@ CCFUtils * CCFUtilsXml_v1::Convert(CCFUtils * pOldConfig)
 // Purpose: Write XML v1 CCF file
 // Inputs:
 //  szFileName - the name of the file to write
-ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(LPCSTR szFileName)
+ccfResult CCFUtilsXml_v1::WriteCCFNoPrompt(const char* szFileName)
 {
     ccfResult res = CCFRESULT_SUCCESS;
     std::string strFilename = std::string(szFileName);
@@ -297,7 +296,7 @@ void CCFUtilsXml_v1::Convert(ccf::ccfBinaryData & data)
 // Outputs:
 //  Sets original XML version if valid CCF XML file, or zero fon non-XML
 //  Returns error code
-ccfResult CCFUtilsXml_v1::ReadVersion(LPCSTR szFileName)
+ccfResult CCFUtilsXml_v1::ReadVersion(const char* szFileName)
 {
     ccfResult res = CCFRESULT_SUCCESS;
     std::string fname = szFileName;

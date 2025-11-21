@@ -1,5 +1,5 @@
 # Unit Tests
-# Each module (cbproto, cbshm, cbdev, cbsdk_v2) will have its own test suite
+# Each module (cbproto, cbshm, cbdev, cbsdk) will have its own test suite
 
 # Only build if new architecture is enabled
 if(NOT CBSDK_BUILD_NEW_ARCH)
@@ -85,23 +85,23 @@ gtest_discover_tests(cbdev_tests)
 
 message(STATUS "Unit tests configured for cbdev")
 
-# cbsdk_v2 tests
-add_executable(cbsdk_v2_tests
+# cbsdk tests
+add_executable(cbsdk_tests
     test_sdk_session.cpp
     test_sdk_handshake.cpp
     test_cbsdk_c_api.cpp
 )
 
-target_link_libraries(cbsdk_v2_tests
+target_link_libraries(cbsdk_tests
     PRIVATE
-        cbsdk_v2
+        cbsdk
         cbdev
         cbproto
         cbshm
         GTest::gtest_main
 )
 
-target_include_directories(cbsdk_v2_tests
+target_include_directories(cbsdk_tests
     BEFORE PRIVATE
         ${PROJECT_SOURCE_DIR}/src/cbsdk/include
         ${PROJECT_SOURCE_DIR}/src/cbdev/include
@@ -110,6 +110,6 @@ target_include_directories(cbsdk_v2_tests
         ${PROJECT_SOURCE_DIR}/upstream
 )
 
-gtest_discover_tests(cbsdk_v2_tests)
+gtest_discover_tests(cbsdk_tests)
 
-message(STATUS "Unit tests configured for cbsdk_v2")
+message(STATUS "Unit tests configured for cbsdk")

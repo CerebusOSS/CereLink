@@ -23,7 +23,7 @@
 #ifndef CCFUTILSXMLITEMS_H_INCLUDED
 #define CCFUTILSXMLITEMS_H_INCLUDED
 
-#include "../include/cerelink/cbproto.h"
+#include <cbproto/cbproto.h>
 
 #include "XmlItem.h"
 #include <vector>

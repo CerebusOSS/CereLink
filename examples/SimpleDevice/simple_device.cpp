@@ -31,7 +31,7 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include <cbsdk_v2/sdk_session.h>
+#include <cbsdk/sdk_session.h>
 #include <cbproto/cbproto.h>
 #include <iostream>
 #include <iomanip>

@@ -73,6 +73,8 @@ typedef int16_t A2D_DATA;
 
 #define cbMAXGROUPS     8   ///< Number of sample rate groups
 #define cbMAXFILTS      32  ///< Maximum number of filters
+#define cbFIRST_DIGITAL_FILTER  13  ///< (0-based) filter number, must be less than cbMAXFILTS
+#define cbNUM_DIGITAL_FILTERS   4   ///< Number of custom digital filters
 #define cbMAXHOOPS      4   ///< Maximum number of hoops for spike sorting
 #define cbMAXSITES      4   ///< Maximum number of electrodes in an n-trode group
 #define cbMAXSITEPLOTS  ((cbMAXSITES - 1) * cbMAXSITES / 2)  ///< Combination of 2 out of n

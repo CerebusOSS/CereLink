@@ -14,7 +14,8 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#include "../include/cerelink/CCFUtils.h"
+#include <ccfutils/compat/platform.h>
+#include "../include/CCFUtils.h"
 #include "CCFUtilsBinary.h"
 #include "CCFUtilsXml.h"
 #include "CCFUtilsConcurrent.h"
@@ -86,7 +87,7 @@ CCFUtils * CCFUtils::Convert(CCFUtils * pOldConfig)
 //  Do NOT prompt for the file to write out.
 // Inputs:
 //  szFileName - the name of the file to write
-ccfResult CCFUtils::WriteCCFNoPrompt(LPCSTR szFileName)
+ccfResult CCFUtils::WriteCCFNoPrompt(const char* szFileName)
 {
     m_szFileName = szFileName;
     ccfResult res = CCFRESULT_SUCCESS;
@@ -112,7 +113,7 @@ ccfResult CCFUtils::WriteCCFNoPrompt(LPCSTR szFileName)
 // Purpose: Read a CCF version information alone.
 // Inputs:
 //   szFileName - the name of the file to read (if NULL uses live config)
-ccfResult CCFUtils::ReadVersion(LPCSTR szFileName)
+ccfResult CCFUtils::ReadVersion(const char* szFileName)
 {
     ccfResult res = CCFRESULT_SUCCESS;
     m_szFileName = szFileName;
@@ -146,7 +147,7 @@ ccfResult CCFUtils::ReadVersion(LPCSTR szFileName)
 // Inputs:
 //   szFileName - the name of the file to read (if NULL raises error; use SDK calls to fetch from device)
 //   bConvert   - if conversion can happen
-ccfResult CCFUtils::ReadCCF(LPCSTR szFileName, bool bConvert)
+ccfResult CCFUtils::ReadCCF(const char* szFileName, bool bConvert)
 {
     m_szFileName = szFileName;
     ccfResult res = CCFRESULT_SUCCESS;
