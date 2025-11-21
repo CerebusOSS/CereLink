@@ -50,3 +50,12 @@ endif()
 install(TARGETS cbdev
     EXPORT CBSDKTargets
 )
+
+# Install public headers only (minimal API surface)
+install(FILES
+    include/cbdev/result.h
+    include/cbdev/connection.h
+    include/cbdev/device_session.h
+    include/cbdev/device_factory.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/cbdev
+)

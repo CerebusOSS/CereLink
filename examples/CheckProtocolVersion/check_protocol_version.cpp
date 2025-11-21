@@ -5,49 +5,61 @@
 ///
 /// @brief  Simple example demonstrating protocol version detection
 ///
-/// This example shows how to use the cbdev protocol detector to determine which protocol
-/// version a device is using. It demonstrates:
-/// - Using the protocol detector with custom addresses/ports
+/// This example shows how to use the cbdev API to determine which protocol version a device
+/// is using. It demonstrates:
+/// - Creating a device session with automatic protocol detection
+/// - Querying the detected protocol version
 /// - Interpreting the detection result
 /// - Handling detection errors
 ///
 /// Usage:
-///   check_protocol_version [device_addr] [device_port] [client_addr] [client_port] [timeout_ms]
+///   check_protocol_version [device_type]
 ///
-/// Arguments (all optional):
-///   device_addr  - Device IP address (default: 192.168.137.128)
-///   device_port  - Device UDP port (default: 51001)
-///   client_addr  - Client IP address for binding (default: 0.0.0.0)
-///   client_port  - Client UDP port for binding (default: 51002)
-///   timeout_ms   - Timeout in milliseconds (default: 500)
+/// Arguments:
+///   device_type - Device type to connect to (default: NSP)
+///                 Valid values: NSP, GEMINI_NSP, HUB1, HUB2, HUB3, NPLAY
 ///
 /// Examples:
-///   check_protocol_version                           # Use defaults for NSP
-///   check_protocol_version 192.168.137.128 51001     # Custom device, default client
-///   check_protocol_version 127.0.0.1 51001 127.0.0.1 51002 1000  # Full custom with 1s timeout
+///   check_protocol_version              # Use defaults for NSP
+///   check_protocol_version GEMINI_NSP   # Connect to Gemini NSP
+///   check_protocol_version NPLAY        # Connect to nPlayServer
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include <cbdev/protocol_detector.h>
+#include <cbdev/connection.h>
+#include <cbdev/device_factory.h>
+#include <cbdev/device_session.h>
 #include <iostream>
-#include <cstdlib>
 #include <cstring>
+#include <cctype>
+#include <algorithm>
 
 using namespace cbdev;
 
 void printUsage(const char* prog_name) {
-    std::cout << "Usage: " << prog_name
-              << " [device_addr] [device_port] [client_addr] [client_port] [timeout_ms]\n\n";
-    std::cout << "Arguments (all optional):\n";
-    std::cout << "  device_addr  - Device IP address (default: 192.168.137.128)\n";
-    std::cout << "  send_port  - Device reads config packets on this port (default: 51001)\n";
-    std::cout << "  client_addr  - Client IP address for binding (default: 0.0.0.0)\n";
-    std::cout << "  recv_port  - Client UDP port for binding (default: 51002)\n";
-    std::cout << "  timeout_ms   - Timeout in milliseconds (default: 500)\n\n";
+    std::cout << "Usage: " << prog_name << " [device_type]\n\n";
+    std::cout << "Arguments:\n";
+    std::cout << "  device_type - Device type to connect to (default: NSP)\n";
+    std::cout << "                Valid values: NSP, GEMINI_NSP, HUB1, HUB2, HUB3, NPLAY\n\n";
     std::cout << "Examples:\n";
     std::cout << "  " << prog_name << "\n";
-    std::cout << "  " << prog_name << " 192.168.137.128 51001\n";
-    std::cout << "  " << prog_name << " 127.0.0.1 51001 127.0.0.1 51002 1000\n";
+    std::cout << "  " << prog_name << " GEMINI_NSP\n";
+    std::cout << "  " << prog_name << " NPLAY\n";
+}
+
+DeviceType parseDeviceType(const char* str) {
+    std::string upper_str = str;
+    std::transform(upper_str.begin(), upper_str.end(), upper_str.begin(),
+                   [](unsigned char c) { return std::toupper(c); });
+
+    if (upper_str == "NSP") return DeviceType::NSP;
+    if (upper_str == "GEMINI_NSP") return DeviceType::GEMINI_NSP;
+    if (upper_str == "HUB1") return DeviceType::HUB1;
+    if (upper_str == "HUB2") return DeviceType::HUB2;
+    if (upper_str == "HUB3") return DeviceType::HUB3;
+    if (upper_str == "NPLAY") return DeviceType::NPLAY;
+
+    throw std::runtime_error("Invalid device type. Valid values: NSP, GEMINI_NSP, HUB1, HUB2, HUB3, NPLAY");
 }
 
 int main(int argc, char* argv[]) {
@@ -55,64 +67,66 @@ int main(int argc, char* argv[]) {
     std::cout << "  CereLink Protocol Version Detector\n";
     std::cout << "================================================\n\n";
 
-    // Parse command line arguments with defaults
-    const char* device_addr = "192.168.137.128";
-    uint16_t send_port = 51001;
-    const char* client_addr = "0.0.0.0";
-    uint16_t recv_port = 51001;
-    uint32_t timeout_ms = 500;
+    // Parse command line arguments
+    DeviceType device_type = DeviceType::NSP;  // Default to NSP
 
     if (argc > 1) {
         if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
             printUsage(argv[0]);
             return 0;
         }
-        device_addr = argv[1];
+
+        try {
+            device_type = parseDeviceType(argv[1]);
+        } catch (const std::exception& e) {
+            std::cerr << "ERROR: " << e.what() << "\n\n";
+            printUsage(argv[0]);
+            return 1;
+        }
     }
-    if (argc > 2) {
-        send_port = static_cast<uint16_t>(std::atoi(argv[2]));
-    }
-    if (argc > 3) {
-        client_addr = argv[3];
-    }
-    if (argc > 4) {
-        recv_port = static_cast<uint16_t>(std::atoi(argv[4]));
-    }
-    if (argc > 5) {
-        timeout_ms = static_cast<uint32_t>(std::atoi(argv[5]));
-    }
+
+    // Create connection configuration for the specified device type
+    const ConnectionParams config = ConnectionParams::forDevice(device_type);
 
     // Display configuration
     std::cout << "Configuration:\n";
-    std::cout << "  Device Address:  " << device_addr << "\n";
-    std::cout << "  Device Port:     " << send_port << "\n";
-    std::cout << "  Client Address:  " << client_addr << "\n";
-    std::cout << "  Client Port:     " << recv_port << "\n";
-    std::cout << "  Timeout:         " << timeout_ms << " ms\n\n";
+    std::cout << "  Device Type:     ";
+    switch (device_type) {
+        case DeviceType::NSP:        std::cout << "NSP (Legacy Neural Signal Processor)\n"; break;
+        case DeviceType::GEMINI_NSP: std::cout << "GEMINI_NSP (Gemini Neural Signal Processor)\n"; break;
+        case DeviceType::HUB1:       std::cout << "HUB1 (Gemini Hub 1)\n"; break;
+        case DeviceType::HUB2:       std::cout << "HUB2 (Gemini Hub 2)\n"; break;
+        case DeviceType::HUB3:       std::cout << "HUB3 (Gemini Hub 3)\n"; break;
+        case DeviceType::NPLAY:      std::cout << "NPLAY (nPlayServer)\n"; break;
+        default:                     std::cout << "CUSTOM\n"; break;
+    }
+    std::cout << "  Device Address:  " << config.device_address << "\n";
+    std::cout << "  Send Port:       " << config.send_port << "\n";
+    std::cout << "  Client Address:  " << config.client_address << "\n";
+    std::cout << "  Recv Port:       " << config.recv_port << "\n\n";
 
-    // Detect protocol version
+    // Create device session with automatic protocol detection
     std::cout << "Detecting protocol version...\n";
-    std::cout << "  (Sending multi-format probe packets and analyzing response)\n\n";
+    std::cout << "  (Creating device session with auto-detection)\n\n";
 
-    auto result = detectProtocol(device_addr, send_port,
-                                 client_addr, recv_port,
-                                 timeout_ms);
+    auto result = createDeviceSession(config, ProtocolVersion::UNKNOWN);
 
     // Handle result
     if (result.isError()) {
-        std::cerr << "ERROR: Protocol detection failed\n";
+        std::cerr << "ERROR: Device session creation failed\n";
         std::cerr << "  Reason: " << result.error() << "\n\n";
         std::cerr << "Possible causes:\n";
         std::cerr << "  - Device is not responding or is offline\n";
-        std::cerr << "  - Incorrect device address or port\n";
-        std::cerr << "  - Network configuration issue\n";
-        std::cerr << "  - Client address/port already in use\n";
-        std::cerr << "  - Timeout too short for device response\n";
+        std::cerr << "  - Incorrect device type or network configuration\n";
+        std::cerr << "  - Network connectivity issue\n";
+        std::cerr << "  - Port already in use\n";
         return 1;
     }
 
-    // Display detected version
-    ProtocolVersion version = result.value();
+    // Query the detected protocol version
+    const auto device = std::move(result.value());
+    const ProtocolVersion version = device->getProtocolVersion();
+
     std::cout << "Protocol Detection Result:\n";
     std::cout << "==========================\n";
     std::cout << "  Detected Version: " << protocolVersionToString(version) << "\n\n";

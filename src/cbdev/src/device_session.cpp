@@ -10,7 +10,7 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "cbdev/device_session.h"
+#include "device_session_impl.h"
 #include <cbproto/cbproto.h>
 #include <cstring>
 
@@ -445,8 +445,12 @@ bool DeviceSession::isConnected() const {
     return m_impl && m_impl->connected;
 }
 
-const ConnectionParams& DeviceSession::getConfig() const {
+const ConnectionParams& DeviceSession::getConnectionParams() const {
     return m_impl->config;
+}
+
+ProtocolVersion DeviceSession::getProtocolVersion() const {
+    return ProtocolVersion::PROTOCOL_CURRENT;
 }
 
 void DeviceSession::close() {

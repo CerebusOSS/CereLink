@@ -11,7 +11,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "cbsdk/sdk_session.h"
-#include "cbdev/device_session.h"
+#include "cbdev/device_factory.h"
 #include "cbshm/shmem_session.h"
 #include <thread>
 #include <mutex>
@@ -30,7 +30,7 @@ struct SdkSession::Impl {
     SdkConfig config;
 
     // Sub-components
-    std::optional<cbdev::DeviceSession> device_session;
+    std::unique_ptr<cbdev::IDeviceSession> device_session;
     std::optional<cbshm::ShmemSession> shmem_session;
 
     // Packet queue (receive thread → callback thread)
@@ -299,7 +299,7 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
         dev_config.recv_buffer_size = config.recv_buffer_size;
         dev_config.non_blocking = config.non_blocking;
 
-        auto dev_result = cbdev::DeviceSession::create(dev_config);
+        auto dev_result = cbdev::createDeviceSession(dev_config);
         if (dev_result.isError()) {
             return Result<SdkSession>::error("Failed to create device session: " + dev_result.error());
         }
@@ -326,7 +326,7 @@ Result<void> SdkSession::start() {
     }
 
     // Set up device callbacks (if in STANDALONE mode)
-    if (m_impl->device_session.has_value()) {
+    if (m_impl->device_session) {
         // STANDALONE mode - start callback thread + device threads
         // In STANDALONE mode, we need the callback thread to decouple fast UDP receive from slow user callbacks
 
@@ -571,7 +571,7 @@ void SdkSession::stop() {
     m_impl->is_running.store(false);
 
     // Stop SDK's own device threads (if STANDALONE mode)
-    if (m_impl->device_session.has_value()) {
+    if (m_impl->device_session) {
         if (m_impl->device_receive_thread_running.load()) {
             m_impl->device_receive_thread_running.store(false);
             if (m_impl->device_receive_thread && m_impl->device_receive_thread->joinable()) {
@@ -643,7 +643,7 @@ Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {
     auto result = m_impl->shmem_session->enqueuePacket(pkt);
     if (result.isOk()) {
         // Wake up send thread if in STANDALONE mode
-        if (m_impl->device_session.has_value()) {
+        if (m_impl->device_session) {
             // Notify send thread that packets are available
             // (device_session checks hasTransmitPackets via callback)
         }
@@ -685,7 +685,7 @@ Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque,
 
 Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags,
                                            uint32_t wait_for_runlevel, uint32_t timeout_ms) {
-    if (!m_impl->device_session.has_value()) {
+    if (!m_impl->device_session) {
         return Result<void>::error("setSystemRunLevel() only available in STANDALONE mode");
     }
 
@@ -711,7 +711,7 @@ Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque,
 }
 
 Result<void> SdkSession::requestConfiguration(uint32_t timeout_ms) {
-    if (!m_impl->device_session.has_value()) {
+    if (!m_impl->device_session) {
         return Result<void>::error("requestConfiguration() only available in STANDALONE mode");
     }
 
@@ -734,7 +734,7 @@ Result<void> SdkSession::requestConfiguration(uint32_t timeout_ms) {
 }
 
 Result<void> SdkSession::performStartupHandshake(uint32_t timeout_ms) {
-    if (!m_impl->device_session.has_value()) {
+    if (!m_impl->device_session) {
         return Result<void>::error("performStartupHandshake() only available in STANDALONE mode");
     }
 

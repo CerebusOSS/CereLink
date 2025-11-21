@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @file   device_conn_params.h
+/// @file   connection.h
 /// @author CereLink Development Team
 /// @date   2025-01-15
 ///
@@ -29,6 +29,20 @@ enum class DeviceType {
     NPLAY,          ///< nPlayServer
     CUSTOM          ///< Custom IP/port configuration
 };
+
+/// Protocol version enumeration
+enum class ProtocolVersion {
+    UNKNOWN,          ///< Unknown or undetected protocol
+    PROTOCOL_311,     ///< Legacy cbproto_311 (32-bit timestamps, deprecated)
+    PROTOCOL_400,     ///< Legacy cbproto_400 (64-bit timestamps, deprecated)
+    PROTOCOL_410,     ///< Protocol 4.1 (64-bit timestamps, 16-bit packet types)
+    PROTOCOL_CURRENT  ///< Current protocol (64-bit timestamps)
+};
+
+/// Convert protocol version to string for logging
+/// @param version Protocol version
+/// @return Human-readable string
+const char* protocolVersionToString(ProtocolVersion version);
 
 /// Connection parameters for device communication
 /// Note: This contains network/socket configuration only.

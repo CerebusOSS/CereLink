@@ -2,7 +2,7 @@
 // Created by Chadwick Boulay on 2025-11-17.
 //
 
-#include "cbdev/packet_translator.h"
+#include "packet_translator.h"
 
 size_t cbdev::PacketTranslator::translate_DINP_pre400_to_current(const uint8_t* src_payload, cbPKT_DINP* dest) {
     // 3.11 -> 4.0: Eliminated data array and added new fields:

@@ -9,8 +9,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "cbdev/device_session_400.h"
-#include "cbdev/packet_translator.h"
+#include "device_session_400.h"
+#include "packet_translator.h"
 #include <cstring>
 
 namespace cbdev {
@@ -150,7 +150,7 @@ Result<void> DeviceSession_400::sendPacket(const cbPKT_GENERIC& pkt) {
     return m_device.sendRaw(temp_buffer, packet_size_400);
 }
 
-Result<void> DeviceSession_400::sendPackets(const cbPKT_GENERIC* pkts, size_t count) {
+Result<void> DeviceSession_400::sendPackets(const cbPKT_GENERIC* pkts, const size_t count) {
     if (!pkts || count == 0) {
         return Result<void>::error("Invalid packet array");
     }
@@ -165,7 +165,7 @@ Result<void> DeviceSession_400::sendPackets(const cbPKT_GENERIC* pkts, size_t co
     return Result<void>::ok();
 }
 
-Result<void> DeviceSession_400::sendRaw(const void* buffer, size_t size) {
+Result<void> DeviceSession_400::sendRaw(const void* buffer, const size_t size) {
     // Pass through to underlying device
     return m_device.sendRaw(buffer, size);
 }
@@ -174,8 +174,22 @@ bool DeviceSession_400::isConnected() const {
     return m_device.isConnected();
 }
 
-const ConnectionParams& DeviceSession_400::getConfig() const {
-    return m_device.getConfig();
+const ConnectionParams& DeviceSession_400::getConnectionParams() const {
+    return m_device.getConnectionParams();
+}
+
+Result<void> DeviceSession_400::setSystemRunLevel(const uint32_t runlevel, const uint32_t resetque, const uint32_t runflags) {
+    // Delegate to wrapped device
+    return m_device.setSystemRunLevel(runlevel, resetque, runflags);
+}
+
+Result<void> DeviceSession_400::requestConfiguration() {
+    // Delegate to wrapped device
+    return m_device.requestConfiguration();
+}
+
+ProtocolVersion DeviceSession_400::getProtocolVersion() const {
+    return ProtocolVersion::PROTOCOL_400;
 }
 
 } // namespace cbdev

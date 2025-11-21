@@ -26,9 +26,9 @@
 #ifndef CBDEV_DEVICE_SESSION_400_H
 #define CBDEV_DEVICE_SESSION_400_H
 
-#include <cbdev/device_session_interface.h>
 #include <cbdev/device_session.h>
-#include <cbdev/device_conn_params.h>
+#include "device_session_impl.h"
+#include <cbdev/connection.h>
 #include <cbdev/result.h>
 #include <cbproto/cbproto.h>
 #include <memory>
@@ -86,13 +86,28 @@ public:
     /// @return Success or error
     Result<void> sendRaw(const void* buffer, size_t size) override;
 
+    /// Set device system runlevel (delegated to wrapped device)
+    /// @param runlevel Desired runlevel
+    /// @param resetque Channel for reset to queue on
+    /// @param runflags Lock recording after reset
+    /// @return Success or error
+    Result<void> setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags) override;
+
+    /// Request configuration from device (delegated to wrapped device)
+    /// @return Success or error
+    Result<void> requestConfiguration() override;
+
     /// Check if underlying device connection is active
     /// @return true if connected
-    bool isConnected() const override;
+    [[nodiscard]] bool isConnected() const override;
 
     /// Get device configuration
     /// @return Configuration reference
-    const ConnectionParams& getConfig() const override;
+    [[nodiscard]] const ConnectionParams& getConnectionParams() const override;
+
+    /// Get protocol version
+    /// @return PROTOCOL_400
+    [[nodiscard]] ProtocolVersion getProtocolVersion() const override;
 
     /// @}
 

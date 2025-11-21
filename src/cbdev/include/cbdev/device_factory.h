@@ -13,9 +13,8 @@
 #ifndef CBDEV_DEVICE_FACTORY_H
 #define CBDEV_DEVICE_FACTORY_H
 
-#include <cbdev/device_session_interface.h>
-#include <cbdev/device_conn_params.h>
-#include <cbdev/protocol_detector.h>
+#include <cbdev/device_session.h>
+#include <cbdev/connection.h>
 #include <cbdev/result.h>
 #include <memory>
 

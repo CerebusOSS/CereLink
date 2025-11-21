@@ -14,20 +14,10 @@
 #define CBDEV_PROTOCOL_DETECTOR_H
 
 #include <cbdev/result.h>
+#include <cbdev/connection.h>
 #include <cstdint>
 
 namespace cbdev {
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Protocol version enumeration
-///
-enum class ProtocolVersion {
-    UNKNOWN,          ///< Unknown or undetected protocol
-    PROTOCOL_311,     ///< Legacy cbproto_311 (32-bit timestamps, deprecated)
-    PROTOCOL_400,     ///< Legacy cbproto_400 (64-bit timestamps, deprecated)
-    PROTOCOL_410,     ///< Protocol 4.1 (64-bit timestamps, 16-bit packet types)
-    PROTOCOL_CURRENT  ///< Current protocol (64-bit timestamps)
-};
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Convert protocol version to string for logging

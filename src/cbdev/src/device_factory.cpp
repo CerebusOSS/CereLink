@@ -8,9 +8,11 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include <cbdev/device_factory.h>
-#include <cbdev/device_session.h>
-#include <cbdev/device_session_311.h>
-#include <cbdev/device_session_400.h>
+#include "device_session_impl.h"
+#include "device_session_311.h"
+#include "device_session_400.h"
+#include "device_session_410.h"
+#include "protocol_detector.h"
 
 namespace cbdev {
 
@@ -45,6 +47,18 @@ Result<std::unique_ptr<IDeviceSession>> createDeviceSession(
 
             // Move into unique_ptr<IDeviceSession>
             auto device = std::make_unique<DeviceSession>(std::move(result.value()));
+            return Result<std::unique_ptr<IDeviceSession>>::ok(std::move(device));
+        }
+
+        case ProtocolVersion::PROTOCOL_410: {
+            // Create modern protocol implementation
+            auto result = DeviceSession_410::create(config);
+            if (result.isError()) {
+                return Result<std::unique_ptr<IDeviceSession>>::error(result.error());
+            }
+
+            // Move into unique_ptr<IDeviceSession>
+            auto device = std::make_unique<DeviceSession_410>(std::move(result.value()));
             return Result<std::unique_ptr<IDeviceSession>>::ok(std::move(device));
         }
 

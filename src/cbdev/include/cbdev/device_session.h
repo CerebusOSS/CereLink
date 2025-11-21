@@ -3,124 +3,123 @@
 /// @author CereLink Development Team
 /// @date   2025-01-15
 ///
-/// @brief  Minimal UDP socket wrapper for Cerebus device communication
+/// @brief  Device session interface for protocol abstraction
 ///
-/// DeviceSession is a thin wrapper around UDP sockets for communicating with Cerebus devices.
-/// It provides only socket operations - no threads, no callbacks, no statistics, no parsing.
-/// All orchestration logic (threads, statistics, callbacks, parsing) is handled by SdkSession.
+/// Defines the interface for device communication, allowing different protocol implementations
+/// (e.g., current protocol vs legacy cbproto_311) without affecting SDK code.
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifndef CBDEV_DEVICE_SESSION_H
-#define CBDEV_DEVICE_SESSION_H
+#ifndef CBDEV_DEVICE_SESSION_INTERFACE_H
+#define CBDEV_DEVICE_SESSION_INTERFACE_H
 
-#include <cbdev/device_session_interface.h>
-#include <cbdev/device_conn_params.h>
+#include <cbdev/connection.h>
 #include <cbdev/result.h>
 #include <cbproto/cbproto.h>
-
-#ifdef _WIN32
-    #include <winsock2.h>
-    typedef SOCKET SocketHandle;
-#else
-    typedef int SocketHandle;
-#endif
+#include <cstddef>
 
 namespace cbdev {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Minimal UDP socket wrapper for device communication (current protocol)
+/// @brief Abstract interface for device communication
 ///
-/// Provides synchronous send/receive operations only. No threads, callbacks, or state management.
-/// Implements IDeviceSession for protocol abstraction.
+/// Implementations handle protocol-specific details (e.g., packet format translation for legacy
+/// devices) while presenting a uniform interface to SDK.
 ///
-class DeviceSession : public IDeviceSession {
+class IDeviceSession {
 public:
-    /// Move constructor
-    DeviceSession(DeviceSession&&) noexcept;
-
-    /// Move assignment
-    DeviceSession& operator=(DeviceSession&&) noexcept;
-
-    /// Destructor - closes socket
-    ~DeviceSession() override;
-
-    /// Create and initialize device session
-    /// @param config Device configuration (IP addresses, ports, device type)
-    /// @return DeviceSession on success, error on failure
-    static Result<DeviceSession> create(const ConnectionParams& config);
+    virtual ~IDeviceSession() = default;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    /// @name IDeviceSession Implementation
+    /// @name Packet Reception
     /// @{
 
-    /// Receive UDP datagram from device (non-blocking)
+    /// Receive UDP datagram from device into provided buffer
     /// @param buffer Destination buffer for received data
     /// @param buffer_size Maximum bytes to receive
     /// @return Number of bytes received, or error
-    /// @note Returns 0 if no data available (EWOULDBLOCK)
-    Result<int> receivePackets(void* buffer, size_t buffer_size) override;
-
-    /// Send single packet to device
-    /// @param pkt Packet to send
-    /// @return Success or error
-    Result<void> sendPacket(const cbPKT_GENERIC& pkt) override;
-
-    /// Send multiple packets to device
-    /// @param pkts Array of packets
-    /// @param count Number of packets
-    /// @return Success or error
-    Result<void> sendPackets(const cbPKT_GENERIC* pkts, size_t count) override;
-
-    /// Send raw bytes to device
-    /// @param buffer Buffer containing raw bytes
-    /// @param size Number of bytes to send
-    /// @return Success or error
-    Result<void> sendRaw(const void* buffer, size_t size) override;
-
-    /// Check if socket is open
-    /// @return true if connected
-    bool isConnected() const override;
-
-    /// Get device configuration
-    /// @return Configuration reference
-    const ConnectionParams& getConfig() const override;
+    /// @note Non-blocking. Returns 0 if no data available.
+    /// @note For protocol-translating implementations, translation happens before returning
+    virtual Result<int> receivePackets(void* buffer, size_t buffer_size) = 0;
 
     /// @}
 
-    /// Close socket (also called by destructor)
-    void close();
-
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    /// @name Protocol Commands
+    /// @name Packet Transmission
     /// @{
 
-    /// Send a runlevel command packet to the device
-    /// Creates cbPKT_SYSINFO with specified parameters and sends it.
+    /// Send single packet to device
+    /// @param pkt Packet to send (in current protocol format)
+    /// @return Success or error
+    /// @note For protocol-translating implementations, translation happens before sending
+    virtual Result<void> sendPacket(const cbPKT_GENERIC& pkt) = 0;
+
+    /// Send multiple packets to device
+    /// @param pkts Array of packets to send
+    /// @param count Number of packets in array
+    /// @return Success or error
+    virtual Result<void> sendPackets(const cbPKT_GENERIC* pkts, size_t count) = 0;
+
+    /// Send raw bytes to device (for protocol translation)
+    /// @param buffer Buffer containing raw bytes to send
+    /// @param size Number of bytes to send
+    /// @return Success or error
+    /// @note This is primarily for use by protocol wrapper implementations
+    virtual Result<void> sendRaw(const void* buffer, size_t size) = 0;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Device Control
+    /// @{
+
+    /// Set device system runlevel (pure virtual - must be implemented)
+    /// Sends cbPKTYPE_SETRUNLEVEL to change device operating state.
     /// Does NOT wait for response - caller must handle SYSREP monitoring.
     /// @param runlevel Desired runlevel (cbRUNLEVEL_*)
     /// @param resetque Channel for reset to queue on
     /// @param runflags Lock recording after reset
     /// @return Success or error
-    Result<void> setSystemRunLevel(uint32_t runlevel, uint32_t resetque = 0, uint32_t runflags = 0);
+    virtual Result<void> setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags) = 0;
+
+    /// Convenience overload with default resetque
+    Result<void> setSystemRunLevel(const uint32_t runlevel, const uint32_t resetque) {
+        return setSystemRunLevel(runlevel, resetque, 0);
+    }
+
+    /// Convenience overload with default resetque and runflags
+    Result<void> setSystemRunLevel(const uint32_t runlevel) {
+        return setSystemRunLevel(runlevel, 0, 0);
+    }
 
     /// Request all configuration from the device
     /// Sends cbPKTTYPE_REQCONFIGALL which triggers the device to send all config packets.
     /// Does NOT wait for response - caller must handle config flood and final SYSREP.
     /// @return Success or error
-    Result<void> requestConfiguration();
+    virtual Result<void> requestConfiguration() = 0;
 
     /// @}
 
-private:
-    /// Private constructor (use create() factory)
-    DeviceSession() = default;
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name State
+    /// @{
 
-    /// Implementation details (pImpl pattern)
-    struct Impl;
-    std::unique_ptr<Impl> m_impl;
+    /// Check if device connection is active
+    /// @return true if socket is open and connected
+    [[nodiscard]] virtual bool isConnected() const = 0;
+
+    /// Get device configuration
+    /// @return Current device configuration
+    [[nodiscard]] virtual const ConnectionParams& getConnectionParams() const = 0;
+
+    /// Get protocol version of this session
+    /// @return Protocol version being used by this session
+    /// @note For auto-detected sessions, returns the detected version
+    [[nodiscard]] virtual ProtocolVersion getProtocolVersion() const = 0;
+
+    /// @}
 };
 
 } // namespace cbdev
 
-#endif // CBDEV_DEVICE_SESSION_H
+#endif // CBDEV_DEVICE_SESSION_INTERFACE_H

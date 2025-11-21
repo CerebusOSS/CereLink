@@ -9,8 +9,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "cbdev/device_session_410.h"
-#include "cbdev/packet_translator.h"
+#include "device_session_410.h"
+#include "packet_translator.h"
 #include <cstring>
 
 namespace cbdev {
@@ -125,8 +125,22 @@ bool DeviceSession_410::isConnected() const {
     return m_device.isConnected();
 }
 
-const ConnectionParams& DeviceSession_410::getConfig() const {
-    return m_device.getConfig();
+const ConnectionParams& DeviceSession_410::getConnectionParams() const {
+    return m_device.getConnectionParams();
+}
+
+Result<void> DeviceSession_410::setSystemRunLevel(const uint32_t runlevel, const uint32_t resetque, const uint32_t runflags) {
+    // Delegate to wrapped device
+    return m_device.setSystemRunLevel(runlevel, resetque, runflags);
+}
+
+Result<void> DeviceSession_410::requestConfiguration() {
+    // Delegate to wrapped device
+    return m_device.requestConfiguration();
+}
+
+ProtocolVersion DeviceSession_410::getProtocolVersion() const {
+    return ProtocolVersion::PROTOCOL_410;
 }
 
 } // namespace cbdev

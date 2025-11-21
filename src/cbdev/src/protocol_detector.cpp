@@ -28,7 +28,7 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include <cbdev/protocol_detector.h>
+#include "protocol_detector.h"
 #include <cbproto/cbproto.h>
 #include <cstring>
 #include <thread>
