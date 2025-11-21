@@ -12,6 +12,7 @@
 
 #include <string>
 #include <cstdint>
+#include <cbproto/types.h>
 
 namespace cbdev {
 
@@ -21,8 +22,8 @@ namespace cbdev {
 
 /// Device type enumeration (for connection addressing)
 enum class DeviceType {
-    NSP,            ///< Neural Signal Processor (legacy)
-    GEMINI_NSP,     ///< Gemini NSP
+    LEGACY_NSP,            ///< Neural Signal Processor (legacy)
+    NSP,     ///< Gemini NSP
     HUB1,           ///< Hub 1 (legacy addressing)
     HUB2,           ///< Hub 2 (legacy addressing)
     HUB3,           ///< Hub 3 (legacy addressing)
@@ -48,15 +49,15 @@ const char* protocolVersionToString(ProtocolVersion version);
 /// Note: This contains network/socket configuration only.
 /// Device operating configuration (sample rates, channels, etc.) is in shared memory.
 struct ConnectionParams {
-    DeviceType type = DeviceType::NSP;
+    DeviceType type = DeviceType::LEGACY_NSP;
 
     // Network addresses
     std::string device_address;     ///< Device IP address (where to send packets)
     std::string client_address;     ///< Client IP address (where to bind receive socket)
 
     // Ports
-    uint16_t recv_port = 51001;     ///< Port to receive packets on (client side)
-    uint16_t send_port = 51002;     ///< Port to send packets to (device side)
+    uint16_t recv_port = cbNET_UDP_PORT_CNT;     ///< Port to receive packets on (client side)
+    uint16_t send_port = cbNET_UDP_PORT_BCAST;     ///< Port to send packets to (device side)
 
     // Socket options
     bool broadcast = false;         ///< Enable broadcast mode
@@ -72,8 +73,8 @@ struct ConnectionParams {
     /// Create custom connection parameters with explicit addresses
     static ConnectionParams custom(const std::string& device_addr,
                                    const std::string& client_addr = "0.0.0.0",
-                                   uint16_t recv_port = 51001,
-                                   uint16_t send_port = 51002);
+                                   uint16_t recv_port = cbNET_UDP_PORT_CNT,
+                                   uint16_t send_port = cbNET_UDP_PORT_BCAST);
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -83,23 +84,23 @@ struct ConnectionParams {
 /// Default device addresses and ports (from upstream/cbproto/cbproto.h)
 namespace ConnectionDefaults {
     // Device addresses
-    constexpr const char* NSP_ADDRESS        = "192.168.137.128";  // Legacy NSP (cbNET_UDP_ADDR_CNT)
-    constexpr const char* GEMINI_NSP_ADDRESS = "192.168.137.128";  // Gemini NSP (cbNET_UDP_ADDR_GEMINI_NSP)
-    constexpr const char* GEMINI_HUB1_ADDRESS = "192.168.137.200"; // Gemini Hub1 (cbNET_UDP_ADDR_GEMINI_HUB)
-    constexpr const char* GEMINI_HUB2_ADDRESS = "192.168.137.201"; // Gemini Hub2 (cbNET_UDP_ADDR_GEMINI_HUB2)
-    constexpr const char* GEMINI_HUB3_ADDRESS = "192.168.137.202"; // Gemini Hub3 (cbNET_UDP_ADDR_GEMINI_HUB3)
+    constexpr const char* LEGACY_NSP_ADDRESS        = cbNET_UDP_ADDR_CNT;  // Legacy NSP
+    constexpr const char* NSP_ADDRESS = cbNET_UDP_ADDR_GEMINI_NSP;  // Gemini NSP
+    constexpr const char* HUB1_ADDRESS = cbNET_UDP_ADDR_GEMINI_HUB; // Gemini Hub1
+    constexpr const char* HUB2_ADDRESS = cbNET_UDP_ADDR_GEMINI_HUB2; // Gemini Hub2
+    constexpr const char* HUB3_ADDRESS = cbNET_UDP_ADDR_GEMINI_HUB3; // Gemini Hub3
     constexpr const char* NPLAY_ADDRESS      = "127.0.0.1";        // nPlayServer (loopback)
 
     // Client/Host addresses (empty = auto-detect based on device type and platform)
     constexpr const char* DEFAULT_CLIENT_ADDRESS = "";  // Auto-detect (was 192.168.137.199)
 
     // Ports
-    constexpr uint16_t LEGACY_NSP_RECV_PORT   = 51001;  // cbNET_UDP_PORT_CNT
-    constexpr uint16_t LEGACY_NSP_SEND_PORT   = 51002;  // cbNET_UDP_PORT_BCAST
-    constexpr uint16_t GEMINI_NSP_PORT        = 51001;  // cbNET_UDP_PORT_GEMINI_NSP (both send & recv)
-    constexpr uint16_t GEMINI_HUB1_PORT       = 51002;  // cbNET_UDP_PORT_GEMINI_HUB (both send & recv)
-    constexpr uint16_t GEMINI_HUB2_PORT       = 51003;  // cbNET_UDP_PORT_GEMINI_HUB2 (both send & recv)
-    constexpr uint16_t GEMINI_HUB3_PORT       = 51004;  // cbNET_UDP_PORT_GEMINI_HUB3 (both send & recv)
+    constexpr uint16_t LEGACY_NSP_RECV_PORT   = cbNET_UDP_PORT_CNT;
+    constexpr uint16_t LEGACY_NSP_SEND_PORT   = cbNET_UDP_PORT_BCAST;
+    constexpr uint16_t NSP_PORT        = cbNET_UDP_PORT_GEMINI_NSP;
+    constexpr uint16_t HUB1_PORT       = cbNET_UDP_PORT_GEMINI_HUB;  // cbNET_UDP_PORT_GEMINI_HUB (both send & recv)
+    constexpr uint16_t HUB2_PORT       = cbNET_UDP_PORT_GEMINI_HUB2;  // cbNET_UDP_PORT_GEMINI_HUB2 (both send & recv)
+    constexpr uint16_t HUB3_PORT       = cbNET_UDP_PORT_GEMINI_HUB3;  // cbNET_UDP_PORT_GEMINI_HUB3 (both send & recv)
     constexpr uint16_t NPLAY_PORT             = 51001;  // nPlayServer port
 }
 

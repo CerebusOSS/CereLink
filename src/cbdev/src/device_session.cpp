@@ -104,44 +104,44 @@ ConnectionParams ConnectionParams::forDevice(DeviceType type) {
     conn_params.type = type;
 
     switch (type) {
-        case DeviceType::NSP:
+        case DeviceType::LEGACY_NSP:
             // Legacy NSP: different ports for send/recv
-            conn_params.device_address = ConnectionDefaults::NSP_ADDRESS;
+            conn_params.device_address = ConnectionDefaults::LEGACY_NSP_ADDRESS;
             conn_params.client_address = "";  // Auto-detect
             conn_params.recv_port = ConnectionDefaults::LEGACY_NSP_RECV_PORT;
             conn_params.send_port = ConnectionDefaults::LEGACY_NSP_SEND_PORT;
             break;
 
-        case DeviceType::GEMINI_NSP:
+        case DeviceType::NSP:
             // Gemini NSP: same port for both send & recv
-            conn_params.device_address = ConnectionDefaults::GEMINI_NSP_ADDRESS;
+            conn_params.device_address = ConnectionDefaults::NSP_ADDRESS;
             conn_params.client_address = "";  // Auto-detect
-            conn_params.recv_port = ConnectionDefaults::GEMINI_NSP_PORT;
-            conn_params.send_port = ConnectionDefaults::GEMINI_NSP_PORT;
+            conn_params.recv_port = ConnectionDefaults::NSP_PORT;
+            conn_params.send_port = ConnectionDefaults::NSP_PORT;
             break;
 
         case DeviceType::HUB1:
             // Gemini Hub1: same port for both send & recv
-            conn_params.device_address = ConnectionDefaults::GEMINI_HUB1_ADDRESS;
+            conn_params.device_address = ConnectionDefaults::HUB1_ADDRESS;
             conn_params.client_address = "";  // Auto-detect
-            conn_params.recv_port = ConnectionDefaults::GEMINI_HUB1_PORT;
-            conn_params.send_port = ConnectionDefaults::GEMINI_HUB1_PORT;
+            conn_params.recv_port = ConnectionDefaults::HUB1_PORT;
+            conn_params.send_port = ConnectionDefaults::HUB1_PORT;
             break;
 
         case DeviceType::HUB2:
             // Gemini Hub2: same port for both send & recv
-            conn_params.device_address = ConnectionDefaults::GEMINI_HUB2_ADDRESS;
+            conn_params.device_address = ConnectionDefaults::HUB2_ADDRESS;
             conn_params.client_address = "";  // Auto-detect
-            conn_params.recv_port = ConnectionDefaults::GEMINI_HUB2_PORT;
-            conn_params.send_port = ConnectionDefaults::GEMINI_HUB2_PORT;
+            conn_params.recv_port = ConnectionDefaults::HUB2_PORT;
+            conn_params.send_port = ConnectionDefaults::HUB2_PORT;
             break;
 
         case DeviceType::HUB3:
             // Gemini Hub3: same port for both send & recv
-            conn_params.device_address = ConnectionDefaults::GEMINI_HUB3_ADDRESS;
+            conn_params.device_address = ConnectionDefaults::HUB3_ADDRESS;
             conn_params.client_address = "";  // Auto-detect
-            conn_params.recv_port = ConnectionDefaults::GEMINI_HUB3_PORT;
-            conn_params.send_port = ConnectionDefaults::GEMINI_HUB3_PORT;
+            conn_params.recv_port = ConnectionDefaults::HUB3_PORT;
+            conn_params.send_port = ConnectionDefaults::HUB3_PORT;
             break;
 
         case DeviceType::NPLAY:

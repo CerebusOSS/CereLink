@@ -52,8 +52,8 @@ DeviceType parseDeviceType(const char* str) {
     std::transform(upper_str.begin(), upper_str.end(), upper_str.begin(),
                    [](unsigned char c) { return std::toupper(c); });
 
-    if (upper_str == "NSP") return DeviceType::NSP;
-    if (upper_str == "GEMINI_NSP") return DeviceType::GEMINI_NSP;
+    if (upper_str == "NSP") return DeviceType::LEGACY_NSP;
+    if (upper_str == "GEMINI_NSP") return DeviceType::NSP;
     if (upper_str == "HUB1") return DeviceType::HUB1;
     if (upper_str == "HUB2") return DeviceType::HUB2;
     if (upper_str == "HUB3") return DeviceType::HUB3;
@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
     std::cout << "================================================\n\n";
 
     // Parse command line arguments
-    DeviceType device_type = DeviceType::NSP;  // Default to NSP
+    DeviceType device_type = DeviceType::LEGACY_NSP;  // Default to NSP
 
     if (argc > 1) {
         if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
@@ -92,8 +92,8 @@ int main(int argc, char* argv[]) {
     std::cout << "Configuration:\n";
     std::cout << "  Device Type:     ";
     switch (device_type) {
-        case DeviceType::NSP:        std::cout << "NSP (Legacy Neural Signal Processor)\n"; break;
-        case DeviceType::GEMINI_NSP: std::cout << "GEMINI_NSP (Gemini Neural Signal Processor)\n"; break;
+        case DeviceType::LEGACY_NSP:        std::cout << "NSP (Legacy Neural Signal Processor)\n"; break;
+        case DeviceType::NSP: std::cout << "GEMINI_NSP (Gemini Neural Signal Processor)\n"; break;
         case DeviceType::HUB1:       std::cout << "HUB1 (Gemini Hub 1)\n"; break;
         case DeviceType::HUB2:       std::cout << "HUB2 (Gemini Hub 2)\n"; break;
         case DeviceType::HUB3:       std::cout << "HUB3 (Gemini Hub 3)\n"; break;

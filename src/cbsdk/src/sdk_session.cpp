@@ -258,10 +258,10 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
         cbdev::DeviceType dev_type;
         switch (config.device_type) {
             case DeviceType::LEGACY_NSP:
-                dev_type = cbdev::DeviceType::NSP;
+                dev_type = cbdev::DeviceType::LEGACY_NSP;
                 break;
             case DeviceType::GEMINI_NSP:
-                dev_type = cbdev::DeviceType::GEMINI_NSP;
+                dev_type = cbdev::DeviceType::NSP;
                 break;
             case DeviceType::GEMINI_HUB1:
                 dev_type = cbdev::DeviceType::HUB1;
