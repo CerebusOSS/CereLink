@@ -1,4 +1,4 @@
-# cbshmem - Shared Memory Management
+# cbshm - Shared Memory Management
 
 **Status:** Phase 2 - ✅ **COMPLETE** (2025-11-11)
 
@@ -71,12 +71,12 @@ Internal C++ library that manages shared memory with **Central-compatible layout
   - `cbMAXPROCS = 4` (up to 4 processors)
   - `cbNUM_FE_CHANS = 768` (channels for up to 4 NSPs)
 
-**Design Decision:** cbshmem MUST use Central constants to ensure compatibility!
+**Design Decision:** cbshm MUST use Central constants to ensure compatibility!
 
-## API (implemented in include/cbshmem/shmem_session.h)
+## API (implemented in include/cbshm/shmem_session.h)
 
 ```cpp
-namespace cbshmem {
+namespace cbshm {
     class ShmemSession {
     public:
         static Result<ShmemSession> create(const std::string& name, Mode mode);

@@ -12,8 +12,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifndef CBSHMEM_CENTRAL_TYPES_H
-#define CBSHMEM_CENTRAL_TYPES_H
+#ifndef CBSHM_CENTRAL_TYPES_H
+#define CBSHM_CENTRAL_TYPES_H
 
 // Include InstrumentId from protocol module
 #include <cbproto/instrument_id.h>
@@ -26,7 +26,7 @@
 // Ensure tight packing for shared memory structures
 #pragma pack(push, 1)
 
-namespace cbshmem {
+namespace cbshm {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Central Constants
@@ -223,7 +223,7 @@ struct CentralReceiveBuffer {
     uint32_t buffer[CENTRAL_cbRECBUFFLEN];      ///< Packet buffer
 };
 
-} // namespace cbshmem
+} // namespace cbshm
 
 #pragma pack(pop)
 

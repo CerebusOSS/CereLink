@@ -16,17 +16,17 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifndef CBSHMEM_SHMEM_SESSION_H
-#define CBSHMEM_SHMEM_SESSION_H
+#ifndef CBSHM_SHMEM_SESSION_H
+#define CBSHM_SHMEM_SESSION_H
 
 // Include Central-compatible types which bring in protocol definitions
-#include <cbshmem/central_types.h>
+#include <cbshm/central_types.h>
 #include <memory>
 #include <string>
 #include <optional>
 #include <cstdint>
 
-namespace cbshmem {
+namespace cbshm {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Result type for operations that can fail
@@ -465,6 +465,6 @@ private:
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace cbshmem
+} // namespace cbshm
 
 #endif // CBSHMEM_SHMEM_SESSION_H

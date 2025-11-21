@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Public C API that orchestrates cbdev + cbshmem to provide a clean, stable interface for users.
+Public C API that orchestrates cbdev + cbshm to provide a clean, stable interface for users.
 
 **Key Goal:** Hide all multi-instrument and indexing complexity from users!
 
@@ -16,7 +16,7 @@ Public C API that orchestrates cbdev + cbshmem to provide a clean, stable interf
    - Device name resolution ("Hub1" → IP address)
 
 2. **Orchestration**
-   - Manages lifecycle of cbshmem + cbdev
+   - Manages lifecycle of cbshm + cbdev
    - Routes packets: device → shmem → user callbacks
    - Handles mode-specific logic internally
 
@@ -35,7 +35,7 @@ Public C API that orchestrates cbdev + cbshmem to provide a clean, stable interf
 - **C API:** Public interface is pure C for ABI stability
 - **C++ Implementation:** Internal SdkSession class in C++
 - **Hide Complexity:** Users never see InstrumentId, indexing, or mode details
-- **Stable API:** Can evolve cbshmem/cbdev without breaking users
+- **Stable API:** Can evolve cbshm/cbdev without breaking users
 
 ## Current Status
 
@@ -95,18 +95,18 @@ class SdkSession {
 public:
     cbSdkResult open(const cbSdkConnectionInfo* pConn) {
         // 1. Determine mode (standalone vs. client)
-        // 2. Open cbshmem
+        // 2. Open cbshm
         // 3. If standalone: open cbdev and start receive thread
-        // 4. Register packet callback: cbdev → cbshmem → user
+        // 4. Register packet callback: cbdev → cbshm → user
     }
 
     cbSdkResult getProcInfo(cbPROCINFO* pInfo) {
-        // Uses cbshmem::getFirstProcInfo()
+        // Uses cbshm::getFirstProcInfo()
         // User never knows about multi-instrument complexity!
     }
 
 private:
-    cbshmem::ShmemSession m_shmem;
+    cbshm::ShmemSession m_shmem;
     cbdev::DeviceSession m_device;
 };
 ```

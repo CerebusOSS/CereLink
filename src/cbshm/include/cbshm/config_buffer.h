@@ -8,16 +8,15 @@
 /// This file defines the configuration buffer structure used to store device state.
 /// It supports up to 4 instruments (NSPs) to match Central's capabilities.
 ///
-/// This structure is shared between:
-/// - cbdev: For standalone device sessions (stores config internally)
-/// - cbshmem: For shared memory (multiple clients access same config)
+/// This structure is used by cbshm:
+///  For shared memory (multiple clients access same config)
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifndef CBPROTO_CONFIG_BUFFER_H
 #define CBPROTO_CONFIG_BUFFER_H
 
-#include "types.h"
+#include <cbproto/types.h>
 
 #ifdef __cplusplus
 extern "C" {

@@ -10,12 +10,12 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include <gtest/gtest.h>
-#include <cbshmem/shmem_session.h>
+#include <cbshm/shmem_session.h>
 #include <cbproto/cbproto.h>       // For packet types and cbNSP1-4 constants
 #include <cbproto/instrument_id.h>
 #include <cstring>
 
-using namespace cbshmem;
+using namespace cbshm;
 using namespace cbproto;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

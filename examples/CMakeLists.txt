@@ -15,7 +15,7 @@ set(CBSDK_V2_EXAMPLES
     "simple_device:SimpleDevice/simple_device.cpp"
 )
 
-# cbdev examples (link against cbdev only - no cbshmem, no cbsdk)
+# cbdev examples (link against cbdev only - no cbshm, no cbsdk)
 set(CBDEV_EXAMPLES
     "check_protocol_version:CheckProtocolVersion/check_protocol_version.cpp"
 )

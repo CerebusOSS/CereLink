@@ -6,13 +6,13 @@
 /// @brief  SDK session implementation
 ///
 /// Implements the two-stage pipeline:
-///   Device → cbdev receive thread → cbshmem (fast!) → queue → callback thread → user callback
+///   Device → cbdev receive thread → cbshm (fast!) → queue → callback thread → user callback
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "cbsdk_v2/sdk_session.h"
+#include "cbsdk/sdk_session.h"
 #include "cbdev/device_session.h"
-#include "cbshmem/shmem_session.h"
+#include "cbshm/shmem_session.h"
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -31,7 +31,7 @@ struct SdkSession::Impl {
 
     // Sub-components
     std::optional<cbdev::DeviceSession> device_session;
-    std::optional<cbshmem::ShmemSession> shmem_session;
+    std::optional<cbshm::ShmemSession> shmem_session;
 
     // Packet queue (receive thread → callback thread)
     SPSCQueue<cbPKT_GENERIC, 16384> packet_queue;  // Fixed size for now (TODO: make configurable)
@@ -43,9 +43,21 @@ struct SdkSession::Impl {
     std::mutex callback_mutex;
     std::condition_variable callback_cv;
 
+    // Device receive/send threads (STANDALONE mode only)
+    std::unique_ptr<std::thread> device_receive_thread;
+    std::unique_ptr<std::thread> device_send_thread;
+    std::atomic<bool> device_receive_thread_running{false};
+    std::atomic<bool> device_send_thread_running{false};
+
     // Shared memory receive thread (CLIENT mode only)
     std::unique_ptr<std::thread> shmem_receive_thread;
     std::atomic<bool> shmem_receive_thread_running{false};
+
+    // Handshake state (for performStartupHandshake)
+    std::atomic<uint32_t> device_runlevel{0};
+    std::atomic<bool> received_sysrep{false};
+    std::mutex handshake_mutex;
+    std::condition_variable handshake_cv;
 
     // User callbacks
     PacketCallback packet_callback;
@@ -60,7 +72,19 @@ struct SdkSession::Impl {
     std::atomic<bool> is_running{false};
 
     ~Impl() {
-        // Ensure threads are stopped
+        // Ensure all threads are stopped
+        if (device_receive_thread_running.load()) {
+            device_receive_thread_running.store(false);
+            if (device_receive_thread && device_receive_thread->joinable()) {
+                device_receive_thread->join();
+            }
+        }
+        if (device_send_thread_running.load()) {
+            device_send_thread_running.store(false);
+            if (device_send_thread && device_send_thread->joinable()) {
+                device_send_thread->join();
+            }
+        }
         if (callback_thread_running.load()) {
             callback_thread_running.store(false);
             callback_cv.notify_one();
@@ -213,13 +237,13 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     bool is_standalone = false;
 
     // Try to attach to existing shared memory (CLIENT mode)
-    auto shmem_result = cbshmem::ShmemSession::create(cfg_name, rec_name, xmt_name, xmt_local_name,
-                                                       status_name, spk_name, signal_event_name, cbshmem::Mode::CLIENT);
+    auto shmem_result = cbshm::ShmemSession::create(cfg_name, rec_name, xmt_name, xmt_local_name,
+                                                       status_name, spk_name, signal_event_name, cbshm::Mode::CLIENT);
 
     if (shmem_result.isError()) {
         // No existing shared memory, create new (STANDALONE mode)
-        shmem_result = cbshmem::ShmemSession::create(cfg_name, rec_name, xmt_name, xmt_local_name,
-                                                      status_name, spk_name, signal_event_name, cbshmem::Mode::STANDALONE);
+        shmem_result = cbshm::ShmemSession::create(cfg_name, rec_name, xmt_name, xmt_local_name,
+                                                      status_name, spk_name, signal_event_name, cbshm::Mode::STANDALONE);
         if (shmem_result.isError()) {
             return Result<SdkSession>::error("Failed to create shared memory: " + shmem_result.error());
         }
@@ -256,7 +280,7 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
         }
 
         // Create device config from device type (uses predefined addresses/ports)
-        cbdev::DeviceConfig dev_config = cbdev::DeviceConfig::forDevice(dev_type);
+        cbdev::ConnectionParams dev_config = cbdev::ConnectionParams::forDevice(dev_type);
 
         // Apply custom addresses/ports if specified (overrides device type defaults)
         if (config.custom_device_address.has_value()) {
@@ -281,9 +305,9 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
         }
         session.m_impl->device_session = std::move(dev_result.value());
 
-        // Connect device's config buffer to shmem's buffer (zero-copy)
-        // DeviceSession will write config packets directly to shared memory
-        session.m_impl->device_session->setConfigBuffer(session.m_impl->shmem_session->getConfigBuffer());
+        // TODO [Phase 3]: Config parsing now happens in SDK receive thread, not DeviceSession
+        // DeviceSession no longer has setConfigBuffer() method
+        // Config buffer management is now SDK's responsibility
 
         // Start the session (starts receive/send threads)
         // Start session (for STANDALONE mode, this also connects to device and performs handshake)
@@ -349,96 +373,179 @@ Result<void> SdkSession::start() {
             }
         });
 
-        // Packet receive callback - capture impl to survive session moves
-        m_impl->device_session->setPacketCallback([impl](const cbPKT_GENERIC* pkts, size_t count) {
-            // This runs on the cbdev receive thread - MUST BE FAST!
-            for (size_t i = 0; i < count; ++i) {
-                const auto& pkt = pkts[i];
+        // Start device receive thread - calls device->receivePackets() in loop
+        m_impl->device_receive_thread_running.store(true);
+        m_impl->device_receive_thread = std::make_unique<std::thread>([impl]() {
+            // Buffer for receiving UDP datagrams (can contain multiple aggregated packets)
+            constexpr size_t RECV_BUFFER_SIZE = cbCER_UDP_SIZE_MAX;  // 58080 bytes
+            auto buffer = std::make_unique<uint8_t[]>(RECV_BUFFER_SIZE);
 
-                // Update stats
-                {
-                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                    impl->stats.packets_received_from_device++;
-                }
+            while (impl->device_receive_thread_running.load()) {
+                // Receive packets from device (synchronous, blocking)
+                auto result = impl->device_session->receivePackets(buffer.get(), RECV_BUFFER_SIZE);
 
-                // Note: SYSREP packet monitoring is now handled by DeviceSession internally
-
-                // Store to shared memory
-                auto result = impl->shmem_session->storePacket(pkt);
-                if (result.isOk()) {
-                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                    impl->stats.packets_stored_to_shmem++;
-                } else {
-                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                    impl->stats.shmem_store_errors++;
-                }
-
-                // Queue for callback
-                if (impl->packet_queue.push(pkt)) {
-                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                    impl->stats.packets_queued_for_callback++;
-                    size_t current_depth = impl->packet_queue.size();
-                    if (current_depth > impl->stats.queue_max_depth) {
-                        impl->stats.queue_max_depth = current_depth;
-                    }
-                } else {
-                    // Queue overflow
+                if (result.isError()) {
+                    // Error receiving - log and continue
                     {
                         std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                        impl->stats.packets_dropped++;
+                        impl->stats.receive_errors++;
                     }
-                    std::lock_guard<std::mutex> lock(impl->user_callback_mutex);
-                    if (impl->error_callback) {
-                        impl->error_callback("Packet queue overflow - dropping packets");
+                    std::this_thread::yield();
+                    continue;
+                }
+
+                int bytes_recv = result.value();
+                if (bytes_recv == 0) {
+                    // No data available (non-blocking mode) - yield and continue
+                    std::this_thread::yield();
+                    continue;
+                }
+
+                // Parse packets from received datagram
+                // One UDP datagram can contain multiple cbPKT_GENERIC packets
+                uint32_t bytes_to_process = static_cast<uint32_t>(bytes_recv);
+                cbPKT_GENERIC* pktptr = reinterpret_cast<cbPKT_GENERIC*>(buffer.get());
+
+                while (bytes_to_process > 0) {
+                    // Validate packet header
+                    constexpr size_t HEADER_SIZE = sizeof(cbPKT_HEADER);
+                    if (bytes_to_process < HEADER_SIZE) {
+                        break;  // Not enough data for header
                     }
+
+                    // Calculate packet size
+                    uint32_t quadlettotal = pktptr->cbpkt_header.dlen + cbPKT_HEADER_32SIZE;
+                    uint32_t packetsize = quadlettotal * 4;  // Convert quadlets to bytes
+
+                    // Validate packet size
+                    if (packetsize > bytes_to_process || packetsize > sizeof(cbPKT_GENERIC)) {
+                        break;  // Invalid or truncated packet
+                    }
+
+                    // Check for SYSREP packets (handshake responses)
+                    if ((pktptr->cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
+                        const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(pktptr);
+                        impl->device_runlevel.store(sysinfo->runlevel, std::memory_order_release);
+                        impl->received_sysrep.store(true, std::memory_order_release);
+                        impl->handshake_cv.notify_all();
+                    }
+
+                    // Update stats
+                    {
+                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                        impl->stats.packets_received_from_device++;
+                    }
+
+                    // Store to shared memory
+                    auto store_result = impl->shmem_session->storePacket(*pktptr);
+                    if (store_result.isOk()) {
+                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                        impl->stats.packets_stored_to_shmem++;
+                    } else {
+                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                        impl->stats.shmem_store_errors++;
+                    }
+
+                    // Queue for callback
+                    if (impl->packet_queue.push(*pktptr)) {
+                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                        impl->stats.packets_queued_for_callback++;
+                        size_t current_depth = impl->packet_queue.size();
+                        if (current_depth > impl->stats.queue_max_depth) {
+                            impl->stats.queue_max_depth = current_depth;
+                        }
+                    } else {
+                        // Queue overflow
+                        {
+                            std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                            impl->stats.packets_dropped++;
+                        }
+                        std::lock_guard<std::mutex> lock(impl->user_callback_mutex);
+                        if (impl->error_callback) {
+                            impl->error_callback("Packet queue overflow - dropping packets");
+                        }
+                    }
+
+                    // Advance to next packet
+                    pktptr = reinterpret_cast<cbPKT_GENERIC*>(reinterpret_cast<uint8_t*>(pktptr) + packetsize);
+                    bytes_to_process -= packetsize;
+                }
+
+                // Signal CLIENT processes that new data is available
+                impl->shmem_session->signalData();
+
+                // Wake callback thread if waiting
+                if (impl->callback_thread_waiting.load(std::memory_order_relaxed)) {
+                    impl->callback_cv.notify_one();
                 }
             }
+        });
 
-            // Signal CLIENT processes that new data is available
-            impl->shmem_session->signalData();
+        // Start device send thread - dequeues from shmem and sends to device
+        m_impl->device_send_thread_running.store(true);
+        m_impl->device_send_thread = std::make_unique<std::thread>([impl]() {
+            while (impl->device_send_thread_running.load()) {
+                bool has_packets = false;
 
-            // Wake callback thread if waiting
-            if (impl->callback_thread_waiting.load(std::memory_order_relaxed)) {
-                impl->callback_cv.notify_one();
+                // Try to dequeue and send all available packets
+                while (true) {
+                    cbPKT_GENERIC pkt = {};
+
+                    // Dequeue packet from shared memory transmit buffer
+                    auto result = impl->shmem_session->dequeuePacket(pkt);
+                    if (result.isError() || !result.value()) {
+                        break;  // Error or no more packets
+                    }
+
+                    has_packets = true;
+
+                    // Send packet to device
+                    auto send_result = impl->device_session->sendPacket(pkt);
+                    if (send_result.isError()) {
+                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                        impl->stats.send_errors++;
+                    } else {
+                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                        impl->stats.packets_sent_to_device++;
+                    }
+                }
+
+                if (has_packets) {
+                    // Had packets - check again quickly
+                    std::this_thread::yield();
+                } else {
+                    // No packets - wait briefly before checking again
+                    std::this_thread::sleep_for(std::chrono::microseconds(100));
+                }
             }
         });
 
-        // Transmit callback - capture impl to survive session moves
-        m_impl->device_session->setTransmitCallback([impl](cbPKT_GENERIC& pkt) -> bool {
-            // Dequeue packet from shared memory transmit buffer
-            auto result = impl->shmem_session->dequeuePacket(pkt);
-            if (result.isError()) {
-                return false;  // Error - treat as empty
-            }
-            return result.value();  // Returns true if packet was dequeued, false if queue empty
-        });
-
-        // Set device autorun flag from our config
-        m_impl->device_session->setAutorun(m_impl->config.autorun);
-
-        // Start device send thread
-        auto send_result = m_impl->device_session->startSendThread();
-        if (send_result.isError()) {
-            // Clean up callback thread
-            m_impl->callback_thread_running.store(false);
-            m_impl->callback_cv.notify_one();
-            if (m_impl->callback_thread && m_impl->callback_thread->joinable()) {
-                m_impl->callback_thread->join();
-            }
-            return Result<void>::error("Failed to start device send thread: " + send_result.error());
+        // Perform handshaking based on autorun flag
+        Result<void> handshake_result;
+        if (m_impl->config.autorun) {
+            // Fully start device to RUNNING state (includes requestConfiguration)
+            handshake_result = performStartupHandshake(500);
+        } else {
+            // Just request configuration without changing runlevel
+            handshake_result = requestConfiguration(500);
         }
 
-        // Connect to device (starts receive thread + performs handshake/config request based on autorun flag)
-        auto connect_result = m_impl->device_session->connect();
-        if (connect_result.isError()) {
-            // Clean up send thread and callback thread
-            m_impl->device_session->stopSendThread();
+        if (handshake_result.isError()) {
+            // Clean up device threads and callback thread
+            m_impl->device_receive_thread_running.store(false);
+            if (m_impl->device_receive_thread && m_impl->device_receive_thread->joinable()) {
+                m_impl->device_receive_thread->join();
+            }
+            m_impl->device_send_thread_running.store(false);
+            if (m_impl->device_send_thread && m_impl->device_send_thread->joinable()) {
+                m_impl->device_send_thread->join();
+            }
             m_impl->callback_thread_running.store(false);
             m_impl->callback_cv.notify_one();
             if (m_impl->callback_thread && m_impl->callback_thread->joinable()) {
                 m_impl->callback_thread->join();
             }
-            return Result<void>::error("Failed to connect to device: " + connect_result.error());
+            return Result<void>::error("Handshake failed: " + handshake_result.error());
         }
     } else {
         // CLIENT mode - start shared memory receive thread only
@@ -463,10 +570,20 @@ void SdkSession::stop() {
 
     m_impl->is_running.store(false);
 
-    // Stop device threads (if STANDALONE mode)
+    // Stop SDK's own device threads (if STANDALONE mode)
     if (m_impl->device_session.has_value()) {
-        m_impl->device_session->stopReceiveThread();
-        m_impl->device_session->stopSendThread();
+        if (m_impl->device_receive_thread_running.load()) {
+            m_impl->device_receive_thread_running.store(false);
+            if (m_impl->device_receive_thread && m_impl->device_receive_thread->joinable()) {
+                m_impl->device_receive_thread->join();
+            }
+        }
+        if (m_impl->device_send_thread_running.load()) {
+            m_impl->device_send_thread_running.store(false);
+            if (m_impl->device_send_thread && m_impl->device_send_thread->joinable()) {
+                m_impl->device_send_thread->join();
+            }
+        }
     }
 
     // Stop shared memory receive thread (if CLIENT mode)
@@ -536,39 +653,149 @@ Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {
     }
 }
 
+///--------------------------------------------------------------------------------------------
+/// Helper: Wait for SYSREP packet
+///--------------------------------------------------------------------------------------------
+
+bool SdkSession::waitForSysrep(uint32_t timeout_ms, uint32_t expected_runlevel) const {
+    // Wait for SYSREP packet with optional expected runlevel
+    // If expected_runlevel is 0, accept any SYSREP
+    // If expected_runlevel is non-zero, wait for that specific runlevel
+    std::unique_lock<std::mutex> lock(m_impl->handshake_mutex);
+    return m_impl->handshake_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms),
+        [this, expected_runlevel] {
+            if (!m_impl->received_sysrep.load(std::memory_order_acquire)) {
+                return false;  // Haven't received SYSREP yet
+            }
+            if (expected_runlevel == 0) {
+                return true;  // Accept any SYSREP
+            }
+            // Check if runlevel matches
+            return m_impl->device_runlevel.load(std::memory_order_acquire) == expected_runlevel;
+        });
+}
+
+///--------------------------------------------------------------------------------------------
+/// Device Handshaking Methods (STANDALONE mode only)
+///--------------------------------------------------------------------------------------------
+
 Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags) {
-    // Delegate to device_session (STANDALONE mode only)
+    return setSystemRunLevel(runlevel, resetque, runflags, 0, 500);
+}
+
+Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags,
+                                           uint32_t wait_for_runlevel, uint32_t timeout_ms) {
     if (!m_impl->device_session.has_value()) {
         return Result<void>::error("setSystemRunLevel() only available in STANDALONE mode");
     }
-    auto result = m_impl->device_session->setSystemRunLevel(runlevel, resetque, runflags);
-    if (result.isError()) {
-        return Result<void>::error(result.error());
+
+    // Reset handshake state before sending
+    m_impl->received_sysrep.store(false, std::memory_order_relaxed);
+
+    // Send the runlevel packet to device (packet creation handled by DeviceSession)
+    auto send_result = m_impl->device_session->setSystemRunLevel(runlevel, resetque, runflags);
+    if (send_result.isError()) {
+        return Result<void>::error(send_result.error());
     }
+
+    // Wait for SYSREP response (synchronous behavior)
+    // wait_for_runlevel: 0 = any SYSREP, non-zero = wait for specific runlevel
+    if (!waitForSysrep(timeout_ms, wait_for_runlevel)) {
+        if (wait_for_runlevel != 0) {
+            return Result<void>::error("No SYSREP response with expected runlevel " + std::to_string(wait_for_runlevel));
+        }
+        return Result<void>::error("No SYSREP response received for setSystemRunLevel");
+    }
+
     return Result<void>::ok();
 }
 
-Result<void> SdkSession::requestConfiguration() {
-    // Delegate to device_session (STANDALONE mode only)
+Result<void> SdkSession::requestConfiguration(uint32_t timeout_ms) {
     if (!m_impl->device_session.has_value()) {
         return Result<void>::error("requestConfiguration() only available in STANDALONE mode");
     }
-    auto result = m_impl->device_session->requestConfiguration();
-    if (result.isError()) {
-        return Result<void>::error(result.error());
+
+    // Reset handshake state before sending
+    m_impl->received_sysrep.store(false, std::memory_order_relaxed);
+
+    // Send the configuration request packet to device (packet creation handled by DeviceSession)
+    auto send_result = m_impl->device_session->requestConfiguration();
+    if (send_result.isError()) {
+        return Result<void>::error(send_result.error());
     }
+
+    // Wait for final SYSREP packet from config flood (synchronous behavior)
+    // The device sends many config packets and finishes with a SYSREP containing current runlevel
+    if (!waitForSysrep(timeout_ms)) {
+        return Result<void>::error("No SYSREP response received for requestConfiguration");
+    }
+
     return Result<void>::ok();
 }
 
 Result<void> SdkSession::performStartupHandshake(uint32_t timeout_ms) {
-    // Delegate to device_session (STANDALONE mode only)
     if (!m_impl->device_session.has_value()) {
         return Result<void>::error("performStartupHandshake() only available in STANDALONE mode");
     }
-    auto result = m_impl->device_session->performStartupHandshake(timeout_ms);
+
+    // Complete device startup sequence to transition device from any state to RUNNING
+    //
+    // Sequence:
+    // 1. Quick device presence check (100ms timeout) - fail fast if device not on network
+    // 2. Send cbRUNLEVEL_RUNNING - check if device is already running
+    // 3. If not running, send cbRUNLEVEL_HARDRESET - wait for STANDBY
+    // 4. Send REQCONFIGALL - wait for config flood ending with SYSREP
+    // 5. Send cbRUNLEVEL_RESET - wait for device to transition to RUNNING
+
+    // Reset handshake state
+    m_impl->received_sysrep.store(false, std::memory_order_relaxed);
+    m_impl->device_runlevel.store(0, std::memory_order_relaxed);
+
+    // Quick presence check - use shorter timeout to fail fast for non-existent devices
+    const uint32_t presence_check_timeout = std::min(100u, timeout_ms);
+
+    // Step 1: Quick presence check - send cbRUNLEVEL_RUNNING with short timeout to fail fast
+    Result<void> result = setSystemRunLevel(cbRUNLEVEL_RUNNING, 0, 0, 0, presence_check_timeout);
     if (result.isError()) {
-        return Result<void>::error(result.error());
+        // No response - device not on network
+        return Result<void>::error("Device not reachable (no response to initial probe - check network connection and IP address)");
     }
+
+    // Step 2: Got response - check if device is already running
+    if (m_impl->device_runlevel.load(std::memory_order_acquire) == cbRUNLEVEL_RUNNING) {
+        // Device is already running - request config and we're done
+        goto request_config;
+    }
+
+    // Step 3: Device responded but not running - send HARDRESET and wait for STANDBY
+    // Device responds with HARDRESET, then STANDBY
+    result = setSystemRunLevel(cbRUNLEVEL_HARDRESET, 0, 0, cbRUNLEVEL_STANDBY, timeout_ms);
+    if (result.isError()) {
+        return Result<void>::error("Failed to send HARDRESET command: " + result.error());
+    }
+
+request_config:
+    // Step 4: Request all configuration (always performed)
+    // requestConfiguration() waits internally for final SYSREP
+    result = requestConfiguration(timeout_ms);
+    if (result.isError()) {
+        return Result<void>::error("Failed to send REQCONFIGALL: " + result.error());
+    }
+
+    // Step 5: Get current runlevel and transition to RUNNING if needed
+    uint32_t current_runlevel = m_impl->device_runlevel.load(std::memory_order_acquire);
+
+    if (current_runlevel != cbRUNLEVEL_RUNNING) {
+        // Send RESET to complete handshake
+        // Device is in STANDBY (30) after REQCONFIGALL - send RESET which transitions to RUNNING (50)
+        // The device responds first with RESET, then on next iteration with RUNNING
+        result = setSystemRunLevel(cbRUNLEVEL_RESET, 0, 0, cbRUNLEVEL_RUNNING, timeout_ms);
+        if (result.isError()) {
+            return Result<void>::error("Failed to send RESET command: " + result.error());
+        }
+    }
+
+    // Success - device is now in RUNNING state
     return Result<void>::ok();
 }
 

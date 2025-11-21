@@ -5,7 +5,7 @@
 ///
 /// @brief  Unit tests for cbsdk::SdkSession
 ///
-/// Tests the SDK orchestration of cbdev + cbshmem with the two-stage pipeline.
+/// Tests the SDK orchestration of cbdev + cbshm with the two-stage pipeline.
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -17,7 +17,7 @@
 
 // Include protocol types and session headers
 #include <cbproto/cbproto.h>            // Protocol types
-#include "cbshmem/shmem_session.h"      // For transmit callback test
+#include "cbshm/shmem_session.h"      // For transmit callback test
 #include "cbdev/device_session.h"       // For loopback test
 #include "cbsdk_v2/sdk_session.h"       // SDK orchestration
 
@@ -180,7 +180,7 @@ TEST_F(SdkSessionTest, ReceivePackets_Loopback) {
 
     // Create a separate device session to send packets
     // Sender: bind to different port (51002) but send to receiver's port (51001)
-    auto dev_config = cbdev::DeviceConfig::custom("127.0.0.1", "127.0.0.1", 51002, 51001);
+    auto dev_config = cbdev::ConnectionParams::custom("127.0.0.1", "127.0.0.1", 51002, 51001);
     auto dev_result = cbdev::DeviceSession::create(dev_config);
     ASSERT_TRUE(dev_result.isOk()) << "Error: " << dev_result.error();
     auto& dev_session = dev_result.value();
@@ -384,10 +384,10 @@ TEST_F(SdkSessionTest, PacketSize_Calculation) {
 TEST_F(SdkSessionTest, TransmitCallback_RoundTrip) {
     // Create shared memory session for testing (use short name to avoid length limits)
     std::string name = "xmt_rt";
-    auto shmem_result = cbshmem::ShmemSession::create(
+    auto shmem_result = cbshm::ShmemSession::create(
         name, name + "_r", name + "_x", name + "_xl",
         name + "_s", name + "_p", name + "_g",
-        cbshmem::Mode::STANDALONE);
+        cbshm::Mode::STANDALONE);
     ASSERT_TRUE(shmem_result.isOk()) << "Failed to create shmem: " << shmem_result.error();
     auto shmem = std::move(shmem_result.value());
 

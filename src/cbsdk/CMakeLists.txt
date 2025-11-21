@@ -1,5 +1,5 @@
 # cbsdk_v2 - SDK Public API
-# Orchestrates cbdev + cbshmem to provide clean public C API
+# Orchestrates cbdev + cbshm to provide clean public C API
 
 project(cbsdk_v2
     DESCRIPTION "CereLink SDK v2"
@@ -25,7 +25,7 @@ target_include_directories(cbsdk_v2
 target_link_libraries(cbsdk_v2
     PUBLIC
         cbproto
-        cbshmem
+        cbshm
         cbdev
 )
 

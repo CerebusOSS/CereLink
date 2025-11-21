@@ -1,5 +1,5 @@
 # Unit Tests
-# Each module (cbproto, cbshmem, cbdev, cbsdk_v2) will have its own test suite
+# Each module (cbproto, cbshm, cbdev, cbsdk_v2) will have its own test suite
 
 # Only build if new architecture is enabled
 if(NOT CBSDK_BUILD_NEW_ARCH)
@@ -43,23 +43,23 @@ gtest_discover_tests(cbproto_tests)
 
 message(STATUS "Unit tests configured for cbproto")
 
-# cbshmem tests
-add_executable(cbshmem_tests
+# cbshm tests
+add_executable(cbshm_tests
     test_shmem_session.cpp
 )
 
-target_link_libraries(cbshmem_tests
+target_link_libraries(cbshm_tests
     PRIVATE
-        cbshmem
+        cbshm
         cbproto
         GTest::gtest_main
 )
 
-# Include directories inherited from cbshmem and cbproto targets
+# Include directories inherited from cbshm and cbproto targets
 
-gtest_discover_tests(cbshmem_tests)
+gtest_discover_tests(cbshm_tests)
 
-message(STATUS "Unit tests configured for cbshmem")
+message(STATUS "Unit tests configured for cbshm")
 
 # cbdev tests
 add_executable(cbdev_tests
@@ -72,14 +72,12 @@ target_link_libraries(cbdev_tests
     PRIVATE
         cbdev
         cbproto
-        cbshmem
         GTest::gtest_main
 )
 
 target_include_directories(cbdev_tests
     BEFORE PRIVATE
         ${PROJECT_SOURCE_DIR}/src/cbdev/include
-        ${PROJECT_SOURCE_DIR}/src/cbshmem/include
         ${PROJECT_SOURCE_DIR}/src/cbproto/include
 )
 
@@ -90,6 +88,7 @@ message(STATUS "Unit tests configured for cbdev")
 # cbsdk_v2 tests
 add_executable(cbsdk_v2_tests
     test_sdk_session.cpp
+    test_sdk_handshake.cpp
     test_cbsdk_c_api.cpp
 )
 
@@ -98,15 +97,15 @@ target_link_libraries(cbsdk_v2_tests
         cbsdk_v2
         cbdev
         cbproto
-        cbshmem
+        cbshm
         GTest::gtest_main
 )
 
 target_include_directories(cbsdk_v2_tests
     BEFORE PRIVATE
-        ${PROJECT_SOURCE_DIR}/src/cbsdk_v2/include
+        ${PROJECT_SOURCE_DIR}/src/cbsdk/include
         ${PROJECT_SOURCE_DIR}/src/cbdev/include
-        ${PROJECT_SOURCE_DIR}/src/cbshmem/include
+        ${PROJECT_SOURCE_DIR}/src/cbshm/include
         ${PROJECT_SOURCE_DIR}/src/cbproto/include
         ${PROJECT_SOURCE_DIR}/upstream
 )

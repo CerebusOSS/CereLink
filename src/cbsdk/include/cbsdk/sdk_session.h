@@ -3,14 +3,14 @@
 /// @author CereLink Development Team
 /// @date   2025-11-11
 ///
-/// @brief  SDK session that orchestrates cbdev + cbshmem
+/// @brief  SDK session that orchestrates cbdev + cbshm
 ///
 /// This is the main SDK implementation that combines device communication (cbdev) with
-/// shared memory management (cbshmem), providing a clean API for receiving packets from
+/// shared memory management (cbshm), providing a clean API for receiving packets from
 /// Cerebus devices with user callbacks.
 ///
 /// Architecture:
-///   Device → cbdev receive thread → cbshmem (fast!) → queue → callback thread → user callback
+///   Device → cbdev receive thread → cbshm (fast!) → queue → callback thread → user callback
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -31,7 +31,7 @@
 namespace cbsdk {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// Result Template (consistent with cbshmem/cbdev)
+// Result Template (consistent with cbshm/cbdev)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 template<typename T>
@@ -211,9 +211,13 @@ struct SdkStats {
     uint64_t queue_current_depth = 0;            ///< Current queue usage
     uint64_t queue_max_depth = 0;                ///< Peak queue usage
 
+    // Transmit statistics (STANDALONE mode only)
+    uint64_t packets_sent_to_device = 0;         ///< Packets sent to device
+
     // Error counters
     uint64_t shmem_store_errors = 0;             ///< Failed to store to shmem
     uint64_t receive_errors = 0;                 ///< Socket receive errors
+    uint64_t send_errors = 0;                    ///< Socket send errors
 
     void reset() {
         packets_received_from_device = 0;
@@ -224,8 +228,10 @@ struct SdkStats {
         packets_dropped = 0;
         queue_current_depth = 0;
         queue_max_depth = 0;
+        packets_sent_to_device = 0;
         shmem_store_errors = 0;
         receive_errors = 0;
+        send_errors = 0;
     }
 };
 
@@ -248,9 +254,9 @@ using ErrorCallback = std::function<void(const std::string& error_message)>;
 
 /// SDK session that orchestrates device communication and shared memory
 ///
-/// This class combines cbdev (device transport) and cbshmem (shared memory) into a unified
+/// This class combines cbdev (device transport) and cbshm (shared memory) into a unified
 /// API with a two-stage pipeline:
-///   1. Receive thread (cbdev) → stores to cbshmem (fast path, microseconds)
+///   1. Receive thread (cbdev) → stores to cbshm (fast path, microseconds)
 ///   2. Callback thread → delivers to user callback (can be slow)
 ///
 /// Example usage:
@@ -393,6 +399,27 @@ private:
 
     /// Shared memory receive thread loop (CLIENT mode only - reads from cbRECbuffer)
     void shmemReceiveThreadLoop();
+
+    /// Wait for SYSREP packet (helper for handshaking)
+    /// @param timeout_ms Timeout in milliseconds
+    /// @param expected_runlevel Expected runlevel (0 = any SYSREP)
+    /// @return true if SYSREP received with expected runlevel, false if timeout
+    bool waitForSysrep(uint32_t timeout_ms, uint32_t expected_runlevel = 0) const;
+
+    /// Send a runlevel command packet to the device (internal version with wait_for_runlevel)
+    /// @param runlevel Desired runlevel (cbRUNLEVEL_*)
+    /// @param resetque Channel for reset to queue on
+    /// @param runflags Lock recording after reset
+    /// @param wait_for_runlevel Runlevel to wait for (0 = any SYSREP)
+    /// @param timeout_ms Timeout in milliseconds
+    /// @return Result indicating success or error
+    Result<void> setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags,
+                                   uint32_t wait_for_runlevel, uint32_t timeout_ms);
+
+    /// Request configuration with custom timeout (internal version)
+    /// @param timeout_ms Timeout in milliseconds
+    /// @return Result indicating success or error
+    Result<void> requestConfiguration(uint32_t timeout_ms);
 
     /// Platform-specific implementation
     struct Impl;

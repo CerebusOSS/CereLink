@@ -301,14 +301,14 @@ The SDK automatically detects mode:
 - ✅ STANDALONE mode signaling to CLIENT processes
 - ✅ Thread lifecycle management (start/stop)
 - ✅ Optimized CLIENT mode (1 thread, 1 data copy)
-- ✅ All unit tests passing (18 cbshmem tests + 28 SDK tests)
+- ✅ All unit tests passing (18 cbshm tests + 28 SDK tests)
 
 ## Code Locations
 
-- **Shared Memory**: `src/cbshmem/`
-  - `include/cbshmem/shmem_session.h` - Public API
+- **Shared Memory**: `src/cbshm/`
+  - `include/cbshm/shmem_session.h` - Public API
   - `src/shmem_session.cpp` - Implementation
-  - `include/cbshmem/central_types.h` - Buffer structures
+  - `include/cbshm/central_types.h` - Buffer structures
 
 - **SDK Integration**: `src/cbsdk_v2/`
   - `src/sdk_session.cpp` - High-level SDK using shared memory

@@ -176,7 +176,9 @@ cbsdk_result_t cbsdk_session_start(cbsdk_session_t session) {
         auto result = session->cpp_session->start();
         if (result.isError()) {
             if (result.error().find("already running") != std::string::npos) {
-                return CBSDK_RESULT_ALREADY_RUNNING;
+                // Session is already started (by create() or previous start() call)
+                // Return SUCCESS to make this call idempotent
+                return CBSDK_RESULT_SUCCESS;
             }
             return CBSDK_RESULT_INTERNAL_ERROR;
         }

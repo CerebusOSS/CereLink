@@ -1,5 +1,5 @@
 # Integration Tests
-# Tests cross-module interactions (cbdev + cbshmem, cbsdk_v2 end-to-end, etc.)
+# Tests cross-module interactions (cbdev + cbshm, cbsdk_v2 end-to-end, etc.)
 
 # Only build if new architecture is enabled
 if(NOT CBSDK_BUILD_NEW_ARCH)
@@ -23,7 +23,7 @@ include(GoogleTest)
 
 # TODO: Add integration test executables when ready
 # Examples:
-# - cbdev_cbshmem_integration: Test device → shmem packet flow
+# - cbdev_cbshm_integration: Test device → shmem packet flow
 # - cbsdk_v2_standalone_test: End-to-end standalone mode test
 # - cbsdk_v2_client_test: End-to-end client mode test (with mock Central)
 # - mode_switching_test: Test switching between modes

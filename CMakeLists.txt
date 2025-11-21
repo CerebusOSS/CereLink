@@ -125,9 +125,9 @@ set_property(TARGET CCFUtils PROPERTY POSITION_INDEPENDENT_CODE ON)
 # (LIB_INCL_DIRS removed - now using target_include_directories)
 
 set( LIB_SOURCE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk/cbsdk.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk/ContinuousData.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk/EventData.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk_old/cbsdk.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk_old/ContinuousData.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk_old/EventData.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib/cbhwlib.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib/cbHwlibHi.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib/InstNetwork.cpp
@@ -148,7 +148,7 @@ target_include_directories( ${LIB_NAME}
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib
         ${CMAKE_CURRENT_SOURCE_DIR}/src/cbproto_old
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk_old
         ${CMAKE_CURRENT_SOURCE_DIR}/src/ccfutils
         ${CMAKE_CURRENT_SOURCE_DIR}/src/central
         ${CMAKE_CURRENT_SOURCE_DIR}/src/compat
@@ -184,7 +184,7 @@ if(CBSDK_BUILD_STATIC)
             PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/src/cbhwlib
             ${CMAKE_CURRENT_SOURCE_DIR}/src/cbproto_old
-                ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/cbsdk_old
                 ${CMAKE_CURRENT_SOURCE_DIR}/src/ccfutils
                 ${CMAKE_CURRENT_SOURCE_DIR}/src/central
                 ${CMAKE_CURRENT_SOURCE_DIR}/src/compat
@@ -238,9 +238,9 @@ add_subdirectory(tools)
 if(CBSDK_BUILD_NEW_ARCH)
     message(STATUS "Building new modular architecture (experimental)")
     add_subdirectory(src/cbproto)
-    add_subdirectory(src/cbshmem)
+    add_subdirectory(src/cbshm)
     add_subdirectory(src/cbdev)
-    add_subdirectory(src/cbsdk_v2)
+    add_subdirectory(src/cbsdk)
 endif(CBSDK_BUILD_NEW_ARCH)
 
 

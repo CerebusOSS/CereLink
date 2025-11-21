@@ -9,8 +9,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include <cbshmem/shmem_session.h>
-#include <cbshmem/central_types.h>
+#include <cbshm/shmem_session.h>
+#include <cbshm/central_types.h>
 #include <cstring>
 
 // Platform-specific headers
@@ -26,7 +26,7 @@
     #include <errno.h>
 #endif
 
-namespace cbshmem {
+namespace cbshm {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Platform-specific implementation details (Pimpl idiom)
@@ -1971,4 +1971,4 @@ Result<void> ShmemSession::getReceiveBufferStats(uint32_t& received, uint32_t& a
     return Result<void>::ok();
 }
 
-} // namespace cbshmem
+} // namespace cbshm

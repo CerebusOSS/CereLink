@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "../src/cbsdk/ContinuousData.h"
+#include "../src/cbsdk_old/ContinuousData.h"
 #include <cstring>
 #include <thread>
 #include <vector>

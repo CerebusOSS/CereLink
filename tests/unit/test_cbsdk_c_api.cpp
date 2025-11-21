@@ -106,8 +106,9 @@ TEST_F(CbsdkCApiTest, StartTwice_Error) {
     cbsdk_session_t session = nullptr;
     ASSERT_EQ(cbsdk_session_create(&session, &config), CBSDK_RESULT_SUCCESS);
 
+    // start() is idempotent - calling it when already running returns SUCCESS
     EXPECT_EQ(cbsdk_session_start(session), CBSDK_RESULT_SUCCESS);
-    EXPECT_EQ(cbsdk_session_start(session), CBSDK_RESULT_ALREADY_RUNNING);
+    EXPECT_EQ(cbsdk_session_start(session), CBSDK_RESULT_SUCCESS);
 
     cbsdk_session_stop(session);
     cbsdk_session_destroy(session);

@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "../src/cbsdk/EventData.h"
+#include "../src/cbsdk_old/EventData.h"
 #include <thread>
 #include <vector>
 #include <atomic>
