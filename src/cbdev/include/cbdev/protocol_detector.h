@@ -25,6 +25,7 @@ enum class ProtocolVersion {
     UNKNOWN,          ///< Unknown or undetected protocol
     PROTOCOL_311,     ///< Legacy cbproto_311 (32-bit timestamps, deprecated)
     PROTOCOL_400,     ///< Legacy cbproto_400 (64-bit timestamps, deprecated)
+    PROTOCOL_410,     ///< Protocol 4.1 (64-bit timestamps, 16-bit packet types)
     PROTOCOL_CURRENT  ///< Current protocol (64-bit timestamps)
 };
 

@@ -59,7 +59,7 @@ int main(int argc, char* argv[]) {
     const char* device_addr = "192.168.137.128";
     uint16_t send_port = 51001;
     const char* client_addr = "0.0.0.0";
-    uint16_t recv_port = 51002;
+    uint16_t recv_port = 51001;
     uint32_t timeout_ms = 500;
 
     if (argc > 1) {
@@ -92,7 +92,7 @@ int main(int argc, char* argv[]) {
 
     // Detect protocol version
     std::cout << "Detecting protocol version...\n";
-    std::cout << "  (Sending dual-format probe packets and analyzing response)\n\n";
+    std::cout << "  (Sending multi-format probe packets and analyzing response)\n\n";
 
     auto result = detectProtocol(device_addr, send_port,
                                  client_addr, recv_port,
@@ -133,14 +133,22 @@ int main(int argc, char* argv[]) {
             std::cout << "  - Requires special handling for compatibility\n";
             break;
 
+        case ProtocolVersion::PROTOCOL_410:
+            std::cout << "Details:\n";
+            std::cout << "  - This device uses protocol 4.1\n";
+            std::cout << "  - Uses 64-bit timestamps and 16-bit packet types\n";
+            std::cout << "  - It differs only slightly from current. Upgrade recommended.\n";
+            break;
+
         case ProtocolVersion::PROTOCOL_CURRENT:
             std::cout << "Details:\n";
-            std::cout << "  - This device uses the current protocol (4.1/4.2)\n";
+            std::cout << "  - This device uses the current protocol (4.2+)\n";
             std::cout << "  - Uses 64-bit timestamps and 16-bit packet types\n";
             std::cout << "  - Recommended for all new development\n";
             break;
 
         case ProtocolVersion::UNKNOWN:
+        default:
             std::cout << "Details:\n";
             std::cout << "  - Device responded but protocol version could not be determined\n";
             std::cout << "  - This may indicate an unsupported protocol version\n";
