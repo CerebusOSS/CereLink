@@ -81,10 +81,10 @@ void printPacket(const cbPKT_GENERIC& pkt) {
 /// Map device type string to DeviceType enum
 DeviceType parseDeviceType(const std::string& type_str) {
     if (type_str == "NSP")        return DeviceType::LEGACY_NSP;
-    if (type_str == "GEMINI_NSP") return DeviceType::GEMINI_NSP;
-    if (type_str == "HUB1")       return DeviceType::GEMINI_HUB1;
-    if (type_str == "HUB2")       return DeviceType::GEMINI_HUB2;
-    if (type_str == "HUB3")       return DeviceType::GEMINI_HUB3;
+    if (type_str == "GEMINI_NSP") return DeviceType::NSP;
+    if (type_str == "HUB1")       return DeviceType::HUB1;
+    if (type_str == "HUB2")       return DeviceType::HUB2;
+    if (type_str == "HUB3")       return DeviceType::HUB3;
     if (type_str == "NPLAY")      return DeviceType::NPLAY;
 
     std::cerr << "ERROR: Unknown device type '" << type_str << "'\n";
@@ -96,10 +96,10 @@ DeviceType parseDeviceType(const std::string& type_str) {
 const char* getDeviceTypeName(DeviceType type) {
     switch (type) {
         case DeviceType::LEGACY_NSP:   return "LEGACY_NSP";
-        case DeviceType::GEMINI_NSP:   return "GEMINI_NSP";
-        case DeviceType::GEMINI_HUB1:  return "GEMINI_HUB1";
-        case DeviceType::GEMINI_HUB2:  return "GEMINI_HUB2";
-        case DeviceType::GEMINI_HUB3:  return "GEMINI_HUB3";
+        case DeviceType::NSP:   return "GEMINI_NSP";
+        case DeviceType::HUB1:  return "GEMINI_HUB1";
+        case DeviceType::HUB2:  return "GEMINI_HUB2";
+        case DeviceType::HUB3:  return "GEMINI_HUB3";
         case DeviceType::NPLAY:        return "NPLAY";
         default:                       return "UNKNOWN";
     }

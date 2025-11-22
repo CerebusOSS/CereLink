@@ -160,10 +160,10 @@ private:
 /// Device type for automatic address/port configuration
 enum class DeviceType {
     LEGACY_NSP,   ///< Legacy NSP (192.168.137.128, ports 51001/51002)
-    GEMINI_NSP,   ///< Gemini NSP (192.168.137.128, port 51001 bidirectional)
-    GEMINI_HUB1,  ///< Gemini Hub 1 (192.168.137.200, port 51002 bidirectional)
-    GEMINI_HUB2,  ///< Gemini Hub 2 (192.168.137.201, port 51003 bidirectional)
-    GEMINI_HUB3,  ///< Gemini Hub 3 (192.168.137.202, port 51004 bidirectional)
+    NSP,   ///< Gemini NSP (192.168.137.128, port 51001 bidirectional)
+    HUB1,  ///< Gemini Hub 1 (192.168.137.200, port 51002 bidirectional)
+    HUB2,  ///< Gemini Hub 2 (192.168.137.201, port 51003 bidirectional)
+    HUB3,  ///< Gemini Hub 3 (192.168.137.202, port 51004 bidirectional)
     NPLAY         ///< NPlay loopback (127.0.0.1, ports 51001/51002)
 };
 

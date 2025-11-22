@@ -128,13 +128,13 @@ static int getInstanceNumber(DeviceType type) {
     switch (type) {
         case DeviceType::LEGACY_NSP:
             return 0;
-        case DeviceType::GEMINI_NSP:
+        case DeviceType::NSP:
             return 0;  // NSP is always instance 0
-        case DeviceType::GEMINI_HUB1:
+        case DeviceType::HUB1:
             return 1;
-        case DeviceType::GEMINI_HUB2:
+        case DeviceType::HUB2:
             return 2;
-        case DeviceType::GEMINI_HUB3:
+        case DeviceType::HUB3:
             return 3;
         case DeviceType::NPLAY:
             return 0;  // nPlay uses instance 0
@@ -260,16 +260,16 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
             case DeviceType::LEGACY_NSP:
                 dev_type = cbdev::DeviceType::LEGACY_NSP;
                 break;
-            case DeviceType::GEMINI_NSP:
+            case DeviceType::NSP:
                 dev_type = cbdev::DeviceType::NSP;
                 break;
-            case DeviceType::GEMINI_HUB1:
+            case DeviceType::HUB1:
                 dev_type = cbdev::DeviceType::HUB1;
                 break;
-            case DeviceType::GEMINI_HUB2:
+            case DeviceType::HUB2:
                 dev_type = cbdev::DeviceType::HUB2;
                 break;
-            case DeviceType::GEMINI_HUB3:
+            case DeviceType::HUB3:
                 dev_type = cbdev::DeviceType::HUB3;
                 break;
             case DeviceType::NPLAY:

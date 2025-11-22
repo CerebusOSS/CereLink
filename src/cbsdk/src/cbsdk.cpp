@@ -51,16 +51,16 @@ static cbsdk::SdkConfig to_cpp_config(const cbsdk_config_t* c_config) {
             cpp_config.device_type = cbsdk::DeviceType::LEGACY_NSP;
             break;
         case CBSDK_DEVICE_GEMINI_NSP:
-            cpp_config.device_type = cbsdk::DeviceType::GEMINI_NSP;
+            cpp_config.device_type = cbsdk::DeviceType::NSP;
             break;
         case CBSDK_DEVICE_GEMINI_HUB1:
-            cpp_config.device_type = cbsdk::DeviceType::GEMINI_HUB1;
+            cpp_config.device_type = cbsdk::DeviceType::HUB1;
             break;
         case CBSDK_DEVICE_GEMINI_HUB2:
-            cpp_config.device_type = cbsdk::DeviceType::GEMINI_HUB2;
+            cpp_config.device_type = cbsdk::DeviceType::HUB2;
             break;
         case CBSDK_DEVICE_GEMINI_HUB3:
-            cpp_config.device_type = cbsdk::DeviceType::GEMINI_HUB3;
+            cpp_config.device_type = cbsdk::DeviceType::HUB3;
             break;
         case CBSDK_DEVICE_NPLAY:
             cpp_config.device_type = cbsdk::DeviceType::NPLAY;
