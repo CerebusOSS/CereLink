@@ -54,12 +54,22 @@ public:
     /// @name IDeviceSession Implementation
     /// @{
 
-    /// Receive UDP datagram from device (non-blocking)
+    /// Receive packets from device and update configuration
+    /// High-level receive that automatically updates device config from received packets.
     /// @param buffer Destination buffer for received data
     /// @param buffer_size Maximum bytes to receive
     /// @return Number of bytes received, or error
     /// @note Returns 0 if no data available (EWOULDBLOCK)
     Result<int> receivePackets(void* buffer, size_t buffer_size) override;
+
+    /// Receive packets without updating configuration (used by protocol wrappers)
+    /// Low-level socket receive that does not parse or update config.
+    /// Protocol wrappers use this to receive untranslated data.
+    /// @param buffer Destination buffer for received data
+    /// @param buffer_size Maximum bytes to receive
+    /// @return Number of bytes received, or error
+    /// @note Returns 0 if no data available (EWOULDBLOCK)
+    Result<int> receivePacketsRaw(void* buffer, size_t buffer_size);
 
     /// Send single packet to device
     /// @param pkt Packet to send
@@ -113,6 +123,19 @@ public:
     /// Does NOT wait for response - caller must handle config flood and final SYSREP.
     /// @return Success or error
     Result<void> requestConfiguration() override;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Configuration Management
+    /// @{
+
+    /// Update device configuration from received packet buffer
+    /// Parses the buffer for configuration packets and updates internal config accordingly.
+    /// This should be called after receiving packets (and after protocol translation for wrappers).
+    /// @param buffer Buffer containing packets in current protocol format
+    /// @param bytes Number of bytes in buffer
+    void updateConfigFromBuffer(const void* buffer, size_t bytes);
 
     /// @}
 

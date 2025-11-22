@@ -21,6 +21,7 @@
 // Include packet structure definitions from cbproto
 #include <cbproto/cbproto.h>
 #include <cbshm/config_buffer.h>
+#include <cbshm/receive_buffer.h>
 
 #include <cstdint>
 

@@ -12,6 +12,7 @@
 
 #include "device_session_impl.h"
 #include <cbproto/cbproto.h>
+#include <cbproto/config.h>
 #include <cstring>
 
 // Platform-specific includes
@@ -183,6 +184,9 @@ struct DeviceSession::Impl {
     SOCKADDR_IN recv_addr{};  // Address we bind to (client side)
     SOCKADDR_IN send_addr{};  // Address we send to (device side)
     bool connected = false;
+
+    // Device configuration (from REQCONFIGALL)
+    cbproto::DeviceConfig device_config{};
 
     // Platform-specific state
     #ifdef _WIN32
@@ -359,7 +363,7 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
 // IDeviceSession Implementation
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-Result<int> DeviceSession::receivePackets(void* buffer, const size_t buffer_size) {
+Result<int> DeviceSession::receivePacketsRaw(void* buffer, const size_t buffer_size) {
     if (!m_impl || !m_impl->connected) {
         return Result<int>::error("Device not connected");
     }
@@ -383,6 +387,20 @@ Result<int> DeviceSession::receivePackets(void* buffer, const size_t buffer_size
     }
 
     return Result<int>::ok(bytes_recv);
+}
+
+Result<int> DeviceSession::receivePackets(void* buffer, const size_t buffer_size) {
+    // Receive packets from device
+    auto result = receivePacketsRaw(buffer, buffer_size);
+
+    if (result.isOk() && result.value() > 0) {
+        // TODO: Update statistics
+
+        // Update configuration from received packets (if any)
+        updateConfigFromBuffer(buffer, result.value());
+    }
+
+    return result;
 }
 
 Result<void> DeviceSession::sendPacket(const cbPKT_GENERIC& pkt) {
@@ -548,6 +566,183 @@ Result<void> DeviceSession::requestConfiguration() {
 
     // Send the packet (caller handles waiting for config flood and final SYSREP)
     return sendPacket(pkt);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Configuration Management
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t bytes) {
+    if (!buffer || bytes == 0 || !m_impl) {
+        return;  // Nothing to process
+    }
+
+    // Parse packets in buffer and update device_config for configuration packets
+    const auto* buff_bytes = static_cast<const uint8_t*>(buffer);
+    size_t offset = 0;
+
+    while (offset + cbPKT_HEADER_SIZE <= bytes) {
+        // Read packet header
+        const auto* header = reinterpret_cast<const cbPKT_HEADER*>(buff_bytes + offset);
+        const size_t packet_size = cbPKT_HEADER_SIZE + (header->dlen * 4);
+
+        // Verify complete packet
+        if (offset + packet_size > bytes) {
+            break;  // Incomplete packet
+        }
+
+        if ((header->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
+            // Configuration packet - process based on type
+            if (header->type == cbPKTTYPE_SYSHEARTBEAT) {
+                // TODO: Handle heartbeat if needed
+                // Central uses this to prevent the system from going idle.
+            }
+            else if (header->type == cbPKTTYPE_LOGREP) {
+                const auto* logrep = reinterpret_cast<const cbPKT_LOG*>(buff_bytes + offset);
+                // TODO: if (logrep->mode == cbLOG_MODE_CRITICAL) {}
+                // NODO: cbsdk uses this to process comments OnPktLog
+            }
+            else if ((header->type & 0xF0) == cbPKTTYPE_CHANREP) {
+                // NODO: Optionally rename the channel label if this device has a prefix
+                //  NSP{instrument}-{label} or Hub{instrument)-{label}
+                // Note: Even though CHANSET* packets sent to the device only have some fields that are valid,
+                //  and the device indeed only reads those fields, the CHANREP packets sent back by the device
+                //  contain the full channel info structure with all fields valid.
+                const auto* chaninfo = reinterpret_cast<const cbPKT_CHANINFO*>(buff_bytes + offset);
+                if (const uint32_t chan = chaninfo->chan; chan > 0 && chan <= cbMAXCHANS) {
+                    // The device always returns the complete channel info, even if only a subset changed.
+                    m_impl->device_config.chaninfo[chan-1] = *chaninfo;
+                    // Note: If this is exactly type == cbPKTTYPE_CHANREP, then we could invalidate cached spikes.
+                    // spk_buffer->cache[chan-1].valid = 0;
+                }
+            }
+            else if ((header->type & 0xF0) == cbPKTTYPE_SYSREP) {
+                const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(buff_bytes + offset);
+                m_impl->device_config.sysinfo = *sysinfo;
+                if (header->type == cbPKTTYPE_SYSREP) {
+                    // Note: this is likely the final packet in a config flood, so we could signal completion here
+                    // and handle any overall state e.g. related to instrument info.
+                }
+                // else if (header->type == cbPKTTYPE_SYSREPRUNLEV) {
+                //     if (sysinfo->runlevel == cbRUNLEVEL_HARDRESET) {
+                //         // TODO: Handle HARDRESET (signal event?)
+                //     }
+                //     else if (sysinfo->runlevel == cbRUNLEVEL_RUNNING && sysinfo->runflags & cbRUNFLAGS_LOCK) {
+                //         // TODO: Handle locked reset.
+                //     }
+                // }
+            }
+            else if (header->type == cbPKTTYPE_GROUPREP) {
+                auto const *groupinfo = reinterpret_cast<const cbPKT_GROUPINFO*>(buff_bytes + offset);
+                m_impl->device_config.groupinfo[groupinfo->group-1] = *groupinfo;
+            }
+            // else if (header->type == cbPKTTYPE_COMMENTREP) {
+            //     // cbsdk uses this to update comment shared memory: OnPktComment
+            // }
+            else if (header->type == cbPKTTYPE_FILTREP) {
+                auto const *filtinfo = reinterpret_cast<const cbPKT_FILTINFO*>(buff_bytes + offset);
+                m_impl->device_config.filtinfo[filtinfo->filt-1] = *filtinfo;
+            }
+            else if (header->type == cbPKTTYPE_PROCREP) {
+                m_impl->device_config.procinfo = *reinterpret_cast<const cbPKT_PROCINFO*>(buff_bytes + offset);
+            }
+            else if (header->type == cbPKTTYPE_BANKREP) {
+                auto const *bankinfo = reinterpret_cast<const cbPKT_BANKINFO*>(buff_bytes + offset);
+                if (bankinfo->bank < cbMAXBANKS) {
+                    m_impl->device_config.bankinfo[bankinfo->bank] = *bankinfo;
+                }
+            }
+            else if (header->type == cbPKTTYPE_SYSPROTOCOLMONITOR) {
+
+            }
+            else if (header->type == cbPKTTYPE_ADAPTFILTREP) {
+                m_impl->device_config.adaptinfo = *reinterpret_cast<const cbPKT_ADAPTFILTINFO*>(buff_bytes + offset);
+            }
+            else if (header->type == cbPKTTYPE_REFELECFILTREP) {
+                m_impl->device_config.refelecinfo = *reinterpret_cast<const cbPKT_REFELECFILTINFO*>(buff_bytes + offset);
+            }
+            else if (header->type == cbPKTTYPE_SS_MODELREP) {
+                auto const *ssmodelrep = reinterpret_cast<const cbPKT_SS_MODELSET*>(buff_bytes + offset);
+                uint32_t unit = ssmodelrep->unit_number;
+                if (unit == 255) {
+                    // Noise. Put it into the last slot.
+                    unit = cbMAXUNITS + 1;  // +1 because we init the array with +2.
+                }
+                // Note: ssmodelrep->chan is 0-based, unlike most other channel fields.
+                // Note: ssmodelrep->unit_number is 0-based because unit==0 means unsorted
+                m_impl->device_config.spike_sorting.models[ssmodelrep->chan][unit] = *ssmodelrep;
+            }
+            else if (header->type == cbPKTTYPE_SS_STATUSREP) {
+                m_impl->device_config.spike_sorting.status = *reinterpret_cast<const cbPKT_SS_STATUS*>(buff_bytes + offset);
+            }
+            else if (header->type == cbPKTTYPE_SS_DETECTREP) {
+                m_impl->device_config.spike_sorting.detect = *reinterpret_cast<const cbPKT_SS_DETECT*>(buff_bytes + offset);
+            }
+            else if (header->type == cbPKTTYPE_SS_ARTIF_REJECTREP) {
+                m_impl->device_config.spike_sorting.artifact_reject = *reinterpret_cast<const cbPKT_SS_ARTIF_REJECT*>(buff_bytes + offset);
+            }
+            else if (header->type == cbPKTTYPE_SS_NOISE_BOUNDARYREP) {
+                auto const* noise_boundary = reinterpret_cast<const cbPKT_SS_NOISE_BOUNDARY*>(buff_bytes + offset);
+                m_impl->device_config.spike_sorting.noise_boundary[noise_boundary->chan-1] = *noise_boundary;
+            }
+            else if (header->type == cbPKTTYPE_SS_STATISTICSREP) {
+                m_impl->device_config.spike_sorting.statistics = *reinterpret_cast<const cbPKT_SS_STATISTICS*>(buff_bytes + offset);
+            }
+            else if (header->type == cbPKTTYPE_FS_BASISREP) {
+                auto const* fs_basis = reinterpret_cast<const cbPKT_FS_BASIS*>(buff_bytes + offset);
+                if (fs_basis->chan != 0) {  // chan==0 is for a request packet only
+                    m_impl->device_config.spike_sorting.basis[fs_basis->chan-1] = *fs_basis;
+                }
+            }
+            else if (header->type == cbPKTTYPE_LNCREP) {
+                m_impl->device_config.lnc = *reinterpret_cast<const cbPKT_LNC*>(buff_bytes + offset);
+            }
+            else if (header->type == cbPKTTYPE_REPFILECFG) {
+                auto const* filecfg = reinterpret_cast<const cbPKT_FILECFG*>(buff_bytes + offset);
+                if (filecfg->options == cbFILECFG_OPT_REC
+                    || filecfg->options == cbFILECFG_OPT_STOP
+                    || filecfg->options == cbFILECFG_OPT_TIMEOUT) {
+                    m_impl->device_config.fileinfo = *filecfg;
+                }
+            }
+            // else if (header->type == cbPKTTYPE_REPINITIMPEDANCE) {
+            //
+            // }
+            // else if (header->type == cbPKTTYPE_REPPOLL) {
+            //
+            // }
+            // else if (header->type == cbPKTTYPE_SETUNITSELECTION) {
+            //
+            // }
+            else if (header->type == cbPKTTYPE_REPNTRODEINFO) {
+                auto const* ntrodeinfo = reinterpret_cast<const cbPKT_NTRODEINFO*>(buff_bytes + offset);
+                m_impl->device_config.ntrodeinfo[ntrodeinfo->ntrode-1] = *ntrodeinfo;
+            }
+            // else if (header->type == cbPKTTYPE_NMREP) {
+            //     // NODO: Abandon NM support
+            // }
+            // else if (header->type == cbPKTTYPE_WAVEFORMREP) {
+            //     const auto* waveformrep = reinterpret_cast<const cbPKT_AOUT_WAVEFORM*>(buff_bytes + offset);
+            //     uint16_t chan = waveformrep->chan;
+            //     // TODO: Support digital out waveforms. Do we care?
+            //     if (IsChanAnalogOut(chan)) {
+            //         chan -= cbGetNumAnalogChans() + 1;
+            //         if (chan < AOUT_NUM_GAIN_CHANS && waveformrep->trigNum < cbMAX_AOUT_TRIGGER) {
+            //             m_impl->device_config.waveform[chan][waveformrep->trigNum] = *waveformrep;
+            //         }
+            //     }
+            // }
+            // else if (header->type == cbPKTTYPE_NPLAYREP) {
+            //     const auto* nplayrep = reinterpret_cast<const cbPKT_NPLAY*>(buff_bytes + offset);
+            //     if (nplayrep->flags == cbNPLAY_FLAG_MAIN) {
+            //         // TODO: Store nplay in config
+            //         m_impl->device_config.nplay = *nplayrep;
+            //     }
+            // }
+        }
+
+        offset += packet_size;
+    }
 }
 
 } // namespace cbdev

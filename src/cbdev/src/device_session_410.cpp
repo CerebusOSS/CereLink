@@ -52,7 +52,7 @@ Result<int> DeviceSession_410::receivePackets(void* buffer, const size_t buffer_
     // Receive from underlying device (in 4.10 format)
     // Format is similar enough to current that we can receive directly into buffer.
     // CHANRESET adds 1 byte to the payload but that packet is not actually sent by the device so we can ignore.
-    auto result = m_device.receivePackets(buffer, buffer_size);
+    auto result = m_device.receivePacketsRaw(buffer, buffer_size);
     if (result.isError()) {
         return result;
     }
@@ -82,6 +82,11 @@ Result<int> DeviceSession_410::receivePackets(void* buffer, const size_t buffer_
 
         // Advance offsets
         offset += HEADER_SIZE_410 + header.dlen * 4;
+    }
+
+    // Update configuration from translated packets (now in current format)
+    if (offset > 0) {
+        m_device.updateConfigFromBuffer(buffer, offset);
     }
 
     return Result<int>::ok(static_cast<int>(offset));

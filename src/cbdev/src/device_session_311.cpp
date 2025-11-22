@@ -59,7 +59,7 @@ Result<int> DeviceSession_311::receivePackets(void* buffer, const size_t buffer_
     uint8_t src_buffer[cbCER_UDP_SIZE_MAX];
 
     // Receive from underlying device (in 3.11 format)
-    auto result = m_device.receivePackets(src_buffer, sizeof(src_buffer));
+    auto result = m_device.receivePacketsRaw(src_buffer, sizeof(src_buffer));
     if (result.isError()) {
         return result;
     }
@@ -105,7 +105,7 @@ Result<int> DeviceSession_311::receivePackets(void* buffer, const size_t buffer_
             pad_quads = 2;
         } else if (
             (dest_header.type == cbPKTTYPE_SYSPROTOCOLMONITOR)
-            || ((dest_header.type & cbPKTTYPE_COMPARE_MASK_REFLECTED) == cbPKTTYPE_CHANREP)
+            || ((dest_header.type & 0xF0) == cbPKTTYPE_CHANREP)
             || (dest_header.type == cbPKTTYPE_CHANRESETREP)){
             pad_quads = 1;
         }
@@ -120,6 +120,11 @@ Result<int> DeviceSession_311::receivePackets(void* buffer, const size_t buffer_
         // Advance offsets
         src_offset += HEADER_SIZE_311 + src_header.dlen * 4;
         dest_offset += cbPKT_HEADER_SIZE + dest_header.dlen * 4;
+    }
+
+    // Update configuration from translated packets
+    if (dest_offset > 0) {
+        m_device.updateConfigFromBuffer(dest_buffer, dest_offset);
     }
 
     return Result<int>::ok(static_cast<int>(dest_offset));

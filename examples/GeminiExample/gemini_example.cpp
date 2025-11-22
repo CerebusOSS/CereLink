@@ -133,22 +133,22 @@ int main(int argc, char* argv[]) {
 
     auto nsp = std::make_unique<DeviceInfo>();
     nsp->name = "Gemini NSP";
-    nsp->type = cbsdk::DeviceType::GEMINI_NSP;
+    nsp->type = cbsdk::DeviceType::NSP;
     devices.push_back(std::move(nsp));
 
     auto hub1 = std::make_unique<DeviceInfo>();
     hub1->name = "Gemini Hub1";
-    hub1->type = cbsdk::DeviceType::GEMINI_HUB1;
+    hub1->type = cbsdk::DeviceType::HUB1;
     devices.push_back(std::move(hub1));
 
     auto hub2 = std::make_unique<DeviceInfo>();
     hub2->name = "Gemini Hub2";
-    hub2->type = cbsdk::DeviceType::GEMINI_HUB2;
+    hub2->type = cbsdk::DeviceType::HUB2;
     devices.push_back(std::move(hub2));
 
     auto hub3 = std::make_unique<DeviceInfo>();
     hub3->name = "Gemini Hub3";
-    hub3->type = cbsdk::DeviceType::GEMINI_HUB3;
+    hub3->type = cbsdk::DeviceType::HUB3;
     devices.push_back(std::move(hub3));
 
     try {
@@ -165,24 +165,24 @@ int main(int argc, char* argv[]) {
             // Map device type to Central-compatible shared memory names
             switch (device->type) {
                 case cbsdk::DeviceType::LEGACY_NSP:
-                case cbsdk::DeviceType::GEMINI_NSP:
+                case cbsdk::DeviceType::NSP:
                 case cbsdk::DeviceType::NPLAY:
                     // Instance 0 uses base names without suffix
                     cfg_name = "cbCFGbuffer";
                     rec_name = "cbRECbuffer";
                     xmt_name = "XmtGlobal";
                     break;
-                case cbsdk::DeviceType::GEMINI_HUB1:
+                case cbsdk::DeviceType::HUB1:
                     cfg_name = "cbCFGbuffer1";
                     rec_name = "cbRECbuffer1";
                     xmt_name = "XmtGlobal1";
                     break;
-                case cbsdk::DeviceType::GEMINI_HUB2:
+                case cbsdk::DeviceType::HUB2:
                     cfg_name = "cbCFGbuffer2";
                     rec_name = "cbRECbuffer2";
                     xmt_name = "XmtGlobal2";
                     break;
-                case cbsdk::DeviceType::GEMINI_HUB3:
+                case cbsdk::DeviceType::HUB3:
                     cfg_name = "cbCFGbuffer3";
                     rec_name = "cbRECbuffer3";
                     xmt_name = "XmtGlobal3";

@@ -53,7 +53,7 @@ public:
             return translate_COMMENT_pre400_to_current(
                 src_payload, reinterpret_cast<cbPKT_COMMENT *>(dest), *reinterpret_cast<const uint32_t*>(src));
         }
-        if ((dest_header.type & cbPKTTYPE_COMPARE_MASK_REFLECTED) == cbPKTTYPE_CHANREP) {
+        if ((dest_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
             return translate_CHANINFO_pre410_to_current(src_payload, reinterpret_cast<cbPKT_CHANINFO *>(dest));
         }
         if (dest_header.type == cbPKTTYPE_SYSPROTOCOLMONITOR) {
@@ -103,7 +103,7 @@ public:
         if (dest_header.type == cbPKTTYPE_SYSPROTOCOLMONITOR) {
             return translate_SYSPROTOCOLMONITOR_pre410_to_current(src_payload, reinterpret_cast<cbPKT_SYSPROTOCOLMONITOR*>(dest));
         }
-        if ((dest_header.type & cbPKTTYPE_COMPARE_MASK_REFLECTED) == cbPKTTYPE_CHANREP) {
+        if ((dest_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
             return translate_CHANINFO_pre410_to_current(src_payload, reinterpret_cast<cbPKT_CHANINFO *>(dest));
         }
         if (dest_header.type == cbPKTTYPE_CHANRESETREP) {
@@ -159,7 +159,7 @@ public:
             return translate_SYSPROTOCOLMONITOR_current_to_pre410(
                 *reinterpret_cast<const cbPKT_SYSPROTOCOLMONITOR*>(&src), dest_payload);
         }
-        if ((src.cbpkt_header.type & cbPKTTYPE_COMPARE_MASK_REFLECTED) == cbPKTTYPE_CHANSET) {
+        if ((src.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANSET) {
             return translate_CHANINFO_current_to_pre410(
                 *reinterpret_cast<const cbPKT_CHANINFO*>(&src), dest_payload);
         }
@@ -195,7 +195,7 @@ public:
             return translate_SYSPROTOCOLMONITOR_current_to_pre410(
                 *reinterpret_cast<const cbPKT_SYSPROTOCOLMONITOR*>(&src), dest_payload);
         }
-        if ((src.cbpkt_header.type & cbPKTTYPE_COMPARE_MASK_REFLECTED) == cbPKTTYPE_CHANSET) {
+        if ((src.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANSET) {
             return translate_CHANINFO_current_to_pre410(
                 *reinterpret_cast<const cbPKT_CHANINFO*>(&src), dest_payload);
         }
