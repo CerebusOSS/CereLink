@@ -277,18 +277,6 @@ void receiveThread(DetectionState* state) {
         }
     }
 }
-
-const char* protocolVersionToString(ProtocolVersion version) {
-    switch (version) {
-        case ProtocolVersion::UNKNOWN:          return "UNKNOWN";
-        case ProtocolVersion::PROTOCOL_311:     return "cbproto 3.11";
-        case ProtocolVersion::PROTOCOL_400:     return "cbproto 4.0";
-        case ProtocolVersion::PROTOCOL_410:     return "cbproto 4.1";
-        case ProtocolVersion::PROTOCOL_CURRENT: return "cbproto >= 4.2 (current)";
-        default:                                return "INVALID";
-    }
-}
-
 Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_port,
                                        const char* client_addr, uint16_t recv_port,
                                        const uint32_t timeout_ms) {

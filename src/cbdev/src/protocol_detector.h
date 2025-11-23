@@ -20,13 +20,6 @@
 namespace cbdev {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Convert protocol version to string for logging
-/// @param version Protocol version
-/// @return Human-readable string
-///
-const char* protocolVersionToString(ProtocolVersion version);
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Detect protocol version by probing the device
 ///
 /// Sends a probe packet to the device and analyzes the response to determine protocol version.

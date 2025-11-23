@@ -47,23 +47,27 @@ static cbsdk::SdkConfig to_cpp_config(const cbsdk_config_t* c_config) {
 
     // Map device type
     switch (c_config->device_type) {
-        case CBSDK_DEVICE_LEGACY_NSP:
+        case CBPROTO_DEVICE_TYPE_LEGACY_NSP:
             cpp_config.device_type = cbsdk::DeviceType::LEGACY_NSP;
             break;
-        case CBSDK_DEVICE_GEMINI_NSP:
+        case CBPROTO_DEVICE_TYPE_NSP:
             cpp_config.device_type = cbsdk::DeviceType::NSP;
             break;
-        case CBSDK_DEVICE_GEMINI_HUB1:
+        case CBPROTO_DEVICE_TYPE_HUB1:
             cpp_config.device_type = cbsdk::DeviceType::HUB1;
             break;
-        case CBSDK_DEVICE_GEMINI_HUB2:
+        case CBPROTO_DEVICE_TYPE_HUB2:
             cpp_config.device_type = cbsdk::DeviceType::HUB2;
             break;
-        case CBSDK_DEVICE_GEMINI_HUB3:
+        case CBPROTO_DEVICE_TYPE_HUB3:
             cpp_config.device_type = cbsdk::DeviceType::HUB3;
             break;
-        case CBSDK_DEVICE_NPLAY:
+        case CBPROTO_DEVICE_TYPE_NPLAY:
             cpp_config.device_type = cbsdk::DeviceType::NPLAY;
+            break;
+        case CBPROTO_DEVICE_TYPE_CUSTOM:
+            // CUSTOM not supported in SDK config - use custom address/port fields instead
+            cpp_config.device_type = cbsdk::DeviceType::LEGACY_NSP;
             break;
     }
 
@@ -113,7 +117,7 @@ extern "C" {
 
 cbsdk_config_t cbsdk_config_default(void) {
     cbsdk_config_t config;
-    config.device_type = CBSDK_DEVICE_LEGACY_NSP;
+    config.device_type = CBPROTO_DEVICE_TYPE_LEGACY_NSP;
     config.callback_queue_depth = 16384;
     config.enable_realtime_priority = false;
     config.drop_on_overflow = true;

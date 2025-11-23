@@ -109,31 +109,6 @@ ChannelType parseChannelType(const char* str) {
     throw std::runtime_error("Invalid channel type. Valid values: FRONTEND, ANALOG_IN, ANALOG_OUT, AUDIO, DIGITAL_IN, SERIAL, DIGITAL_OUT");
 }
 
-const char* channelTypeToString(ChannelType type) {
-    switch (type) {
-        case ChannelType::FRONTEND: return "FRONTEND";
-        case ChannelType::ANALOG_IN: return "ANALOG_IN";
-        case ChannelType::ANALOG_OUT: return "ANALOG_OUT";
-        case ChannelType::AUDIO: return "AUDIO";
-        case ChannelType::DIGITAL_IN: return "DIGITAL_IN";
-        case ChannelType::SERIAL: return "SERIAL";
-        case ChannelType::DIGITAL_OUT: return "DIGITAL_OUT";
-        default: return "UNKNOWN";
-    }
-}
-
-const char* deviceTypeToString(DeviceType type) {
-    switch (type) {
-        case DeviceType::LEGACY_NSP: return "NSP (Legacy)";
-        case DeviceType::NSP: return "NSP (Gemini)";
-        case DeviceType::HUB1: return "HUB1";
-        case DeviceType::HUB2: return "HUB2";
-        case DeviceType::HUB3: return "HUB3";
-        case DeviceType::NPLAY: return "NPLAY";
-        default: return "CUSTOM";
-    }
-}
-
 /// Wait for configuration flood to complete by polling for SYSREP
 /// Returns true if SYSREP received, false on timeout
 bool waitForConfiguration(IDeviceSession& device, const int timeout_ms = 5000) {

@@ -971,4 +971,67 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
     }
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Utility Functions
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+const char* protocolVersionToString(ProtocolVersion version) {
+    switch (version) {
+        case ProtocolVersion::UNKNOWN:
+            return "Unknown";
+        case ProtocolVersion::PROTOCOL_311:
+            return "Protocol 3.11 (32-bit timestamps, 8-bit packet types)";
+        case ProtocolVersion::PROTOCOL_400:
+            return "Protocol 4.0 (64-bit timestamps, 8-bit packet types)";
+        case ProtocolVersion::PROTOCOL_410:
+            return "Protocol 4.1 (64-bit timestamps, 16-bit packet types)";
+        case ProtocolVersion::PROTOCOL_CURRENT:
+            return "Protocol 4.2+ (current)";
+        default:
+            return "Invalid Protocol Version";
+    }
+}
+
+const char* deviceTypeToString(DeviceType type) {
+    switch (type) {
+        case DeviceType::LEGACY_NSP:
+            return "Legacy NSP";
+        case DeviceType::NSP:
+            return "Gemini NSP";
+        case DeviceType::HUB1:
+            return "Gemini Hub 1";
+        case DeviceType::HUB2:
+            return "Gemini Hub 2";
+        case DeviceType::HUB3:
+            return "Gemini Hub 3";
+        case DeviceType::NPLAY:
+            return "nPlayServer";
+        case DeviceType::CUSTOM:
+            return "Custom";
+        default:
+            return "Invalid Device Type";
+    }
+}
+
+const char* channelTypeToString(ChannelType type) {
+    switch (type) {
+        case ChannelType::FRONTEND:
+            return "Front-End Analog Input";
+        case ChannelType::ANALOG_IN:
+            return "Analog Input";
+        case ChannelType::ANALOG_OUT:
+            return "Analog Output";
+        case ChannelType::AUDIO:
+            return "Audio Output";
+        case ChannelType::DIGITAL_IN:
+            return "Digital Input";
+        case ChannelType::SERIAL:
+            return "Serial Input";
+        case ChannelType::DIGITAL_OUT:
+            return "Digital Output";
+        default:
+            return "Invalid Channel Type";
+    }
+}
+
 } // namespace cbdev

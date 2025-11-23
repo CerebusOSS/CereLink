@@ -13,6 +13,7 @@
 #include <string>
 #include <cstdint>
 #include <cbproto/types.h>
+#include <cbproto/connection.h>
 
 namespace cbdev {
 
@@ -20,41 +21,51 @@ namespace cbdev {
 // Connection Configuration
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Device type enumeration (for connection addressing)
-enum class DeviceType {
-    LEGACY_NSP,            ///< Neural Signal Processor (legacy)
-    NSP,     ///< Gemini NSP
-    HUB1,           ///< Hub 1 (legacy addressing)
-    HUB2,           ///< Hub 2 (legacy addressing)
-    HUB3,           ///< Hub 3 (legacy addressing)
-    NPLAY,          ///< nPlayServer
-    CUSTOM          ///< Custom IP/port configuration
+/// Device type enumeration (C++ wrapper around C enum for type safety)
+enum class DeviceType : uint32_t {
+    LEGACY_NSP = CBPROTO_DEVICE_TYPE_LEGACY_NSP,  ///< Neural Signal Processor (legacy)
+    NSP        = CBPROTO_DEVICE_TYPE_NSP,         ///< Gemini NSP
+    HUB1       = CBPROTO_DEVICE_TYPE_HUB1,        ///< Hub 1 (legacy addressing)
+    HUB2       = CBPROTO_DEVICE_TYPE_HUB2,        ///< Hub 2 (legacy addressing)
+    HUB3       = CBPROTO_DEVICE_TYPE_HUB3,        ///< Hub 3 (legacy addressing)
+    NPLAY      = CBPROTO_DEVICE_TYPE_NPLAY,       ///< nPlayServer
+    CUSTOM     = CBPROTO_DEVICE_TYPE_CUSTOM       ///< Custom IP/port configuration
 };
 
-/// Protocol version enumeration
-enum class ProtocolVersion {
-    UNKNOWN,          ///< Unknown or undetected protocol
-    PROTOCOL_311,     ///< Legacy cbproto_311 (32-bit timestamps, deprecated)
-    PROTOCOL_400,     ///< Legacy cbproto_400 (64-bit timestamps, deprecated)
-    PROTOCOL_410,     ///< Protocol 4.1 (64-bit timestamps, 16-bit packet types)
-    PROTOCOL_CURRENT  ///< Current protocol (64-bit timestamps)
+/// Protocol version enumeration (C++ wrapper around C enum for type safety)
+enum class ProtocolVersion : uint32_t {
+    UNKNOWN        = CBPROTO_PROTOCOL_UNKNOWN,    ///< Unknown or undetected protocol
+    PROTOCOL_311   = CBPROTO_PROTOCOL_311,        ///< Legacy cbproto_311 (32-bit timestamps, deprecated)
+    PROTOCOL_400   = CBPROTO_PROTOCOL_400,        ///< Legacy cbproto_400 (64-bit timestamps, deprecated)
+    PROTOCOL_410   = CBPROTO_PROTOCOL_410,        ///< Protocol 4.1 (64-bit timestamps, 16-bit packet types)
+    PROTOCOL_CURRENT = CBPROTO_PROTOCOL_CURRENT   ///< Current protocol (64-bit timestamps)
 };
 
-/// Channel type enumeration (for filtering channels by capability)
-enum class ChannelType {
-    FRONTEND,         ///< Front-end analog input (isolated)
-    ANALOG_IN,        ///< Analog input (non-isolated)
-    ANALOG_OUT,       ///< Analog output (non-audio)
-    AUDIO,            ///< Audio output
-    DIGITAL_IN,       ///< Digital input
-    SERIAL,           ///< Serial input
-    DIGITAL_OUT       ///< Digital output
+/// Channel type enumeration (C++ wrapper around C enum for type safety)
+enum class ChannelType : uint32_t {
+    FRONTEND    = CBPROTO_CHANNEL_TYPE_FRONTEND,    ///< Front-end analog input (isolated)
+    ANALOG_IN   = CBPROTO_CHANNEL_TYPE_ANALOG_IN,   ///< Analog input (non-isolated)
+    ANALOG_OUT  = CBPROTO_CHANNEL_TYPE_ANALOG_OUT,  ///< Analog output (non-audio)
+    AUDIO       = CBPROTO_CHANNEL_TYPE_AUDIO,       ///< Audio output
+    DIGITAL_IN  = CBPROTO_CHANNEL_TYPE_DIGITAL_IN,  ///< Digital input
+    SERIAL      = CBPROTO_CHANNEL_TYPE_SERIAL,      ///< Serial input
+    DIGITAL_OUT = CBPROTO_CHANNEL_TYPE_DIGITAL_OUT  ///< Digital output
 };
 
 /// Convert protocol version to string for logging
 /// @param version Protocol version
 /// @return Human-readable string
 const char* protocolVersionToString(ProtocolVersion version);
+
+/// Convert device type to string for logging
+/// @param type Device type
+/// @return Human-readable string
+const char* deviceTypeToString(DeviceType type);
+
+/// Convert channel type to string for logging
+/// @param type Channel type
+/// @return Human-readable string
+const char* channelTypeToString(ChannelType type);
 
 /// Connection parameters for device communication
 /// Note: This contains network/socket configuration only.

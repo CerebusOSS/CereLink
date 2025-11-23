@@ -52,6 +52,7 @@ extern "C" {
 #endif
 
 #include <cbproto/cbproto.h>
+#include <cbproto/connection.h>
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Result Codes
@@ -72,21 +73,11 @@ typedef enum {
 // Configuration Structures
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Device type (automatically maps to correct IP addresses and ports)
-typedef enum {
-    CBSDK_DEVICE_LEGACY_NSP   = 0,  ///< Legacy NSP (192.168.137.128, ports 51001/51002)
-    CBSDK_DEVICE_GEMINI_NSP   = 1,  ///< Gemini NSP (192.168.137.128, port 51001 bidirectional)
-    CBSDK_DEVICE_GEMINI_HUB1  = 2,  ///< Gemini Hub 1 (192.168.137.200, port 51002 bidirectional)
-    CBSDK_DEVICE_GEMINI_HUB2  = 3,  ///< Gemini Hub 2 (192.168.137.201, port 51003 bidirectional)
-    CBSDK_DEVICE_GEMINI_HUB3  = 4,  ///< Gemini Hub 3 (192.168.137.202, port 51004 bidirectional)
-    CBSDK_DEVICE_NPLAY        = 5   ///< NPlay loopback (127.0.0.1, ports 51001/51002)
-} cbsdk_device_type_t;
-
 /// SDK configuration (C version of SdkConfig)
 typedef struct {
     // Device type (automatically maps to correct address/port and shared memory name)
     // Used only when creating new shared memory (STANDALONE mode)
-    cbsdk_device_type_t device_type;  ///< Device type to connect to
+    cbproto_device_type_t device_type;  ///< Device type to connect to
 
     // Callback thread configuration
     size_t callback_queue_depth;      ///< Packets to buffer (default: 16384)

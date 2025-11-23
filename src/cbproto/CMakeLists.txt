@@ -1,12 +1,12 @@
 # cbproto - Protocol Definitions Module
-# Pure header-only library containing packet structures and protocol constants
+# Header-only library containing packet structures, protocol constants, and connection enums
 
 project(cbproto
     DESCRIPTION "CereLink Protocol Definitions"
     LANGUAGES CXX
 )
 
-# Header-only library
+# Header-only INTERFACE library
 add_library(cbproto INTERFACE)
 
 target_include_directories(cbproto
