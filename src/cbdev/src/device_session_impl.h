@@ -100,6 +100,15 @@ public:
     /// @return Protocol version (PROTOCOL_CURRENT for this session)
     [[nodiscard]] ProtocolVersion getProtocolVersion() const override;
 
+    /// Get full device configuration
+    [[nodiscard]] const cbproto::DeviceConfig& getDeviceConfig() const override;
+
+    /// Get system information
+    [[nodiscard]] const cbPKT_SYSINFO& getSysInfo() const override;
+
+    /// Get channel information for specific channel
+    [[nodiscard]] const cbPKT_CHANINFO* getChanInfo(uint32_t chan_id) const override;
+
     /// @}
 
     /// Close socket (also called by destructor)
@@ -127,6 +136,21 @@ public:
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Channel Configuration
+    /// @{
+
+    /// Set sampling group for first N channels of a specific type
+    Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, uint32_t group_id) override;
+
+    /// Set AC input coupling for first N channels of a specific type
+    Result<void> setChannelsACInputCouplingByType(size_t nChans, ChannelType chanType, bool enabled) override;
+
+    /// Set spike sorting options for first N channels
+    Result<void> setChannelsSpikeSorting(size_t nChans, uint32_t sortOptions) override;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
     /// @name Configuration Management
     /// @{
 
@@ -142,6 +166,12 @@ public:
 private:
     /// Private constructor (use create() factory)
     DeviceSession() = default;
+
+    /// Helper method to check if a channel matches a specific type based on capabilities
+    /// @param chaninfo Channel information packet
+    /// @param chanType Channel type to check
+    /// @return true if channel matches the type
+    static bool channelMatchesType(const cbPKT_CHANINFO& chaninfo, ChannelType chanType);
 
     /// Implementation details (pImpl pattern)
     struct Impl;

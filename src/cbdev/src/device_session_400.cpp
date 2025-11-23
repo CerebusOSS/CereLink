@@ -197,4 +197,28 @@ ProtocolVersion DeviceSession_400::getProtocolVersion() const {
     return ProtocolVersion::PROTOCOL_400;
 }
 
+const cbproto::DeviceConfig& DeviceSession_400::getDeviceConfig() const {
+    return m_device.getDeviceConfig();
+}
+
+const cbPKT_SYSINFO& DeviceSession_400::getSysInfo() const {
+    return m_device.getSysInfo();
+}
+
+const cbPKT_CHANINFO* DeviceSession_400::getChanInfo(const uint32_t chan_id) const {
+    return m_device.getChanInfo(chan_id);
+}
+
+Result<void> DeviceSession_400::setChannelsGroupByType(const size_t nChans, const ChannelType chanType, const uint32_t group_id) {
+    return m_device.setChannelsGroupByType(nChans, chanType, group_id);
+}
+
+Result<void> DeviceSession_400::setChannelsACInputCouplingByType(const size_t nChans, const ChannelType chanType, const bool enabled) {
+    return m_device.setChannelsACInputCouplingByType(nChans, chanType, enabled);
+}
+
+Result<void> DeviceSession_400::setChannelsSpikeSorting(const size_t nChans, const uint32_t sortOptions) {
+    return m_device.setChannelsSpikeSorting(nChans, sortOptions);
+}
+
 } // namespace cbdev

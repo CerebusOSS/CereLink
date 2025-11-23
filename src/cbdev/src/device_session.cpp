@@ -188,6 +188,9 @@ struct DeviceSession::Impl {
     // Device configuration (from REQCONFIGALL)
     cbproto::DeviceConfig device_config{};
 
+    // Configuration request tracking
+    bool config_request_pending = false;
+
     // Platform-specific state
     #ifdef _WIN32
     bool wsa_initialized = false;
@@ -471,6 +474,21 @@ ProtocolVersion DeviceSession::getProtocolVersion() const {
     return ProtocolVersion::PROTOCOL_CURRENT;
 }
 
+const cbproto::DeviceConfig& DeviceSession::getDeviceConfig() const {
+    return m_impl->device_config;
+}
+
+const cbPKT_SYSINFO& DeviceSession::getSysInfo() const {
+    return m_impl->device_config.sysinfo;
+}
+
+const cbPKT_CHANINFO* DeviceSession::getChanInfo(const uint32_t chan_id) const {
+    if (chan_id < 1 || chan_id > cbMAXCHANS) {
+        return nullptr;
+    }
+    return &m_impl->device_config.chaninfo[chan_id - 1];
+}
+
 void DeviceSession::close() {
     if (!m_impl) return;
 
@@ -554,6 +572,15 @@ Result<void> DeviceSession::setSystemRunLevel(const uint32_t runlevel, const uin
 }
 
 Result<void> DeviceSession::requestConfiguration() {
+    if (!m_impl) {
+        return Result<void>::error("Device not initialized");
+    }
+
+    // Check if a config request is already pending
+    if (m_impl->config_request_pending) {
+        return Result<void>::error("Configuration request already in progress");
+    }
+
     // Create REQCONFIGALL packet
     cbPKT_GENERIC pkt = {};
 
@@ -564,8 +591,207 @@ Result<void> DeviceSession::requestConfiguration() {
     pkt.cbpkt_header.dlen = 0;  // No payload
     pkt.cbpkt_header.instrument = 0;
 
+    // Set flag before sending (will be cleared when cbPKTTYPE_SYSREP is received)
+    m_impl->config_request_pending = true;
+
     // Send the packet (caller handles waiting for config flood and final SYSREP)
-    return sendPacket(pkt);
+    auto result = sendPacket(pkt);
+    if (result.isError()) {
+        // Clear flag if send failed
+        m_impl->config_request_pending = false;
+    }
+    return result;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Channel Configuration
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+bool DeviceSession::channelMatchesType(const cbPKT_CHANINFO& chaninfo, const ChannelType chanType) {
+    const uint32_t caps = chaninfo.chancaps;
+    const uint32_t ainpcaps = chaninfo.ainpcaps;
+    const uint32_t aoutcaps = chaninfo.aoutcaps;
+    const uint32_t dinpcaps = chaninfo.dinpcaps;
+
+    // Channel must exist and be connected
+    if ((cbCHAN_EXISTS | cbCHAN_CONNECTED) != (caps & (cbCHAN_EXISTS | cbCHAN_CONNECTED))) {
+        return false;
+    }
+
+    // Check type-specific capabilities
+    switch (chanType) {
+        case ChannelType::FRONTEND:
+            // Front-end: analog input + isolated
+            return (cbCHAN_AINP | cbCHAN_ISOLATED) == (caps & (cbCHAN_AINP | cbCHAN_ISOLATED));
+
+        case ChannelType::ANALOG_IN:
+            // Analog input but not isolated
+            return (cbCHAN_AINP) == (caps & (cbCHAN_AINP | cbCHAN_ISOLATED));
+
+        case ChannelType::ANALOG_OUT:
+            // Analog output but not audio
+            return (cbCHAN_AOUT == (caps & cbCHAN_AOUT)) &&
+                   (cbAOUT_AUDIO != (aoutcaps & cbAOUT_AUDIO));
+
+        case ChannelType::AUDIO:
+            // Analog output + audio flag
+            return (cbCHAN_AOUT == (caps & cbCHAN_AOUT)) &&
+                   (cbAOUT_AUDIO == (aoutcaps & cbAOUT_AUDIO));
+
+        case ChannelType::DIGITAL_IN:
+            // Digital input with mask (but not serial)
+            return (cbCHAN_DINP == (caps & cbCHAN_DINP)) &&
+                   (dinpcaps & cbDINP_MASK) &&
+                   !(dinpcaps & cbDINP_SERIALMASK);
+
+        case ChannelType::SERIAL:
+            // Digital input with serial mask
+            return (cbCHAN_DINP == (caps & cbCHAN_DINP)) &&
+                   (dinpcaps & cbDINP_SERIALMASK);
+
+        case ChannelType::DIGITAL_OUT:
+            // Digital output
+            return cbCHAN_DOUT == (caps & cbCHAN_DOUT);
+
+        default:
+            return false;
+    }
+}
+
+Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const ChannelType chanType, const uint32_t group_id) {
+    if (!m_impl || !m_impl->connected) {
+        return Result<void>::error("Device not connected");
+    }
+
+    if (group_id > 6) {
+        return Result<void>::error("Invalid group ID (must be 0-6)");
+    }
+
+    // Find first nChans channels of specified type and configure them
+    size_t count = 0;
+    for (uint32_t chan = 1; chan <= cbMAXCHANS && count < nChans; ++chan) {
+        auto& chaninfo = m_impl->device_config.chaninfo[chan - 1];
+
+        // Check if this channel matches the requested type
+        if (!channelMatchesType(chaninfo, chanType)) {
+            continue;
+        }
+
+        // Create channel config packet
+        cbPKT_CHANINFO pkt = chaninfo;  // Start with current config
+        pkt.cbpkt_header.type = cbPKTTYPE_CHANSETSMP;  // Use sampling-specific set command
+        pkt.chan = chan;
+
+        // Apply group-specific logic
+        if (group_id >= 1 && group_id <= 4) {
+            // Groups 1-4: disable groups 1-5 but not 6, set smpgroup, set smpfilter
+            pkt.smpgroup = group_id;
+
+            // Set filter based on group mapping: {1: 5, 2: 6, 3: 7, 4: 10}
+            constexpr uint32_t filter_map[] = {0, 5, 6, 7, 10, 0, 0};
+            pkt.smpfilter = filter_map[group_id];
+        }
+        else if (group_id == 5) {
+            // Group 5: disable all others
+            pkt.smpgroup = 5;
+            pkt.ainpopts &= ~cbAINP_RAWSTREAM;  // Clear group 6 flag
+        }
+        else if (group_id == 6) {
+            // Group 6: disable 5 but no others, set cbAINP_RAWSTREAM
+            if (pkt.smpgroup == 5) {
+                pkt.smpgroup = 0;  // Clear group 5 if it was set
+            }
+            pkt.ainpopts |= cbAINP_RAWSTREAM;  // Set group 6 flag
+        }
+        else if (group_id == 0) {
+            // Group 0: disable all groups including raw (group 6)
+            pkt.smpgroup = 0;
+            pkt.ainpopts &= ~cbAINP_RAWSTREAM;  // Clear group 6 flag
+        }
+
+        // Send the packet
+        if (auto result = sendPacket(*reinterpret_cast<cbPKT_GENERIC*>(&pkt)); result.isError()) {
+            return result;
+        }
+
+        count++;
+    }
+
+    if (count == 0) {
+        return Result<void>::error("No channels found matching type");
+    }
+
+    return Result<void>::ok();
+}
+
+Result<void> DeviceSession::setChannelsACInputCouplingByType(const size_t nChans, const ChannelType chanType, const bool enabled) {
+    if (!m_impl || !m_impl->connected) {
+        return Result<void>::error("Device not connected");
+    }
+
+    // Find first nChans channels of specified type and configure them
+    size_t count = 0;
+    for (uint32_t chan = 1; chan <= cbMAXCHANS && count < nChans; ++chan) {
+        const auto& chaninfo = m_impl->device_config.chaninfo[chan - 1];
+
+        // Check if this channel matches the requested type
+        if (!channelMatchesType(chaninfo, chanType)) {
+            continue;
+        }
+
+        // Create channel config packet
+        cbPKT_CHANINFO pkt = chaninfo;  // Start with current config
+        pkt.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;  // Use analog input set command
+        pkt.chan = chan;
+
+        // Set or clear offset correction flag
+        if (enabled) {
+            pkt.ainpopts |= cbAINP_OFFSET_CORRECT;
+        } else {
+            pkt.ainpopts &= ~cbAINP_OFFSET_CORRECT;
+        }
+
+        // Send the packet
+        if (auto result = sendPacket(*reinterpret_cast<cbPKT_GENERIC*>(&pkt)); result.isError()) {
+            return result;
+        }
+
+        count++;
+    }
+
+    if (count == 0) {
+        return Result<void>::error("No channels found matching type");
+    }
+
+    return Result<void>::ok();
+}
+
+Result<void> DeviceSession::setChannelsSpikeSorting(const size_t nChans, const uint32_t sortOptions) {
+    if (!m_impl || !m_impl->connected) {
+        return Result<void>::error("Device not connected");
+    }
+
+    // Configure first nChans channels (no type filter for this method)
+    for (size_t i = 0; i < nChans && i < cbMAXCHANS; ++i) {
+        const uint32_t chan = i + 1;
+        const auto& chaninfo = m_impl->device_config.chaninfo[i];
+
+        // Create channel config packet
+        cbPKT_CHANINFO pkt = chaninfo;  // Start with current config
+        pkt.cbpkt_header.type = cbPKTTYPE_CHANSETSPKTHR;  // Use spike threshold set command
+        pkt.chan = chan;
+
+        // Clear all spike sorting flags and set new ones
+        pkt.spkopts &= ~cbAINPSPK_ALLSORT;
+        pkt.spkopts |= sortOptions;
+
+        // Send the packet
+        if (auto result = sendPacket(*reinterpret_cast<cbPKT_GENERIC*>(&pkt)); result.isError()) {
+            return result;
+        }
+    }
+
+    return Result<void>::ok();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -620,8 +846,8 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(buff_bytes + offset);
                 m_impl->device_config.sysinfo = *sysinfo;
                 if (header->type == cbPKTTYPE_SYSREP) {
-                    // Note: this is likely the final packet in a config flood, so we could signal completion here
-                    // and handle any overall state e.g. related to instrument info.
+                    // This is the final packet in a config flood - clear the pending flag
+                    m_impl->config_request_pending = false;
                 }
                 // else if (header->type == cbPKTTYPE_SYSREPRUNLEV) {
                 //     if (sysinfo->runlevel == cbRUNLEVEL_HARDRESET) {

@@ -109,6 +109,24 @@ public:
     /// @return PROTOCOL_400
     [[nodiscard]] ProtocolVersion getProtocolVersion() const override;
 
+    /// Get full device configuration (delegated to wrapped device)
+    [[nodiscard]] const cbproto::DeviceConfig& getDeviceConfig() const override;
+
+    /// Get system information (delegated to wrapped device)
+    [[nodiscard]] const cbPKT_SYSINFO& getSysInfo() const override;
+
+    /// Get channel information for specific channel (delegated to wrapped device)
+    [[nodiscard]] const cbPKT_CHANINFO* getChanInfo(uint32_t chan_id) const override;
+
+    /// Set sampling group for first N channels of a specific type (delegated to wrapped device)
+    Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, uint32_t group_id) override;
+
+    /// Set AC input coupling for first N channels of a specific type (delegated to wrapped device)
+    Result<void> setChannelsACInputCouplingByType(size_t nChans, ChannelType chanType, bool enabled) override;
+
+    /// Set spike sorting options for first N channels (delegated to wrapped device)
+    Result<void> setChannelsSpikeSorting(size_t nChans, uint32_t sortOptions) override;
+
     /// @}
 
 private:

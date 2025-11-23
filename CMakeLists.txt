@@ -89,6 +89,7 @@ if(CBSDK_BUILD_SAMPLE)
 
     set(CBDEV_EXAMPLES
         "check_protocol_version:CheckProtocolVersion/check_protocol_version.cpp"
+        "configure_channels:ConfigureChannels/configure_channels.cpp"
     )
 
     set(SAMPLE_TARGET_LIST)

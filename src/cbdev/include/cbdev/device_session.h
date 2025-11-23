@@ -16,6 +16,7 @@
 #include <cbdev/connection.h>
 #include <cbdev/result.h>
 #include <cbproto/cbproto.h>
+#include <cbproto/config.h>
 #include <cstddef>
 
 namespace cbdev {
@@ -116,6 +117,54 @@ public:
     /// @return Protocol version being used by this session
     /// @note For auto-detected sessions, returns the detected version
     [[nodiscard]] virtual ProtocolVersion getProtocolVersion() const = 0;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Configuration Access
+    /// @{
+
+    /// Get full device configuration
+    /// @return Reference to device configuration buffer
+    /// @note Configuration is updated automatically when config packets are received
+    [[nodiscard]] virtual const cbproto::DeviceConfig& getDeviceConfig() const = 0;
+
+    /// Get system information
+    /// @return Reference to system info packet
+    [[nodiscard]] virtual const cbPKT_SYSINFO& getSysInfo() const = 0;
+
+    /// Get channel information for specific channel
+    /// @param chan_id Channel ID (1-based, 1 to cbMAXCHANS)
+    /// @return Pointer to channel info, or nullptr if invalid channel ID
+    [[nodiscard]] virtual const cbPKT_CHANINFO* getChanInfo(uint32_t chan_id) const = 0;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Channel Configuration
+    /// @{
+
+    /// Set sampling group for first N channels of a specific type
+    /// Groups 1-4 disable groups 1-5 but not 6. Group 5 disables all others. Group 6 disables 5 but no others.
+    /// Group 0 disables all groups including raw.
+    /// @param nChans Number of channels to configure (use cbMAXCHANS for all channels of type)
+    /// @param chanType Channel type filter (e.g., ChannelType::FRONTEND)
+    /// @param group_id Group ID (0-6)
+    /// @return Success or error
+    virtual Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, uint32_t group_id) = 0;
+
+    /// Set AC input coupling (offset correction) for first N channels of a specific type
+    /// @param nChans Number of channels to configure (use cbMAXCHANS for all channels of type)
+    /// @param chanType Channel type filter
+    /// @param enabled true to enable AC coupling, false to disable
+    /// @return Success or error
+    virtual Result<void> setChannelsACInputCouplingByType(size_t nChans, ChannelType chanType, bool enabled) = 0;
+
+    /// Set spike sorting options for first N channels
+    /// @param nChans Number of channels to configure
+    /// @param sortOptions Spike sorting options (cbAINPSPK_* flags)
+    /// @return Success or error
+    virtual Result<void> setChannelsSpikeSorting(size_t nChans, uint32_t sortOptions) = 0;
 
     /// @}
 };

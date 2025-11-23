@@ -18,6 +18,7 @@ set(CBSDK_V2_EXAMPLES
 # cbdev examples (link against cbdev only - no cbshm, no cbsdk)
 set(CBDEV_EXAMPLES
     "check_protocol_version:CheckProtocolVersion/check_protocol_version.cpp"
+    "configure_channels:ConfigureChannels/configure_channels.cpp"
 )
 
 set(SAMPLE_TARGET_LIST)

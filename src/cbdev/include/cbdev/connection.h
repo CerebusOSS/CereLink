@@ -40,6 +40,17 @@ enum class ProtocolVersion {
     PROTOCOL_CURRENT  ///< Current protocol (64-bit timestamps)
 };
 
+/// Channel type enumeration (for filtering channels by capability)
+enum class ChannelType {
+    FRONTEND,         ///< Front-end analog input (isolated)
+    ANALOG_IN,        ///< Analog input (non-isolated)
+    ANALOG_OUT,       ///< Analog output (non-audio)
+    AUDIO,            ///< Audio output
+    DIGITAL_IN,       ///< Digital input
+    SERIAL,           ///< Serial input
+    DIGITAL_OUT       ///< Digital output
+};
+
 /// Convert protocol version to string for logging
 /// @param version Protocol version
 /// @return Human-readable string
