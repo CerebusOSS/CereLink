@@ -14,6 +14,11 @@
 #include <cbproto/cbproto.h>
 #include <cbproto/config.h>
 #include <cstring>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
+#include <algorithm>  // for std::remove
+#include <functional> // for std::function
 
 // Platform-specific includes
 #ifdef _WIN32
@@ -188,8 +193,15 @@ struct DeviceSession::Impl {
     // Device configuration (from REQCONFIGALL)
     cbproto::DeviceConfig device_config{};
 
-    // Configuration request tracking
-    bool config_request_pending = false;
+    // General response waiting mechanism
+    struct PendingResponse {
+        std::function<bool(const cbPKT_HEADER*)> matcher;
+        std::condition_variable cv;
+        std::mutex mutex;
+        bool received = false;
+    };
+    std::vector<std::shared_ptr<PendingResponse>> pending_responses;
+    std::mutex pending_mutex;
 
     // Platform-specific state
     #ifdef _WIN32
@@ -207,6 +219,17 @@ struct DeviceSession::Impl {
         }
 #endif
     }
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// ResponseWaiter::Impl - PImpl pattern to hide internal details
+///////////////////////////////////////////////////////////////////////////////////////////////////
+struct DeviceSession::ResponseWaiter::Impl {
+    std::shared_ptr<DeviceSession::Impl::PendingResponse> response;
+    DeviceSession* session;
+
+    Impl(std::shared_ptr<DeviceSession::Impl::PendingResponse> resp, DeviceSession* sess)
+        : response(std::move(resp)), session(sess) {}
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -571,36 +594,119 @@ Result<void> DeviceSession::setSystemRunLevel(const uint32_t runlevel, const uin
     return sendPacket(*reinterpret_cast<cbPKT_GENERIC*>(&sysinfo));
 }
 
+Result<void> DeviceSession::setSystemRunLevelSync(uint32_t runlevel, uint32_t resetque,
+                                                   uint32_t runflags,
+                                                   std::chrono::milliseconds timeout) {
+    // Determine expected runlevel in response:
+    // - HARDRESET returns STANDBY (after 2 packets)
+    // - RESET returns RUNNING (after 2 packets)
+    // - Others return the same runlevel
+    uint32_t expected_runlevel;
+    switch (runlevel) {
+        case cbRUNLEVEL_HARDRESET:
+            expected_runlevel = cbRUNLEVEL_STANDBY;
+            break;
+        case cbRUNLEVEL_RESET:
+            expected_runlevel = cbRUNLEVEL_RUNNING;
+            break;
+        default:
+            expected_runlevel = runlevel;
+            break;
+    }
+
+    return sendAndWait(
+        [this, runlevel, resetque, runflags]() {
+            return setSystemRunLevel(runlevel, resetque, runflags);
+        },
+        [expected_runlevel](const cbPKT_HEADER* hdr) {
+            if ((hdr->chid & cbPKTCHAN_CONFIGURATION) != cbPKTCHAN_CONFIGURATION ||
+                hdr->type != cbPKTTYPE_SYSREPRUNLEV) {
+                return false;
+            }
+            // Cast to full packet to check runlevel field
+            auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(hdr);
+            return sysinfo->runlevel == expected_runlevel;
+        },
+        timeout
+    );
+}
+
 Result<void> DeviceSession::requestConfiguration() {
     if (!m_impl) {
         return Result<void>::error("Device not initialized");
     }
 
-    // Check if a config request is already pending
-    if (m_impl->config_request_pending) {
-        return Result<void>::error("Configuration request already in progress");
-    }
-
     // Create REQCONFIGALL packet
     cbPKT_GENERIC pkt = {};
-
-    // Fill header
     pkt.cbpkt_header.time = 1;
     pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     pkt.cbpkt_header.type = cbPKTTYPE_REQCONFIGALL;
     pkt.cbpkt_header.dlen = 0;  // No payload
     pkt.cbpkt_header.instrument = 0;
 
-    // Set flag before sending (will be cleared when cbPKTTYPE_SYSREP is received)
-    m_impl->config_request_pending = true;
+    // Send the packet
+    return sendPacket(pkt);
+}
 
-    // Send the packet (caller handles waiting for config flood and final SYSREP)
-    auto result = sendPacket(pkt);
-    if (result.isError()) {
-        // Clear flag if send failed
-        m_impl->config_request_pending = false;
+Result<void> DeviceSession::requestConfigurationSync(std::chrono::milliseconds timeout) {
+    return sendAndWait(
+        [this]() { return requestConfiguration(); },
+        [](const cbPKT_HEADER* hdr) {
+            return (hdr->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION &&
+                   hdr->type == cbPKTTYPE_SYSREP;
+        },
+        timeout
+    );
+}
+
+Result<void> DeviceSession::performHandshakeSync(std::chrono::milliseconds timeout) {
+    if (!m_impl) {
+        return Result<void>::error("Device not initialized");
     }
-    return result;
+
+    // Step 1: Try to set runlevel to RUNNING
+    auto result = setSystemRunLevelSync(cbRUNLEVEL_RUNNING, 0, 0, std::chrono::milliseconds(10));
+    if (result.isError()) {
+        // If this fails, it's not critical - device may already be in a different state
+        // Continue with the handshake process
+    }
+
+    // Step 2: Check current runlevel
+    uint32_t current_runlevel = m_impl->device_config.sysinfo.runlevel;
+
+    // Step 3: If not RUNNING, do HARDRESET
+    if (current_runlevel != cbRUNLEVEL_RUNNING) {
+        result = setSystemRunLevelSync(cbRUNLEVEL_HARDRESET, 0, 0, timeout);
+        if (result.isError()) {
+            return result;  // HARDRESET failed
+        }
+        // After HARDRESET, we should be in STANDBY
+    }
+
+    // Step 5: Request configuration
+    result = requestConfigurationSync(timeout);
+    if (result.isError()) {
+        return result;
+    }
+
+    // Step 6: Check if runlevel is RUNNING
+    current_runlevel = m_impl->device_config.sysinfo.runlevel;
+    if (current_runlevel != cbRUNLEVEL_RUNNING) {
+        // Step 7: Need to do RESET to get to RUNNING
+        result = setSystemRunLevelSync(cbRUNLEVEL_RESET, 0, 0, timeout);
+        if (result.isError()) {
+            return result;
+        }
+        // After RESET, we should be in RUNNING
+    }
+
+    // Verify we're in RUNNING state
+    current_runlevel = m_impl->device_config.sysinfo.runlevel;
+    if (current_runlevel != cbRUNLEVEL_RUNNING) {
+        return Result<void>::error("Failed to reach RUNNING state after handshake");
+    }
+
+    return Result<void>::ok();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -766,6 +872,19 @@ Result<void> DeviceSession::setChannelsACInputCouplingByType(const size_t nChans
     return Result<void>::ok();
 }
 
+Result<void> DeviceSession::setChannelsACInputCouplingSync(const size_t nChans, const ChannelType chanType, const bool enabled, std::chrono::milliseconds timeout) {
+    return sendAndWait(
+        [this, nChans, chanType, enabled]() {
+            return setChannelsACInputCouplingByType(nChans, chanType, enabled);
+        },
+        [](const cbPKT_HEADER* hdr) {
+            return (hdr->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION &&
+                   hdr->type == cbPKTTYPE_CHANREPAINP;
+        },
+        timeout
+    );
+}
+
 Result<void> DeviceSession::setChannelsSpikeSorting(const size_t nChans, const uint32_t sortOptions) {
     if (!m_impl || !m_impl->connected) {
         return Result<void>::error("Device not connected");
@@ -817,6 +936,18 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
             break;  // Incomplete packet
         }
 
+        // Check if any pending response waiters match this packet
+        if ((header->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
+            std::lock_guard<std::mutex> lock(m_impl->pending_mutex);
+            for (auto& pending : m_impl->pending_responses) {
+                if (!pending->received && pending->matcher(header)) {
+                    std::lock_guard<std::mutex> resp_lock(pending->mutex);
+                    pending->received = true;
+                    pending->cv.notify_all();
+                }
+            }
+        }
+
         if ((header->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
             // Configuration packet - process based on type
             if (header->type == cbPKTTYPE_SYSHEARTBEAT) {
@@ -842,13 +973,12 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                     // spk_buffer->cache[chan-1].valid = 0;
                 }
             }
+            else if (header->type == cbPKTTYPE_REPCONFIGALL) {
+                // Config flood starting - no action needed
+            }
             else if ((header->type & 0xF0) == cbPKTTYPE_SYSREP) {
                 const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(buff_bytes + offset);
                 m_impl->device_config.sysinfo = *sysinfo;
-                if (header->type == cbPKTTYPE_SYSREP) {
-                    // This is the final packet in a config flood - clear the pending flag
-                    m_impl->config_request_pending = false;
-                }
                 // else if (header->type == cbPKTTYPE_SYSREPRUNLEV) {
                 //     if (sysinfo->runlevel == cbRUNLEVEL_HARDRESET) {
                 //         // TODO: Handle HARDRESET (signal event?)
@@ -969,6 +1099,91 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
 
         offset += packet_size;
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Configuration Synchronization
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Response Waiter (General Mechanism)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+DeviceSession::ResponseWaiter::ResponseWaiter(std::unique_ptr<Impl> impl)
+    : m_impl(std::move(impl)) {}
+
+DeviceSession::ResponseWaiter::~ResponseWaiter() {
+    if (m_impl && m_impl->session && m_impl->session->m_impl) {
+        // Remove this waiter from the pending list
+        std::lock_guard<std::mutex> lock(m_impl->session->m_impl->pending_mutex);
+        auto& vec = m_impl->session->m_impl->pending_responses;
+        vec.erase(std::remove(vec.begin(), vec.end(), m_impl->response), vec.end());
+    }
+    // unique_ptr automatically cleans up m_impl
+}
+
+DeviceSession::ResponseWaiter::ResponseWaiter(ResponseWaiter&&) noexcept = default;
+
+DeviceSession::ResponseWaiter& DeviceSession::ResponseWaiter::operator=(ResponseWaiter&&) noexcept = default;
+
+Result<void> DeviceSession::ResponseWaiter::wait(std::chrono::milliseconds timeout) {
+    if (!m_impl || !m_impl->response) {
+        return Result<void>::error("Invalid response waiter");
+    }
+
+    auto& response = m_impl->response;
+    std::unique_lock<std::mutex> lock(response->mutex);
+
+    if (response->received) {
+        return Result<void>::ok();  // Already received
+    }
+
+    if (response->cv.wait_for(lock, timeout, [&response] {
+        return response->received;
+    })) {
+        return Result<void>::ok();
+    } else {
+        return Result<void>::error("Response timeout");
+    }
+}
+
+DeviceSession::ResponseWaiter DeviceSession::registerResponseWaiter(
+    std::function<bool(const cbPKT_HEADER*)> matcher) {
+
+    auto response = std::make_shared<Impl::PendingResponse>();
+    response->matcher = std::move(matcher);
+
+    {
+        std::lock_guard<std::mutex> lock(m_impl->pending_mutex);
+        m_impl->pending_responses.push_back(response);
+    }
+
+    // Create ResponseWaiter::Impl and wrap in unique_ptr
+    auto waiter_impl = std::make_unique<ResponseWaiter::Impl>(response, this);
+    return ResponseWaiter(std::move(waiter_impl));
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Private Helper for Synchronous Operations
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+Result<void> DeviceSession::sendAndWait(
+    std::function<Result<void>()> sender,
+    std::function<bool(const cbPKT_HEADER*)> matcher,
+    std::chrono::milliseconds timeout) {
+
+    // Register waiter BEFORE sending packet (avoids race condition)
+    auto waiter = registerResponseWaiter(std::move(matcher));
+
+    // Send the request
+    auto result = sender();
+    if (result.isError()) {
+        return result;
+    }
+
+    // Wait for response
+    return waiter.wait(timeout);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

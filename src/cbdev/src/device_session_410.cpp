@@ -126,50 +126,8 @@ Result<void> DeviceSession_410::sendRaw(const void* buffer, const size_t size) {
     return m_device.sendRaw(buffer, size);
 }
 
-bool DeviceSession_410::isConnected() const {
-    return m_device.isConnected();
-}
-
-const ConnectionParams& DeviceSession_410::getConnectionParams() const {
-    return m_device.getConnectionParams();
-}
-
-Result<void> DeviceSession_410::setSystemRunLevel(const uint32_t runlevel, const uint32_t resetque, const uint32_t runflags) {
-    // Delegate to wrapped device
-    return m_device.setSystemRunLevel(runlevel, resetque, runflags);
-}
-
-Result<void> DeviceSession_410::requestConfiguration() {
-    // Delegate to wrapped device
-    return m_device.requestConfiguration();
-}
-
 ProtocolVersion DeviceSession_410::getProtocolVersion() const {
     return ProtocolVersion::PROTOCOL_410;
-}
-
-const cbproto::DeviceConfig& DeviceSession_410::getDeviceConfig() const {
-    return m_device.getDeviceConfig();
-}
-
-const cbPKT_SYSINFO& DeviceSession_410::getSysInfo() const {
-    return m_device.getSysInfo();
-}
-
-const cbPKT_CHANINFO* DeviceSession_410::getChanInfo(const uint32_t chan_id) const {
-    return m_device.getChanInfo(chan_id);
-}
-
-Result<void> DeviceSession_410::setChannelsGroupByType(const size_t nChans, const ChannelType chanType, const uint32_t group_id) {
-    return m_device.setChannelsGroupByType(nChans, chanType, group_id);
-}
-
-Result<void> DeviceSession_410::setChannelsACInputCouplingByType(const size_t nChans, const ChannelType chanType, const bool enabled) {
-    return m_device.setChannelsACInputCouplingByType(nChans, chanType, enabled);
-}
-
-Result<void> DeviceSession_410::setChannelsSpikeSorting(const size_t nChans, const uint32_t sortOptions) {
-    return m_device.setChannelsSpikeSorting(nChans, sortOptions);
 }
 
 } // namespace cbdev

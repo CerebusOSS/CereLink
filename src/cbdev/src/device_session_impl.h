@@ -18,6 +18,8 @@
 #include <cbdev/connection.h>
 #include <cbdev/result.h>
 #include <cbproto/cbproto.h>
+#include <functional>
+#include <chrono>
 
 #ifdef _WIN32
     #include <winsock2.h>
@@ -118,19 +120,21 @@ public:
     /// @name Protocol Commands
     /// @{
 
-    /// Send a runlevel command packet to the device
-    /// Creates cbPKT_SYSINFO with specified parameters and sends it.
+    /// Set device system runlevel (asynchronous)
+    /// Sends cbPKTYPE_SETRUNLEVEL to change device operating state.
     /// Does NOT wait for response - caller must handle SYSREP monitoring.
     /// @param runlevel Desired runlevel (cbRUNLEVEL_*)
     /// @param resetque Channel for reset to queue on
     /// @param runflags Lock recording after reset
     /// @return Success or error
+    /// @note For synchronous version, use setSystemRunLevelSync()
     Result<void> setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags) override;
 
-    /// Request all configuration from the device
+    /// Request all configuration from the device (asynchronous)
     /// Sends cbPKTTYPE_REQCONFIGALL which triggers the device to send all config packets.
     /// Does NOT wait for response - caller must handle config flood and final SYSREP.
     /// @return Success or error
+    /// @note For synchronous version, use requestConfigurationSync()
     Result<void> requestConfiguration() override;
 
     /// @}
@@ -147,6 +151,79 @@ public:
 
     /// Set spike sorting options for first N channels
     Result<void> setChannelsSpikeSorting(size_t nChans, uint32_t sortOptions) override;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Response Waiting (General Mechanism)
+    /// @{
+
+    /// RAII helper for waiting on packet responses
+    /// Automatically registers/unregisters matcher with device session
+    class ResponseWaiter {
+    public:
+        /// Wait for the response packet to arrive
+        /// @param timeout Maximum time to wait
+        /// @return Success if packet received, error on timeout
+        Result<void> wait(std::chrono::milliseconds timeout);
+
+        /// Destructor - automatically unregisters from device session
+        ~ResponseWaiter();
+
+        // Non-copyable, movable
+        ResponseWaiter(const ResponseWaiter&) = delete;
+        ResponseWaiter& operator=(const ResponseWaiter&) = delete;
+        ResponseWaiter(ResponseWaiter&&) noexcept;
+        ResponseWaiter& operator=(ResponseWaiter&&) noexcept;
+
+    private:
+        friend class DeviceSession;
+
+        struct Impl;  // Forward declaration - defined in .cpp
+        ResponseWaiter(std::unique_ptr<Impl> impl);
+
+        std::unique_ptr<Impl> m_impl;
+    };
+
+    /// Register a response waiter that will be notified when a matching packet arrives
+    /// @param matcher Function that returns true when the desired packet is received
+    /// @return ResponseWaiter object - call wait() to block until packet arrives
+    /// @note The matcher is checked against all configuration packets in updateConfigFromBuffer
+    ResponseWaiter registerResponseWaiter(std::function<bool(const cbPKT_HEADER*)> matcher);
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Synchronous Protocol Commands
+    /// @{
+
+    /// Request configuration synchronously (blocks until SYSREP received)
+    /// @param timeout Maximum time to wait
+    /// @return Success if config received, error on timeout or send failure
+    Result<void> requestConfigurationSync(std::chrono::milliseconds timeout) override;
+
+    /// Set system runlevel synchronously (blocks until SYSREPRUNLEV received)
+    /// @param runlevel Desired runlevel
+    /// @param resetque Channel for reset to queue on
+    /// @param runflags Lock recording after reset
+    /// @param timeout Maximum time to wait
+    /// @return Success if response received, error on timeout or send failure
+    Result<void> setSystemRunLevelSync(uint32_t runlevel, uint32_t resetque, uint32_t runflags,
+                                       std::chrono::milliseconds timeout) override;
+
+    /// Set AC input coupling synchronously (blocks until CHANREP received)
+    /// @param nChans Number of channels to configure
+    /// @param chanType Channel type filter
+    /// @param enabled true to enable AC coupling, false to disable
+    /// @param timeout Maximum time to wait
+    /// @return Success if response received, error on timeout or send failure
+    Result<void> setChannelsACInputCouplingSync(size_t nChans, ChannelType chanType, bool enabled,
+                                                 std::chrono::milliseconds timeout) override;
+
+    /// Perform complete device handshake sequence (synchronous)
+    /// @param timeout Maximum total time for entire handshake sequence
+    /// @return Success if device reaches RUNNING state, error otherwise
+    Result<void> performHandshakeSync(std::chrono::milliseconds timeout) override;
 
     /// @}
 
@@ -172,6 +249,17 @@ private:
     /// @param chanType Channel type to check
     /// @return true if channel matches the type
     static bool channelMatchesType(const cbPKT_CHANINFO& chaninfo, ChannelType chanType);
+
+    /// Helper for synchronous send-and-wait pattern
+    /// @param sender Function that sends the request packet
+    /// @param matcher Function that identifies the response packet
+    /// @param timeout Maximum time to wait for response
+    /// @return Success if response received, error on timeout or send failure
+    Result<void> sendAndWait(
+        std::function<Result<void>()> sender,
+        std::function<bool(const cbPKT_HEADER*)> matcher,
+        std::chrono::milliseconds timeout
+    );
 
     /// Implementation details (pImpl pattern)
     struct Impl;

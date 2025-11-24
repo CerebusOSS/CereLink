@@ -26,12 +26,10 @@
 #ifndef CBDEV_DEVICE_SESSION_400_H
 #define CBDEV_DEVICE_SESSION_400_H
 
-#include <cbdev/device_session.h>
-#include "device_session_impl.h"
+#include "device_session_wrapper.h"
 #include <cbdev/connection.h>
 #include <cbdev/result.h>
 #include <cbproto/cbproto.h>
-#include <memory>
 
 namespace cbdev {
 
@@ -39,9 +37,9 @@ namespace cbdev {
 /// @brief Protocol 4.0 wrapper for device communication
 ///
 /// Translates packets between protocol 4.0 format and current format (4.1+).
-/// All actual socket I/O is delegated to the wrapped DeviceSession.
+/// Inherits from DeviceSessionWrapper which handles all delegation automatically.
 ///
-class DeviceSession_400 : public IDeviceSession {
+class DeviceSession_400 : public DeviceSessionWrapper {
 public:
     /// Create protocol 4.0 wrapper around a device session
     /// @param config Device configuration (IP addresses, ports, device type)
@@ -58,84 +56,30 @@ public:
     ~DeviceSession_400() override = default;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    /// @name IDeviceSession Implementation
+    /// @name Protocol-Specific Overrides
     /// @{
 
     /// Receive packets from device and translate from 4.0 to current format
-    /// @param buffer Destination buffer for received data (current format)
-    /// @param buffer_size Maximum bytes to receive
-    /// @return Number of bytes received (in current format), or error
-    /// @note Translation happens automatically: 4.0 -> current
     Result<int> receivePackets(void* buffer, size_t buffer_size) override;
 
     /// Send packet to device, translating from current to 4.0 format
-    /// @param pkt Packet to send (in current format)
-    /// @return Success or error
-    /// @note Translation happens automatically: current -> 4.0
     Result<void> sendPacket(const cbPKT_GENERIC& pkt) override;
 
     /// Send multiple packets to device, translating each one
-    /// @param pkts Array of packets (in current format)
-    /// @param count Number of packets
-    /// @return Success or error
     Result<void> sendPackets(const cbPKT_GENERIC* pkts, size_t count) override;
 
     /// Send raw bytes (pass-through to underlying device)
-    /// @param buffer Buffer containing raw bytes
-    /// @param size Number of bytes
-    /// @return Success or error
     Result<void> sendRaw(const void* buffer, size_t size) override;
 
-    /// Set device system runlevel (delegated to wrapped device)
-    /// @param runlevel Desired runlevel
-    /// @param resetque Channel for reset to queue on
-    /// @param runflags Lock recording after reset
-    /// @return Success or error
-    Result<void> setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags) override;
-
-    /// Request configuration from device (delegated to wrapped device)
-    /// @return Success or error
-    Result<void> requestConfiguration() override;
-
-    /// Check if underlying device connection is active
-    /// @return true if connected
-    [[nodiscard]] bool isConnected() const override;
-
-    /// Get device configuration
-    /// @return Configuration reference
-    [[nodiscard]] const ConnectionParams& getConnectionParams() const override;
-
     /// Get protocol version
-    /// @return PROTOCOL_400
     [[nodiscard]] ProtocolVersion getProtocolVersion() const override;
-
-    /// Get full device configuration (delegated to wrapped device)
-    [[nodiscard]] const cbproto::DeviceConfig& getDeviceConfig() const override;
-
-    /// Get system information (delegated to wrapped device)
-    [[nodiscard]] const cbPKT_SYSINFO& getSysInfo() const override;
-
-    /// Get channel information for specific channel (delegated to wrapped device)
-    [[nodiscard]] const cbPKT_CHANINFO* getChanInfo(uint32_t chan_id) const override;
-
-    /// Set sampling group for first N channels of a specific type (delegated to wrapped device)
-    Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, uint32_t group_id) override;
-
-    /// Set AC input coupling for first N channels of a specific type (delegated to wrapped device)
-    Result<void> setChannelsACInputCouplingByType(size_t nChans, ChannelType chanType, bool enabled) override;
-
-    /// Set spike sorting options for first N channels (delegated to wrapped device)
-    Result<void> setChannelsSpikeSorting(size_t nChans, uint32_t sortOptions) override;
 
     /// @}
 
 private:
     /// Private constructor taking a DeviceSession
     explicit DeviceSession_400(DeviceSession&& device)
-        : m_device(std::move(device)) {}
-
-    /// Wrapped device session for actual I/O
-    DeviceSession m_device;
+        : DeviceSessionWrapper(std::move(device)) {}
 };
 
 } // namespace cbdev

@@ -93,11 +93,37 @@ public:
         return setSystemRunLevel(runlevel, 0, 0);
     }
 
-    /// Request all configuration from the device
+    /// Set device system runlevel (synchronous)
+    /// Sends cbPKTYPE_SETRUNLEVEL and waits for cbPKTTYPE_SYSREPRUNLEV response.
+    /// @param runlevel Desired runlevel (cbRUNLEVEL_*)
+    /// @param resetque Channel for reset to queue on
+    /// @param runflags Lock recording after reset
+    /// @param timeout Maximum time to wait for response
+    /// @return Success if response received, error on send failure or timeout
+    virtual Result<void> setSystemRunLevelSync(uint32_t runlevel, uint32_t resetque, uint32_t runflags,
+                                                std::chrono::milliseconds timeout) = 0;
+
+    /// Request all configuration from the device (asynchronous)
     /// Sends cbPKTTYPE_REQCONFIGALL which triggers the device to send all config packets.
     /// Does NOT wait for response - caller must handle config flood and final SYSREP.
     /// @return Success or error
     virtual Result<void> requestConfiguration() = 0;
+
+    /// Request all configuration from the device (synchronous)
+    /// Sends cbPKTTYPE_REQCONFIGALL and waits for cbPKTTYPE_SYSREP response.
+    /// @param timeout Maximum time to wait for configuration
+    /// @return Success if config received, error on send failure or timeout
+    virtual Result<void> requestConfigurationSync(std::chrono::milliseconds timeout) = 0;
+
+    /// Perform complete device handshake sequence (synchronous)
+    /// Attempts to bring device to RUNNING state through the following sequence:
+    /// 1. Try to set RUNNING directly
+    /// 2. If not RUNNING, perform HARDRESET (→ STANDBY)
+    /// 3. Request configuration
+    /// 4. If still not RUNNING, perform RESET (→ RUNNING)
+    /// @param timeout Maximum total time for entire handshake sequence
+    /// @return Success if device reaches RUNNING state, error otherwise
+    virtual Result<void> performHandshakeSync(std::chrono::milliseconds timeout) = 0;
 
     /// @}
 
@@ -153,12 +179,20 @@ public:
     /// @return Success or error
     virtual Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, uint32_t group_id) = 0;
 
-    /// Set AC input coupling (offset correction) for first N channels of a specific type
+    /// Set AC input coupling (offset correction) for first N channels of a specific type (asynchronous)
     /// @param nChans Number of channels to configure (use cbMAXCHANS for all channels of type)
     /// @param chanType Channel type filter
     /// @param enabled true to enable AC coupling, false to disable
     /// @return Success or error
     virtual Result<void> setChannelsACInputCouplingByType(size_t nChans, ChannelType chanType, bool enabled) = 0;
+
+    /// Set AC input coupling synchronously (blocks until CHANREP received)
+    /// @param nChans Number of channels to configure
+    /// @param chanType Channel type filter
+    /// @param enabled true to enable AC coupling, false to disable
+    /// @param timeout Maximum time to wait for response
+    /// @return Success if response received, error on send failure or timeout
+    virtual Result<void> setChannelsACInputCouplingSync(size_t nChans, ChannelType chanType, bool enabled, std::chrono::milliseconds timeout) = 0;
 
     /// Set spike sorting options for first N channels
     /// @param nChans Number of channels to configure
