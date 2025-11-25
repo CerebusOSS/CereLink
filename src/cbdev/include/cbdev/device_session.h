@@ -176,8 +176,11 @@ public:
     /// @param nChans Number of channels to configure (use cbMAXCHANS for all channels of type)
     /// @param chanType Channel type filter (e.g., ChannelType::FRONTEND)
     /// @param group_id Group ID (0-6)
+    /// @param disableOthers Whether channels not in the first nChans of type chanType should have their group set to 0
     /// @return Success or error
-    virtual Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, uint32_t group_id) = 0;
+    virtual Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, uint32_t group_id, bool disableOthers) = 0;
+
+    virtual Result<void> setChannelsGroupSync(size_t nChans, ChannelType chanType, uint32_t group_id, std::chrono::milliseconds timeout) = 0;
 
     /// Set AC input coupling (offset correction) for first N channels of a specific type (asynchronous)
     /// @param nChans Number of channels to configure (use cbMAXCHANS for all channels of type)
@@ -196,9 +199,12 @@ public:
 
     /// Set spike sorting options for first N channels
     /// @param nChans Number of channels to configure
+    /// @param chanType Channel type filter
     /// @param sortOptions Spike sorting options (cbAINPSPK_* flags)
     /// @return Success or error
-    virtual Result<void> setChannelsSpikeSorting(size_t nChans, uint32_t sortOptions) = 0;
+    virtual Result<void> setChannelsSpikeSortingByType(size_t nChans, ChannelType chanType, uint32_t sortOptions) = 0;
+
+    virtual Result<void> setChannelsSpikeSortingSync(size_t nChans, ChannelType chanType, uint32_t sortOptions, std::chrono::milliseconds timeout) = 0;
 
     /// @}
 };

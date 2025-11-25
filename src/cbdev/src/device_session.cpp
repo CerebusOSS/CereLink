@@ -198,7 +198,8 @@ struct DeviceSession::Impl {
         std::function<bool(const cbPKT_HEADER*)> matcher;
         std::condition_variable cv;
         std::mutex mutex;
-        bool received = false;
+        size_t expected_count = 1;  // How many packets we expect
+        size_t received_count = 0;  // How many we've received so far
     };
     std::vector<std::shared_ptr<PendingResponse>> pending_responses;
     std::mutex pending_mutex;
@@ -683,16 +684,15 @@ Result<void> DeviceSession::performHandshakeSync(std::chrono::milliseconds timeo
         // After HARDRESET, we should be in STANDBY
     }
 
-    // Step 5: Request configuration
+    // Step 4: Request configuration.
     result = requestConfigurationSync(timeout);
     if (result.isError()) {
         return result;
     }
 
-    // Step 6: Check if runlevel is RUNNING
+    // Step 6: Do (soft) RESET if not RUNNING
     current_runlevel = m_impl->device_config.sysinfo.runlevel;
     if (current_runlevel != cbRUNLEVEL_RUNNING) {
-        // Step 7: Need to do RESET to get to RUNNING
         result = setSystemRunLevelSync(cbRUNLEVEL_RESET, 0, 0, timeout);
         if (result.isError()) {
             return result;
@@ -764,7 +764,7 @@ bool DeviceSession::channelMatchesType(const cbPKT_CHANINFO& chaninfo, const Cha
     }
 }
 
-Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const ChannelType chanType, const uint32_t group_id) {
+Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const bool disableOthers) {
     if (!m_impl || !m_impl->connected) {
         return Result<void>::error("Device not connected");
     }
@@ -775,7 +775,11 @@ Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const Ch
 
     // Find first nChans channels of specified type and configure them
     size_t count = 0;
-    for (uint32_t chan = 1; chan <= cbMAXCHANS && count < nChans; ++chan) {
+    for (uint32_t chan = 1; chan <= cbMAXCHANS; ++chan) {
+        if (!disableOthers and count >= nChans) {
+            break;  // Only configure beyond nChans if disabling others
+        }
+
         auto& chaninfo = m_impl->device_config.chaninfo[chan - 1];
 
         // Check if this channel matches the requested type
@@ -784,33 +788,39 @@ Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const Ch
         }
 
         // Create channel config packet
-        cbPKT_CHANINFO pkt = chaninfo;  // Start with current config
-        pkt.cbpkt_header.type = cbPKTTYPE_CHANSETSMP;  // Use sampling-specific set command
+        cbPKT_CHANINFO pkt = chaninfo;  // Copy current config
         pkt.chan = chan;
 
+        const auto grp = count < nChans ? group_id : 0;  // Set to group_id or disable (0)
+
         // Apply group-specific logic
-        if (group_id >= 1 && group_id <= 4) {
-            // Groups 1-4: disable groups 1-5 but not 6, set smpgroup, set smpfilter
-            pkt.smpgroup = group_id;
+        if (grp >= 1 && grp <= 5) {
+            pkt.cbpkt_header.type = cbPKTTYPE_CHANSETSMP; // only need SMP for this.
+            pkt.smpgroup = grp;
 
             // Set filter based on group mapping: {1: 5, 2: 6, 3: 7, 4: 10}
             constexpr uint32_t filter_map[] = {0, 5, 6, 7, 10, 0, 0};
-            pkt.smpfilter = filter_map[group_id];
-        }
-        else if (group_id == 5) {
-            // Group 5: disable all others
-            pkt.smpgroup = 5;
-            pkt.ainpopts &= ~cbAINP_RAWSTREAM;  // Clear group 6 flag
-        }
-        else if (group_id == 6) {
-            // Group 6: disable 5 but no others, set cbAINP_RAWSTREAM
-            if (pkt.smpgroup == 5) {
-                pkt.smpgroup = 0;  // Clear group 5 if it was set
+            pkt.smpfilter = filter_map[grp];
+
+            if (grp == 5) {
+                // Further disable raw stream (group 6) when enabling group 5; requires cbPKTTYPE_CHANSET
+                pkt.cbpkt_header.type = cbPKTTYPE_CHANSET;
+                pkt.ainpopts &= ~cbAINP_RAWSTREAM;  // Clear group 6 flag
             }
-            pkt.ainpopts |= cbAINP_RAWSTREAM;  // Set group 6 flag
         }
-        else if (group_id == 0) {
+        else if (grp == 6) {
+            // Group 6: Raw
+            pkt.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
+            pkt.ainpopts |= cbAINP_RAWSTREAM;  // Set group 6 flag
+            // Note: The system will automatically set smpgroup to 0 if 5 when enabling raw stream
+            // TODO: Verify this is accurate on older systems.
+            // if (pkt.smpgroup == 5) {
+            //     pkt.smpgroup = 0;  // Clear group 5 if it was set
+            // }
+        }
+        else if (grp == 0) {
             // Group 0: disable all groups including raw (group 6)
+            pkt.cbpkt_header.type = cbPKTTYPE_CHANSET;
             pkt.smpgroup = 0;
             pkt.ainpopts &= ~cbAINP_RAWSTREAM;  // Clear group 6 flag
         }
@@ -828,6 +838,23 @@ Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const Ch
     }
 
     return Result<void>::ok();
+}
+
+Result<void> DeviceSession::setChannelsGroupSync(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const std::chrono::milliseconds timeout) {
+    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANALOG_CHANS : cbNUM_FE_CHANS;
+    clip_chans = clip_chans < nChans ? clip_chans : nChans;
+
+    return sendAndWait(
+        [this, clip_chans, chanType, group_id]() {
+            return setChannelsGroupByType(clip_chans, chanType, group_id, true);
+        },
+        [](const cbPKT_HEADER* hdr) {
+            return (hdr->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION &&
+                   (hdr->type == cbPKTTYPE_CHANREPAINP || hdr->type == cbPKTTYPE_CHANREPSMP || hdr->type == cbPKTTYPE_CHANREP);
+        },
+        timeout,
+        clip_chans
+    );
 }
 
 Result<void> DeviceSession::setChannelsACInputCouplingByType(const size_t nChans, const ChannelType chanType, const bool enabled) {
@@ -872,28 +899,37 @@ Result<void> DeviceSession::setChannelsACInputCouplingByType(const size_t nChans
     return Result<void>::ok();
 }
 
-Result<void> DeviceSession::setChannelsACInputCouplingSync(const size_t nChans, const ChannelType chanType, const bool enabled, std::chrono::milliseconds timeout) {
+Result<void> DeviceSession::setChannelsACInputCouplingSync(const size_t nChans, const ChannelType chanType, const bool enabled, const std::chrono::milliseconds timeout) {
+    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANALOG_CHANS : cbNUM_FE_CHANS;
+    clip_chans = clip_chans < nChans ? clip_chans : nChans;
+
     return sendAndWait(
-        [this, nChans, chanType, enabled]() {
-            return setChannelsACInputCouplingByType(nChans, chanType, enabled);
+        [this, clip_chans, chanType, enabled]() {
+            return setChannelsACInputCouplingByType(clip_chans, chanType, enabled);
         },
         [](const cbPKT_HEADER* hdr) {
             return (hdr->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION &&
                    hdr->type == cbPKTTYPE_CHANREPAINP;
         },
-        timeout
+        timeout,
+        clip_chans
     );
 }
 
-Result<void> DeviceSession::setChannelsSpikeSorting(const size_t nChans, const uint32_t sortOptions) {
+Result<void> DeviceSession::setChannelsSpikeSortingByType(const size_t nChans, const ChannelType chanType, const uint32_t sortOptions) {
     if (!m_impl || !m_impl->connected) {
         return Result<void>::error("Device not connected");
     }
 
-    // Configure first nChans channels (no type filter for this method)
+    // Configure first nChans channels ofo type chanType
     for (size_t i = 0; i < nChans && i < cbMAXCHANS; ++i) {
         const uint32_t chan = i + 1;
         const auto& chaninfo = m_impl->device_config.chaninfo[i];
+
+        // Check if this channel matches the requested type
+        if (!channelMatchesType(chaninfo, chanType)) {
+            continue;
+        }
 
         // Create channel config packet
         cbPKT_CHANINFO pkt = chaninfo;  // Start with current config
@@ -913,6 +949,22 @@ Result<void> DeviceSession::setChannelsSpikeSorting(const size_t nChans, const u
     return Result<void>::ok();
 }
 
+Result<void> DeviceSession::setChannelsSpikeSortingSync(const size_t nChans, const ChannelType chanType, const uint32_t sortOptions, const std::chrono::milliseconds timeout) {
+    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANALOG_CHANS : cbNUM_FE_CHANS;
+    clip_chans = clip_chans < nChans ? clip_chans : nChans;
+
+    return sendAndWait(
+        [this, clip_chans, chanType, sortOptions]() {
+            return setChannelsSpikeSortingByType(clip_chans, chanType, sortOptions);
+        },
+        [](const cbPKT_HEADER* hdr) {
+            return (hdr->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION &&
+                   hdr->type == cbPKTTYPE_CHANREPSPKTHR;
+        },
+        timeout,
+        clip_chans
+    );
+}
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Configuration Management
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -940,10 +992,12 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
         if ((header->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
             std::lock_guard<std::mutex> lock(m_impl->pending_mutex);
             for (auto& pending : m_impl->pending_responses) {
-                if (!pending->received && pending->matcher(header)) {
+                if (pending->received_count < pending->expected_count && pending->matcher(header)) {
                     std::lock_guard<std::mutex> resp_lock(pending->mutex);
-                    pending->received = true;
-                    pending->cv.notify_all();
+                    pending->received_count++;
+                    if (pending->received_count >= pending->expected_count) {
+                        pending->cv.notify_all();
+                    }
                 }
             }
         }
@@ -1101,10 +1155,6 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
     }
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
-// Configuration Synchronization
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Response Waiter (General Mechanism)
@@ -1127,7 +1177,7 @@ DeviceSession::ResponseWaiter::ResponseWaiter(ResponseWaiter&&) noexcept = defau
 
 DeviceSession::ResponseWaiter& DeviceSession::ResponseWaiter::operator=(ResponseWaiter&&) noexcept = default;
 
-Result<void> DeviceSession::ResponseWaiter::wait(std::chrono::milliseconds timeout) {
+Result<void> DeviceSession::ResponseWaiter::wait(const std::chrono::milliseconds timeout) {
     if (!m_impl || !m_impl->response) {
         return Result<void>::error("Invalid response waiter");
     }
@@ -1135,12 +1185,12 @@ Result<void> DeviceSession::ResponseWaiter::wait(std::chrono::milliseconds timeo
     auto& response = m_impl->response;
     std::unique_lock<std::mutex> lock(response->mutex);
 
-    if (response->received) {
-        return Result<void>::ok();  // Already received
+    if (response->received_count >= response->expected_count) {
+        return Result<void>::ok();  // Already received all expected packets
     }
 
     if (response->cv.wait_for(lock, timeout, [&response] {
-        return response->received;
+        return response->received_count >= response->expected_count;
     })) {
         return Result<void>::ok();
     } else {
@@ -1149,10 +1199,12 @@ Result<void> DeviceSession::ResponseWaiter::wait(std::chrono::milliseconds timeo
 }
 
 DeviceSession::ResponseWaiter DeviceSession::registerResponseWaiter(
-    std::function<bool(const cbPKT_HEADER*)> matcher) {
+    std::function<bool(const cbPKT_HEADER*)> matcher,
+        const size_t count) {
 
     auto response = std::make_shared<Impl::PendingResponse>();
     response->matcher = std::move(matcher);
+    response->expected_count = count;
 
     {
         std::lock_guard<std::mutex> lock(m_impl->pending_mutex);
@@ -1169,12 +1221,13 @@ DeviceSession::ResponseWaiter DeviceSession::registerResponseWaiter(
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 Result<void> DeviceSession::sendAndWait(
-    std::function<Result<void>()> sender,
+    const std::function<Result<void>()>& sender,
     std::function<bool(const cbPKT_HEADER*)> matcher,
-    std::chrono::milliseconds timeout) {
+    const std::chrono::milliseconds timeout,
+    const size_t count) {
 
     // Register waiter BEFORE sending packet (avoids race condition)
-    auto waiter = registerResponseWaiter(std::move(matcher));
+    auto waiter = registerResponseWaiter(std::move(matcher), count);
 
     // Send the request
     auto result = sender();

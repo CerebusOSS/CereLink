@@ -73,12 +73,12 @@ public:
     /// @{
 
     /// Send multiple packets (delegated to wrapped device)
-    Result<void> sendPackets(const cbPKT_GENERIC* pkts, size_t count) override {
+    Result<void> sendPackets(const cbPKT_GENERIC* pkts, const size_t count) override {
         return m_device.sendPackets(pkts, count);
     }
 
     /// Send raw bytes (delegated to wrapped device)
-    Result<void> sendRaw(const void* buffer, size_t size) override {
+    Result<void> sendRaw(const void* buffer, const size_t size) override {
         return m_device.sendRaw(buffer, size);
     }
 
@@ -103,12 +103,12 @@ public:
     }
 
     /// Get channel information (delegated to wrapped device)
-    [[nodiscard]] const cbPKT_CHANINFO* getChanInfo(uint32_t chan_id) const override {
+    [[nodiscard]] const cbPKT_CHANINFO* getChanInfo(const uint32_t chan_id) const override {
         return m_device.getChanInfo(chan_id);
     }
 
     /// Set system runlevel - async (delegated to wrapped device)
-    Result<void> setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags) override {
+    Result<void> setSystemRunLevel(const uint32_t runlevel, const uint32_t resetque, const uint32_t runflags) override {
         return m_device.setSystemRunLevel(runlevel, resetque, runflags);
     }
 
@@ -118,39 +118,47 @@ public:
     }
 
     /// Request configuration - sync (delegated to wrapped device)
-    Result<void> requestConfigurationSync(std::chrono::milliseconds timeout) override {
+    Result<void> requestConfigurationSync(const std::chrono::milliseconds timeout) override {
         return m_device.requestConfigurationSync(timeout);
     }
 
     /// Set system runlevel - sync (delegated to wrapped device)
-    Result<void> setSystemRunLevelSync(uint32_t runlevel, uint32_t resetque, uint32_t runflags,
-                                       std::chrono::milliseconds timeout) override {
+    Result<void> setSystemRunLevelSync(const uint32_t runlevel, const uint32_t resetque, const uint32_t runflags,
+                                       const std::chrono::milliseconds timeout) override {
         return m_device.setSystemRunLevelSync(runlevel, resetque, runflags, timeout);
     }
 
     /// Perform complete device handshake sequence - sync (delegated to wrapped device)
-    Result<void> performHandshakeSync(std::chrono::milliseconds timeout) override {
+    Result<void> performHandshakeSync(const std::chrono::milliseconds timeout) override {
         return m_device.performHandshakeSync(timeout);
     }
 
     /// Set sampling group for channels by type (delegated to wrapped device)
-    Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, uint32_t group_id) override {
-        return m_device.setChannelsGroupByType(nChans, chanType, group_id);
+    Result<void> setChannelsGroupByType(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const bool disableOthers) override {
+        return m_device.setChannelsGroupByType(nChans, chanType, group_id, disableOthers);
+    }
+
+    Result<void> setChannelsGroupSync(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const std::chrono::milliseconds timeout) override {
+        return m_device.setChannelsGroupSync(nChans, chanType, group_id, timeout);
     }
 
     /// Set AC input coupling for channels by type (delegated to wrapped device)
-    Result<void> setChannelsACInputCouplingByType(size_t nChans, ChannelType chanType, bool enabled) override {
+    Result<void> setChannelsACInputCouplingByType(const size_t nChans, const ChannelType chanType, const bool enabled) override {
         return m_device.setChannelsACInputCouplingByType(nChans, chanType, enabled);
     }
 
-    Result<void> setChannelsACInputCouplingSync(size_t nChans, ChannelType chanType, bool enabled,
-                                                std::chrono::milliseconds timeout) override {
+    Result<void> setChannelsACInputCouplingSync(const size_t nChans, const ChannelType chanType, const bool enabled,
+                                                const std::chrono::milliseconds timeout) override {
         return m_device.setChannelsACInputCouplingSync(nChans, chanType, enabled, timeout);
     }
 
     /// Set spike sorting options (delegated to wrapped device)
-    Result<void> setChannelsSpikeSorting(size_t nChans, uint32_t sortOptions) override {
-        return m_device.setChannelsSpikeSorting(nChans, sortOptions);
+    Result<void> setChannelsSpikeSortingByType(const size_t nChans, const ChannelType chanType, const uint32_t sortOptions) override {
+        return m_device.setChannelsSpikeSortingByType(nChans, chanType, sortOptions);
+    }
+
+    Result<void> setChannelsSpikeSortingSync(const size_t nChans, const ChannelType chanType, const uint32_t sortOptions, const std::chrono::milliseconds timeout) override {
+        return m_device.setChannelsSpikeSortingSync(nChans, chanType, sortOptions, timeout);
     }
 
     /// @}

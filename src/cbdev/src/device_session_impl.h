@@ -144,13 +144,15 @@ public:
     /// @{
 
     /// Set sampling group for first N channels of a specific type
-    Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, uint32_t group_id) override;
+    Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, uint32_t group_id, bool disableOthers) override;
+
+    Result<void> setChannelsGroupSync(size_t nChans, ChannelType chanType, uint32_t group_id, std::chrono::milliseconds timeout) override;
 
     /// Set AC input coupling for first N channels of a specific type
     Result<void> setChannelsACInputCouplingByType(size_t nChans, ChannelType chanType, bool enabled) override;
 
     /// Set spike sorting options for first N channels
-    Result<void> setChannelsSpikeSorting(size_t nChans, uint32_t sortOptions) override;
+    Result<void> setChannelsSpikeSortingByType(size_t nChans, ChannelType chanType, uint32_t sortOptions) override;
 
     /// @}
 
@@ -187,9 +189,10 @@ public:
 
     /// Register a response waiter that will be notified when a matching packet arrives
     /// @param matcher Function that returns true when the desired packet is received
+    /// @param count Number of matching packets to wait for (default: 1)
     /// @return ResponseWaiter object - call wait() to block until packet arrives
     /// @note The matcher is checked against all configuration packets in updateConfigFromBuffer
-    ResponseWaiter registerResponseWaiter(std::function<bool(const cbPKT_HEADER*)> matcher);
+    ResponseWaiter registerResponseWaiter(std::function<bool(const cbPKT_HEADER*)> matcher, size_t count = 1);
 
     /// @}
 
@@ -219,6 +222,8 @@ public:
     /// @return Success if response received, error on timeout or send failure
     Result<void> setChannelsACInputCouplingSync(size_t nChans, ChannelType chanType, bool enabled,
                                                  std::chrono::milliseconds timeout) override;
+
+    Result<void> setChannelsSpikeSortingSync(size_t nChans, ChannelType chanType, uint32_t sortOptions, std::chrono::milliseconds timeout) override;
 
     /// Perform complete device handshake sequence (synchronous)
     /// @param timeout Maximum total time for entire handshake sequence
@@ -254,11 +259,13 @@ private:
     /// @param sender Function that sends the request packet
     /// @param matcher Function that identifies the response packet
     /// @param timeout Maximum time to wait for response
+    /// @param count Number of matching packets to wait for (default: 1)
     /// @return Success if response received, error on timeout or send failure
     Result<void> sendAndWait(
-        std::function<Result<void>()> sender,
+        const std::function<Result<void>()>& sender,
         std::function<bool(const cbPKT_HEADER*)> matcher,
-        std::chrono::milliseconds timeout
+        std::chrono::milliseconds timeout,
+        size_t count = 1
     );
 
     /// Implementation details (pImpl pattern)
