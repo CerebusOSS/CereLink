@@ -63,7 +63,7 @@ struct DetectionState {
     std::atomic<bool> done{false};
     // TODO: State machine to create REQCONFIGALL and capture the first packet in the response
     std::atomic<ProtocolVersion> detected_version{ProtocolVersion::PROTOCOL_CURRENT};
-    SOCKET sock;
+    SOCKET sock = INVALID_SOCKET;
 };
 
 /// @brief Guess packet size when protocol version is ambiguous
@@ -386,7 +386,7 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
     }
 
     std::this_thread::sleep_for(std::chrono::microseconds(50));
-    if (sendto(sock, runlev_400, sizeof(runlev_400), 0,
+    if (sendto(sock, reinterpret_cast<const char *>(runlev_400), sizeof(runlev_400), 0,
                reinterpret_cast<sockaddr *>(&device_sockaddr), sizeof(device_sockaddr)) == SOCKET_ERROR_VALUE) {
         state.done = true;
         recv_thread.join();
@@ -395,7 +395,7 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
                }
 
     std::this_thread::sleep_for(std::chrono::microseconds(50));
-    if (sendto(sock, runlev_311, sizeof(runlev_311), 0,
+    if (sendto(sock, reinterpret_cast<const char *>(runlev_311), sizeof(runlev_311), 0,
                reinterpret_cast<sockaddr *>(&device_sockaddr), sizeof(device_sockaddr)) == SOCKET_ERROR_VALUE) {
         state.done = true;
         recv_thread.join();
@@ -424,7 +424,7 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
             pkt.cbpkt_header.dlen = 0;
             pkt.cbpkt_header.instrument = 0;
 
-            sendto(sock, &pkt, cbPKT_HEADER_SIZE, 0,
+            sendto(sock, reinterpret_cast<const char *>(&pkt), cbPKT_HEADER_SIZE, 0,
                    reinterpret_cast<sockaddr *>(&device_sockaddr), sizeof(device_sockaddr));
 
             state.send_config = false;

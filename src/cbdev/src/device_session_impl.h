@@ -20,6 +20,7 @@
 #include <cbproto/cbproto.h>
 #include <functional>
 #include <chrono>
+#include <memory>
 
 #ifdef _WIN32
     #include <winsock2.h>

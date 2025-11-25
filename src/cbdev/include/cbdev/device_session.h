@@ -13,6 +13,7 @@
 #ifndef CBDEV_DEVICE_SESSION_INTERFACE_H
 #define CBDEV_DEVICE_SESSION_INTERFACE_H
 
+#include <chrono>
 #include <cbdev/connection.h>
 #include <cbdev/result.h>
 #include <cbproto/cbproto.h>

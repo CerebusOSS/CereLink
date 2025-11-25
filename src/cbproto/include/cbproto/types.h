@@ -2092,8 +2092,13 @@ typedef struct {
 /// These are used in shared memory structures for Central application
 /// @{
 
-#ifndef COLORREF
-#define COLORREF uint32_t
+/* Avoid macro redefinition of COLORREF which conflicts with Windows typedef.
+   If building on Windows, let <windef.h> provide COLORREF; otherwise define it. */
+#if defined(_WIN32) || defined(_WIN64)
+  #include <windef.h>  // provides typedef DWORD COLORREF
+#else
+  #include <cstdint>
+  typedef uint32_t COLORREF;
 #endif
 
 /// @brief Color table for Central application
