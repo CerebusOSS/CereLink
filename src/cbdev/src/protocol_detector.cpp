@@ -194,7 +194,7 @@ void receiveThread(DetectionState* state) {
         }
 
         size_t offset = 0;
-        while (bytes_received - offset >= 32) {
+        while (offset < bytes_received && bytes_received - offset >= 32) {
             // Remaining bytes in buffer are at least as large as 3.11 SYSINFO packet.
             // This filters out some smaller packets we might want to ignore.
             // Try 3.11 SYSREPRUNLEV first
