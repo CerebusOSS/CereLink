@@ -841,7 +841,7 @@ Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const Ch
 }
 
 Result<void> DeviceSession::setChannelsGroupSync(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const std::chrono::milliseconds timeout) {
-    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANALOG_CHANS : cbNUM_FE_CHANS;
+    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANAIN_CHANS : cbNUM_FE_CHANS;
     clip_chans = clip_chans < nChans ? clip_chans : nChans;
 
     return sendAndWait(
@@ -900,7 +900,7 @@ Result<void> DeviceSession::setChannelsACInputCouplingByType(const size_t nChans
 }
 
 Result<void> DeviceSession::setChannelsACInputCouplingSync(const size_t nChans, const ChannelType chanType, const bool enabled, const std::chrono::milliseconds timeout) {
-    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANALOG_CHANS : cbNUM_FE_CHANS;
+    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANAIN_CHANS : cbNUM_FE_CHANS;
     clip_chans = clip_chans < nChans ? clip_chans : nChans;
 
     return sendAndWait(
@@ -950,7 +950,7 @@ Result<void> DeviceSession::setChannelsSpikeSortingByType(const size_t nChans, c
 }
 
 Result<void> DeviceSession::setChannelsSpikeSortingSync(const size_t nChans, const ChannelType chanType, const uint32_t sortOptions, const std::chrono::milliseconds timeout) {
-    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANALOG_CHANS : cbNUM_FE_CHANS;
+    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANAIN_CHANS : cbNUM_FE_CHANS;
     clip_chans = clip_chans < nChans ? clip_chans : nChans;
 
     return sendAndWait(
@@ -986,20 +986,6 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
         // Verify complete packet
         if (offset + packet_size > bytes) {
             break;  // Incomplete packet
-        }
-
-        // Check if any pending response waiters match this packet
-        if ((header->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
-            std::lock_guard<std::mutex> lock(m_impl->pending_mutex);
-            for (auto& pending : m_impl->pending_responses) {
-                if (pending->received_count < pending->expected_count && pending->matcher(header)) {
-                    std::lock_guard<std::mutex> resp_lock(pending->mutex);
-                    pending->received_count++;
-                    if (pending->received_count >= pending->expected_count) {
-                        pending->cv.notify_all();
-                    }
-                }
-            }
         }
 
         if ((header->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
@@ -1149,6 +1135,17 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
             //         m_impl->device_config.nplay = *nplayrep;
             //     }
             // }
+
+            std::lock_guard<std::mutex> lock(m_impl->pending_mutex);
+            for (auto& pending : m_impl->pending_responses) {
+                if (pending->received_count < pending->expected_count && pending->matcher(header)) {
+                    std::lock_guard<std::mutex> resp_lock(pending->mutex);
+                    pending->received_count++;
+                    if (pending->received_count >= pending->expected_count) {
+                        pending->cv.notify_all();
+                    }
+                }
+            }
         }
 
         offset += packet_size;

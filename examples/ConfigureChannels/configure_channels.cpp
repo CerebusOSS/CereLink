@@ -8,10 +8,9 @@
 /// This example shows how to use the cbdev API to configure channels on a Cerebus device.
 /// It demonstrates:
 /// - Creating a device session with automatic protocol detection
-/// - Performing device handshake (requesting configuration)
+/// - Requesting device configuration synchronously
 /// - Querying device configuration (sysinfo, chaninfo)
-/// - Setting sampling group for first N channels of a specific type
-/// - Confirming device accepted the configuration changes
+/// - Setting sampling group synchronously (with device confirmation)
 /// - Optionally restoring the original device state
 ///
 /// Usage:
@@ -42,12 +41,13 @@
 #include <cbdev/device_factory.h>
 #include <cbdev/device_session.h>
 #include <cbproto/cbproto.h>
-#include <iostream>
-#include <iomanip>
-#include <cstring>
-#include <cctype>
 #include <algorithm>
+#include <atomic>
+#include <cctype>
 #include <chrono>
+#include <cstring>
+#include <iomanip>
+#include <iostream>
 #include <thread>
 #include <vector>
 
@@ -107,43 +107,6 @@ ChannelType parseChannelType(const char* str) {
     if (upper_str == "DIGITAL_OUT" || upper_str == "DIGOUT") return ChannelType::DIGITAL_OUT;
 
     throw std::runtime_error("Invalid channel type. Valid values: FRONTEND, ANALOG_IN, ANALOG_OUT, AUDIO, DIGITAL_IN, SERIAL, DIGITAL_OUT");
-}
-
-/// Wait for configuration flood to complete by polling for SYSREP
-/// Returns true if SYSREP received, false on timeout
-bool waitForConfiguration(IDeviceSession& device, const int timeout_ms = 5000) {
-    constexpr int poll_interval_ms = 100;
-    const int max_polls = timeout_ms / poll_interval_ms;
-
-    std::vector<uint8_t> buffer(1024 * 1024);  // 1MB receive buffer
-
-    for (int poll = 0; poll < max_polls; ++poll) {
-        // Receive packets
-        auto result = device.receivePackets(buffer.data(), buffer.size());
-        if (result.isError()) {
-            std::cerr << "  ERROR: Failed to receive packets: " << result.error() << "\n";
-            return false;
-        }
-
-        int bytes_received = result.value();
-        if (bytes_received > 0) {
-            // Check for SYSREP packet (end of config flood)
-            size_t offset = 0;
-            while (offset + sizeof(cbPKT_HEADER) <= static_cast<size_t>(bytes_received)) {
-                const auto* header = reinterpret_cast<cbPKT_HEADER*>(&buffer[offset]);
-
-                if (header->type == cbPKTTYPE_SYSREP) {
-                    return true;  // Configuration complete
-                }
-
-                offset += sizeof(cbPKT_HEADER) + header->dlen * 4;
-            }
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms));
-    }
-
-    return false;  // Timeout
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -232,22 +195,31 @@ int main(int argc, char* argv[]) {
     std::cout << "  Device session created successfully\n";
     std::cout << "  Protocol Version: " << protocolVersionToString(device->getProtocolVersion()) << "\n\n";
 
+    // Start background receive thread (required for sync methods to work)
+    std::atomic<bool> running{true};
+    std::thread receive_thread([&device, &running]() {
+        std::vector<uint8_t> buffer(1024 * 1024);  // 1MB receive buffer
+        while (running) {
+            device->receivePackets(buffer.data(), buffer.size());
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+
     //==============================================================================================
     // Step 2: Request configuration from device (handshake)
     //==============================================================================================
 
-    std::cout << "Step 2: Requesting device configuration...\n";
-    auto req_result = device->requestConfiguration();
-    if (req_result.isError()) {
-        std::cerr << "  ERROR: Failed to request configuration: " << req_result.error() << "\n";
-        return 1;
-    }
-    std::cout << "  Configuration request sent\n";
+    // Helper to stop receive thread on exit
+    auto stop_receive_thread = [&]() {
+        running = false;
+        receive_thread.join();
+    };
 
-    // Wait for configuration flood to complete
-    std::cout << "  Waiting for configuration flood...\n";
-    if (!waitForConfiguration(*device, 10000)) {
-        std::cerr << "  ERROR: Timeout waiting for configuration (no SYSREP received)\n";
+    std::cout << "Step 2: Requesting device configuration...\n";
+    auto req_result = device->requestConfigurationSync(std::chrono::milliseconds(2000));
+    if (req_result.isError()) {
+        std::cerr << "  ERROR: Failed to receive configuration: " << req_result.error() << "\n";
+        stop_receive_thread();
         return 1;
     }
     std::cout << "  Configuration received successfully\n\n";
@@ -258,7 +230,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Step 3: Querying device configuration...\n";
 
-    const cbPKT_SYSINFO& sysinfo = device->getSysInfo();
+    const auto sysinfo = device->getSysInfo();
     std::cout << "  System Info:\n";
     std::cout << "    Run Level: " << sysinfo.runlevel << "\n";
     std::cout << "    Run Flags: 0x" << std::hex << sysinfo.runflags << std::dec << "\n";
@@ -285,118 +257,25 @@ int main(int argc, char* argv[]) {
     std::cout << "  Channels to Configure: " << std::min(num_channels, channels_found) << "\n\n";
 
     //==============================================================================================
-    // Step 4: Set sampling group for first N channels of specified type
+    // Step 4: Set sampling group for first N channels of specified type (synchronous)
     //==============================================================================================
 
-    std::cout << "Step 4: Setting sampling group...\n";
-    auto set_result = device->setChannelsGroupByType(num_channels, channel_type, group_id);
+    std::cout << "Step 4: Setting sampling group (waiting for device confirmation)...\n";
+    auto set_result = device->setChannelsGroupSync(num_channels, channel_type, group_id,
+                                                    std::chrono::milliseconds(5000));
     if (set_result.isError()) {
         std::cerr << "  ERROR: Failed to set channel group: " << set_result.error() << "\n";
+        stop_receive_thread();
         return 1;
     }
-    std::cout << "  Channel group commands sent successfully\n\n";
+    std::cout << "  Channel group configuration confirmed by device\n\n";
 
     //==============================================================================================
-    // Step 5: Confirm device accepted the configuration changes
-    //==============================================================================================
-
-    std::cout << "Step 5: Confirming configuration changes...\n";
-
-    // Verify device is still connected
-    if (!device->isConnected()) {
-        std::cerr << "  ERROR: Device is no longer connected\n";
-        return 1;
-    }
-    std::cout << "  Device is connected\n";
-
-    std::cout << "  Waiting for device to echo configuration...\n";
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-    // Receive configuration packets mixed with sample group packets
-    std::vector<uint8_t> buffer(1024 * 1024);
-    size_t max_channels = 0;
-    size_t chaninfo_packets_received = 0;
-    size_t total_bytes_received = 0;
-    size_t polls_with_data = 0;
-
-    std::cout << "  Polling for packets (this may take up to 10 seconds)...\n";
-
-    for (int i = 0; i < 10; ++i) {
-        // Print progress every 10 iterations
-        if (i % 10 == 0 && i > 0) {
-            std::cout << "  Poll " << i << "/100: " << polls_with_data << " polls with data, "
-                      << total_bytes_received << " bytes total\n";
-        }
-
-        auto recv_result = device->receivePackets(buffer.data(), buffer.size());
-        if (recv_result.isError()) {
-            std::cerr << "  WARNING: Receive error at poll " << i << ": " << recv_result.error() << "\n";
-            continue;
-        }
-
-        const int bytes_received = recv_result.value();
-        if (bytes_received > 0) {
-            total_bytes_received += bytes_received;
-            polls_with_data++;
-
-            // Parse packets in the buffer
-            size_t offset = 0;
-            size_t packet_count = 0;
-            while (offset + sizeof(cbPKT_HEADER) <= static_cast<size_t>(bytes_received)) {
-                const auto* header = reinterpret_cast<cbPKT_HEADER*>(&buffer[offset]);
-                const size_t packet_size = sizeof(cbPKT_HEADER) + header->dlen * 4;
-
-                if (offset + packet_size > static_cast<size_t>(bytes_received)) {
-                    break;  // Incomplete packet
-                }
-
-                packet_count++;
-
-                // Check if this is a sample group packet (types 0x30-0x35)
-                if (header->type >= 1 && header->type < cbMAXGROUPS) {
-                    // Sample group packet - count channels
-                    // The dlen field indicates the number of 32-bit words in the payload
-                    // For group packets, this is half the number of 16-bit integers (i.e., channels)
-                    const uint32_t group_num = header->type;
-                    const uint32_t num_channels = 2 * header->dlen;
-                    max_channels = num_channels > max_channels ? num_channels : max_channels;
-
-                    if (chaninfo_packets_received == 0 && max_channels <= 100) {  // Only print first few
-                        std::cout << "  Sample Group " << group_num << ": " << num_channels << " channels" << std::endl;
-                    }
-                }
-                // Check if this is a chaninfo packet
-                else if (header->type == cbPKTTYPE_CHANREP || header->type == cbPKTTYPE_CHANREPSMP) {
-                    const auto* chaninfo = reinterpret_cast<const cbPKT_CHANINFO*>(&buffer[offset]);
-                    std::cout << "  CHANINFO Ch" << chaninfo->chan
-                              << ": group=" << chaninfo->smpgroup
-                              << ", filter=" << chaninfo->smpfilter
-                              << ", raw=" << ((chaninfo->ainpopts & cbAINP_RAWSTREAM) ? "yes" : "no")
-                              << std::endl;  // Use endl to flush output
-                    chaninfo_packets_received++;
-                }
-
-                offset += packet_size;
-            }
-
-            if (packet_count > 0 && i % 10 == 0) {
-                std::cout << "    Parsed " << packet_count << " packets in this datagram" << std::endl;
-            }
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    std::cout << "\n  Summary:\n";
-    std::cout << "    CHANINFO packets received: " << chaninfo_packets_received << "\n";
-    std::cout << "    Total channels in sample group packets: " << max_channels << "\n";
-    std::cout << "  Configuration changes confirmed\n\n";
-
-    //==============================================================================================
-    // Step 6: Optionally restore original state
+    // Step 5: Optionally restore original state
     //==============================================================================================
 
     if (restore && !original_configs.empty()) {
-        std::cout << "Step 6: Restoring original configuration...\n";
+        std::cout << "Step 5: Restoring original configuration...\n";
 
         for (const auto& original : original_configs) {
             cbPKT_CHANINFO pkt = original;
@@ -407,17 +286,11 @@ int main(int argc, char* argv[]) {
                 std::cerr << "  WARNING: Failed to restore channel " << original.chan << ": " << send_result.error() << "\n";
             }
         }
-
-        std::cout << "  Original configuration restored\n";
-
-        // Wait for device to acknowledge
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        for (int i = 0; i < 10; ++i) {
-            device->receivePackets(buffer.data(), buffer.size());
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-        std::cout << "\n";
+        std::cout << "  Original configuration sent\n\n";
     }
+
+    stop_receive_thread();
 
     std::cout << "================================================\n";
     std::cout << "  Configuration Complete!\n";
