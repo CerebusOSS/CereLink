@@ -168,14 +168,14 @@ TEST_F(DeviceSessionTest, SendPackets_Multiple) {
     auto& session = result.value();
 
     // Create test packets
-    cbPKT_GENERIC pkts[5];
+    std::vector<cbPKT_GENERIC> pkts(5);
     for (int i = 0; i < 5; ++i) {
         std::memset(&pkts[i], 0, sizeof(cbPKT_GENERIC));
         pkts[i].cbpkt_header.type = 0x01 + i;
     }
 
-    // Send packets
-    auto send_result = session.sendPackets(pkts, 5);
+    // Send packets (coalesced into minimal datagrams)
+    auto send_result = session.sendPackets(pkts);
     EXPECT_TRUE(send_result.isOk()) << "Error: " << send_result.error();
 }
 
@@ -242,25 +242,14 @@ TEST_F(DeviceSessionTest, DetectLocalIP) {
 // Error Handling Tests
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(DeviceSessionTest, Error_SendPacketsNullPointer) {
+TEST_F(DeviceSessionTest, Error_SendPacketsEmpty) {
     auto config = ConnectionParams::custom("127.0.0.1", "0.0.0.0", 51029, 51030);
     auto result = DeviceSession::create(config);
     ASSERT_TRUE(result.isOk());
 
     auto& session = result.value();
 
-    auto send_result = session.sendPackets(nullptr, 5);
-    EXPECT_TRUE(send_result.isError());
-}
-
-TEST_F(DeviceSessionTest, Error_SendPacketsZeroCount) {
-    auto config = ConnectionParams::custom("127.0.0.1", "0.0.0.0", 51031, 51032);
-    auto result = DeviceSession::create(config);
-    ASSERT_TRUE(result.isOk());
-
-    auto& session = result.value();
-
-    cbPKT_GENERIC pkts[5];
-    auto send_result = session.sendPackets(pkts, 0);
+    std::vector<cbPKT_GENERIC> empty_pkts;
+    auto send_result = session.sendPackets(empty_pkts);
     EXPECT_TRUE(send_result.isError());
 }

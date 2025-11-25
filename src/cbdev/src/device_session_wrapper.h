@@ -23,6 +23,7 @@
 #include <cbdev/connection.h>
 #include <cbdev/result.h>
 #include <cbproto/cbproto.h>
+#include <thread>
 
 namespace cbdev {
 
@@ -72,9 +73,22 @@ public:
     /// @name Auto-Delegated Methods (Same for All Protocols)
     /// @{
 
-    /// Send multiple packets (delegated to wrapped device)
-    Result<void> sendPackets(const cbPKT_GENERIC* pkts, const size_t count) override {
-        return m_device.sendPackets(pkts, count);
+    /// Send multiple packets with translation via virtual sendPacket()
+    Result<void> sendPackets(const std::vector<cbPKT_GENERIC>& pkts) override {
+        if (pkts.empty()) {
+            return Result<void>::error("Empty packet vector");
+        }
+
+        // Send each packet as its own datagram with a small delay between packets.
+        // Uses virtual sendPacket() so derived classes handle protocol translation.
+        for (const auto& pkt : pkts) {
+            if (auto result = sendPacket(pkt); result.isError()) {
+                return result;
+            }
+            std::this_thread::sleep_for(std::chrono::microseconds(50));
+        }
+
+        return Result<void>::ok();
     }
 
     /// Send raw bytes (delegated to wrapped device)

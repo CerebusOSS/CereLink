@@ -78,11 +78,11 @@ public:
     /// @return Success or error
     Result<void> sendPacket(const cbPKT_GENERIC& pkt) override;
 
-    /// Send multiple packets to device
-    /// @param pkts Array of packets
-    /// @param count Number of packets
+    /// Send multiple packets to device, coalesced into minimal UDP datagrams
+    /// @param pkts Vector of packets to send
     /// @return Success or error
-    Result<void> sendPackets(const cbPKT_GENERIC* pkts, size_t count) override;
+    /// @note Packets are batched into datagrams up to MTU size to reduce packet loss
+    Result<void> sendPackets(const std::vector<cbPKT_GENERIC>& pkts) override;
 
     /// Send raw bytes to device
     /// @param buffer Buffer containing raw bytes

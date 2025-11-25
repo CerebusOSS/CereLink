@@ -19,6 +19,7 @@
 #include <chrono>
 #include <algorithm>  // for std::remove
 #include <functional> // for std::function
+#include <thread>
 
 // Platform-specific includes
 #ifdef _WIN32
@@ -323,6 +324,15 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
         }
     }
 
+    // Set send buffer size (if specified)
+    if (config.send_buffer_size > 0) {
+        int buffer_size = config.send_buffer_size;
+        if (setsockopt(session.m_impl->socket, SOL_SOCKET, SO_SNDBUF,
+                      (char*)&buffer_size, sizeof(buffer_size)) != 0) {
+            return Result<DeviceSession>::error("Failed to set send buffer size");
+        }
+    }
+
     // Set non-blocking mode
     if (config.non_blocking) {
 #ifdef _WIN32
@@ -441,16 +451,23 @@ Result<void> DeviceSession::sendPacket(const cbPKT_GENERIC& pkt) {
     return sendRaw(&pkt, packet_size);
 }
 
-Result<void> DeviceSession::sendPackets(const cbPKT_GENERIC* pkts, const size_t count) {
-    if (!pkts || count == 0) {
-        return Result<void>::error("Invalid packet array");
+Result<void> DeviceSession::sendPackets(const std::vector<cbPKT_GENERIC>& pkts) {
+    if (pkts.empty()) {
+        return Result<void>::error("Empty packet vector");
     }
 
-    // Send each packet individually
-    for (size_t i = 0; i < count; ++i) {
-        if (auto result = sendPacket(pkts[i]); result.isError()) {
+    if (!m_impl || !m_impl->connected) {
+        return Result<void>::error("Device not connected");
+    }
+
+    // Send each packet as its own datagram with a small delay between packets.
+    // Note: Coalescing multiple packets into one datagram was tried but the device
+    // expects one packet per UDP datagram.
+    for (const auto& pkt : pkts) {
+        if (auto result = sendPacket(pkt); result.isError()) {
             return result;
         }
+        std::this_thread::sleep_for(std::chrono::microseconds(50));
     }
 
     return Result<void>::ok();
@@ -690,7 +707,7 @@ Result<void> DeviceSession::performHandshakeSync(std::chrono::milliseconds timeo
         return result;
     }
 
-    // Step 6: Do (soft) RESET if not RUNNING
+    // Step 5: Do (soft) RESET if not RUNNING
     current_runlevel = m_impl->device_config.sysinfo.runlevel;
     if (current_runlevel != cbRUNLEVEL_RUNNING) {
         result = setSystemRunLevelSync(cbRUNLEVEL_RESET, 0, 0, timeout);
@@ -773,10 +790,13 @@ Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const Ch
         return Result<void>::error("Invalid group ID (must be 0-6)");
     }
 
-    // Find first nChans channels of specified type and configure them
+    // Build vector of packets for all matching channels
+    std::vector<cbPKT_GENERIC> packets;
+    packets.reserve(nChans);
+
     size_t count = 0;
     for (uint32_t chan = 1; chan <= cbMAXCHANS; ++chan) {
-        if (!disableOthers and count >= nChans) {
+        if (!disableOthers && count >= nChans) {
             break;  // Only configure beyond nChans if disabling others
         }
 
@@ -812,11 +832,6 @@ Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const Ch
             // Group 6: Raw
             pkt.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
             pkt.ainpopts |= cbAINP_RAWSTREAM;  // Set group 6 flag
-            // Note: The system will automatically set smpgroup to 0 if 5 when enabling raw stream
-            // TODO: Verify this is accurate on older systems.
-            // if (pkt.smpgroup == 5) {
-            //     pkt.smpgroup = 0;  // Clear group 5 if it was set
-            // }
         }
         else if (grp == 0) {
             // Group 0: disable all groups including raw (group 6)
@@ -825,19 +840,17 @@ Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const Ch
             pkt.ainpopts &= ~cbAINP_RAWSTREAM;  // Clear group 6 flag
         }
 
-        // Send the packet
-        if (auto result = sendPacket(*reinterpret_cast<cbPKT_GENERIC*>(&pkt)); result.isError()) {
-            return result;
-        }
-
+        // Add packet to vector
+        packets.push_back(*reinterpret_cast<cbPKT_GENERIC*>(&pkt));
         count++;
     }
 
-    if (count == 0) {
+    if (packets.empty()) {
         return Result<void>::error("No channels found matching type");
     }
 
-    return Result<void>::ok();
+    // Send all packets coalesced into minimal datagrams
+    return sendPackets(packets);
 }
 
 Result<void> DeviceSession::setChannelsGroupSync(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const std::chrono::milliseconds timeout) {
@@ -862,7 +875,10 @@ Result<void> DeviceSession::setChannelsACInputCouplingByType(const size_t nChans
         return Result<void>::error("Device not connected");
     }
 
-    // Find first nChans channels of specified type and configure them
+    // Build vector of packets for all matching channels
+    std::vector<cbPKT_GENERIC> packets;
+    packets.reserve(nChans);
+
     size_t count = 0;
     for (uint32_t chan = 1; chan <= cbMAXCHANS && count < nChans; ++chan) {
         const auto& chaninfo = m_impl->device_config.chaninfo[chan - 1];
@@ -884,19 +900,17 @@ Result<void> DeviceSession::setChannelsACInputCouplingByType(const size_t nChans
             pkt.ainpopts &= ~cbAINP_OFFSET_CORRECT;
         }
 
-        // Send the packet
-        if (auto result = sendPacket(*reinterpret_cast<cbPKT_GENERIC*>(&pkt)); result.isError()) {
-            return result;
-        }
-
+        // Add packet to vector
+        packets.push_back(*reinterpret_cast<cbPKT_GENERIC*>(&pkt));
         count++;
     }
 
-    if (count == 0) {
+    if (packets.empty()) {
         return Result<void>::error("No channels found matching type");
     }
 
-    return Result<void>::ok();
+    // Send all packets coalesced into minimal datagrams
+    return sendPackets(packets);
 }
 
 Result<void> DeviceSession::setChannelsACInputCouplingSync(const size_t nChans, const ChannelType chanType, const bool enabled, const std::chrono::milliseconds timeout) {
@@ -921,7 +935,11 @@ Result<void> DeviceSession::setChannelsSpikeSortingByType(const size_t nChans, c
         return Result<void>::error("Device not connected");
     }
 
-    // Configure first nChans channels ofo type chanType
+    // Build vector of packets for all matching channels
+    std::vector<cbPKT_GENERIC> packets;
+    packets.reserve(nChans);
+
+    // Configure first nChans channels of type chanType
     for (size_t i = 0; i < nChans && i < cbMAXCHANS; ++i) {
         const uint32_t chan = i + 1;
         const auto& chaninfo = m_impl->device_config.chaninfo[i];
@@ -940,13 +958,16 @@ Result<void> DeviceSession::setChannelsSpikeSortingByType(const size_t nChans, c
         pkt.spkopts &= ~cbAINPSPK_ALLSORT;
         pkt.spkopts |= sortOptions;
 
-        // Send the packet
-        if (auto result = sendPacket(*reinterpret_cast<cbPKT_GENERIC*>(&pkt)); result.isError()) {
-            return result;
-        }
+        // Add packet to vector
+        packets.push_back(*reinterpret_cast<cbPKT_GENERIC*>(&pkt));
     }
 
-    return Result<void>::ok();
+    if (packets.empty()) {
+        return Result<void>::ok();  // No matching channels, but not an error
+    }
+
+    // Send all packets coalesced into minimal datagrams
+    return sendPackets(packets);
 }
 
 Result<void> DeviceSession::setChannelsSpikeSortingSync(const size_t nChans, const ChannelType chanType, const uint32_t sortOptions, const std::chrono::milliseconds timeout) {

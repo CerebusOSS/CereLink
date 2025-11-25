@@ -155,21 +155,6 @@ Result<void> DeviceSession_400::sendPacket(const cbPKT_GENERIC& pkt) {
     return m_device.sendRaw(temp_buffer, packet_size_400);
 }
 
-Result<void> DeviceSession_400::sendPackets(const cbPKT_GENERIC* pkts, const size_t count) {
-    if (!pkts || count == 0) {
-        return Result<void>::error("Invalid packet array");
-    }
-
-    // Send each packet individually
-    for (size_t i = 0; i < count; ++i) {
-        if (auto result = sendPacket(pkts[i]); result.isError()) {
-            return result;
-        }
-    }
-
-    return Result<void>::ok();
-}
-
 Result<void> DeviceSession_400::sendRaw(const void* buffer, const size_t size) {
     // Pass through to underlying device
     return m_device.sendRaw(buffer, size);

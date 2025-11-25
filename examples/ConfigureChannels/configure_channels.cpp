@@ -164,6 +164,7 @@ int main(int argc, char* argv[]) {
     // Display configuration
     ConnectionParams config = ConnectionParams::forDevice(device_type);
     config.non_blocking = true;  // Enable non-blocking mode to prevent recv() from hanging
+    config.send_buffer_size = 1024 * 1024;
 
     std::cout << "Configuration:\n";
     std::cout << "  Device Type:     " << deviceTypeToString(device_type) << "\n";
@@ -205,9 +206,9 @@ int main(int argc, char* argv[]) {
         }
     });
 
-    //==============================================================================================
-    // Step 2: Request configuration from device (handshake)
-    //==============================================================================================
+    //=========================================
+    // Step 2: Start thread to receive packets
+    //=========================================
 
     // Helper to stop receive thread on exit
     auto stop_receive_thread = [&]() {
@@ -215,8 +216,12 @@ int main(int argc, char* argv[]) {
         receive_thread.join();
     };
 
-    std::cout << "Step 2: Requesting device configuration...\n";
-    auto req_result = device->requestConfigurationSync(std::chrono::milliseconds(2000));
+    //============================================================================
+    // Step 3: Get device into running state and request configuration (handshake)
+    //============================================================================
+
+    std::cout << "Step 3: Handshaking with device..\n";
+    auto req_result = device->performHandshakeSync(std::chrono::milliseconds(2000));
     if (req_result.isError()) {
         std::cerr << "  ERROR: Failed to receive configuration: " << req_result.error() << "\n";
         stop_receive_thread();
@@ -225,10 +230,10 @@ int main(int argc, char* argv[]) {
     std::cout << "  Configuration received successfully\n\n";
 
     //==============================================================================================
-    // Step 3: Query device configuration
+    // Step 4: Query device configuration
     //==============================================================================================
 
-    std::cout << "Step 3: Querying device configuration...\n";
+    std::cout << "Step 4: Querying device configuration...\n";
 
     const auto sysinfo = device->getSysInfo();
     std::cout << "  System Info:\n";
@@ -257,12 +262,12 @@ int main(int argc, char* argv[]) {
     std::cout << "  Channels to Configure: " << std::min(num_channels, channels_found) << "\n\n";
 
     //==============================================================================================
-    // Step 4: Set sampling group for first N channels of specified type (synchronous)
+    // Step 5: Set sampling group for first N channels of specified type
     //==============================================================================================
 
-    std::cout << "Step 4: Setting sampling group (waiting for device confirmation)...\n";
+    std::cout << "Step 5: Setting sampling group (waiting for device confirmation)...\n";
     auto set_result = device->setChannelsGroupSync(num_channels, channel_type, group_id,
-                                                    std::chrono::milliseconds(5000));
+                                                    std::chrono::milliseconds(3000));
     if (set_result.isError()) {
         std::cerr << "  ERROR: Failed to set channel group: " << set_result.error() << "\n";
         stop_receive_thread();
@@ -271,11 +276,11 @@ int main(int argc, char* argv[]) {
     std::cout << "  Channel group configuration confirmed by device\n\n";
 
     //==============================================================================================
-    // Step 5: Optionally restore original state
+    // Step 6: Optionally restore original state
     //==============================================================================================
 
     if (restore && !original_configs.empty()) {
-        std::cout << "Step 5: Restoring original configuration...\n";
+        std::cout << "Step 6: Restoring original configuration...\n";
 
         for (const auto& original : original_configs) {
             cbPKT_CHANINFO pkt = original;
@@ -285,8 +290,9 @@ int main(int argc, char* argv[]) {
             if (send_result.isError()) {
                 std::cerr << "  WARNING: Failed to restore channel " << original.chan << ": " << send_result.error() << "\n";
             }
+            std::this_thread::sleep_for(std::chrono::microseconds(50));
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
         std::cout << "  Original configuration sent\n\n";
     }
 

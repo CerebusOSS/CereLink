@@ -385,6 +385,7 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
         return Result<ProtocolVersion>::error("Failed to send 4.1 runlev packet");
     }
 
+    std::this_thread::sleep_for(std::chrono::microseconds(50));
     if (sendto(sock, runlev_400, sizeof(runlev_400), 0,
                reinterpret_cast<sockaddr *>(&device_sockaddr), sizeof(device_sockaddr)) == SOCKET_ERROR_VALUE) {
         state.done = true;
@@ -393,6 +394,7 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
         return Result<ProtocolVersion>::error("Failed to send 4.0 runlev packet");
                }
 
+    std::this_thread::sleep_for(std::chrono::microseconds(50));
     if (sendto(sock, runlev_311, sizeof(runlev_311), 0,
                reinterpret_cast<sockaddr *>(&device_sockaddr), sizeof(device_sockaddr)) == SOCKET_ERROR_VALUE) {
         state.done = true;

@@ -18,6 +18,7 @@
 #include <cbproto/cbproto.h>
 #include <cbproto/config.h>
 #include <cstddef>
+#include <vector>
 
 namespace cbdev {
 
@@ -55,11 +56,11 @@ public:
     /// @note For protocol-translating implementations, translation happens before sending
     virtual Result<void> sendPacket(const cbPKT_GENERIC& pkt) = 0;
 
-    /// Send multiple packets to device
-    /// @param pkts Array of packets to send
-    /// @param count Number of packets in array
+    /// Send multiple packets to device, coalesced into minimal UDP datagrams
+    /// @param pkts Vector of packets to send
     /// @return Success or error
-    virtual Result<void> sendPackets(const cbPKT_GENERIC* pkts, size_t count) = 0;
+    /// @note Packets are batched into datagrams up to MTU size to reduce packet loss
+    virtual Result<void> sendPackets(const std::vector<cbPKT_GENERIC>& pkts) = 0;
 
     /// Send raw bytes to device (for protocol translation)
     /// @param buffer Buffer containing raw bytes to send

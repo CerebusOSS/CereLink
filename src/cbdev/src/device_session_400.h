@@ -65,9 +65,6 @@ public:
     /// Send packet to device, translating from current to 4.0 format
     Result<void> sendPacket(const cbPKT_GENERIC& pkt) override;
 
-    /// Send multiple packets to device, translating each one
-    Result<void> sendPackets(const cbPKT_GENERIC* pkts, size_t count) override;
-
     /// Send raw bytes (pass-through to underlying device)
     Result<void> sendRaw(const void* buffer, size_t size) override;
 
