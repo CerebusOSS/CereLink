@@ -190,15 +190,17 @@ static size_t guessPacketSize(const uint8_t* buffer, size_t buffer_size) {
 
 /// Receive thread function - listens for packets and analyzes protocol version
 void receiveThread(DetectionState* state) {
+    std::vector<uint8_t> recv_buffer(cbPKT_MAX_SIZE * 1024);
+
     while (!state->done) {
-        uint8_t buffer[cbPKT_MAX_SIZE * 1024];
-        const int bytes_received = recv(state->sock, reinterpret_cast<char *>(buffer), sizeof(buffer), 0);
+        const int bytes_received = recv(state->sock, reinterpret_cast<char *>(recv_buffer.data()), recv_buffer.size(), 0);
 
         if (bytes_received == SOCKET_ERROR_VALUE) {
             // Timeout or error - thread will be stopped by main thread
             continue;
         }
         state->bytes_received += bytes_received;
+        uint8_t* buffer = recv_buffer.data();
 
         size_t offset = 0;
         while (offset < bytes_received && bytes_received - offset >= 32) {
