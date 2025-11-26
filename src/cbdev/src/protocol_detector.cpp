@@ -34,6 +34,7 @@
 #include <thread>
 #include <atomic>
 #include <chrono>
+#include <vector>
 
 // Platform-specific networking
 #ifdef _WIN32
