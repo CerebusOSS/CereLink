@@ -37,7 +37,7 @@ target_compile_features(cbdev PUBLIC cxx_std_17)
 
 # Platform-specific networking libraries
 if(WIN32)
-    target_link_libraries(cbdev PRIVATE wsock32 ws2_32)
+    target_link_libraries(cbdev PRIVATE wsock32 ws2_32 iphlpapi)
 elseif(APPLE)
     # macOS networking (includes the IP_BOUND_IF fix!)
     target_link_libraries(cbdev PRIVATE pthread)

@@ -25,6 +25,9 @@
 #ifdef _WIN32
     #include <winsock2.h>
     #include <windows.h>
+    #include <iphlpapi.h>
+    #include <ws2tcpip.h>
+    #pragma comment(lib, "iphlpapi.lib")
     typedef int socklen_t;
     #define INVALID_SOCKET_VALUE INVALID_SOCKET
     #define SOCKET_ERROR_VALUE SOCKET_ERROR
@@ -586,9 +589,46 @@ std::string detectLocalIP() {
     return "0.0.0.0";
 #else
 #ifdef _WIN32
-    // Windows: Use GetAdaptersAddresses to find 192.168.137.x adapter
-    // For now, use 0.0.0.0 as safe default (binds to all interfaces)
-    // TODO: Implement Windows adapter detection
+    // Find a Windows adapter with IPv4 in 192\.168\.137\.* (Cerebus default ICS subnet).
+    // If found, return its unicast IPv4 address; otherwise return 0\.0\.0\.0.
+    const ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
+    const ULONG family = AF_UNSPEC;
+
+    ULONG bufLen = 16 * 1024;
+    std::vector<uint8_t> buffer(bufLen);
+    auto addrs = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buffer.data());
+
+    DWORD ret = GetAdaptersAddresses(family, flags, nullptr, addrs, &bufLen);
+    if (ret == ERROR_BUFFER_OVERFLOW) {
+        buffer.resize(bufLen);
+        addrs = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buffer.data());
+        ret = GetAdaptersAddresses(family, flags, nullptr, addrs, &bufLen);
+    }
+    if (ret != NO_ERROR) {
+        return "0.0.0.0";
+    }
+
+    for (IP_ADAPTER_ADDRESSES* aa = addrs; aa != nullptr; aa = aa->Next) {
+        // Skip adapters that are down or loopback
+        if (aa->OperStatus != IfOperStatusUp) continue;
+        if (aa->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
+
+        for (IP_ADAPTER_UNICAST_ADDRESS* ua = aa->FirstUnicastAddress; ua != nullptr; ua = ua->Next) {
+            if (!ua->Address.lpSockaddr) continue;
+            if (ua->Address.lpSockaddr->sa_family != AF_INET) continue;
+
+            auto* sin = reinterpret_cast<sockaddr_in*>(ua->Address.lpSockaddr);
+            char ip[INET_ADDRSTRLEN] = {};
+            if (!inet_ntop(AF_INET, &sin->sin_addr, ip, sizeof(ip))) continue;
+
+            // Match 192\.168\.137\.* prefix
+            if (std::strncmp(ip, "192.168.137.", 12) == 0) {
+                return std::string(ip);
+            }
+        }
+    }
+
+    // Fallback: bind to all interfaces
     return "0.0.0.0";
 #else
     // Linux: To receive UDP broadcast packets, we must bind to the broadcast address
