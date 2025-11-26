@@ -49,6 +49,7 @@
     #include <unistd.h>
     #include <fcntl.h>
     #include <errno.h>
+    #include <ifaddrs.h>
     #define SOCKET_ERROR_VALUE -1
     #define INVALID_SOCKET -1
     #define closesocket close
@@ -308,6 +309,11 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
         return Result<ProtocolVersion>::error("Failed to create probe socket");
     }
 
+    // Set socket options for broadcast
+    int opt_one = 1;
+    setsockopt(sock, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<const char*>(&opt_one), sizeof(opt_one));
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&opt_one), sizeof(opt_one));
+
     // Bind to client address/port
     sockaddr_in client_sockaddr = {};
     client_sockaddr.sin_family = AF_INET;
@@ -316,7 +322,33 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
     if (client_addr && strlen(client_addr) > 0 && strcmp(client_addr, "0.0.0.0") != 0) {
         inet_pton(AF_INET, client_addr, &client_sockaddr.sin_addr);
     } else {
+#if defined(__linux__)
+        // Linux: To receive UDP broadcast packets, we must bind to the broadcast address.
+        // First check if we have a 192.168.137.x interface, if so use its broadcast address.
+        bool found_cerebus_interface = false;
+        struct ifaddrs *ifaddr, *ifa;
+        if (getifaddrs(&ifaddr) != -1) {
+            for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
+                if (ifa->ifa_addr == nullptr || ifa->ifa_addr->sa_family != AF_INET)
+                    continue;
+                struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(ifa->ifa_addr);
+                uint32_t ip = ntohl(addr->sin_addr.s_addr);
+                // Check if this is a 192.168.137.x address (0xC0A889xx)
+                if ((ip & 0xFFFFFF00) == 0xC0A88900) {
+                    // Use the broadcast address for this subnet
+                    inet_pton(AF_INET, cbNET_UDP_ADDR_BCAST, &client_sockaddr.sin_addr);
+                    found_cerebus_interface = true;
+                    break;
+                }
+            }
+            freeifaddrs(ifaddr);
+        }
+        if (!found_cerebus_interface) {
+            client_sockaddr.sin_addr.s_addr = INADDR_ANY;
+        }
+#else
         client_sockaddr.sin_addr.s_addr = INADDR_ANY;
+#endif
     }
 
     if (bind(sock, reinterpret_cast<sockaddr *>(&client_sockaddr), sizeof(client_sockaddr)) == SOCKET_ERROR_VALUE) {

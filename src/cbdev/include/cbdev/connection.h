@@ -84,7 +84,7 @@ struct ConnectionParams {
     // Socket options
     bool broadcast = false;         ///< Enable broadcast mode
     bool non_blocking = false;      ///< Non-blocking socket (false = blocking, better for dedicated receive thread)
-    int recv_buffer_size = 6000000; ///< Receive buffer size (6MB default)
+    int recv_buffer_size = 8388608; ///< Receive buffer size (6MB default)
     int send_buffer_size = 0;       ///< Send buffer size (0 = OS default, typically 64KB-256KB)
 
     // Connection options

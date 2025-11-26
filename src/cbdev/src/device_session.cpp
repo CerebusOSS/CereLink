@@ -585,16 +585,15 @@ std::string detectLocalIP() {
     // macOS routing will handle interface selection via IP_BOUND_IF
     return "0.0.0.0";
 #else
-    // On Windows/Linux: try to find local adapter on 192.168.137.x subnet
-    // This is the typical subnet for Cerebus devices
-
 #ifdef _WIN32
     // Windows: Use GetAdaptersAddresses to find 192.168.137.x adapter
     // For now, use 0.0.0.0 as safe default (binds to all interfaces)
     // TODO: Implement Windows adapter detection
     return "0.0.0.0";
 #else
-    // Linux: Use getifaddrs to find 192.168.137.x adapter
+    // Linux: To receive UDP broadcast packets, we must bind to the broadcast address
+    // (not the interface's unicast IP). Linux does not deliver broadcast packets to
+    // sockets bound to a specific unicast address.
     struct ifaddrs *ifaddr, *ifa;
     std::string result = "0.0.0.0";  // Default fallback
 
@@ -609,8 +608,9 @@ std::string detectLocalIP() {
 
             // Check if this is a 192.168.137.x address
             if (std::strncmp(ip_str, "192.168.137.", 12) == 0) {
-                result = ip_str;
-                break;  // Found it!
+                // Found the Cerebus interface - use the broadcast address to receive broadcasts
+                result = cbNET_UDP_ADDR_BCAST;  // "192.168.137.255"
+                break;
             }
         }
         freeifaddrs(ifaddr);
