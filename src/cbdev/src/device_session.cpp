@@ -35,9 +35,9 @@
     #include <unistd.h>
     #include <fcntl.h>
     #include <errno.h>
+    #include <ifaddrs.h>
     #ifdef __APPLE__
         #include <net/if.h>
-        #include <ifaddrs.h>
     #endif
     typedef int SOCKET;
     typedef struct sockaddr SOCKADDR;
