@@ -55,6 +55,36 @@ namespace {
         ::close(sock);
 #endif
     }
+
+    // High-resolution microsecond delay.
+    // On Windows, use QueryPerformanceCounter spin-wait to achieve sub-millisecond precision.
+    // On other platforms, steady_clock busy-wait is used as a fallback.
+    inline void hr_sleep_us(uint64_t microseconds) {
+        if (microseconds == 0) return;
+#ifdef _WIN32
+        LARGE_INTEGER freq;
+        LARGE_INTEGER start, target;
+        QueryPerformanceFrequency(&freq);
+        QueryPerformanceCounter(&start);
+        // Calculate target ticks: microseconds * (freq / 1e6)
+        const double ticks_per_us = static_cast<double>(freq.QuadPart) / 1'000'000.0;
+        const LONGLONG delta_ticks = static_cast<LONGLONG>(microseconds * ticks_per_us);
+        target.QuadPart = start.QuadPart + delta_ticks;
+        for (;;) {
+            LARGE_INTEGER now;
+            QueryPerformanceCounter(&now);
+            if (now.QuadPart >= target.QuadPart) break;
+            // Optional short pause to reduce power; comment out for maximum precision
+            // _mm_pause();
+        }
+#else
+        auto start = std::chrono::steady_clock::now();
+        auto target = start + std::chrono::microseconds(static_cast<int64_t>(microseconds));
+        while (std::chrono::steady_clock::now() < target) {
+            // busy-wait
+        }
+#endif
+    }
 }
 
 namespace cbdev {
@@ -467,7 +497,11 @@ Result<void> DeviceSession::sendPackets(const std::vector<cbPKT_GENERIC>& pkts) 
         if (auto result = sendPacket(pkt); result.isError()) {
             return result;
         }
+#ifdef _WIN32
+        hr_sleep_us(50);
+#else
         std::this_thread::sleep_for(std::chrono::microseconds(50));
+#endif
     }
 
     return Result<void>::ok();
