@@ -25,7 +25,7 @@ Result<std::unique_ptr<IDeviceSession>> createDeviceSession(
         auto detect_result = detectProtocol(
             config.device_address.c_str(), config.send_port,
             config.client_address.c_str(), config.recv_port,
-            1000  // 1 second timeout
+            2000  // 2 second timeout
         );
 
         if (detect_result.isError()) {

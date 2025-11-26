@@ -64,6 +64,11 @@ struct DetectionState {
     // TODO: State machine to create REQCONFIGALL and capture the first packet in the response
     std::atomic<ProtocolVersion> detected_version{ProtocolVersion::PROTOCOL_CURRENT};
     SOCKET sock = INVALID_SOCKET;
+    // Debug counters
+    std::atomic<size_t> packets_seen{0};
+    std::atomic<size_t> bytes_received{0};
+    std::atomic<size_t> config_packets_seen{0};
+    std::atomic<size_t> procrep_seen{0};
 };
 
 /// @brief Guess packet size when protocol version is ambiguous
@@ -185,16 +190,19 @@ static size_t guessPacketSize(const uint8_t* buffer, size_t buffer_size) {
 /// Receive thread function - listens for packets and analyzes protocol version
 void receiveThread(DetectionState* state) {
     while (!state->done) {
-        uint8_t buffer[cbPKT_MAX_SIZE * 8];
-        const int bytes_received = recv(state->sock, (char*)buffer, sizeof(buffer), 0);
+        uint8_t buffer[cbPKT_MAX_SIZE * 1024];
+        const int bytes_received = recv(state->sock, reinterpret_cast<char *>(buffer), sizeof(buffer), 0);
 
         if (bytes_received == SOCKET_ERROR_VALUE) {
             // Timeout or error - thread will be stopped by main thread
             continue;
         }
+        state->bytes_received += bytes_received;
 
         size_t offset = 0;
         while (offset < bytes_received && bytes_received - offset >= 32) {
+            ++state->packets_seen;
+
             // Remaining bytes in buffer are at least as large as 3.11 SYSINFO packet.
             // This filters out some smaller packets we might want to ignore.
             // Try 3.11 SYSREPRUNLEV first
@@ -227,12 +235,15 @@ void receiveThread(DetectionState* state) {
             // Try 4.1+ packets.
             const auto* pkt_header = reinterpret_cast<const cbPKT_HEADER *>(buffer + offset);
             if ((pkt_header->chid == cbPKTCHAN_CONFIGURATION)) {
+                ++state->config_packets_seen;
                 if (pkt_header->type == cbPKTTYPE_SYSREPRUNLEV) {
                     // We cannot distinguish between 4.1 and 4.2 based solely on SYSREPRUNLEV
                     // Send a REQCONFIGALL and await the response.
                     state->send_config = true;
                 }
                 else if (pkt_header->type == cbPKTTYPE_PROCREP) {
+                    ++state->procrep_seen;
+
                     // If we received PROCREP then we can inspect it to distinguish between 4.1 and 4.2+.
                     const auto* pkt_procinfo = reinterpret_cast<const cbPKT_PROCINFO*>(buffer + offset);
 
@@ -280,9 +291,20 @@ void receiveThread(DetectionState* state) {
 Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_port,
                                        const char* client_addr, uint16_t recv_port,
                                        const uint32_t timeout_ms) {
+#ifdef _WIN32
+    // Initialize Winsock on Windows before using socket APIs
+    WSADATA wsaData;
+    int wsaInit = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (wsaInit != 0) {
+        return Result<ProtocolVersion>::error("WSAStartup failed");
+    }
+#endif
     // Create temporary UDP socket for probing
     SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock == INVALID_SOCKET) {
+#ifdef _WIN32
+        WSACleanup();
+#endif
         return Result<ProtocolVersion>::error("Failed to create probe socket");
     }
 
@@ -299,19 +321,30 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
 
     if (bind(sock, reinterpret_cast<sockaddr *>(&client_sockaddr), sizeof(client_sockaddr)) == SOCKET_ERROR_VALUE) {
         closesocket(sock);
+#ifdef _WIN32
+        WSACleanup();
+#endif
         return Result<ProtocolVersion>::error("Failed to bind probe socket");
     }
 
     // Set socket timeout for receive (for the thread)
     // Use a short timeout so the thread can check 'done' flag frequently
 #ifdef _WIN32
-    DWORD recv_timeout = 100;  // 100ms
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&recv_timeout, sizeof(recv_timeout));
+    DWORD recv_timeout = 500;  // 500ms
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char *>(&recv_timeout), sizeof(recv_timeout));
+    // Increase socket buffers to handle bursts
+    int bufSize = 8 * 1024 * 1024;
+    setsockopt(sock, SOL_SOCKET, SO_RCVBUF, reinterpret_cast<const char*>(&bufSize), sizeof(bufSize));
+    setsockopt(sock, SOL_SOCKET, SO_SNDBUF, reinterpret_cast<const char*>(&bufSize), sizeof(bufSize));
 #else
     struct timeval tv;
     tv.tv_sec = 0;
-    tv.tv_usec = 100000;  // 100ms
+    tv.tv_usec = 500000;  // 500ms
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    // Increase socket buffers to handle bursts
+    int bufSize = 8 * 1024 * 1024; // 8 MB
+    setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &bufSize, sizeof(bufSize));
+    setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &bufSize, sizeof(bufSize));
 #endif
 
     // Prepare device address for sending
@@ -377,7 +410,7 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
     std::thread recv_thread(receiveThread, &state);
 
     // Send the runlev packets
-    if (sendto(sock, (const char*)&runlev, sizeof(cbPKT_SYSINFO), 0,
+    if (sendto(sock, reinterpret_cast<const char *>(&runlev), sizeof(cbPKT_SYSINFO), 0,
                reinterpret_cast<sockaddr *>(&device_sockaddr), sizeof(device_sockaddr)) == SOCKET_ERROR_VALUE) {
         state.done = true;
         recv_thread.join();
@@ -392,7 +425,7 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
         recv_thread.join();
         closesocket(sock);
         return Result<ProtocolVersion>::error("Failed to send 4.0 runlev packet");
-               }
+    }
 
     std::this_thread::sleep_for(std::chrono::microseconds(50));
     if (sendto(sock, reinterpret_cast<const char *>(runlev_311), sizeof(runlev_311), 0,
@@ -438,9 +471,18 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
     state.done = true;
     recv_thread.join();
     closesocket(sock);
-
+#ifdef _WIN32
+    WSACleanup();
+#endif
     if (timed_out) {
-        return Result<ProtocolVersion>::error("Timed out waiting for protocol detection");
+        // Provide debug info on what we observed
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Timed out: packets=%llu, config=%llu, procrep=%llu, bytes=%llu",
+                 (unsigned long long)state.packets_seen.load(),
+                 (unsigned long long)state.config_packets_seen.load(),
+                 (unsigned long long)state.procrep_seen.load(),
+                 (unsigned long long)state.bytes_received.load());
+        return Result<ProtocolVersion>::error(msg);
     }
     return Result<ProtocolVersion>::ok(state.detected_version.load());
 }
