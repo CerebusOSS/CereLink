@@ -9,6 +9,9 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
+
 #include "cbsdk/cbsdk.h"
 #include "cbsdk/sdk_session.h"
 #include <cstring>

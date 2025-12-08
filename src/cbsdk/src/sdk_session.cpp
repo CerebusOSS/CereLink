@@ -10,6 +10,9 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
+
 #include "cbsdk/sdk_session.h"
 #include "cbdev/device_factory.h"
 #include "cbshm/shmem_session.h"
