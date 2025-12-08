@@ -38,6 +38,18 @@ target_compile_features(cbdev PUBLIC cxx_std_17)
 # Platform-specific networking libraries
 if(WIN32)
     target_link_libraries(cbdev PRIVATE wsock32 ws2_32 iphlpapi)
+
+    # Ensure Windows SDK architecture macros are defined.
+    # This is required when consumed as a dependency (FetchContent) where the
+    # consuming project may not properly propagate architecture settings.
+    # Without this, winnt.h fails with "No Target Architecture" error.
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")
+        target_compile_definitions(cbdev PRIVATE _ARM64_)
+    elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        target_compile_definitions(cbdev PRIVATE _AMD64_)
+    else()
+        target_compile_definitions(cbdev PRIVATE _X86_)
+    endif()
 elseif(APPLE)
     # macOS networking (includes the IP_BOUND_IF fix!)
     target_link_libraries(cbdev PRIVATE pthread)
