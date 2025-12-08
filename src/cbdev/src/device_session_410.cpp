@@ -9,6 +9,9 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
+
 #include "device_session_410.h"
 #include "packet_translator.h"
 #include <cstring>

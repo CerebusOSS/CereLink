@@ -1,4 +1,4 @@
-// =STS=> XmlFile.cpp[2738].aa05   open     SMID:5 
+// =STS=> XmlFile.cpp[2738].aa05   open     SMID:5
 //////////////////////////////////////////////////////////////////////////////
 //
 // (c) Copyright 2010 - 2011 Blackrock Microsystems
@@ -12,6 +12,9 @@
 // $NoKeywords: $
 //
 //////////////////////////////////////////////////////////////////////////////
+
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
 
 #include "XmlFile.h"
 #include "XmlItem.h"

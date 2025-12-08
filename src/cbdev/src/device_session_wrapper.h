@@ -18,8 +18,10 @@
 #ifndef CBDEV_DEVICE_SESSION_WRAPPER_H
 #define CBDEV_DEVICE_SESSION_WRAPPER_H
 
-#include <cbdev/device_session.h>
+// IMPORTANT: device_session_impl.h includes Windows headers FIRST (before cbproto),
+// so it must be included before any other headers that might include cbproto.
 #include "device_session_impl.h"
+#include <cbdev/device_session.h>
 #include <cbdev/connection.h>
 #include <cbdev/result.h>
 #include <cbproto/cbproto.h>

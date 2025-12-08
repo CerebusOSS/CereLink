@@ -1,4 +1,4 @@
-// =STS=> CCFUtilsXmlItems.cpp[4878].aa03   open     SMID:3 
+// =STS=> CCFUtilsXmlItems.cpp[4878].aa03   open     SMID:3
 //////////////////////////////////////////////////////////////////////
 //
 // (c) Copyright 2012-2013 Blackrock Microsystems
@@ -40,6 +40,9 @@
 //     --------- Last rule after this line ---------
 //  8- Giving above rules higher precedence, use filed-name keeping its captial/lower case the same
 //
+
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
 
 #include <algorithm>  // Use C++ default min and max implementation.
 #include <type_traits>  // For std::is_same_v

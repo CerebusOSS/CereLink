@@ -1,4 +1,4 @@
-// =STS=> CCFUtilsXml.cpp[4876].aa03   open     SMID:3 
+// =STS=> CCFUtilsXml.cpp[4876].aa03   open     SMID:3
 //////////////////////////////////////////////////////////////////////
 //
 // (c) Copyright 2012-2013 Blackrock Microsystems
@@ -12,6 +12,9 @@
 // $NoKeywords: $
 //
 //////////////////////////////////////////////////////////////////////
+
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
 
 #include <ccfutils/compat/platform.h>
 #include <ccfutils/compat/debug.h>

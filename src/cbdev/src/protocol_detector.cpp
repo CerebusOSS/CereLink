@@ -28,12 +28,10 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-// IMPORTANT: Windows headers MUST be included BEFORE cbproto headers.
-// cbproto uses #pragma pack(1) for network structures, and Windows SDK headers
-// have a static_assert that fails if packing is not at the default setting.
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
+
 #ifdef _WIN32
-    #include <winsock2.h>
-    #include <ws2tcpip.h>
     #pragma comment(lib, "ws2_32.lib")
     #define SOCKET_ERROR_VALUE SOCKET_ERROR
     typedef int socklen_t;

@@ -12,6 +12,9 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
+
 #include "CCFUtilsConcurrent.h"
 #include <future>
 #include <cstring>

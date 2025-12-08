@@ -2,6 +2,9 @@
 // Created by Chadwick Boulay on 2025-11-17.
 //
 
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
+
 #include "packet_translator.h"
 
 size_t cbdev::PacketTranslator::translate_DINP_pre400_to_current(const uint8_t* src_payload, cbPKT_DINP* dest) {

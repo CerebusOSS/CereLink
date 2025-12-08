@@ -9,12 +9,10 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-// IMPORTANT: Windows headers MUST be included BEFORE cbproto headers.
-// cbproto uses #pragma pack(1) for network structures, and Windows SDK headers
-// have a static_assert that fails if packing is not at the default setting.
-#ifdef _WIN32
-    #include <windows.h>
-#else
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
+
+#ifndef _WIN32
     #include <sys/mman.h>
     #include <sys/time.h>
     #include <fcntl.h>
