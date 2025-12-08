@@ -44,7 +44,7 @@ public:
         // Copy the payload bytes into the destination packet.
 
         const auto* src_payload = &src[HEADER_SIZE_311];
-        auto dest_header = *reinterpret_cast<cbPKT_HEADER*>(dest);
+        auto& dest_header = *reinterpret_cast<cbPKT_HEADER*>(dest);
 
         if (dest_header.type == cbPKTTYPE_NPLAYREP) {
             return translate_NPLAY_pre400_to_current(src_payload, reinterpret_cast<cbPKT_NPLAY *>(dest));
@@ -96,7 +96,7 @@ public:
         // Header has already been translated, and we are guaranteed dest has enough space.
         // Copy the payload bytes into the destination packet.
 
-        auto dest_header = *reinterpret_cast<cbPKT_HEADER*>(dest);
+        auto& dest_header = *reinterpret_cast<cbPKT_HEADER*>(dest);
         const auto* src_payload = &src[HEADER_SIZE_400];
 
         // Now handle payloads that changed in 4.1+
@@ -127,7 +127,7 @@ public:
     static size_t translatePayload_410_to_current(const uint8_t* src, uint8_t* dest) {
         // For 410 to current, we do not use an intermediate buffer; src and dest are the same!
         const auto* src_payload = &src[HEADER_SIZE_410];
-        auto dest_header = *reinterpret_cast<cbPKT_HEADER*>(dest);
+        auto& dest_header = *reinterpret_cast<cbPKT_HEADER*>(dest);
         if (dest_header.type == cbPKTTYPE_CHANRESETREP) {
             return translate_CHANRESET_pre420_to_current(src_payload, reinterpret_cast<cbPKT_CHANRESET*>(dest));
         }
@@ -141,7 +141,7 @@ public:
 
     static size_t translatePayload_current_to_311(const cbPKT_GENERIC& src, uint8_t* dest) {
         // Prepare pointers to specific sections that will be modified
-        auto dest_header = *reinterpret_cast<cbPKT_HEADER_311*>(dest);
+        auto& dest_header = *reinterpret_cast<cbPKT_HEADER_311*>(dest);
         auto* dest_payload = &dest[HEADER_SIZE_311];
 
         // Handle packets with changed payload structures
@@ -188,7 +188,7 @@ public:
     }
 
     static size_t translatePayload_current_to_400(const cbPKT_GENERIC& src, uint8_t* dest) {
-        auto dest_header = *reinterpret_cast<cbPKT_HEADER_400*>(dest);
+        auto& dest_header = *reinterpret_cast<cbPKT_HEADER_400*>(dest);
         auto* dest_payload = &dest[HEADER_SIZE_400];
 
         if (src.cbpkt_header.type == cbPKTTYPE_SYSPROTOCOLMONITOR) {
@@ -221,7 +221,7 @@ public:
 
     static size_t translatePayload_current_to_410(const cbPKT_GENERIC& src, uint8_t* dest) {
         // We already copied the entire packet upstream. Here we need to adjust payload only.
-        auto dest_header = *reinterpret_cast<cbPKT_HEADER*>(dest);
+        auto& dest_header = *reinterpret_cast<cbPKT_HEADER*>(dest);
         auto* dest_payload = &dest[HEADER_SIZE_410];
         if (src.cbpkt_header.type == cbPKTTYPE_CHANRESET) {
             // In 4.2, cbPKTTYPE_CHANRESET grew by 1 byte. However, the code to process these packets

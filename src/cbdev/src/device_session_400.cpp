@@ -82,7 +82,7 @@ Result<int> DeviceSession_400::receivePackets(void* buffer, const size_t buffer_
 
         // -- Header --
         auto src_header = *reinterpret_cast<const cbPKT_HEADER_400*>(&src_buffer[src_offset]);
-        auto dest_header = *reinterpret_cast<cbPKT_HEADER*>(&dest_buffer[dest_offset]);
+        auto& dest_header = *reinterpret_cast<cbPKT_HEADER*>(&dest_buffer[dest_offset]);
         //   When going from 4.0 to current, we fix the header as follows:
         //   1. Read reserved from bytes 15-16, truncate to 8-bit, write to byte 16.
         //   2. Read instrument from byte 14, write to byte 15.
@@ -140,7 +140,7 @@ Result<void> DeviceSession_400::sendPacket(const cbPKT_GENERIC& pkt) {
     ///   2. Read dlen from bytes 13-14, write to bytes 12-13.
     ///   3. Read instrument from byte 15, write to byte 14.
     ///   4. Read reserved from byte 16, write to bytes 15-16 as 16-bit.
-    auto dest_header = *reinterpret_cast<cbPKT_HEADER_400*>(temp_buffer);
+    auto& dest_header = *reinterpret_cast<cbPKT_HEADER_400*>(temp_buffer);
     dest_header.time = pkt.cbpkt_header.time;  // TODO: What if we are using time ticks, not nanoseconds?
     dest_header.chid = pkt.cbpkt_header.chid;
     dest_header.type = static_cast<uint8_t>(pkt.cbpkt_header.type);
