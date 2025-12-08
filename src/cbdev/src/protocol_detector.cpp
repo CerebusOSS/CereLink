@@ -28,15 +28,9 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "protocol_detector.h"
-#include <cbproto/cbproto.h>
-#include <cstring>
-#include <thread>
-#include <atomic>
-#include <chrono>
-#include <vector>
-
-// Platform-specific networking
+// IMPORTANT: Windows headers MUST be included BEFORE cbproto headers.
+// cbproto uses #pragma pack(1) for network structures, and Windows SDK headers
+// have a static_assert that fails if packing is not at the default setting.
 #ifdef _WIN32
     #include <winsock2.h>
     #include <ws2tcpip.h>
@@ -56,6 +50,14 @@
     #define closesocket close
     typedef int SOCKET;
 #endif
+
+#include "protocol_detector.h"
+#include <cbproto/cbproto.h>
+#include <cstring>
+#include <thread>
+#include <atomic>
+#include <chrono>
+#include <vector>
 
 namespace cbdev {
 

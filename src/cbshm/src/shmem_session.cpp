@@ -9,11 +9,9 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include <cbshm/shmem_session.h>
-#include <cbshm/central_types.h>
-#include <cstring>
-
-// Platform-specific headers
+// IMPORTANT: Windows headers MUST be included BEFORE cbproto headers.
+// cbproto uses #pragma pack(1) for network structures, and Windows SDK headers
+// have a static_assert that fails if packing is not at the default setting.
 #ifdef _WIN32
     #include <windows.h>
 #else
@@ -25,6 +23,10 @@
     #include <time.h>
     #include <errno.h>
 #endif
+
+#include <cbshm/shmem_session.h>
+#include <cbshm/central_types.h>
+#include <cstring>
 
 namespace cbshm {
 

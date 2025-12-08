@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @file   device_session.h
+/// @file   device_session_impl.h
 /// @author CereLink Development Team
 /// @date   2025-01-15
 ///
@@ -11,8 +11,18 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifndef CBDEV_DEVICE_SESSION_H
-#define CBDEV_DEVICE_SESSION_H
+#ifndef CBDEV_DEVICE_SESSION_IMPL_H
+#define CBDEV_DEVICE_SESSION_IMPL_H
+
+// IMPORTANT: Windows headers MUST be included BEFORE cbproto headers.
+// cbproto uses #pragma pack(1) for network structures, and Windows SDK headers
+// have a static_assert that fails if packing is not at the default setting.
+#ifdef _WIN32
+    #include <winsock2.h>
+    typedef SOCKET SocketHandle;
+#else
+    typedef int SocketHandle;
+#endif
 
 #include <cbdev/device_session.h>
 #include <cbdev/connection.h>
@@ -21,13 +31,6 @@
 #include <functional>
 #include <chrono>
 #include <memory>
-
-#ifdef _WIN32
-    #include <winsock2.h>
-    typedef SOCKET SocketHandle;
-#else
-    typedef int SocketHandle;
-#endif
 
 namespace cbdev {
 
@@ -276,4 +279,4 @@ private:
 
 } // namespace cbdev
 
-#endif // CBDEV_DEVICE_SESSION_H
+#endif // CBDEV_DEVICE_SESSION_IMPL_H

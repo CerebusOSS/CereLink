@@ -10,18 +10,9 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "device_session_impl.h"
-#include <cbproto/cbproto.h>
-#include <cbproto/config.h>
-#include <cstring>
-#include <mutex>
-#include <condition_variable>
-#include <chrono>
-#include <algorithm>  // for std::remove
-#include <functional> // for std::function
-#include <thread>
-
-// Platform-specific includes
+// IMPORTANT: Windows headers MUST be included BEFORE cbproto headers.
+// cbproto uses #pragma pack(1) for network structures, and Windows SDK headers
+// have a static_assert that fails if packing is not at the default setting.
 #ifdef _WIN32
     #include <winsock2.h>
     #include <windows.h>
@@ -48,6 +39,17 @@
     #define INVALID_SOCKET_VALUE -1
     #define SOCKET_ERROR_VALUE -1
 #endif
+
+#include "device_session_impl.h"
+#include <cbproto/cbproto.h>
+#include <cbproto/config.h>
+#include <cstring>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
+#include <algorithm>  // for std::remove
+#include <functional> // for std::function
+#include <thread>
 
 namespace {
     // Platform-specific socket close function
