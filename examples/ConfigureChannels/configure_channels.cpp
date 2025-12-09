@@ -196,25 +196,30 @@ int main(int argc, char* argv[]) {
     std::cout << "  Device session created successfully\n";
     std::cout << "  Protocol Version: " << protocolVersionToString(device->getProtocolVersion()) << "\n\n";
 
-    // Start background receive thread (required for sync methods to work)
-    std::atomic<bool> running{true};
-    std::thread receive_thread([&device, &running]() {
-        std::vector<uint8_t> buffer(1024 * 1024);  // 1MB receive buffer
-        while (running) {
-            device->receivePackets(buffer.data(), buffer.size());
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-    });
-
     //=========================================
     // Step 2: Start thread to receive packets
     //=========================================
 
-    // Helper to stop receive thread on exit
-    auto stop_receive_thread = [&]() {
-        running = false;
-        receive_thread.join();
-    };
+    std::cout << "Step 2: Starting receive thread...\n";
+
+    // Debug: Register callback to count CHANREP packets
+    std::atomic<size_t> chanrep_count{0};
+    std::atomic<size_t> chanrep_smp_count{0};
+    std::atomic<size_t> chanrep_ainp_count{0};
+    auto debug_handle = device->registerReceiveCallback([&](const cbPKT_GENERIC& pkt) {
+        if ((pkt.cbpkt_header.chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
+            if (pkt.cbpkt_header.type == cbPKTTYPE_CHANREP) chanrep_count++;
+            else if (pkt.cbpkt_header.type == cbPKTTYPE_CHANREPSMP) chanrep_smp_count++;
+            else if (pkt.cbpkt_header.type == cbPKTTYPE_CHANREPAINP) chanrep_ainp_count++;
+        }
+    });
+
+    auto thread_result = device->startReceiveThread();
+    if (thread_result.isError()) {
+        std::cerr << "  ERROR: Failed to start receive thread: " << thread_result.error() << "\n";
+        return 1;
+    }
+    std::cout << "  Receive thread started\n\n";
 
     //============================================================================
     // Step 3: Get device into running state and request configuration (handshake)
@@ -224,7 +229,7 @@ int main(int argc, char* argv[]) {
     auto req_result = device->performHandshakeSync(std::chrono::milliseconds(2000));
     if (req_result.isError()) {
         std::cerr << "  ERROR: Failed to receive configuration: " << req_result.error() << "\n";
-        stop_receive_thread();
+        device->stopReceiveThread();
         return 1;
     }
     std::cout << "  Configuration received successfully\n\n";
@@ -240,63 +245,61 @@ int main(int argc, char* argv[]) {
     std::cout << "    Run Level: " << sysinfo.runlevel << "\n";
     std::cout << "    Run Flags: 0x" << std::hex << sysinfo.runflags << std::dec << "\n";
 
-    // Count channels of the requested type and save original states
-    size_t channels_found = 0;
-    std::vector<cbPKT_CHANINFO> original_configs;
+    // Count channels matching the requested type (same criteria as setChannelsGroupByType)
+    const size_t matching_channels = device->countChannelsOfType(channel_type, num_channels);
+    std::cout << "  Matching Channels (" << channelTypeToString(channel_type) << "): " << matching_channels << "\n\n";
 
-    for (uint32_t chan = 1; chan <= cbMAXCHANS; ++chan) {
-        const cbPKT_CHANINFO* chaninfo = device->getChanInfo(chan);
-        if (chaninfo == nullptr) continue;
-
-        // Simple channel type check - we'll rely on the device to filter correctly
-        // Just count all existing channels for display purposes
-        if (chaninfo->chancaps & cbCHAN_EXISTS) {
-            channels_found++;
-            if (channels_found <= num_channels) {
-                original_configs.push_back(*chaninfo);
-            }
-        }
+    if (matching_channels == 0) {
+        std::cerr << "  ERROR: No channels found matching type " << channelTypeToString(channel_type) << "\n";
+        device->unregisterCallback(debug_handle);
+        device->stopReceiveThread();
+        return 1;
     }
-
-    std::cout << "  Total Channels: " << channels_found << "\n";
-    std::cout << "  Channels to Configure: " << std::min(num_channels, channels_found) << "\n\n";
 
     //==============================================================================================
     // Step 5: Set sampling group for first N channels of specified type
     //==============================================================================================
 
-    std::cout << "Step 5: Setting sampling group (waiting for device confirmation)...\n";
-    auto set_result = device->setChannelsGroupSync(num_channels, channel_type, group_id,
-                                                    std::chrono::milliseconds(3000));
+    std::cout << "Step 5: Setting sampling group...\n";
+
+    // Reset counters before sending
+    chanrep_count = 0;
+    chanrep_smp_count = 0;
+    chanrep_ainp_count = 0;
+
+    auto set_result = device->setChannelsGroupSync(matching_channels, channel_type, group_id,
+                                                     std::chrono::milliseconds(5000));
     if (set_result.isError()) {
         std::cerr << "  ERROR: Failed to set channel group: " << set_result.error() << "\n";
-        stop_receive_thread();
+        device->unregisterCallback(debug_handle);
+        device->stopReceiveThread();
         return 1;
     }
-    std::cout << "  Channel group configuration confirmed by device\n\n";
+
+    // Print debug info about received CHANREP packets
+    std::cout << "  Channel group configuration sent\n";
+    std::cout << "  DEBUG: Received CHANREP packets:\n";
+    std::cout << "    CHANREP:     " << chanrep_count.load() << "\n";
+    std::cout << "    CHANREPSMP:  " << chanrep_smp_count.load() << "\n";
+    std::cout << "    CHANREPAINP: " << chanrep_ainp_count.load() << "\n\n";
 
     //==============================================================================================
-    // Step 6: Optionally restore original state
+    // Step 6: Optionally restore (disable) channels
     //==============================================================================================
 
-    if (restore && !original_configs.empty()) {
-        std::cout << "Step 6: Restoring original configuration...\n";
-
-        for (const auto& original : original_configs) {
-            cbPKT_CHANINFO pkt = original;
-            pkt.cbpkt_header.type = cbPKTTYPE_CHANSETSMP;
-
-            auto send_result = device->sendPacket(*reinterpret_cast<cbPKT_GENERIC*>(&pkt));
-            if (send_result.isError()) {
-                std::cerr << "  WARNING: Failed to restore channel " << original.chan << ": " << send_result.error() << "\n";
-            }
-            std::this_thread::sleep_for(std::chrono::microseconds(50));
+    if (restore) {
+        std::cout << "Step 6: Restoring (disabling) channels...\n";
+        auto restore_result = device->setChannelsGroupByType(matching_channels, channel_type, 0, true);
+        if (restore_result.isError()) {
+            std::cerr << "  WARNING: Failed to restore channels: " << restore_result.error() << "\n";
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::cout << "  Channels disabled\n\n";
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        std::cout << "  Original configuration sent\n\n";
     }
 
-    stop_receive_thread();
+    device->unregisterCallback(debug_handle);
+    device->stopReceiveThread();
 
     std::cout << "================================================\n";
     std::cout << "  Configuration Complete!\n";
