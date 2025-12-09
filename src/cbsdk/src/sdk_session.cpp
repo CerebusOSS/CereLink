@@ -46,11 +46,14 @@ struct SdkSession::Impl {
     std::mutex callback_mutex;
     std::condition_variable callback_cv;
 
-    // Device receive/send threads (STANDALONE mode only)
-    std::unique_ptr<std::thread> device_receive_thread;
+    // Device send thread (STANDALONE mode only)
+    // Note: device receive thread is now managed by device_session->startReceiveThread()
     std::unique_ptr<std::thread> device_send_thread;
-    std::atomic<bool> device_receive_thread_running{false};
     std::atomic<bool> device_send_thread_running{false};
+
+    // Callback handles for device receive thread
+    cbdev::CallbackHandle receive_callback_handle = 0;
+    cbdev::CallbackHandle datagram_callback_handle = 0;
 
     // Shared memory receive thread (CLIENT mode only)
     std::unique_ptr<std::thread> shmem_receive_thread;
@@ -75,19 +78,25 @@ struct SdkSession::Impl {
     std::atomic<bool> is_running{false};
 
     ~Impl() {
-        // Ensure all threads are stopped
-        if (device_receive_thread_running.load()) {
-            device_receive_thread_running.store(false);
-            if (device_receive_thread && device_receive_thread->joinable()) {
-                device_receive_thread->join();
+        // Stop device receive thread (managed by DeviceSession)
+        if (device_session) {
+            device_session->stopReceiveThread();
+            // Unregister callbacks
+            if (receive_callback_handle != 0) {
+                device_session->unregisterCallback(receive_callback_handle);
+            }
+            if (datagram_callback_handle != 0) {
+                device_session->unregisterCallback(datagram_callback_handle);
             }
         }
+        // Stop device send thread
         if (device_send_thread_running.load()) {
             device_send_thread_running.store(false);
             if (device_send_thread && device_send_thread->joinable()) {
                 device_send_thread->join();
             }
         }
+        // Stop callback thread
         if (callback_thread_running.load()) {
             callback_thread_running.store(false);
             callback_cv.notify_one();
@@ -95,6 +104,7 @@ struct SdkSession::Impl {
                 callback_thread->join();
             }
         }
+        // Stop shmem receive thread (CLIENT mode)
         if (shmem_receive_thread_running.load()) {
             shmem_receive_thread_running.store(false);
             if (shmem_receive_thread && shmem_receive_thread->joinable()) {
@@ -376,104 +386,57 @@ Result<void> SdkSession::start() {
             }
         });
 
-        // Start device receive thread - calls device->receivePackets() in loop
-        m_impl->device_receive_thread_running.store(true);
-        m_impl->device_receive_thread = std::make_unique<std::thread>([impl]() {
-            // Buffer for receiving UDP datagrams (can contain multiple aggregated packets)
-            constexpr size_t RECV_BUFFER_SIZE = cbCER_UDP_SIZE_MAX;  // 58080 bytes
-            auto buffer = std::make_unique<uint8_t[]>(RECV_BUFFER_SIZE);
+        // Register receive callback - handles each packet from device
+        m_impl->receive_callback_handle = m_impl->device_session->registerReceiveCallback(
+            [impl](const cbPKT_GENERIC& pkt) {
+                // Check for SYSREP packets (handshake responses)
+                if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
+                    const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
+                    impl->device_runlevel.store(sysinfo->runlevel, std::memory_order_release);
+                    impl->received_sysrep.store(true, std::memory_order_release);
+                    impl->handshake_cv.notify_all();
+                }
 
-            while (impl->device_receive_thread_running.load()) {
-                // Receive packets from device (synchronous, blocking)
-                auto result = impl->device_session->receivePackets(buffer.get(), RECV_BUFFER_SIZE);
+                // Update stats
+                {
+                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                    impl->stats.packets_received_from_device++;
+                }
 
-                if (result.isError()) {
-                    // Error receiving - log and continue
+                // Store to shared memory
+                auto store_result = impl->shmem_session->storePacket(pkt);
+                if (store_result.isOk()) {
+                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                    impl->stats.packets_stored_to_shmem++;
+                } else {
+                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                    impl->stats.shmem_store_errors++;
+                }
+
+                // Queue for callback
+                if (impl->packet_queue.push(pkt)) {
+                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                    impl->stats.packets_queued_for_callback++;
+                    size_t current_depth = impl->packet_queue.size();
+                    if (current_depth > impl->stats.queue_max_depth) {
+                        impl->stats.queue_max_depth = current_depth;
+                    }
+                } else {
+                    // Queue overflow
                     {
                         std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                        impl->stats.receive_errors++;
+                        impl->stats.packets_dropped++;
                     }
-                    std::this_thread::yield();
-                    continue;
+                    std::lock_guard<std::mutex> lock(impl->user_callback_mutex);
+                    if (impl->error_callback) {
+                        impl->error_callback("Packet queue overflow - dropping packets");
+                    }
                 }
+            });
 
-                int bytes_recv = result.value();
-                if (bytes_recv == 0) {
-                    // No data available (non-blocking mode) - yield and continue
-                    std::this_thread::yield();
-                    continue;
-                }
-
-                // Parse packets from received datagram
-                // One UDP datagram can contain multiple cbPKT_GENERIC packets
-                uint32_t bytes_to_process = static_cast<uint32_t>(bytes_recv);
-                cbPKT_GENERIC* pktptr = reinterpret_cast<cbPKT_GENERIC*>(buffer.get());
-
-                while (bytes_to_process > 0) {
-                    // Validate packet header
-                    constexpr size_t HEADER_SIZE = sizeof(cbPKT_HEADER);
-                    if (bytes_to_process < HEADER_SIZE) {
-                        break;  // Not enough data for header
-                    }
-
-                    // Calculate packet size
-                    uint32_t quadlettotal = pktptr->cbpkt_header.dlen + cbPKT_HEADER_32SIZE;
-                    uint32_t packetsize = quadlettotal * 4;  // Convert quadlets to bytes
-
-                    // Validate packet size
-                    if (packetsize > bytes_to_process || packetsize > sizeof(cbPKT_GENERIC)) {
-                        break;  // Invalid or truncated packet
-                    }
-
-                    // Check for SYSREP packets (handshake responses)
-                    if ((pktptr->cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
-                        const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(pktptr);
-                        impl->device_runlevel.store(sysinfo->runlevel, std::memory_order_release);
-                        impl->received_sysrep.store(true, std::memory_order_release);
-                        impl->handshake_cv.notify_all();
-                    }
-
-                    // Update stats
-                    {
-                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                        impl->stats.packets_received_from_device++;
-                    }
-
-                    // Store to shared memory
-                    auto store_result = impl->shmem_session->storePacket(*pktptr);
-                    if (store_result.isOk()) {
-                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                        impl->stats.packets_stored_to_shmem++;
-                    } else {
-                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                        impl->stats.shmem_store_errors++;
-                    }
-
-                    // Queue for callback
-                    if (impl->packet_queue.push(*pktptr)) {
-                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                        impl->stats.packets_queued_for_callback++;
-                        size_t current_depth = impl->packet_queue.size();
-                        if (current_depth > impl->stats.queue_max_depth) {
-                            impl->stats.queue_max_depth = current_depth;
-                        }
-                    } else {
-                        // Queue overflow
-                        {
-                            std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                            impl->stats.packets_dropped++;
-                        }
-                        std::lock_guard<std::mutex> lock(impl->user_callback_mutex);
-                        if (impl->error_callback) {
-                            impl->error_callback("Packet queue overflow - dropping packets");
-                        }
-                    }
-
-                    // Advance to next packet
-                    pktptr = reinterpret_cast<cbPKT_GENERIC*>(reinterpret_cast<uint8_t*>(pktptr) + packetsize);
-                    bytes_to_process -= packetsize;
-                }
-
+        // Register datagram complete callback - signals after all packets in a datagram are processed
+        m_impl->datagram_callback_handle = m_impl->device_session->registerDatagramCompleteCallback(
+            [impl]() {
                 // Signal CLIENT processes that new data is available
                 impl->shmem_session->signalData();
 
@@ -481,8 +444,19 @@ Result<void> SdkSession::start() {
                 if (impl->callback_thread_waiting.load(std::memory_order_relaxed)) {
                     impl->callback_cv.notify_one();
                 }
+            });
+
+        // Start device receive thread (managed by DeviceSession)
+        auto recv_start_result = m_impl->device_session->startReceiveThread();
+        if (recv_start_result.isError()) {
+            // Failed to start receive thread - clean up
+            m_impl->callback_thread_running.store(false);
+            m_impl->callback_cv.notify_one();
+            if (m_impl->callback_thread && m_impl->callback_thread->joinable()) {
+                m_impl->callback_thread->join();
             }
-        });
+            return Result<void>::error("Failed to start device receive thread: " + recv_start_result.error());
+        }
 
         // Start device send thread - dequeues from shmem and sends to device
         m_impl->device_send_thread_running.store(true);
@@ -534,15 +508,18 @@ Result<void> SdkSession::start() {
         }
 
         if (handshake_result.isError()) {
-            // Clean up device threads and callback thread
-            m_impl->device_receive_thread_running.store(false);
-            if (m_impl->device_receive_thread && m_impl->device_receive_thread->joinable()) {
-                m_impl->device_receive_thread->join();
-            }
+            // Clean up device receive thread (managed by DeviceSession)
+            m_impl->device_session->stopReceiveThread();
+            m_impl->device_session->unregisterCallback(m_impl->receive_callback_handle);
+            m_impl->device_session->unregisterCallback(m_impl->datagram_callback_handle);
+            m_impl->receive_callback_handle = 0;
+            m_impl->datagram_callback_handle = 0;
+            // Clean up device send thread
             m_impl->device_send_thread_running.store(false);
             if (m_impl->device_send_thread && m_impl->device_send_thread->joinable()) {
                 m_impl->device_send_thread->join();
             }
+            // Clean up callback thread
             m_impl->callback_thread_running.store(false);
             m_impl->callback_cv.notify_one();
             if (m_impl->callback_thread && m_impl->callback_thread->joinable()) {
@@ -573,14 +550,20 @@ void SdkSession::stop() {
 
     m_impl->is_running.store(false);
 
-    // Stop SDK's own device threads (if STANDALONE mode)
+    // Stop device threads (if STANDALONE mode)
     if (m_impl->device_session) {
-        if (m_impl->device_receive_thread_running.load()) {
-            m_impl->device_receive_thread_running.store(false);
-            if (m_impl->device_receive_thread && m_impl->device_receive_thread->joinable()) {
-                m_impl->device_receive_thread->join();
-            }
+        // Stop device receive thread (managed by DeviceSession)
+        m_impl->device_session->stopReceiveThread();
+        // Unregister callbacks
+        if (m_impl->receive_callback_handle != 0) {
+            m_impl->device_session->unregisterCallback(m_impl->receive_callback_handle);
+            m_impl->receive_callback_handle = 0;
         }
+        if (m_impl->datagram_callback_handle != 0) {
+            m_impl->device_session->unregisterCallback(m_impl->datagram_callback_handle);
+            m_impl->datagram_callback_handle = 0;
+        }
+        // Stop device send thread
         if (m_impl->device_send_thread_running.load()) {
             m_impl->device_send_thread_running.store(false);
             if (m_impl->device_send_thread && m_impl->device_send_thread->joinable()) {

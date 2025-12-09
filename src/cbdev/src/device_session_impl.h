@@ -30,14 +30,15 @@
 #include <functional>
 #include <chrono>
 #include <memory>
+#include <cstdint>
 
 namespace cbdev {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Minimal UDP socket wrapper for device communication (current protocol)
 ///
-/// Provides synchronous send/receive operations only. No threads, callbacks, or state management.
-/// Implements IDeviceSession for protocol abstraction.
+/// Provides synchronous send/receive operations, with optional receive thread for
+/// callback-based packet handling. Implements IDeviceSession for protocol abstraction.
 ///
 class DeviceSession : public IDeviceSession {
 public:
@@ -146,6 +147,9 @@ public:
     /// @name Channel Configuration
     /// @{
 
+    /// Count channels matching a specific type
+    [[nodiscard]] size_t countChannelsOfType(ChannelType chanType, size_t maxCount) const override;
+
     /// Set sampling group for first N channels of a specific type
     Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, uint32_t group_id, bool disableOthers) override;
 
@@ -245,6 +249,42 @@ public:
     /// @param buffer Buffer containing packets in current protocol format
     /// @param bytes Number of bytes in buffer
     void updateConfigFromBuffer(const void* buffer, size_t bytes);
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Receive Thread and Callbacks
+    /// @{
+
+    /// Register a callback to be invoked for each received packet
+    /// @param callback Function to call for each packet
+    /// @return Handle for unregistration, or 0 on failure
+    /// @note Callbacks run on the receive thread - keep them fast to avoid packet loss!
+    /// @note Multiple callbacks can be registered and will be called in registration order
+    CallbackHandle registerReceiveCallback(ReceiveCallback callback) override;
+
+    /// Register a callback to be invoked after all packets in a datagram are processed
+    /// @param callback Function to call after datagram processing
+    /// @return Handle for unregistration, or 0 on failure
+    /// @note Use this for batch operations like signaling shared memory
+    CallbackHandle registerDatagramCompleteCallback(DatagramCompleteCallback callback) override;
+
+    /// Unregister a previously registered callback
+    /// @param handle Handle returned by registerReceiveCallback or registerDatagramCompleteCallback
+    void unregisterCallback(CallbackHandle handle) override;
+
+    /// Start the receive thread
+    /// @return Success or error if thread cannot be started
+    /// @note Thread calls receivePackets() in a loop and invokes registered callbacks
+    Result<void> startReceiveThread() override;
+
+    /// Stop the receive thread
+    /// @note Blocks until thread terminates
+    void stopReceiveThread() override;
+
+    /// Check if receive thread is running
+    /// @return true if thread is active
+    [[nodiscard]] bool isReceiveThreadRunning() const override;
 
     /// @}
 

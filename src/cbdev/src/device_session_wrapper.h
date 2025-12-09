@@ -25,7 +25,12 @@
 #include <cbdev/connection.h>
 #include <cbdev/result.h>
 #include <cbproto/cbproto.h>
+#include <algorithm>
+#include <atomic>
+#include <memory>
+#include <mutex>
 #include <thread>
+#include <vector>
 
 namespace cbdev {
 
@@ -45,9 +50,12 @@ protected:
         : m_device(std::move(device)) {}
 
 public:
-    virtual ~DeviceSessionWrapper() = default;
+    virtual ~DeviceSessionWrapper() {
+        // Stop receive thread before destruction
+        stopReceiveThread();
+    }
 
-    // Non-copyable, movable
+    // Non-copyable, movable (uses pImpl for thread state)
     DeviceSessionWrapper(const DeviceSessionWrapper&) = delete;
     DeviceSessionWrapper& operator=(const DeviceSessionWrapper&) = delete;
     DeviceSessionWrapper(DeviceSessionWrapper&&) noexcept = default;
@@ -149,6 +157,11 @@ public:
         return m_device.performHandshakeSync(timeout);
     }
 
+    /// Count channels matching type (delegated to wrapped device)
+    [[nodiscard]] size_t countChannelsOfType(const ChannelType chanType, const size_t maxCount) const override {
+        return m_device.countChannelsOfType(chanType, maxCount);
+    }
+
     /// Set sampling group for channels by type (delegated to wrapped device)
     Result<void> setChannelsGroupByType(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const bool disableOthers) override {
         return m_device.setChannelsGroupByType(nChans, chanType, group_id, disableOthers);
@@ -178,6 +191,176 @@ public:
     }
 
     /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Receive Thread and Callbacks (Wrapper-Specific Implementation)
+    /// @{
+
+    /// Register a receive callback
+    /// @note Uses wrapper's own callback storage (not underlying device's)
+    CallbackHandle registerReceiveCallback(ReceiveCallback callback) override {
+        if (!callback || !m_thread_state) {
+            return 0;
+        }
+        std::lock_guard<std::mutex> lock(m_thread_state->callback_mutex);
+        CallbackHandle handle = m_thread_state->next_callback_handle++;
+        m_thread_state->receive_callbacks.push_back({handle, std::move(callback)});
+        return handle;
+    }
+
+    /// Register a datagram complete callback
+    CallbackHandle registerDatagramCompleteCallback(DatagramCompleteCallback callback) override {
+        if (!callback || !m_thread_state) {
+            return 0;
+        }
+        std::lock_guard<std::mutex> lock(m_thread_state->callback_mutex);
+        CallbackHandle handle = m_thread_state->next_callback_handle++;
+        m_thread_state->datagram_callbacks.push_back({handle, std::move(callback)});
+        return handle;
+    }
+
+    /// Unregister a callback
+    void unregisterCallback(CallbackHandle handle) override {
+        if (handle == 0 || !m_thread_state) {
+            return;
+        }
+        std::lock_guard<std::mutex> lock(m_thread_state->callback_mutex);
+
+        // Check receive callbacks
+        auto& recv_cbs = m_thread_state->receive_callbacks;
+        recv_cbs.erase(
+            std::remove_if(recv_cbs.begin(), recv_cbs.end(),
+                [handle](const CallbackRegistration& reg) { return reg.handle == handle; }),
+            recv_cbs.end());
+
+        // Check datagram callbacks
+        auto& dg_cbs = m_thread_state->datagram_callbacks;
+        dg_cbs.erase(
+            std::remove_if(dg_cbs.begin(), dg_cbs.end(),
+                [handle](const DatagramCallbackRegistration& reg) { return reg.handle == handle; }),
+            dg_cbs.end());
+    }
+
+    /// Start the receive thread
+    /// @note Thread calls this wrapper's receivePackets() (with translation)
+    Result<void> startReceiveThread() override {
+        if (!m_thread_state) {
+            return Result<void>::error("Thread state not initialized");
+        }
+
+        if (m_thread_state->receive_thread_running.load()) {
+            return Result<void>::error("Receive thread already running");
+        }
+
+        m_thread_state->receive_thread_stop_requested.store(false);
+        m_thread_state->receive_thread_running.store(true);
+
+        m_thread_state->receive_thread = std::thread([this]() {
+            uint8_t buffer[cbCER_UDP_SIZE_MAX];
+
+            while (!m_thread_state->receive_thread_stop_requested.load()) {
+                // Call virtual receivePackets() - handles protocol translation
+                auto result = this->receivePackets(buffer, sizeof(buffer));
+
+                if (result.isError()) {
+                    continue;
+                }
+
+                const int bytes_received = result.value();
+                if (bytes_received == 0) {
+                    std::this_thread::sleep_for(std::chrono::microseconds(100));
+                    continue;
+                }
+
+                // Parse packets and invoke callbacks
+                size_t offset = 0;
+                while (offset + cbPKT_HEADER_SIZE <= static_cast<size_t>(bytes_received)) {
+                    const auto* pkt = reinterpret_cast<const cbPKT_GENERIC*>(&buffer[offset]);
+                    const size_t packet_size = cbPKT_HEADER_SIZE + (pkt->cbpkt_header.dlen * 4);
+
+                    if (offset + packet_size > static_cast<size_t>(bytes_received)) {
+                        break;
+                    }
+
+                    // Invoke receive callbacks
+                    {
+                        std::lock_guard<std::mutex> lock(m_thread_state->callback_mutex);
+                        for (const auto& reg : m_thread_state->receive_callbacks) {
+                            reg.callback(*pkt);
+                        }
+                    }
+
+                    offset += packet_size;
+                }
+
+                // Invoke datagram complete callbacks
+                {
+                    std::lock_guard<std::mutex> lock(m_thread_state->callback_mutex);
+                    for (const auto& reg : m_thread_state->datagram_callbacks) {
+                        reg.callback();
+                    }
+                }
+            }
+
+            m_thread_state->receive_thread_running.store(false);
+        });
+
+        return Result<void>::ok();
+    }
+
+    /// Stop the receive thread
+    void stopReceiveThread() override {
+        if (m_thread_state) {
+            m_thread_state->stop();
+        }
+    }
+
+    /// Check if receive thread is running
+    [[nodiscard]] bool isReceiveThreadRunning() const override {
+        return m_thread_state && m_thread_state->receive_thread_running.load();
+    }
+
+    /// @}
+
+private:
+    // Callback storage (in pImpl for move semantics)
+    struct CallbackRegistration {
+        CallbackHandle handle;
+        ReceiveCallback callback;
+    };
+    struct DatagramCallbackRegistration {
+        CallbackHandle handle;
+        DatagramCompleteCallback callback;
+    };
+
+    // Thread state pImpl - allows DeviceSessionWrapper to be movable
+    struct ThreadState {
+        std::vector<CallbackRegistration> receive_callbacks;
+        std::vector<DatagramCallbackRegistration> datagram_callbacks;
+        std::mutex callback_mutex;
+        CallbackHandle next_callback_handle = 1;
+
+        std::thread receive_thread;
+        std::atomic<bool> receive_thread_running{false};
+        std::atomic<bool> receive_thread_stop_requested{false};
+
+        void stop() {
+            if (receive_thread_running.load()) {
+                receive_thread_stop_requested.store(true);
+                if (receive_thread.joinable()) {
+                    receive_thread.join();
+                }
+                receive_thread_running.store(false);
+                receive_thread_stop_requested.store(false);
+            }
+        }
+
+        ~ThreadState() {
+            stop();
+        }
+    };
+
+    std::unique_ptr<ThreadState> m_thread_state = std::make_unique<ThreadState>();
 };
 
 } // namespace cbdev

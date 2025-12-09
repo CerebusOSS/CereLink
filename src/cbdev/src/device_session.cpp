@@ -46,6 +46,8 @@
 #include <algorithm>  // for std::remove
 #include <functional> // for std::function
 #include <thread>
+#include <atomic>
+#include <vector>
 
 namespace {
     // Platform-specific socket close function
@@ -236,12 +238,45 @@ struct DeviceSession::Impl {
     std::vector<std::shared_ptr<PendingResponse>> pending_responses;
     std::mutex pending_mutex;
 
+    // Callback registration
+    struct CallbackRegistration {
+        CallbackHandle handle;
+        ReceiveCallback callback;
+    };
+    struct DatagramCallbackRegistration {
+        CallbackHandle handle;
+        DatagramCompleteCallback callback;
+    };
+    std::vector<CallbackRegistration> receive_callbacks;
+    std::vector<DatagramCallbackRegistration> datagram_callbacks;
+    std::mutex callback_mutex;
+    CallbackHandle next_callback_handle = 1;  // 0 is reserved for "invalid"
+
+    // Receive thread state
+    std::thread receive_thread;
+    std::atomic<bool> receive_thread_running{false};
+    std::atomic<bool> receive_thread_stop_requested{false};
+
     // Platform-specific state
     #ifdef _WIN32
     bool wsa_initialized = false;
     #endif
 
+    void stopReceiveThreadInternal() {
+        if (receive_thread_running.load()) {
+            receive_thread_stop_requested.store(true);
+            if (receive_thread.joinable()) {
+                receive_thread.join();
+            }
+            receive_thread_running.store(false);
+            receive_thread_stop_requested.store(false);
+        }
+    }
+
     ~Impl() {
+        // Stop receive thread before closing socket
+        stopReceiveThreadInternal();
+
         if (socket != INVALID_SOCKET_VALUE) {
             closeSocket(socket);
         }
@@ -853,6 +888,19 @@ bool DeviceSession::channelMatchesType(const cbPKT_CHANINFO& chaninfo, const Cha
     }
 }
 
+size_t DeviceSession::countChannelsOfType(const ChannelType chanType, const size_t maxCount) const {
+    if (!m_impl) return 0;
+
+    size_t count = 0;
+    for (uint32_t chan = 1; chan <= cbMAXCHANS && count < maxCount; ++chan) {
+        const auto& chaninfo = m_impl->device_config.chaninfo[chan - 1];
+        if (channelMatchesType(chaninfo, chanType)) {
+            count++;
+        }
+    }
+    return count;
+}
+
 Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const bool disableOthers) {
     if (!m_impl || !m_impl->connected) {
         return Result<void>::error("Device not connected");
@@ -926,19 +974,23 @@ Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const Ch
 }
 
 Result<void> DeviceSession::setChannelsGroupSync(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const std::chrono::milliseconds timeout) {
-    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANAIN_CHANS : cbNUM_FE_CHANS;
-    clip_chans = clip_chans < nChans ? clip_chans : nChans;
+    // Count ALL matching channels - with disableOthers=true, we send packets for all
+    // (first nChans get group_id, rest get disabled)
+    const size_t total_matching = countChannelsOfType(chanType, cbMAXCHANS);
+    if (total_matching == 0) {
+        return Result<void>::error("No channels found matching type");
+    }
 
     return sendAndWait(
-        [this, clip_chans, chanType, group_id]() {
-            return setChannelsGroupByType(clip_chans, chanType, group_id, true);
+        [this, nChans, chanType, group_id]() {
+            return setChannelsGroupByType(nChans, chanType, group_id, true);
         },
         [](const cbPKT_HEADER* hdr) {
             return (hdr->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION &&
                    (hdr->type == cbPKTTYPE_CHANREPAINP || hdr->type == cbPKTTYPE_CHANREPSMP || hdr->type == cbPKTTYPE_CHANREP);
         },
         timeout,
-        clip_chans
+        total_matching
     );
 }
 
@@ -1243,6 +1295,137 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
 
         offset += packet_size;
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Receive Thread and Callbacks
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+CallbackHandle DeviceSession::registerReceiveCallback(ReceiveCallback callback) {
+    if (!m_impl || !callback) {
+        return 0;  // Invalid
+    }
+
+    std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
+    CallbackHandle handle = m_impl->next_callback_handle++;
+    m_impl->receive_callbacks.push_back({handle, std::move(callback)});
+    return handle;
+}
+
+CallbackHandle DeviceSession::registerDatagramCompleteCallback(DatagramCompleteCallback callback) {
+    if (!m_impl || !callback) {
+        return 0;  // Invalid
+    }
+
+    std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
+    CallbackHandle handle = m_impl->next_callback_handle++;
+    m_impl->datagram_callbacks.push_back({handle, std::move(callback)});
+    return handle;
+}
+
+void DeviceSession::unregisterCallback(CallbackHandle handle) {
+    if (!m_impl || handle == 0) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
+
+    // Check receive callbacks
+    auto& recv_cbs = m_impl->receive_callbacks;
+    recv_cbs.erase(
+        std::remove_if(recv_cbs.begin(), recv_cbs.end(),
+            [handle](const Impl::CallbackRegistration& reg) {
+                return reg.handle == handle;
+            }),
+        recv_cbs.end());
+
+    // Check datagram callbacks
+    auto& dg_cbs = m_impl->datagram_callbacks;
+    dg_cbs.erase(
+        std::remove_if(dg_cbs.begin(), dg_cbs.end(),
+            [handle](const Impl::DatagramCallbackRegistration& reg) {
+                return reg.handle == handle;
+            }),
+        dg_cbs.end());
+}
+
+Result<void> DeviceSession::startReceiveThread() {
+    if (!m_impl) {
+        return Result<void>::error("Device not initialized");
+    }
+
+    if (m_impl->receive_thread_running.load()) {
+        return Result<void>::error("Receive thread already running");
+    }
+
+    m_impl->receive_thread_stop_requested.store(false);
+    m_impl->receive_thread_running.store(true);
+
+    m_impl->receive_thread = std::thread([this]() {
+        // Receive buffer (on stack to avoid allocations)
+        uint8_t buffer[cbCER_UDP_SIZE_MAX];
+
+        while (!m_impl->receive_thread_stop_requested.load()) {
+            // Receive packets
+            auto result = receivePackets(buffer, sizeof(buffer));
+
+            if (result.isError()) {
+                // TODO: Could invoke an error callback here
+                continue;
+            }
+
+            const int bytes_received = result.value();
+            if (bytes_received == 0) {
+                // No data available - brief sleep to avoid busy-waiting
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
+                continue;
+            }
+
+            // Parse packets and invoke callbacks
+            size_t offset = 0;
+            while (offset + cbPKT_HEADER_SIZE <= static_cast<size_t>(bytes_received)) {
+                const auto* pkt = reinterpret_cast<const cbPKT_GENERIC*>(&buffer[offset]);
+                const size_t packet_size = cbPKT_HEADER_SIZE + (pkt->cbpkt_header.dlen * 4);
+
+                // Verify complete packet
+                if (offset + packet_size > static_cast<size_t>(bytes_received)) {
+                    break;  // Incomplete packet
+                }
+
+                // Invoke receive callbacks
+                {
+                    std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
+                    for (const auto& reg : m_impl->receive_callbacks) {
+                        reg.callback(*pkt);
+                    }
+                }
+
+                offset += packet_size;
+            }
+
+            // Invoke datagram complete callbacks
+            {
+                std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
+                for (const auto& reg : m_impl->datagram_callbacks) {
+                    reg.callback();
+                }
+            }
+        }
+
+        m_impl->receive_thread_running.store(false);
+    });
+
+    return Result<void>::ok();
+}
+
+void DeviceSession::stopReceiveThread() {
+    if (m_impl) {
+        m_impl->stopReceiveThreadInternal();
+    }
+}
+
+bool DeviceSession::isReceiveThreadRunning() const {
+    return m_impl && m_impl->receive_thread_running.load();
 }
 
 

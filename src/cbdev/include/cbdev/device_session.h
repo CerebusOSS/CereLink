@@ -19,9 +19,28 @@
 #include <cbproto/cbproto.h>
 #include <cbproto/config.h>
 #include <cstddef>
+#include <functional>
 #include <vector>
 
 namespace cbdev {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Callback Types for Receive Thread
+/// @{
+
+/// Callback invoked for each received packet
+/// @param pkt The received packet (reference valid only during callback invocation)
+/// @note Callbacks run on the receive thread - keep them fast to avoid packet loss!
+using ReceiveCallback = std::function<void(const cbPKT_GENERIC& pkt)>;
+
+/// Callback invoked after all packets in a UDP datagram have been processed
+/// @note Use this for batch operations like signaling shared memory
+using DatagramCompleteCallback = std::function<void()>;
+
+/// Handle for callback registration (used for unregistration)
+using CallbackHandle = uint32_t;
+
+/// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Abstract interface for device communication
@@ -172,6 +191,12 @@ public:
     /// @name Channel Configuration
     /// @{
 
+    /// Count channels matching a specific type
+    /// @param chanType Channel type filter (e.g., ChannelType::FRONTEND)
+    /// @param maxCount Maximum number to count (use cbMAXCHANS for all)
+    /// @return Number of channels matching the type criteria
+    [[nodiscard]] virtual size_t countChannelsOfType(ChannelType chanType, size_t maxCount = cbMAXCHANS) const = 0;
+
     /// Set sampling group for first N channels of a specific type
     /// Groups 1-4 disable groups 1-5 but not 6. Group 5 disables all others. Group 6 disables 5 but no others.
     /// Group 0 disables all groups including raw.
@@ -207,6 +232,43 @@ public:
     virtual Result<void> setChannelsSpikeSortingByType(size_t nChans, ChannelType chanType, uint32_t sortOptions) = 0;
 
     virtual Result<void> setChannelsSpikeSortingSync(size_t nChans, ChannelType chanType, uint32_t sortOptions, std::chrono::milliseconds timeout) = 0;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Receive Thread and Callbacks
+    /// @{
+
+    /// Register a callback to be invoked for each received packet
+    /// @param callback Function to call for each packet
+    /// @return Handle for unregistration, or 0 on failure
+    /// @note Callbacks run on the receive thread - keep them fast to avoid packet loss!
+    /// @note Use the cbsdk API to leverage shared memory and queueing for slower callbacks.
+    /// @note Multiple callbacks can be registered and will be called in registration order
+    virtual CallbackHandle registerReceiveCallback(ReceiveCallback callback) = 0;
+
+    /// Register a callback to be invoked after all packets in a datagram are processed
+    /// @param callback Function to call after datagram processing
+    /// @return Handle for unregistration, or 0 on failure
+    /// @note Use this for batch operations like signaling shared memory
+    virtual CallbackHandle registerDatagramCompleteCallback(DatagramCompleteCallback callback) = 0;
+
+    /// Unregister a previously registered callback
+    /// @param handle Handle returned by registerReceiveCallback or registerDatagramCompleteCallback
+    virtual void unregisterCallback(CallbackHandle handle) = 0;
+
+    /// Start the receive thread
+    /// @return Success or error if thread cannot be started
+    /// @note Thread calls receivePackets() in a loop and invokes registered callbacks
+    virtual Result<void> startReceiveThread() = 0;
+
+    /// Stop the receive thread
+    /// @note Blocks until thread terminates
+    virtual void stopReceiveThread() = 0;
+
+    /// Check if receive thread is running
+    /// @return true if thread is active
+    [[nodiscard]] virtual bool isReceiveThreadRunning() const = 0;
 
     /// @}
 };
