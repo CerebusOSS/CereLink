@@ -118,13 +118,12 @@ namespace ConnectionDefaults {
     constexpr const char* DEFAULT_CLIENT_ADDRESS = "";  // Auto-detect (was 192.168.137.199)
 
     // Ports
-    constexpr uint16_t LEGACY_NSP_RECV_PORT   = cbNET_UDP_PORT_CNT;
-    constexpr uint16_t LEGACY_NSP_SEND_PORT   = cbNET_UDP_PORT_BCAST;
+    constexpr uint16_t LEGACY_NSP_RECV_PORT   = cbNET_UDP_PORT_BCAST;
+    constexpr uint16_t LEGACY_NSP_SEND_PORT   = cbNET_UDP_PORT_CNT;
     constexpr uint16_t NSP_PORT        = cbNET_UDP_PORT_GEMINI_NSP;
     constexpr uint16_t HUB1_PORT       = cbNET_UDP_PORT_GEMINI_HUB;  // cbNET_UDP_PORT_GEMINI_HUB (both send & recv)
     constexpr uint16_t HUB2_PORT       = cbNET_UDP_PORT_GEMINI_HUB2;  // cbNET_UDP_PORT_GEMINI_HUB2 (both send & recv)
     constexpr uint16_t HUB3_PORT       = cbNET_UDP_PORT_GEMINI_HUB3;  // cbNET_UDP_PORT_GEMINI_HUB3 (both send & recv)
-    constexpr uint16_t NPLAY_PORT             = 51001;  // nPlayServer port
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

@@ -183,11 +183,11 @@ ConnectionParams ConnectionParams::forDevice(DeviceType type) {
             break;
 
         case DeviceType::NPLAY:
-            // nPlayServer: loopback for both device and client
+            // nPlayServer: loopback, different ports for send/recv
             conn_params.device_address = ConnectionDefaults::NPLAY_ADDRESS;
             conn_params.client_address = "127.0.0.1";  // Always use loopback for NPLAY
-            conn_params.recv_port = ConnectionDefaults::NPLAY_PORT;
-            conn_params.send_port = ConnectionDefaults::NPLAY_PORT;
+            conn_params.recv_port = ConnectionDefaults::LEGACY_NSP_RECV_PORT;
+            conn_params.send_port = ConnectionDefaults::LEGACY_NSP_SEND_PORT;
             break;
 
         case DeviceType::CUSTOM:
