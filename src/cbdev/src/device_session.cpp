@@ -1037,19 +1037,17 @@ Result<void> DeviceSession::setChannelsACInputCouplingByType(const size_t nChans
 }
 
 Result<void> DeviceSession::setChannelsACInputCouplingSync(const size_t nChans, const ChannelType chanType, const bool enabled, const std::chrono::milliseconds timeout) {
-    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANAIN_CHANS : cbNUM_FE_CHANS;
-    clip_chans = clip_chans < nChans ? clip_chans : nChans;
-
+    const size_t total_matching = std::min(nChans, countChannelsOfType(chanType, cbMAXCHANS));
     return sendAndWait(
-        [this, clip_chans, chanType, enabled]() {
-            return setChannelsACInputCouplingByType(clip_chans, chanType, enabled);
+        [this, nChans, chanType, enabled]() {
+            return setChannelsACInputCouplingByType(nChans, chanType, enabled);
         },
         [](const cbPKT_HEADER* hdr) {
             return (hdr->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION &&
                    hdr->type == cbPKTTYPE_CHANREPAINP;
         },
         timeout,
-        clip_chans
+        total_matching
     );
 }
 
@@ -1094,19 +1092,18 @@ Result<void> DeviceSession::setChannelsSpikeSortingByType(const size_t nChans, c
 }
 
 Result<void> DeviceSession::setChannelsSpikeSortingSync(const size_t nChans, const ChannelType chanType, const uint32_t sortOptions, const std::chrono::milliseconds timeout) {
-    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANAIN_CHANS : cbNUM_FE_CHANS;
-    clip_chans = clip_chans < nChans ? clip_chans : nChans;
+    const size_t total_matching = std::min(nChans, countChannelsOfType(chanType, cbMAXCHANS));
 
     return sendAndWait(
-        [this, clip_chans, chanType, sortOptions]() {
-            return setChannelsSpikeSortingByType(clip_chans, chanType, sortOptions);
+        [this, nChans, chanType, sortOptions]() {
+            return setChannelsSpikeSortingByType(nChans, chanType, sortOptions);
         },
         [](const cbPKT_HEADER* hdr) {
             return (hdr->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION &&
                    hdr->type == cbPKTTYPE_CHANREPSPKTHR;
         },
         timeout,
-        clip_chans
+        total_matching
     );
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////

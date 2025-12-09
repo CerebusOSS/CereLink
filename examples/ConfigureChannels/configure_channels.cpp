@@ -205,13 +205,17 @@ int main(int argc, char* argv[]) {
     std::atomic<size_t> chanrep_count{0};
     std::atomic<size_t> chanrep_smp_count{0};
     std::atomic<size_t> chanrep_ainp_count{0};
+    std::atomic<size_t> chanrep_spkthr_count{0};
     auto debug_handle = device->registerReceiveCallback([&](const cbPKT_GENERIC& pkt) {
         if ((pkt.cbpkt_header.chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
             if (pkt.cbpkt_header.type == cbPKTTYPE_CHANREP) chanrep_count++;
             else if (pkt.cbpkt_header.type == cbPKTTYPE_CHANREPSMP) chanrep_smp_count++;
             else if (pkt.cbpkt_header.type == cbPKTTYPE_CHANREPAINP) chanrep_ainp_count++;
+            else if (pkt.cbpkt_header.type == cbPKTTYPE_CHANREPSPKTHR) chanrep_spkthr_count++;
         }
     });
+
+    int ret = 0;
 
     auto thread_result = device->startReceiveThread();
     if (thread_result.isError()) {
@@ -228,8 +232,8 @@ int main(int argc, char* argv[]) {
     auto req_result = device->performHandshakeSync(std::chrono::milliseconds(2000));
     if (req_result.isError()) {
         std::cerr << "  ERROR: Failed to receive configuration: " << req_result.error() << "\n";
-        device->stopReceiveThread();
-        return 1;
+        ret = 1;
+        goto cleanup;
     }
     std::cout << "  Configuration received successfully\n\n";
 
@@ -239,37 +243,62 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Step 4: Querying device configuration...\n";
 
-    const auto sysinfo = device->getSysInfo();
-    std::cout << "  System Info:\n";
-    std::cout << "    Run Level: " << sysinfo.runlevel << "\n";
-    std::cout << "    Run Flags: 0x" << std::hex << sysinfo.runflags << std::dec << "\n";
+    {
+        const auto sysinfo = device->getSysInfo();
+        std::cout << "  System Info:\n";
+        std::cout << "    Run Level: " << sysinfo.runlevel << "\n";
+        std::cout << "    Run Flags: 0x" << std::hex << sysinfo.runflags << std::dec << "\n\n";
+    }
 
     //==============================================================================================
-    // Step 5: Set sampling group for first N channels of specified type
+    // Step 5: Configure channels of specified type
     //==============================================================================================
 
-    std::cout << "Step 5: Setting sampling group...\n";
+    std::cout << "Step 5: Configuring channels...\n";
 
     // Reset counters before sending
     chanrep_count = 0;
     chanrep_smp_count = 0;
     chanrep_ainp_count = 0;
+    chanrep_spkthr_count = 0;
 
-    auto set_result = device->setChannelsGroupSync(num_channels, channel_type, group_id,
-                                                     std::chrono::milliseconds(5000));
-    if (set_result.isError()) {
-        std::cerr << "  ERROR: Failed to set channel group: " << set_result.error() << "\n";
-        device->unregisterCallback(debug_handle);
-        device->stopReceiveThread();
-        return 1;
+    {
+        auto set_result = device->setChannelsGroupSync(num_channels, channel_type, group_id,
+                                                       std::chrono::milliseconds(1000));
+        if (set_result.isError()) {
+            std::cerr << "  ERROR: Failed to set channel group: " << set_result.error() << "\n";
+            ret = 1;
+            goto cleanup;
+        }
+        std::cout << "  Channel group set to " << group_id << "\n";
+    }
+
+    {
+        auto coupling_result = device->setChannelsACInputCouplingSync(num_channels, channel_type, false, std::chrono::milliseconds(1000));
+        if (coupling_result.isError()) {
+            std::cerr << "  ERROR: Failed to set AC input coupling: " << coupling_result.error() << "\n";
+            ret = 1;
+            goto cleanup;
+        }
+        std::cout << "  AC input coupling disabled\n";
+    }
+
+    {
+        auto sorting_result = device->setChannelsSpikeSortingSync(num_channels, channel_type, cbAINPSPK_NOSORT, std::chrono::milliseconds(1000));
+        if (sorting_result.isError()) {
+            std::cerr << "  ERROR: Failed to set spike sorting: " << sorting_result.error() << "\n";
+            ret = 1;
+            goto cleanup;
+        }
+        std::cout << "  Spike sorting disabled\n";
     }
 
     // Print debug info about received CHANREP packets
-    std::cout << "  Channel group configuration sent\n";
     std::cout << "  DEBUG: Received CHANREP packets:\n";
-    std::cout << "    CHANREP:     " << chanrep_count.load() << "\n";
-    std::cout << "    CHANREPSMP:  " << chanrep_smp_count.load() << "\n";
-    std::cout << "    CHANREPAINP: " << chanrep_ainp_count.load() << "\n\n";
+    std::cout << "    CHANREP:      " << chanrep_count.load() << "\n";
+    std::cout << "    CHANREPSMP:   " << chanrep_smp_count.load() << "\n";
+    std::cout << "    CHANREPAINP:  " << chanrep_ainp_count.load() << "\n";
+    std::cout << "    CHANREPSPKTHR:" << chanrep_spkthr_count.load() << "\n\n";
 
     //==============================================================================================
     // Step 6: Optionally restore (disable) channels
@@ -286,12 +315,13 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    device->unregisterCallback(debug_handle);
-    device->stopReceiveThread();
-
     std::cout << "================================================\n";
     std::cout << "  Configuration Complete!\n";
     std::cout << "================================================\n";
 
-    return 0;
+cleanup:
+    device->unregisterCallback(debug_handle);
+    device->stopReceiveThread();
+
+    return ret;
 }
