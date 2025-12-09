@@ -171,7 +171,6 @@ int main(int argc, char* argv[]) {
     std::cout << "  Device Address:  " << config.device_address << ":" << config.send_port << "\n";
     std::cout << "  Client Address:  " << config.client_address << ":" << config.recv_port << "\n";
     std::cout << "  Channel Type:    " << channelTypeToString(channel_type) << "\n";
-    std::cout << "  Num Channels:    " << num_channels << (num_channels == cbMAXCHANS ? " (all)" : "") << "\n";
     std::cout << "  Group ID:        " << group_id << "\n";
     std::cout << "  Restore State:   " << (restore ? "yes" : "no") << "\n\n";
 
@@ -245,17 +244,6 @@ int main(int argc, char* argv[]) {
     std::cout << "    Run Level: " << sysinfo.runlevel << "\n";
     std::cout << "    Run Flags: 0x" << std::hex << sysinfo.runflags << std::dec << "\n";
 
-    // Count channels matching the requested type (same criteria as setChannelsGroupByType)
-    const size_t matching_channels = device->countChannelsOfType(channel_type, num_channels);
-    std::cout << "  Matching Channels (" << channelTypeToString(channel_type) << "): " << matching_channels << "\n\n";
-
-    if (matching_channels == 0) {
-        std::cerr << "  ERROR: No channels found matching type " << channelTypeToString(channel_type) << "\n";
-        device->unregisterCallback(debug_handle);
-        device->stopReceiveThread();
-        return 1;
-    }
-
     //==============================================================================================
     // Step 5: Set sampling group for first N channels of specified type
     //==============================================================================================
@@ -267,7 +255,7 @@ int main(int argc, char* argv[]) {
     chanrep_smp_count = 0;
     chanrep_ainp_count = 0;
 
-    auto set_result = device->setChannelsGroupSync(matching_channels, channel_type, group_id,
+    auto set_result = device->setChannelsGroupSync(num_channels, channel_type, group_id,
                                                      std::chrono::milliseconds(5000));
     if (set_result.isError()) {
         std::cerr << "  ERROR: Failed to set channel group: " << set_result.error() << "\n";
@@ -289,7 +277,7 @@ int main(int argc, char* argv[]) {
 
     if (restore) {
         std::cout << "Step 6: Restoring (disabling) channels...\n";
-        auto restore_result = device->setChannelsGroupByType(matching_channels, channel_type, 0, true);
+        auto restore_result = device->setChannelsGroupByType(num_channels, channel_type, 0, true);
         if (restore_result.isError()) {
             std::cerr << "  WARNING: Failed to restore channels: " << restore_result.error() << "\n";
         } else {

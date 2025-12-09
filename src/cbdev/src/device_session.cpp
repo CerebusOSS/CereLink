@@ -974,9 +974,8 @@ Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const Ch
 }
 
 Result<void> DeviceSession::setChannelsGroupSync(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const std::chrono::milliseconds timeout) {
-    // Count ALL matching channels - with disableOthers=true, we send packets for all
-    // (first nChans get group_id, rest get disabled)
-    const size_t total_matching = countChannelsOfType(chanType, cbMAXCHANS);
+    // Count matching channels, capped by requested count
+    const size_t total_matching = std::min(nChans, countChannelsOfType(chanType, cbMAXCHANS));
     if (total_matching == 0) {
         return Result<void>::error("No channels found matching type");
     }
