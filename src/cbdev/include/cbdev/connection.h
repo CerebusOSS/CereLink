@@ -52,6 +52,17 @@ enum class ChannelType : uint32_t {
     DIGITAL_OUT = CBPROTO_CHANNEL_TYPE_DIGITAL_OUT  ///< Digital output
 };
 
+/// Sampling rate enumeration
+enum class DeviceRate : uint32_t {
+    NONE        = CBPROTO_GROUP_RATE_NONE,
+    SR_500      = CBPROTO_GROUP_RATE_500Hz,
+    SR_1000     = CBPROTO_GROUP_RATE_1000Hz,
+    SR_2000     = CBPROTO_GROUP_RATE_2000Hz,
+    SR_10000    = CBPROTO_GROUP_RATE_10000Hz,
+    SR_30000    = CBPROTO_GROUP_RATE_30000Hz,
+    SR_RAW      = CBPROTO_GROUP_RATE_RAW
+};
+
 /// Convert protocol version to string for logging
 /// @param version Protocol version
 /// @return Human-readable string
@@ -66,6 +77,12 @@ const char* deviceTypeToString(DeviceType type);
 /// @param type Channel type
 /// @return Human-readable string
 const char* channelTypeToString(ChannelType type);
+
+/// Convert device rate to string for logging
+/// @param rate Device rate
+/// @return Human-readable string
+const char* deviceRateToString(DeviceRate rate);
+
 
 /// Connection parameters for device communication
 /// Note: This contains network/socket configuration only.

@@ -151,9 +151,9 @@ public:
     [[nodiscard]] size_t countChannelsOfType(ChannelType chanType, size_t maxCount) const override;
 
     /// Set sampling group for first N channels of a specific type
-    Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, uint32_t group_id, bool disableOthers) override;
+    Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, DeviceRate group_id, bool disableOthers) override;
 
-    Result<void> setChannelsGroupSync(size_t nChans, ChannelType chanType, uint32_t group_id, std::chrono::milliseconds timeout) override;
+    Result<void> setChannelsGroupSync(size_t nChans, ChannelType chanType, DeviceRate group_id, std::chrono::milliseconds timeout) override;
 
     /// Set AC input coupling for first N channels of a specific type
     Result<void> setChannelsACInputCouplingByType(size_t nChans, ChannelType chanType, bool enabled) override;

@@ -122,7 +122,7 @@ int main(int argc, char* argv[]) {
     auto device_type = DeviceType::NSP;
     auto channel_type = ChannelType::ANALOG_IN;
     size_t num_channels = 1;
-    uint32_t group_id = 1;
+    auto group_id = DeviceRate::SR_500;
     bool restore = false;
 
     try {
@@ -150,7 +150,7 @@ int main(int argc, char* argv[]) {
                 std::cerr << "ERROR: group_id must be between 0 and 6\n";
                 return 1;
             }
-            group_id = gid;
+            group_id = static_cast<DeviceRate>(gid);
         }
         if (argc > 5 && (strcmp(argv[5], "--restore") == 0 || strcmp(argv[5], "-r") == 0)) {
             restore = true;
@@ -171,7 +171,7 @@ int main(int argc, char* argv[]) {
     std::cout << "  Device Address:  " << config.device_address << ":" << config.send_port << "\n";
     std::cout << "  Client Address:  " << config.client_address << ":" << config.recv_port << "\n";
     std::cout << "  Channel Type:    " << channelTypeToString(channel_type) << "\n";
-    std::cout << "  Group ID:        " << group_id << "\n";
+    std::cout << "  Group ID:        " << deviceRateToString(group_id) << "\n";
     std::cout << "  Restore State:   " << (restore ? "yes" : "no") << "\n\n";
 
     //==============================================================================================
@@ -270,7 +270,7 @@ int main(int argc, char* argv[]) {
             ret = 1;
             goto cleanup;
         }
-        std::cout << "  Channel group set to " << group_id << "\n";
+        std::cout << "  Channel group set to " << deviceRateToString(group_id) << "\n";
     }
 
     {
@@ -306,7 +306,7 @@ int main(int argc, char* argv[]) {
 
     if (restore) {
         std::cout << "Step 6: Restoring (disabling) channels...\n";
-        auto restore_result = device->setChannelsGroupByType(num_channels, channel_type, 0, true);
+        auto restore_result = device->setChannelsGroupByType(num_channels, channel_type, DeviceRate::NONE, true);
         if (restore_result.isError()) {
             std::cerr << "  WARNING: Failed to restore channels: " << restore_result.error() << "\n";
         } else {

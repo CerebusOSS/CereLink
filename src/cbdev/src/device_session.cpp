@@ -901,13 +901,9 @@ size_t DeviceSession::countChannelsOfType(const ChannelType chanType, const size
     return count;
 }
 
-Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const bool disableOthers) {
+Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const ChannelType chanType, const DeviceRate group_id, const bool disableOthers) {
     if (!m_impl || !m_impl->connected) {
         return Result<void>::error("Device not connected");
-    }
-
-    if (group_id > 6) {
-        return Result<void>::error("Invalid group ID (must be 0-6)");
     }
 
     // Build vector of packets for all matching channels
@@ -931,29 +927,29 @@ Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const Ch
         cbPKT_CHANINFO pkt = chaninfo;  // Copy current config
         pkt.chan = chan;
 
-        const auto grp = count < nChans ? group_id : 0;  // Set to group_id or disable (0)
+        const auto grp = count < nChans ? group_id : DeviceRate::NONE;  // Set to group_id or disable (0)
 
         // Apply group-specific logic
-        if (grp >= 1 && grp <= 5) {
+        if (grp != DeviceRate::NONE && grp != DeviceRate::SR_RAW) {
             pkt.cbpkt_header.type = cbPKTTYPE_CHANSETSMP; // only need SMP for this.
-            pkt.smpgroup = grp;
+            pkt.smpgroup = static_cast<uint32_t>(grp);
 
             // Set filter based on group mapping: {1: 5, 2: 6, 3: 7, 4: 10}
             constexpr uint32_t filter_map[] = {0, 5, 6, 7, 10, 0, 0};
-            pkt.smpfilter = filter_map[grp];
+            pkt.smpfilter = filter_map[static_cast<uint32_t>(grp)];
 
-            if (grp == 5) {
+            if (grp == DeviceRate::SR_30000) {
                 // Further disable raw stream (group 6) when enabling group 5; requires cbPKTTYPE_CHANSET
                 pkt.cbpkt_header.type = cbPKTTYPE_CHANSET;
                 pkt.ainpopts &= ~cbAINP_RAWSTREAM;  // Clear group 6 flag
             }
         }
-        else if (grp == 6) {
+        else if (grp == DeviceRate::SR_RAW) {
             // Group 6: Raw
             pkt.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
             pkt.ainpopts |= cbAINP_RAWSTREAM;  // Set group 6 flag
         }
-        else if (grp == 0) {
+        else if (grp == DeviceRate::NONE) {
             // Group 0: disable all groups including raw (group 6)
             pkt.cbpkt_header.type = cbPKTTYPE_CHANSET;
             pkt.smpgroup = 0;
@@ -973,7 +969,7 @@ Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const Ch
     return sendPackets(packets);
 }
 
-Result<void> DeviceSession::setChannelsGroupSync(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const std::chrono::milliseconds timeout) {
+Result<void> DeviceSession::setChannelsGroupSync(const size_t nChans, const ChannelType chanType, const DeviceRate group_id, const std::chrono::milliseconds timeout) {
     // Count matching channels, capped by requested count
     const size_t total_matching = std::min(nChans, countChannelsOfType(chanType, cbMAXCHANS));
     if (total_matching == 0) {
@@ -1568,6 +1564,27 @@ const char* channelTypeToString(ChannelType type) {
             return "Digital Output";
         default:
             return "Invalid Channel Type";
+    }
+}
+
+const char* deviceRateToString(DeviceRate rate) {
+    switch (rate) {
+        case DeviceRate::NONE:
+            return "None";
+        case DeviceRate::SR_500:
+            return "500 S/s";
+        case DeviceRate::SR_1000:
+            return "1000 S/s";
+        case DeviceRate::SR_2000:
+            return "2000 S/s";
+        case DeviceRate::SR_10000:
+            return "10000 S/s";
+        case DeviceRate::SR_30000:
+            return "30000 S/s";
+        case DeviceRate::SR_RAW:
+            return "Raw Stream";
+        default:
+            return "Invalid Device Rate";
     }
 }
 

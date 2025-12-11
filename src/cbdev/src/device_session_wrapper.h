@@ -163,11 +163,11 @@ public:
     }
 
     /// Set sampling group for channels by type (delegated to wrapped device)
-    Result<void> setChannelsGroupByType(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const bool disableOthers) override {
+    Result<void> setChannelsGroupByType(const size_t nChans, const ChannelType chanType, const DeviceRate group_id, const bool disableOthers) override {
         return m_device.setChannelsGroupByType(nChans, chanType, group_id, disableOthers);
     }
 
-    Result<void> setChannelsGroupSync(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const std::chrono::milliseconds timeout) override {
+    Result<void> setChannelsGroupSync(const size_t nChans, const ChannelType chanType, const DeviceRate group_id, const std::chrono::milliseconds timeout) override {
         return m_device.setChannelsGroupSync(nChans, chanType, group_id, timeout);
     }
 
