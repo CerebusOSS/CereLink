@@ -257,7 +257,12 @@ void InstNetwork::ProcessIncomingPacket(const cbPKT_GENERIC * const pPkt)
                 {
                     // Any change to the instrument will be reported here, including initial connection as stand-alone
                     uint32_t instInfo;
-                    cbGetInstInfo(pPkt->cbpkt_header.instrument + 1, &instInfo, m_nInstance);
+#ifdef CBPROTO_311
+                    uint8_t nInstrument = cbNSP1;
+#else
+                    uint8_t nInstrument = pPkt->cbpkt_header.instrument + 1;
+#endif
+                    cbGetInstInfo(nInstrument, &instInfo, m_nInstance);
                     // If instrument connection state has changed
                     if (instInfo != m_instInfo)
                     {

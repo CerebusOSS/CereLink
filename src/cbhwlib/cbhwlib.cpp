@@ -2989,7 +2989,9 @@ cbRESULT cbSSSetNoiseBoundaryByTheta(const uint32_t chanIdx, const float afCentr
                            minor_1[0], minor_1[1], minor_1[2],
                            minor_2[0], minor_2[1], minor_2[2]);
     icPkt.chan = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].chan;
+#ifndef CBPROTO_311
     icPkt.cbpkt_header.instrument = cb_cfg_buffer_ptr[nIdx]->chaninfo[chanIdx - 1].cbpkt_header.instrument;
+#endif
     // Send it
     return cbSendPacket(&icPkt, nInstance);
 #else

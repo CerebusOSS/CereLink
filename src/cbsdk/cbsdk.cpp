@@ -717,6 +717,7 @@ cbSdkResult SdkApp::SdkSendCCF(cbSdkCCF * pData, bool bAutosort)
     int nSerialChan = 1;
     int nDoutChan = 1;
     uint32_t nChannelNumber = 0;
+    uint8_t nInstrument = cbNSP1;
     for (auto & info : data.isChan)
     {
         if (info.chan)
@@ -727,11 +728,10 @@ cbSdkResult SdkApp::SdkSendCCF(cbSdkCCF * pData, bool bAutosort)
             switch (info.chancaps)
             {
                 case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_ISOLATED | cbCHAN_AINP:  // FE channels
-#ifdef CBPROTO_311
-                    nChannelNumber = cbGetExpandedChannelNumber(1, data.isChan[info].chan);
-#else
-                    nChannelNumber = cbGetExpandedChannelNumber(info.cbpkt_header.instrument + 1, info.chan);
+#ifndef CBPROTO_311
+                    nInstrument = info.cbpkt_header.instrument + 1;
 #endif
+                    nChannelNumber = cbGetExpandedChannelNumber(nInstrument, info.chan);
                     break;
                 case cbCHAN_EXISTS | cbCHAN_CONNECTED | cbCHAN_AINP:  // Analog input channels
                     nChannelNumber = GetAIAnalogInChanNumber(nAinChan++);
