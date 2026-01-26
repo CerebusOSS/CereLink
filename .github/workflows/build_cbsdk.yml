@@ -28,10 +28,12 @@ jobs:
       matrix:
         config:
           - {name: "windows-x64", os: "windows-latest", cmake_extra: "-T v142,host=x86", arch: "AMD64"}
+          - {name: "windows-x64-CBPROTO_311", os: "windows-latest", cmake_extra: "-T v142,host=x86 -DCBPROTO_311=ON", arch: "AMD64", "publish": "no"}
           - {name: "windows-arm64", os: "windows-latest", cmake_extra: "-A ARM64", arch: "ARM64"}
           - {name: "macOS-latest", os: "macOS-latest", arch: "auto"}
           - {name: "jammy", os: "ubuntu-22.04", arch: "x86_64"}
           - {name: "ubuntu-latest", os: "ubuntu-latest", arch: "x86_64"}
+          - {name: "ubuntu-latest-CBPROTO_311", os: "ubuntu-latest", cmake_extra: "-DCBPROTO_311=ON", arch: "x86_64", "publish": "no"}
           - {name: "bookworm-x64", os: "ubuntu-latest", container: "debian:bookworm", arch: "x86_64"}
           - {name: "linux-arm64", os: "ubuntu-latest", arch: "aarch64"}
 
@@ -150,6 +152,7 @@ jobs:
 
       - name: Upload C++ Packages
         uses: actions/upload-artifact@v4
+        if: matrix.config.publish != 'no'
         with:
           name: cpp-packages-${{ matrix.config.name }}
           path: dist/*
@@ -157,7 +160,7 @@ jobs:
 
       - name: Upload Python Wheels
         uses: actions/upload-artifact@v4
-        if: "(!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest' || matrix.config.name == 'linux-arm64') && !matrix.config.container"
+        if: "(!startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'ubuntu-latest' || matrix.config.name == 'linux-arm64') && !matrix.config.container && matrix.config.publish != 'no'"
         with:
           name: python-wheels-${{ matrix.config.name }}
           path: bindings/Python/dist/*.whl
@@ -165,7 +168,7 @@ jobs:
 
       - name: Attach to Release
         uses: softprops/action-gh-release@v1
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' && matrix.config.publish != 'no'
         with:
           files: |
             dist/*
