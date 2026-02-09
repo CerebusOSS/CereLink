@@ -1297,6 +1297,288 @@ TEST_F(NativeShmemSessionTest, NumTotalChans) {
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name CENTRAL_COMPAT ShmemSession Tests
+/// @{
+
+class CentralCompatShmemSessionTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        test_name = "test_compat_" + std::to_string(test_counter++);
+    }
+
+    // Helper to create a CENTRAL_COMPAT STANDALONE session (for testing)
+    Result<ShmemSession> createCompatSession() {
+        return ShmemSession::create(
+            test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
+            test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
+            test_name + "_signal", Mode::STANDALONE, ShmemLayout::CENTRAL_COMPAT);
+    }
+
+    std::string test_name;
+    static int test_counter;
+};
+
+int CentralCompatShmemSessionTest::test_counter = 0;
+
+TEST_F(CentralCompatShmemSessionTest, CreateCompatStandalone) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << "Failed to create compat session: " << result.error();
+
+    auto& session = result.value();
+    EXPECT_TRUE(session.isOpen());
+    EXPECT_EQ(session.getMode(), Mode::STANDALONE);
+    EXPECT_EQ(session.getLayout(), ShmemLayout::CENTRAL_COMPAT);
+}
+
+TEST_F(CentralCompatShmemSessionTest, LegacyConfigBufferAccessor) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    // CENTRAL_COMPAT should return legacy config buffer
+    EXPECT_NE(session.getLegacyConfigBuffer(), nullptr);
+    // Central accessor should return nullptr for compat layout
+    EXPECT_EQ(session.getConfigBuffer(), nullptr);
+    // Native accessor should also return nullptr
+    EXPECT_EQ(session.getNativeConfigBuffer(), nullptr);
+}
+
+TEST_F(CentralCompatShmemSessionTest, IsInstrumentActive_AlwaysTrue) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    // In CENTRAL_COMPAT mode, all instruments report as active
+    for (uint8_t i = 1; i <= cbMAXOPEN; ++i) {
+        auto id = InstrumentId::fromOneBased(i);
+        auto active_result = session.isInstrumentActive(id);
+        ASSERT_TRUE(active_result.isOk());
+        EXPECT_TRUE(active_result.value()) << "Instrument " << (int)i << " should be active in compat mode";
+    }
+}
+
+TEST_F(CentralCompatShmemSessionTest, SetInstrumentActive_ReturnsError) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    // Setting instrument status should fail (read-only in compat mode)
+    auto id = InstrumentId::fromOneBased(1);
+    auto set_result = session.setInstrumentActive(id, true);
+    EXPECT_TRUE(set_result.isError());
+}
+
+TEST_F(CentralCompatShmemSessionTest, GetFirstActiveInstrument) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    // Should always return instrument 0 (first)
+    auto first_result = session.getFirstActiveInstrument();
+    ASSERT_TRUE(first_result.isOk());
+    EXPECT_EQ(first_result.value().toIndex(), 0);
+}
+
+TEST_F(CentralCompatShmemSessionTest, SetAndGetProcInfo) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    cbPKT_PROCINFO info;
+    std::memset(&info, 0, sizeof(info));
+    info.proc = 2;
+    info.chancount = 512;
+    info.bankcount = 24;
+
+    // Set procinfo for instrument 2 (index 1)
+    auto id = InstrumentId::fromOneBased(2);
+    auto set_result = session.setProcInfo(id, info);
+    ASSERT_TRUE(set_result.isOk());
+
+    // Retrieve and verify
+    auto get_result = session.getProcInfo(id);
+    ASSERT_TRUE(get_result.isOk());
+    EXPECT_EQ(get_result.value().proc, 2);
+    EXPECT_EQ(get_result.value().chancount, 512);
+    EXPECT_EQ(get_result.value().bankcount, 24);
+}
+
+TEST_F(CentralCompatShmemSessionTest, SetAndGetBankInfo) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    cbPKT_BANKINFO info;
+    std::memset(&info, 0, sizeof(info));
+    info.proc = 1;
+    info.bank = 5;
+    info.chancount = 32;
+
+    auto id = InstrumentId::fromOneBased(1);
+    ASSERT_TRUE(session.setBankInfo(id, 5, info).isOk());
+
+    auto get_result = session.getBankInfo(id, 5);
+    ASSERT_TRUE(get_result.isOk());
+    EXPECT_EQ(get_result.value().proc, 1);
+    EXPECT_EQ(get_result.value().bank, 5);
+    EXPECT_EQ(get_result.value().chancount, 32);
+}
+
+TEST_F(CentralCompatShmemSessionTest, SetAndGetFilterInfo) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    cbPKT_FILTINFO info;
+    std::memset(&info, 0, sizeof(info));
+    info.proc = 1;
+    info.filt = 10;
+    info.hpfreq = 300000;
+
+    auto id = InstrumentId::fromOneBased(1);
+    ASSERT_TRUE(session.setFilterInfo(id, 10, info).isOk());
+
+    auto get_result = session.getFilterInfo(id, 10);
+    ASSERT_TRUE(get_result.isOk());
+    EXPECT_EQ(get_result.value().filt, 10);
+    EXPECT_EQ(get_result.value().hpfreq, 300000);
+}
+
+TEST_F(CentralCompatShmemSessionTest, SetAndGetChanInfo) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    cbPKT_CHANINFO info;
+    std::memset(&info, 0, sizeof(info));
+    info.chan = 100;
+    info.proc = 1;
+    info.bank = 4;
+    std::strncpy(info.label, "elec100", cbLEN_STR_LABEL);
+
+    ASSERT_TRUE(session.setChanInfo(100, info).isOk());
+
+    auto get_result = session.getChanInfo(100);
+    ASSERT_TRUE(get_result.isOk());
+    EXPECT_EQ(get_result.value().chan, 100);
+    EXPECT_STREQ(get_result.value().label, "elec100");
+}
+
+TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_DefaultNoFilter) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    EXPECT_EQ(session.getInstrumentFilter(), -1);
+}
+
+TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_SetAndGet) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    session.setInstrumentFilter(2);
+    EXPECT_EQ(session.getInstrumentFilter(), 2);
+
+    session.setInstrumentFilter(-1);
+    EXPECT_EQ(session.getInstrumentFilter(), -1);
+}
+
+TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_FiltersReceiveBuffer) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    // Store packets from different instruments
+    // NOTE: readReceiveBuffer interprets the first dword (time field) as packet size in dwords.
+    // So time must equal cbPKT_HEADER_32SIZE + dlen for correct parsing.
+    uint32_t dlen = 4;
+    uint32_t pkt_size_dwords = cbPKT_HEADER_32SIZE + dlen;
+
+    for (uint8_t inst = 0; inst < 4; ++inst) {
+        cbPKT_GENERIC pkt;
+        std::memset(&pkt, 0, sizeof(pkt));
+        pkt.cbpkt_header.time = pkt_size_dwords;  // Must match packet size for reader
+        pkt.cbpkt_header.chid = 1;  // Non-configuration packet
+        pkt.cbpkt_header.instrument = inst;
+        pkt.cbpkt_header.type = 0x01;
+        pkt.cbpkt_header.dlen = dlen;
+        pkt.data_u32[0] = 0xAA00 + inst;
+
+        ASSERT_TRUE(session.storePacket(pkt).isOk());
+    }
+
+    // Set filter to instrument 2 only
+    session.setInstrumentFilter(2);
+
+    // Read packets - should only get the one from instrument 2
+    cbPKT_GENERIC read_pkts[10];
+    size_t packets_read = 0;
+    auto read_result = session.readReceiveBuffer(read_pkts, 10, packets_read);
+    ASSERT_TRUE(read_result.isOk()) << read_result.error();
+    EXPECT_EQ(packets_read, 1u);
+    EXPECT_EQ(read_pkts[0].cbpkt_header.instrument, 2);
+    EXPECT_EQ(read_pkts[0].data_u32[0], 0xAA02u);
+}
+
+TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_NoFilter_ReturnsAll) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    // Store packets from different instruments
+    uint32_t dlen = 4;
+    uint32_t pkt_size_dwords = cbPKT_HEADER_32SIZE + dlen;
+
+    for (uint8_t inst = 0; inst < 3; ++inst) {
+        cbPKT_GENERIC pkt;
+        std::memset(&pkt, 0, sizeof(pkt));
+        pkt.cbpkt_header.time = pkt_size_dwords;  // Must match packet size for reader
+        pkt.cbpkt_header.chid = 1;
+        pkt.cbpkt_header.instrument = inst;
+        pkt.cbpkt_header.type = 0x01;
+        pkt.cbpkt_header.dlen = dlen;
+        pkt.data_u32[0] = 0xBB00 + inst;
+
+        ASSERT_TRUE(session.storePacket(pkt).isOk());
+    }
+
+    // No filter set (default -1) - should get all packets
+    cbPKT_GENERIC read_pkts[10];
+    size_t packets_read = 0;
+    auto read_result = session.readReceiveBuffer(read_pkts, 10, packets_read);
+    ASSERT_TRUE(read_result.isOk()) << read_result.error();
+    EXPECT_EQ(packets_read, 3u);
+}
+
+TEST_F(CentralCompatShmemSessionTest, TransmitQueueRoundTrip) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.type = 0x05;
+    pkt.cbpkt_header.dlen = 4;
+    pkt.data_u32[0] = 0x12345678;
+
+    ASSERT_FALSE(session.hasTransmitPackets());
+    ASSERT_TRUE(session.enqueuePacket(pkt).isOk());
+    EXPECT_TRUE(session.hasTransmitPackets());
+
+    cbPKT_GENERIC out_pkt;
+    auto deq_result = session.dequeuePacket(out_pkt);
+    ASSERT_TRUE(deq_result.isOk());
+    EXPECT_TRUE(deq_result.value());
+    EXPECT_EQ(out_pkt.cbpkt_header.type, 0x05);
+    EXPECT_EQ(out_pkt.data_u32[0], 0x12345678u);
+
+    EXPECT_FALSE(session.hasTransmitPackets());
+}
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Run all tests
 ///
 int main(int argc, char **argv) {

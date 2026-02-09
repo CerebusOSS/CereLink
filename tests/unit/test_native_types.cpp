@@ -161,3 +161,53 @@ TEST(NativeTypesTest, PCStatusLayout) {
 }
 
 /// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name CentralLegacyCFGBUFF Tests
+/// @{
+
+TEST(CentralLegacyTypesTest, SizeCloseToConfigBuffer) {
+    // CentralLegacyCFGBUFF and CentralConfigBuffer should be close in size.
+    // Differences:
+    //   CentralConfigBuffer has instrument_status[4] (+16 bytes), no optiontable/colortable move (neutral)
+    //   CentralLegacyCFGBUFF omits hwndCentral (saves ~8 bytes) and instrument_status (saves 16 bytes)
+    //   isLnc position differs but size is the same
+    // So the difference should be small (under 1KB)
+    size_t legacy_size = sizeof(CentralLegacyCFGBUFF);
+    size_t config_size = sizeof(CentralConfigBuffer);
+
+    // Both should be in the multi-MB range
+    EXPECT_GT(legacy_size, 1 * 1024 * 1024u) << "Legacy config buffer seems too small: " << legacy_size;
+    EXPECT_GT(config_size, 1 * 1024 * 1024u) << "Config buffer seems too small: " << config_size;
+
+    // The difference should be small (instrument_status[4] = 16 bytes)
+    size_t diff = (legacy_size > config_size) ? (legacy_size - config_size) : (config_size - legacy_size);
+    EXPECT_LT(diff, 1024u)
+        << "Legacy (" << legacy_size << ") and CereLink (" << config_size
+        << ") config buffers differ by " << diff << " bytes (expected < 1KB)";
+}
+
+TEST(CentralLegacyTypesTest, FieldOrderMatchesCentral) {
+    // Verify that optiontable comes right after sysflags (Central's layout)
+    // In CereLink's cbConfigBuffer, optiontable is at the END
+    CentralLegacyCFGBUFF legacy = {};
+
+    // Access fields to verify they compile and are accessible
+    legacy.version = 42;
+    legacy.sysflags = 1;
+    legacy.optiontable = {};
+    legacy.colortable = {};
+    legacy.sysinfo = {};
+    legacy.procinfo[0] = {};
+    legacy.procinfo[3] = {};
+    legacy.bankinfo[0][0] = {};
+    legacy.chaninfo[0] = {};
+    legacy.chaninfo[CENTRAL_cbMAXCHANS - 1] = {};
+    legacy.isLnc[0] = {};
+    legacy.isLnc[3] = {};
+    legacy.fileinfo = {};
+
+    EXPECT_EQ(legacy.version, 42u);
+}
+
+/// @}

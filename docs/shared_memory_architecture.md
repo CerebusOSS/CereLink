@@ -9,8 +9,10 @@ CereLink supports two shared memory modes:
   always in the current protocol format.
 
 - **Central compat mode** (fallback): CereLink attaches to Central's existing shared memory
-  as a CLIENT. Uses Central's monolithic layout with 4-instrument arrays. Packets may require
-  protocol translation from older formats.
+  as a CLIENT. Uses `CentralLegacyCFGBUFF` to match Central's exact binary layout (which
+  differs from CereLink's `cbConfigBuffer`). Instrument filtering extracts only the
+  requested device's packets from Central's shared receive buffer. Protocol translation
+  from older Central formats is deferred to Phase 3.
 
 Mode is auto-detected at startup: if Central's shared memory exists, use compat mode;
 otherwise, use native mode.
@@ -210,8 +212,10 @@ This means CLIENT processes never need to know what protocol the device speaks.
 
 ## Central Compat Mode
 
-When CereLink detects that Central is running (by checking for Central's system mutex
-`cbSharedDataMutex`), it attaches to Central's existing shared memory as a CLIENT.
+When CereLink detects that Central is running (its shared memory segments exist), it
+attaches as a CLIENT using the `CENTRAL_COMPAT` shared memory layout. This layout uses
+`CentralLegacyCFGBUFF` -- a struct matching Central's exact binary field order -- instead
+of CereLink's own `cbConfigBuffer` (which has incompatible field ordering).
 
 ### Segment Names (Central's)
 
@@ -246,46 +250,65 @@ For legacy (non-Gemini) NSP systems, only instrument index 0 is used.
 
 ### Receive Buffer Filtering
 
-In Central's shared memory, ALL devices' packets go into ONE receive ring buffer. When
-CereLink compat mode is reading for a specific device:
+In Central's shared memory, ALL devices' packets go into ONE receive ring buffer. CereLink's
+`setInstrumentFilter()` method configures `readReceiveBuffer()` to filter by instrument:
 
-1. Read all packets from `cbRECbuffer` (cannot filter at the shmem level)
-2. Check each packet's `cbpkt_header.instrument` field
-3. Deliver only packets matching the requested device's instrument index
+1. `SdkSession::create()` sets the instrument filter based on DeviceType → instrument index
+2. `readReceiveBuffer()` reads all packets from `cbRECbuffer` (advances the ring buffer tail)
+3. For each packet, checks `cbpkt_header.instrument` against the filter
+4. Packets not matching the filter are consumed (tail advances) but not delivered to the caller
+
+```cpp
+// Set automatically by SdkSession::create() in compat mode
+shmem_session.setInstrumentFilter(getCentralInstrumentIndex(config.device_type));
+
+// readReceiveBuffer() internally skips non-matching packets
+session.readReceiveBuffer(packets, max_count, packets_read);
+// packets_read only includes packets matching the instrument filter
+```
 
 This is less efficient than native mode (where the receive buffer only contains one device's
-packets), but the large buffer size makes this a negligible cost.
+packets), but the large buffer size (~768 MB) makes this a negligible cost.
 
-### Protocol Translation in Compat Mode
+### Protocol Translation in Compat Mode (Phase 3 - Deferred)
 
-Central only supports one protocol version at a time. Packets in Central's shared memory
-are in whatever protocol format Central is using, which may be older than CereLink's current
-format (4.2+).
+Modern Central binaries use the same 4.1/4.2 protocol format as CereLink, so protocol
+translation is not needed for current deployments. Phase 3 will add translation support
+for older Central versions:
 
-When reading from Central's shared memory, CereLink must:
-1. Detect the protocol version (from `cbCFGBUFF.sysinfo` version field)
+1. Detect the protocol version (from `CentralLegacyCFGBUFF.sysinfo` version field)
 2. Translate packets from old format to current format using `PacketTranslator`
 3. Deliver current-format packets to the user callback
 
-When writing to Central's transmit buffer, the reverse translation applies.
-
-This reuses the same `PacketTranslator` infrastructure that `cbdev` uses for direct UDP
-connections to older devices.
+This will reuse the same `PacketTranslator` infrastructure that `cbdev` uses for direct
+UDP connections to older devices.
 
 ### Config Buffer Access in Compat Mode
 
 Central's `cbCFGBUFF` has a different field layout than CereLink's `NativeConfigBuffer` or
-`cbConfigBuffer` (see "Differences from Central" section below). In compat mode, CereLink
-must use a `CentralLegacyCFGBUFF` struct that matches Central's exact field order to read
-the config buffer correctly.
+`cbConfigBuffer` (see "Differences from Central" section below). The `CENTRAL_COMPAT` layout
+uses a `CentralLegacyCFGBUFF` struct that matches Central's exact field order to read the
+config buffer correctly.
 
-Config access for a specific device uses the instrument index:
+All `ShmemSession` accessor methods (`getProcInfo`, `setBankInfo`, `getFilterInfo`, etc.)
+dispatch on the layout and use the correct struct:
+
+```cpp
+// In CENTRAL_COMPAT mode, accessors use legacyCfg()
+if (layout == ShmemLayout::CENTRAL_COMPAT)
+    return legacyCfg()->procinfo[idx];       // CentralLegacyCFGBUFF
+else if (layout == ShmemLayout::NATIVE)
+    return nativeCfg()->procinfo;            // NativeConfigBuffer (scalar)
+else
+    return centralCfg()->procinfo[idx];      // cbConfigBuffer
 ```
-cfg->procinfo[instrument_idx]
-cfg->bankinfo[instrument_idx]
-cfg->filtinfo[instrument_idx]
-// etc.
-```
+
+Instrument status in compat mode:
+- `isInstrumentActive()` always returns **true** (Central has no `instrument_status` field;
+  if the shared memory exists, instruments are configured by Central)
+- `setInstrumentActive()` returns **error** (read-only in compat mode)
+- `getConfigBuffer()` returns **nullptr** (wrong struct type for compat mode)
+- `getLegacyConfigBuffer()` returns the `CentralLegacyCFGBUFF*` pointer
 
 ## Mode Auto-Detection
 
@@ -294,12 +317,13 @@ SdkSession::open(DeviceType::HUB1)
     |
     +-- Can open Central's "cbSharedDataMutex" (instance 0)?
     |     |
-    |     YES --> Central Compat Mode
+    |     YES --> Central Compat Mode (CENTRAL_COMPAT layout)
     |             - Map Central's 7 instance-0 segments
+    |             - Use CentralLegacyCFGBUFF for config buffer (Central's binary layout)
     |             - Use GEMSTART==2 mapping: Hub1 = instrument index 0
-    |             - Filter receive buffer by instrument field
-    |             - Translate packets if protocol version < current
-    |             - Index into [4] arrays for config access
+    |             - Set instrument filter (setInstrumentFilter) for receive buffer
+    |             - Index into [4] arrays for config access via legacyCfg()
+    |             - Protocol translation deferred to Phase 3
     |
     +-- NO --> Can open "cbshm_hub1_signal"?
     |     |
@@ -483,7 +507,7 @@ Same structure layouts and mechanisms.
 ### Core Infrastructure (Complete)
 
 - All 7 shared memory segments implemented for both Central-compat and native layouts
-- `ShmemLayout` enum (`CENTRAL` / `NATIVE`) controls buffer sizes and struct interpretation
+- `ShmemLayout` enum (`CENTRAL` / `CENTRAL_COMPAT` / `NATIVE`) controls buffer sizes and struct interpretation
 - cbSIGNALevent synchronization working
 - Ring buffer reading logic complete
 - CLIENT mode shared memory receive thread implemented
@@ -509,19 +533,34 @@ Same structure layouts and mechanisms.
 - [x] 34 new unit tests (20 NativeShmemSession + 14 NativeTypes), all passing
 - [x] All existing Central-mode tests unaffected (no regressions)
 
-### TODO (Central Compat Mode - Phase 2)
+### Central Compat Mode (Complete - Phase 2)
 
-- [ ] Implement `CentralLegacyCFGBUFF` for reading Central's actual config buffer
-- [ ] Implement receive buffer instrument filtering for compat mode
-- [ ] Implement protocol translation bridge for compat mode reads/writes
+- [x] Define `CentralLegacyCFGBUFF` struct matching Central's exact binary layout
+- [x] Add `ShmemLayout::CENTRAL_COMPAT` layout mode using `CentralLegacyCFGBUFF`
+- [x] All accessor methods dispatch on `CENTRAL_COMPAT` (use `legacyCfg()` instead of `centralCfg()`)
+- [x] Instrument status: `isInstrumentActive()` returns true, `setInstrumentActive()` returns error
+- [x] `getLegacyConfigBuffer()` accessor for direct access to `CentralLegacyCFGBUFF*`
+- [x] Implement receive buffer instrument filtering (`setInstrumentFilter()`)
+- [x] `SdkSession::create()` uses `CENTRAL_COMPAT` for Central CLIENT with instrument filter auto-set
+- [x] `getCentralInstrumentIndex()` maps DeviceType → instrument index (GEMSTART==2)
+- [x] 16 new unit tests (14 CentralCompat + 2 CentralLegacyTypes), all passing
+- [x] All existing tests unaffected (no regressions)
+
+### TODO (Protocol Translation - Phase 3)
+
+- [ ] Detect Central's protocol version from `CentralLegacyCFGBUFF.sysinfo`
+- [ ] Translate packets from old format to current via `PacketTranslator`
+- [ ] Compat mode write path with protocol translation for older Central binaries
+- [ ] Runtime GEMSTART detection (currently hardcoded GEMSTART==2)
 
 ## Code Locations
 
 - **Shared Memory**: `src/cbshm/`
   - `include/cbshm/shmem_session.h` - Public API (ShmemSession class)
   - `src/shmem_session.cpp` - Implementation
-  - `include/cbshm/central_types.h` - Central-compatible buffer structures
-  - `include/cbshm/config_buffer.h` - Configuration buffer struct definition
+  - `include/cbshm/central_types.h` - Central-compatible buffer structures + `CentralLegacyCFGBUFF`
+  - `include/cbshm/native_types.h` - Native-mode buffer structures (single-instrument)
+  - `include/cbshm/config_buffer.h` - Configuration buffer struct definition (`cbConfigBuffer`)
 
 - **SDK Integration**: `src/cbsdk/`
   - `src/sdk_session.cpp` - High-level SDK, mode auto-detection, segment naming

@@ -259,6 +259,23 @@ static std::string getNativeSegmentName(DeviceType type, const std::string& segm
     return std::string("cbshm_") + getNativeDeviceName(type) + "_" + segment;
 }
 
+/// @brief Map DeviceType to Central's instrument index (GEMSTART==2 mapping)
+///
+/// Central hardcodes instrument assignments at compile time.
+/// With GEMSTART==2 (current build): Hub1=0, Hub2=1, Hub3=2, NSP=3
+/// With single-device (non-Gemini): instrument 0
+///
+static int32_t getCentralInstrumentIndex(DeviceType type) {
+    switch (type) {
+        case DeviceType::HUB1:       return 0;
+        case DeviceType::HUB2:       return 1;
+        case DeviceType::HUB3:       return 2;
+        case DeviceType::NSP:        return 3;
+        case DeviceType::LEGACY_NSP: return 0;  // Non-Gemini, single instrument
+        default:                     return -1;  // No filter
+    }
+}
+
 Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     SdkSession session;
     session.m_impl->config = config;
@@ -282,7 +299,14 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     auto shmem_result = cbshm::ShmemSession::create(
         central_cfg, central_rec, central_xmt, central_xmt_local,
         central_status, central_spk, central_signal,
-        cbshm::Mode::CLIENT, cbshm::ShmemLayout::CENTRAL);
+        cbshm::Mode::CLIENT, cbshm::ShmemLayout::CENTRAL_COMPAT);
+
+    if (shmem_result.isOk()) {
+        // Set instrument filter for CENTRAL_COMPAT mode (Central's receive buffer
+        // contains packets from ALL instruments; we only want our device's packets)
+        int32_t inst_idx = getCentralInstrumentIndex(config.device_type);
+        shmem_result.value().setInstrumentFilter(inst_idx);
+    }
 
     if (shmem_result.isError()) {
         // --- Attempt 2: Native CLIENT mode ---

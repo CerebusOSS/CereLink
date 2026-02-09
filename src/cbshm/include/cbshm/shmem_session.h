@@ -105,8 +105,9 @@ enum class Mode {
 /// Controls buffer sizes, struct types, and bounds checking.
 ///
 enum class ShmemLayout {
-    CENTRAL,  ///< Central-compatible layout (4 instruments, 848 channels, ~1.2 GB)
-    NATIVE    ///< Native layout (1 instrument, 284 channels, ~265 MB)
+    CENTRAL,         ///< CereLink's own Central-compatible layout (cbConfigBuffer)
+    CENTRAL_COMPAT,  ///< Central's actual binary layout (CentralLegacyCFGBUFF)
+    NATIVE           ///< Native single-instrument layout (NativeConfigBuffer)
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -276,6 +277,14 @@ public:
     /// @return Const pointer to native configuration buffer, or nullptr if not NATIVE layout
     const NativeConfigBuffer* getNativeConfigBuffer() const;
 
+    /// @brief Get direct pointer to Central legacy configuration buffer
+    /// @return Pointer to legacy config buffer, or nullptr if not CENTRAL_COMPAT layout
+    CentralLegacyCFGBUFF* getLegacyConfigBuffer();
+
+    /// @brief Get direct pointer to Central legacy configuration buffer (const version)
+    /// @return Const pointer to legacy config buffer, or nullptr if not CENTRAL_COMPAT layout
+    const CentralLegacyCFGBUFF* getLegacyConfigBuffer() const;
+
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
@@ -415,6 +424,25 @@ public:
     /// @param spike Output parameter to receive spike packet
     /// @return Result<bool> - true if spike available, false if cache empty
     Result<bool> getRecentSpike(uint32_t channel, cbPKT_SPK& spike) const;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name Instrument Filtering (CENTRAL_COMPAT mode)
+    /// @{
+
+    /// @brief Set instrument filter for receive buffer reads
+    ///
+    /// In CENTRAL_COMPAT mode, Central's receive buffer contains packets from ALL
+    /// instruments. This filter causes readReceiveBuffer() to only return packets
+    /// matching the specified instrument index.
+    ///
+    /// @param instrument_index 0-based instrument index to filter for, or -1 for no filter (default)
+    void setInstrumentFilter(int32_t instrument_index);
+
+    /// @brief Get current instrument filter
+    /// @return Current filter (-1 = no filter)
+    int32_t getInstrumentFilter() const;
 
     /// @}
 

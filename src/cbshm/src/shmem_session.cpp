@@ -88,11 +88,16 @@ struct ShmemSession::Impl {
     uint32_t rec_tailindex;      // Our read position in receive buffer
     uint32_t rec_tailwrap;       // Our wrap counter
 
+    // Instrument filter for CENTRAL_COMPAT mode (-1 = no filter)
+    int32_t instrument_filter;
+
     // Typed accessors for config buffer
     CentralConfigBuffer* centralCfg() { return static_cast<CentralConfigBuffer*>(cfg_buffer_raw); }
     const CentralConfigBuffer* centralCfg() const { return static_cast<const CentralConfigBuffer*>(cfg_buffer_raw); }
     NativeConfigBuffer* nativeCfg() { return static_cast<NativeConfigBuffer*>(cfg_buffer_raw); }
     const NativeConfigBuffer* nativeCfg() const { return static_cast<const NativeConfigBuffer*>(cfg_buffer_raw); }
+    CentralLegacyCFGBUFF* legacyCfg() { return static_cast<CentralLegacyCFGBUFF*>(cfg_buffer_raw); }
+    const CentralLegacyCFGBUFF* legacyCfg() const { return static_cast<const CentralLegacyCFGBUFF*>(cfg_buffer_raw); }
 
     // Generic receive buffer header access (header fields are at identical offsets in both layouts)
     uint32_t& recReceived() {
@@ -161,6 +166,7 @@ struct ShmemSession::Impl {
         , rec_buffer_len(0)
         , rec_tailindex(0)
         , rec_tailwrap(0)
+        , instrument_filter(-1)
     {}
 
     ~Impl() {
@@ -177,6 +183,15 @@ struct ShmemSession::Impl {
             status_buffer_size = sizeof(NativePCStatus);
             spike_buffer_size = sizeof(NativeSpikeBuffer);
             rec_buffer_len = NATIVE_cbRECBUFFLEN;
+        } else if (layout == ShmemLayout::CENTRAL_COMPAT) {
+            cfg_buffer_size = sizeof(CentralLegacyCFGBUFF);
+            // All other buffers use Central sizes (receive, xmt, spike, status are compatible)
+            rec_buffer_size = sizeof(CentralReceiveBuffer);
+            xmt_buffer_size = sizeof(CentralTransmitBuffer);
+            xmt_local_buffer_size = sizeof(CentralTransmitBufferLocal);
+            status_buffer_size = sizeof(CentralPCStatus);
+            spike_buffer_size = sizeof(CentralSpikeBuffer);
+            rec_buffer_len = CENTRAL_cbRECBUFFLEN;
         } else {
             cfg_buffer_size = sizeof(CentralConfigBuffer);
             rec_buffer_size = sizeof(CentralReceiveBuffer);
@@ -463,6 +478,8 @@ struct ShmemSession::Impl {
     void initBuffers() {
         if (layout == ShmemLayout::NATIVE) {
             initNativeBuffers();
+        } else if (layout == ShmemLayout::CENTRAL_COMPAT) {
+            initLegacyBuffers();
         } else {
             initCentralBuffers();
         }
@@ -508,6 +525,54 @@ struct ShmemSession::Impl {
         }
 
         // Initialize spike cache buffer
+        auto* spike = static_cast<CentralSpikeBuffer*>(spike_buffer_raw);
+        std::memset(spike, 0, spike_buffer_size);
+        spike->chidmax = CENTRAL_cbNUM_ANALOG_CHANS;
+        spike->linesize = sizeof(CentralSpikeCache);
+        for (uint32_t ch = 0; ch < CENTRAL_cbPKT_SPKCACHELINECNT; ++ch) {
+            spike->cache[ch].chid = ch;
+            spike->cache[ch].pktcnt = CENTRAL_cbPKT_SPKCACHEPKTCNT;
+            spike->cache[ch].pktsize = sizeof(cbPKT_SPK);
+        }
+    }
+
+    void initLegacyBuffers() {
+        auto* cfg = legacyCfg();
+        std::memset(cfg, 0, cfg_buffer_size);
+        cfg->version = cbVERSION_MAJOR * 100 + cbVERSION_MINOR;
+
+        // Initialize receive buffer
+        std::memset(rec_buffer_raw, 0, rec_buffer_size);
+
+        // Initialize transmit buffers (same struct as Central)
+        auto* xmt = static_cast<CentralTransmitBuffer*>(xmt_buffer_raw);
+        std::memset(xmt, 0, xmt_buffer_size);
+        xmt->last_valid_index = CENTRAL_cbXMT_GLOBAL_BUFFLEN - 1;
+        xmt->bufferlen = CENTRAL_cbXMT_GLOBAL_BUFFLEN;
+
+        auto* xmt_local = static_cast<CentralTransmitBufferLocal*>(xmt_local_buffer_raw);
+        std::memset(xmt_local, 0, xmt_local_buffer_size);
+        xmt_local->last_valid_index = CENTRAL_cbXMT_LOCAL_BUFFLEN - 1;
+        xmt_local->bufferlen = CENTRAL_cbXMT_LOCAL_BUFFLEN;
+
+        // Initialize status buffer (same struct as Central)
+        auto* status = static_cast<CentralPCStatus*>(status_buffer_raw);
+        std::memset(status, 0, status_buffer_size);
+        status->m_nNumFEChans = CENTRAL_cbNUM_FE_CHANS;
+        status->m_nNumAnainChans = CENTRAL_cbNUM_ANAIN_CHANS;
+        status->m_nNumAnalogChans = CENTRAL_cbNUM_ANALOG_CHANS;
+        status->m_nNumAoutChans = CENTRAL_cbNUM_ANAOUT_CHANS;
+        status->m_nNumAudioChans = CENTRAL_cbNUM_AUDOUT_CHANS;
+        status->m_nNumAnalogoutChans = CENTRAL_cbNUM_ANALOGOUT_CHANS;
+        status->m_nNumDiginChans = CENTRAL_cbNUM_DIGIN_CHANS;
+        status->m_nNumSerialChans = CENTRAL_cbNUM_SERIAL_CHANS;
+        status->m_nNumDigoutChans = CENTRAL_cbNUM_DIGOUT_CHANS;
+        status->m_nNumTotalChans = CENTRAL_cbMAXCHANS;
+        for (int i = 0; i < CENTRAL_cbMAXPROCS; ++i) {
+            status->m_nNspStatus[i] = NSPStatus::NSP_INIT;
+        }
+
+        // Initialize spike cache buffer (same struct as Central)
         auto* spike = static_cast<CentralSpikeBuffer*>(spike_buffer_raw);
         std::memset(spike, 0, spike_buffer_size);
         spike->chidmax = CENTRAL_cbNUM_ANALOG_CHANS;
@@ -634,6 +699,10 @@ Result<bool> ShmemSession::isInstrumentActive(cbproto::InstrumentId id) const {
         }
         bool active = (m_impl->nativeCfg()->instrument_status == static_cast<uint32_t>(InstrumentStatus::ACTIVE));
         return Result<bool>::ok(active);
+    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        // CentralLegacyCFGBUFF has no instrument_status field;
+        // if the shared memory exists, instruments are as Central configured them
+        return Result<bool>::ok(true);
     } else {
         bool active = (m_impl->centralCfg()->instrument_status[idx] == static_cast<uint32_t>(InstrumentStatus::ACTIVE));
         return Result<bool>::ok(active);
@@ -656,6 +725,8 @@ Result<void> ShmemSession::setInstrumentActive(cbproto::InstrumentId id, bool ac
             return Result<void>::error("Native mode: single instrument only (index 0)");
         }
         m_impl->nativeCfg()->instrument_status = val;
+    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        return Result<void>::error("CENTRAL_COMPAT mode: instrument status is read-only (no instrument_status field in Central's layout)");
     } else {
         m_impl->centralCfg()->instrument_status[idx] = val;
     }
@@ -672,6 +743,9 @@ Result<cbproto::InstrumentId> ShmemSession::getFirstActiveInstrument() const {
         if (m_impl->nativeCfg()->instrument_status == static_cast<uint32_t>(InstrumentStatus::ACTIVE)) {
             return Result<cbproto::InstrumentId>::ok(cbproto::InstrumentId::fromIndex(0));
         }
+    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        // No instrument_status in legacy layout; return first instrument (always "active")
+        return Result<cbproto::InstrumentId>::ok(cbproto::InstrumentId::fromIndex(0));
     } else {
         for (uint8_t i = 0; i < CENTRAL_cbMAXPROCS; ++i) {
             if (m_impl->centralCfg()->instrument_status[i] == static_cast<uint32_t>(InstrumentStatus::ACTIVE)) {
@@ -701,6 +775,9 @@ Result<cbPKT_PROCINFO> ShmemSession::getProcInfo(cbproto::InstrumentId id) const
             return Result<cbPKT_PROCINFO>::error("Native mode: single instrument only");
         }
         return Result<cbPKT_PROCINFO>::ok(m_impl->nativeCfg()->procinfo);
+    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        if (idx >= CENTRAL_cbMAXPROCS) return Result<cbPKT_PROCINFO>::error("instrument index out of range");
+        return Result<cbPKT_PROCINFO>::ok(m_impl->legacyCfg()->procinfo[idx]);
     } else {
         return Result<cbPKT_PROCINFO>::ok(m_impl->centralCfg()->procinfo[idx]);
     }
@@ -726,6 +803,9 @@ Result<cbPKT_BANKINFO> ShmemSession::getBankInfo(cbproto::InstrumentId id, uint3
             return Result<cbPKT_BANKINFO>::error("Native mode: single instrument only");
         }
         return Result<cbPKT_BANKINFO>::ok(m_impl->nativeCfg()->bankinfo[bank - 1]);
+    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        if (idx >= CENTRAL_cbMAXPROCS) return Result<cbPKT_BANKINFO>::error("instrument index out of range");
+        return Result<cbPKT_BANKINFO>::ok(m_impl->legacyCfg()->bankinfo[idx][bank - 1]);
     } else {
         return Result<cbPKT_BANKINFO>::ok(m_impl->centralCfg()->bankinfo[idx][bank - 1]);
     }
@@ -751,6 +831,9 @@ Result<cbPKT_FILTINFO> ShmemSession::getFilterInfo(cbproto::InstrumentId id, uin
             return Result<cbPKT_FILTINFO>::error("Native mode: single instrument only");
         }
         return Result<cbPKT_FILTINFO>::ok(m_impl->nativeCfg()->filtinfo[filter - 1]);
+    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        if (idx >= CENTRAL_cbMAXPROCS) return Result<cbPKT_FILTINFO>::error("instrument index out of range");
+        return Result<cbPKT_FILTINFO>::ok(m_impl->legacyCfg()->filtinfo[idx][filter - 1]);
     } else {
         return Result<cbPKT_FILTINFO>::ok(m_impl->centralCfg()->filtinfo[idx][filter - 1]);
     }
@@ -769,6 +852,8 @@ Result<cbPKT_CHANINFO> ShmemSession::getChanInfo(uint32_t channel) const {
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
         return Result<cbPKT_CHANINFO>::ok(m_impl->nativeCfg()->chaninfo[channel]);
+    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        return Result<cbPKT_CHANINFO>::ok(m_impl->legacyCfg()->chaninfo[channel]);
     } else {
         return Result<cbPKT_CHANINFO>::ok(m_impl->centralCfg()->chaninfo[channel]);
     }
@@ -792,6 +877,9 @@ Result<void> ShmemSession::setProcInfo(cbproto::InstrumentId id, const cbPKT_PRO
             return Result<void>::error("Native mode: single instrument only");
         }
         m_impl->nativeCfg()->procinfo = info;
+    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        if (idx >= CENTRAL_cbMAXPROCS) return Result<void>::error("instrument index out of range");
+        m_impl->legacyCfg()->procinfo[idx] = info;
     } else {
         m_impl->centralCfg()->procinfo[idx] = info;
     }
@@ -819,6 +907,9 @@ Result<void> ShmemSession::setBankInfo(cbproto::InstrumentId id, uint32_t bank, 
             return Result<void>::error("Native mode: single instrument only");
         }
         m_impl->nativeCfg()->bankinfo[bank - 1] = info;
+    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        if (idx >= CENTRAL_cbMAXPROCS) return Result<void>::error("instrument index out of range");
+        m_impl->legacyCfg()->bankinfo[idx][bank - 1] = info;
     } else {
         m_impl->centralCfg()->bankinfo[idx][bank - 1] = info;
     }
@@ -846,6 +937,9 @@ Result<void> ShmemSession::setFilterInfo(cbproto::InstrumentId id, uint32_t filt
             return Result<void>::error("Native mode: single instrument only");
         }
         m_impl->nativeCfg()->filtinfo[filter - 1] = info;
+    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        if (idx >= CENTRAL_cbMAXPROCS) return Result<void>::error("instrument index out of range");
+        m_impl->legacyCfg()->filtinfo[idx][filter - 1] = info;
     } else {
         m_impl->centralCfg()->filtinfo[idx][filter - 1] = info;
     }
@@ -866,6 +960,8 @@ Result<void> ShmemSession::setChanInfo(uint32_t channel, const cbPKT_CHANINFO& i
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
         m_impl->nativeCfg()->chaninfo[channel] = info;
+    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        m_impl->legacyCfg()->chaninfo[channel] = info;
     } else {
         m_impl->centralCfg()->chaninfo[channel] = info;
     }
@@ -902,6 +998,20 @@ const NativeConfigBuffer* ShmemSession::getNativeConfigBuffer() const {
         return nullptr;
     }
     return m_impl->nativeCfg();
+}
+
+CentralLegacyCFGBUFF* ShmemSession::getLegacyConfigBuffer() {
+    if (!isOpen() || m_impl->layout != ShmemLayout::CENTRAL_COMPAT) {
+        return nullptr;
+    }
+    return m_impl->legacyCfg();
+}
+
+const CentralLegacyCFGBUFF* ShmemSession::getLegacyConfigBuffer() const {
+    if (!isOpen() || m_impl->layout != ShmemLayout::CENTRAL_COMPAT) {
+        return nullptr;
+    }
+    return m_impl->legacyCfg();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1141,6 +1251,7 @@ Result<uint32_t> ShmemSession::getNumTotalChans() const {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         return Result<uint32_t>::ok(static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nNumTotalChans);
     } else {
+        // CENTRAL and CENTRAL_COMPAT share the same CentralPCStatus struct
         return Result<uint32_t>::ok(static_cast<CentralPCStatus*>(m_impl->status_buffer_raw)->m_nNumTotalChans);
     }
 }
@@ -1414,6 +1525,17 @@ Result<void> ShmemSession::resetSignal() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Instrument Filtering
+
+void ShmemSession::setInstrumentFilter(int32_t instrument_index) {
+    m_impl->instrument_filter = instrument_index;
+}
+
+int32_t ShmemSession::getInstrumentFilter() const {
+    return m_impl->instrument_filter;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Receive buffer reading methods
 
 Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_packets, size_t& packets_read) {
@@ -1480,13 +1602,22 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
                        second_part_size * sizeof(uint32_t));
         }
 
-        packets_read++;
-
+        // Advance tail past this packet (consumed from ring buffer regardless of filter)
         m_impl->rec_tailindex += pkt_size_dwords;
         if (m_impl->rec_tailindex >= buflen) {
             m_impl->rec_tailindex -= buflen;
             m_impl->rec_tailwrap++;
         }
+
+        // Apply instrument filter: skip packets not matching our instrument
+        if (m_impl->instrument_filter >= 0) {
+            uint8_t pkt_instrument = packets[packets_read].cbpkt_header.instrument;
+            if (pkt_instrument != static_cast<uint8_t>(m_impl->instrument_filter)) {
+                continue;  // Skip this packet, don't increment packets_read
+            }
+        }
+
+        packets_read++;
     }
 
     return Result<void>::ok();

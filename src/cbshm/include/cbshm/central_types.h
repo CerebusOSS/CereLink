@@ -103,6 +103,44 @@ enum class InstrumentStatus : uint32_t {
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Central's actual binary layout (CentralLegacyCFGBUFF)
+///
+/// This struct matches Central's cbCFGBUFF field order EXACTLY (from cbhwlib.h).
+/// It is NOT the same as CereLink's cbConfigBuffer (which reorders fields and adds
+/// instrument_status). This struct is used in CENTRAL_COMPAT mode to read Central's
+/// shared memory as a CLIENT.
+///
+/// Key differences from CereLink's cbConfigBuffer:
+/// - optiontable/colortable: 3rd/4th fields here (after sysflags), last fields in CereLink
+/// - instrument_status: absent here (Central has no such concept)
+/// - isLnc: after isWaveform here, before chaninfo in CereLink
+/// - hwndCentral: omitted (at end, variable size, not needed)
+///
+struct CentralLegacyCFGBUFF {
+    uint32_t          version;
+    uint32_t          sysflags;
+    cbOPTIONTABLE     optiontable;
+    cbCOLORTABLE      colortable;
+    cbPKT_SYSINFO     sysinfo;
+    cbPKT_PROCINFO    procinfo[CENTRAL_cbMAXPROCS];
+    cbPKT_BANKINFO    bankinfo[CENTRAL_cbMAXPROCS][CENTRAL_cbMAXBANKS];
+    cbPKT_GROUPINFO   groupinfo[CENTRAL_cbMAXPROCS][CENTRAL_cbMAXGROUPS];
+    cbPKT_FILTINFO    filtinfo[CENTRAL_cbMAXPROCS][CENTRAL_cbMAXFILTS];
+    cbPKT_ADAPTFILTINFO adaptinfo[CENTRAL_cbMAXPROCS];
+    cbPKT_REFELECFILTINFO refelecinfo[CENTRAL_cbMAXPROCS];
+    cbPKT_CHANINFO    chaninfo[CENTRAL_cbMAXCHANS];
+    cbSPIKE_SORTING   isSortingOptions;
+    cbPKT_NTRODEINFO  isNTrodeInfo[cbMAXNTRODES];
+    cbPKT_AOUT_WAVEFORM isWaveform[AOUT_NUM_GAIN_CHANS][cbMAX_AOUT_TRIGGER];
+    cbPKT_LNC         isLnc[CENTRAL_cbMAXPROCS];
+    cbPKT_NPLAY       isNPlay;
+    cbVIDEOSOURCE     isVideoSource[cbMAXVIDEOSOURCE];
+    cbTRACKOBJ        isTrackObj[cbMAXTRACKOBJ];
+    cbPKT_FILECFG     fileinfo;
+    // hwndCentral omitted (at end, variable size, not needed by CereLink)
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Transmit buffer for outgoing packets (Global - sent to device)
 ///
 /// Ring buffer for packets waiting to be transmitted to device via UDP.
