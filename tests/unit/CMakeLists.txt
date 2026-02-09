@@ -46,6 +46,7 @@ message(STATUS "Unit tests configured for cbproto")
 # cbshm tests
 add_executable(cbshm_tests
     test_shmem_session.cpp
+    test_native_types.cpp
 )
 
 target_link_libraries(cbshm_tests

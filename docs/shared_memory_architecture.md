@@ -480,27 +480,40 @@ Same structure layouts and mechanisms.
 
 ## Implementation Status
 
-- All 7 shared memory segments implemented (Central-compat layout)
+### Core Infrastructure (Complete)
+
+- All 7 shared memory segments implemented for both Central-compat and native layouts
+- `ShmemLayout` enum (`CENTRAL` / `NATIVE`) controls buffer sizes and struct interpretation
 - cbSIGNALevent synchronization working
 - Ring buffer reading logic complete
 - CLIENT mode shared memory receive thread implemented
 - STANDALONE mode signaling to CLIENT processes
 - Thread lifecycle management (start/stop)
 - Optimized CLIENT mode (1 thread, 1 data copy)
-- All unit tests passing (18 cbshm tests + 28 SDK tests)
 
-### TODO (Native Mode)
+### Native Mode (Complete)
 
-- [ ] Define `NativeConfigBuffer` struct (single-instrument)
-- [ ] Define `NativeSPIKE_SORTING` struct (284-channel arrays)
-- [ ] Implement `cbshm_{device}_{segment}` naming in ShmemSession
-- [ ] Implement right-sized receive buffer (256 FE channels)
-- [ ] Implement right-sized transmit buffers (1024-byte packet slots)
-- [ ] Implement mode auto-detection in SdkSession::open()
-- [ ] Implement `CentralLegacyCFGBUFF` for compat mode config access
+- [x] Define `NativeConfigBuffer` struct (single-instrument, 284 channels)
+- [x] Define native spike sorting structs (284-channel arrays)
+- [x] Define `NativeTransmitBuffer` / `NativeTransmitBufferLocal` (1024-byte slots)
+- [x] Define `NativeSpikeCache` / `NativeSpikeBuffer` (272 analog channels)
+- [x] Define `NativePCStatus` (single instrument)
+- [x] Implement `ShmemLayout` parameter in `ShmemSession::create()`
+- [x] Implement dual-layout buffer sizing (`computeBufferSizes()`)
+- [x] Implement `initNativeBuffers()` for STANDALONE initialization
+- [x] All accessor methods branch on layout (procinfo, bankinfo, filtinfo, chaninfo, etc.)
+- [x] Runtime `rec_buffer_len` replaces hardcoded receive buffer length
+- [x] `getConfigBuffer()` returns nullptr if NATIVE; `getNativeConfigBuffer()` returns nullptr if CENTRAL
+- [x] Implement `cbshm_{device}_{segment}` naming in SdkSession
+- [x] Implement three-way mode auto-detection: Central CLIENT → Native CLIENT → Native STANDALONE
+- [x] 34 new unit tests (20 NativeShmemSession + 14 NativeTypes), all passing
+- [x] All existing Central-mode tests unaffected (no regressions)
+
+### TODO (Central Compat Mode - Phase 2)
+
+- [ ] Implement `CentralLegacyCFGBUFF` for reading Central's actual config buffer
 - [ ] Implement receive buffer instrument filtering for compat mode
 - [ ] Implement protocol translation bridge for compat mode reads/writes
-- [ ] Update unit tests for dual-mode operation
 
 ## Code Locations
 

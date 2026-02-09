@@ -21,6 +21,7 @@
 
 // Include Central-compatible types which bring in protocol definitions
 #include <cbshm/central_types.h>
+#include <cbshm/native_types.h>
 #include <memory>
 #include <string>
 #include <optional>
@@ -99,6 +100,16 @@ enum class Mode {
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Buffer layout for shared memory session
+///
+/// Controls buffer sizes, struct types, and bounds checking.
+///
+enum class ShmemLayout {
+    CENTRAL,  ///< Central-compatible layout (4 instruments, 848 channels, ~1.2 GB)
+    NATIVE    ///< Native layout (1 instrument, 284 channels, ~265 MB)
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Shared memory session for Cerebus configuration and data buffers
 ///
 /// Manages lifecycle of shared memory buffers that are compatible with Central's layout.
@@ -122,11 +133,13 @@ public:
     /// @param spk_name Spike cache buffer shared memory name (e.g., "cbSPKbuffer")
     /// @param signal_event_name Signal event name (e.g., "cbSIGNALevent")
     /// @param mode Operating mode (STANDALONE or CLIENT)
+    /// @param layout Buffer layout (CENTRAL or NATIVE, default CENTRAL for backward compat)
     /// @return Result containing ShmemSession on success, error message on failure
     static Result<ShmemSession> create(const std::string& cfg_name, const std::string& rec_name,
                                         const std::string& xmt_name, const std::string& xmt_local_name,
                                         const std::string& status_name, const std::string& spk_name,
-                                        const std::string& signal_event_name, Mode mode);
+                                        const std::string& signal_event_name, Mode mode,
+                                        ShmemLayout layout = ShmemLayout::CENTRAL);
 
     /// @brief Destructor - closes shared memory and releases resources
     ~ShmemSession();
@@ -150,6 +163,10 @@ public:
     /// @brief Get the current operating mode
     /// @return STANDALONE or CLIENT
     Mode getMode() const;
+
+    /// @brief Get the current buffer layout
+    /// @return CENTRAL or NATIVE
+    ShmemLayout getLayout() const;
 
     /// @}
 
@@ -238,18 +255,26 @@ public:
     /// @name Configuration Buffer Direct Access
     /// @{
 
-    /// @brief Get direct pointer to configuration buffer
+    /// @brief Get direct pointer to Central configuration buffer
     ///
     /// Provides direct access to the shared memory config buffer for zero-copy
     /// operations. Used by SdkSession to connect DeviceSession's config buffer
     /// to shared memory.
     ///
-    /// @return Pointer to configuration buffer, or nullptr if not available
+    /// @return Pointer to configuration buffer, or nullptr if not CENTRAL layout
     cbConfigBuffer* getConfigBuffer();
 
-    /// @brief Get direct pointer to configuration buffer (const version)
-    /// @return Const pointer to configuration buffer, or nullptr if not available
+    /// @brief Get direct pointer to Central configuration buffer (const version)
+    /// @return Const pointer to configuration buffer, or nullptr if not CENTRAL layout
     const cbConfigBuffer* getConfigBuffer() const;
+
+    /// @brief Get direct pointer to native configuration buffer
+    /// @return Pointer to native configuration buffer, or nullptr if not NATIVE layout
+    NativeConfigBuffer* getNativeConfigBuffer();
+
+    /// @brief Get direct pointer to native configuration buffer (const version)
+    /// @return Const pointer to native configuration buffer, or nullptr if not NATIVE layout
+    const NativeConfigBuffer* getNativeConfigBuffer() const;
 
     /// @}
 
