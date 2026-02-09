@@ -13,10 +13,14 @@
 #include "platform_first.h"
 
 #include "device_session_400.h"
-#include "packet_translator.h"
+#include <cbproto/packet_translator.h>
 #include <cstring>
 
 namespace cbdev {
+
+using cbproto::PacketTranslator;
+using cbproto::cbPKT_HEADER_400;
+using cbproto::HEADER_SIZE_400;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// Protocol 4.0 Packet Header Layout (16 bytes total)

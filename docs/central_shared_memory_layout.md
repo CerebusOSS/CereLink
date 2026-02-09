@@ -70,16 +70,16 @@ Central creates **7 named shared memory segments** per instance.
 
 ### Naming Convention
 
-| Segment | Base Name | Instance 0 | Instance N (N>0) |
-|---------|-----------|------------|-------------------|
-| Config buffer | `cbCFGbuffer` | `cbCFGbuffer` | `cbCFGbufferN` |
-| Receive buffer | `cbRECbuffer` | `cbRECbuffer` | `cbRECbufferN` |
-| Global transmit | `XmtGlobal` | `XmtGlobal` | `XmtGlobalN` |
-| Local transmit | `XmtLocal` | `XmtLocal` | `XmtLocalN` |
-| PC status | `cbSTATUSbuffer` | `cbSTATUSbuffer` | `cbSTATUSbufferN` |
-| Spike cache | `cbSPKbuffer` | `cbSPKbuffer` | `cbSPKbufferN` |
-| Signal event | `cbSIGNALevent` | `cbSIGNALevent` | `cbSIGNALeventN` |
-| System mutex | `cbSharedDataMutex` | `cbSharedDataMutex` | `cbSharedDataMutexN` |
+| Segment         | Base Name           | Instance 0          | Instance N (N>0)     |
+|-----------------|---------------------|---------------------|----------------------|
+| Config buffer   | `cbCFGbuffer`       | `cbCFGbuffer`       | `cbCFGbufferN`       |
+| Receive buffer  | `cbRECbuffer`       | `cbRECbuffer`       | `cbRECbufferN`       |
+| Global transmit | `XmtGlobal`         | `XmtGlobal`         | `XmtGlobalN`         |
+| Local transmit  | `XmtLocal`          | `XmtLocal`          | `XmtLocalN`          |
+| PC status       | `cbSTATUSbuffer`    | `cbSTATUSbuffer`    | `cbSTATUSbufferN`    |
+| Spike cache     | `cbSPKbuffer`       | `cbSPKbuffer`       | `cbSPKbufferN`       |
+| Signal event    | `cbSIGNALevent`     | `cbSIGNALevent`     | `cbSIGNALeventN`     |
+| System mutex    | `cbSharedDataMutex` | `cbSharedDataMutex` | `cbSharedDataMutexN` |
 
 Implementation: `cbhwlib.cpp` lines 271-399 (`cbOpen()`) and lines 3744-3904 (`CreateSharedObjects()`)
 
@@ -125,16 +125,16 @@ typedef struct {
 
 **Channel count (`cbMAXCHANS`)** for Central (`cbMAXPROCS=4`, `cbNUM_FE_CHANS=768`):
 
-| Type | Count | Formula |
-|------|-------|---------|
-| Front-end | 768 | `cbNUM_FE_CHANS` |
-| Analog input | 64 | `16 * cbMAXPROCS` |
-| Analog output | 16 | `4 * cbMAXPROCS` |
-| Audio output | 8 | `2 * cbMAXPROCS` |
-| Digital input | 4 | `1 * cbMAXPROCS` |
-| Serial | 4 | `1 * cbMAXPROCS` |
-| Digital output | 16 | `4 * cbMAXPROCS` |
-| **Total** | **880** | `cbMAXCHANS` |
+| Type           | Count   | Formula           |
+|----------------|---------|-------------------|
+| Front-end      | 768     | `cbNUM_FE_CHANS`  |
+| Analog input   | 64      | `16 * cbMAXPROCS` |
+| Analog output  | 16      | `4 * cbMAXPROCS`  |
+| Audio output   | 8       | `2 * cbMAXPROCS`  |
+| Digital input  | 4       | `1 * cbMAXPROCS`  |
+| Serial         | 4       | `1 * cbMAXPROCS`  |
+| Digital output | 16      | `4 * cbMAXPROCS`  |
+| **Total**      | **880** | `cbMAXCHANS`      |
 
 #### 2. cbRECBUFF (Receive Ring Buffer)
 
@@ -259,15 +259,15 @@ determine which NSP a global channel belongs to.
 
 ## Size Summary
 
-| Segment | Approximate Size |
-|---------|-----------------|
-| cbCFGBUFF | Several MB (depends on packet struct sizes) |
-| cbRECBUFF | ~768 MB |
-| XmtGlobal | ~290 MB |
-| XmtLocal | ~116 MB |
-| cbPcStatus | Few KB |
-| cbSPKBUFF | Large (400 spikes * 880 channels) |
-| **Total per instance** | **~1.2 GB** |
+| Segment                | Approximate Size                            |
+|------------------------|---------------------------------------------|
+| cbCFGBUFF              | Several MB (depends on packet struct sizes) |
+| cbRECBUFF              | ~768 MB                                     |
+| XmtGlobal              | ~290 MB                                     |
+| XmtLocal               | ~116 MB                                     |
+| cbPcStatus             | Few KB                                      |
+| cbSPKBUFF              | Large (400 spikes * 880 channels)           |
+| **Total per instance** | **~1.2 GB**                                 |
 
 ## Creation Flow
 

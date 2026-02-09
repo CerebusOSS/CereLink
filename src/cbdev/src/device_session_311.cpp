@@ -13,10 +13,14 @@
 #include "platform_first.h"
 
 #include "device_session_311.h"
-#include "packet_translator.h"
+#include <cbproto/packet_translator.h>
 #include <cstring>
 
 namespace cbdev {
+
+using cbproto::PacketTranslator;
+using cbproto::cbPKT_HEADER_311;
+using cbproto::HEADER_SIZE_311;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// Protocol 3.11 Packet Header Layout (8 bytes total)

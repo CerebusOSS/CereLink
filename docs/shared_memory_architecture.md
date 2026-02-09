@@ -12,7 +12,7 @@ CereLink supports two shared memory modes:
   as a CLIENT. Uses `CentralLegacyCFGBUFF` to match Central's exact binary layout (which
   differs from CereLink's `cbConfigBuffer`). Instrument filtering extracts only the
   requested device's packets from Central's shared receive buffer. Protocol translation
-  from older Central formats is deferred to Phase 3.
+  handles older Central formats (3.11, 4.0, 4.1) automatically.
 
 Mode is auto-detected at startup: if Central's shared memory exists, use compat mode;
 otherwise, use native mode.
@@ -25,14 +25,14 @@ upstream layout that compat mode interoperates with.
 CereLink identifies devices by **type**, not by numeric instance index. Each device type is
 a singleton with fixed, well-known network configuration:
 
-| DeviceType | IP Address | Recv Port | FE Channels |
-|------------|-----------|-----------|-------------|
-| `LEGACY_NSP` | 192.168.137.128 | 51002 | 256 |
-| `NSP` | 192.168.137.128 | 51001 | 256 |
-| `HUB1` | 192.168.137.200 | 51002 | 256 |
-| `HUB2` | 192.168.137.201 | 51003 | 256 |
-| `HUB3` | 192.168.137.202 | 51004 | 256 |
-| `NPLAY` | 127.0.0.1 | -- | 256 |
+| DeviceType   | IP Address      | Recv Port | FE Channels  |
+|--------------|-----------------|-----------|--------------|
+| `LEGACY_NSP` | 192.168.137.128 | 51002     | 256          |
+| `NSP`        | 192.168.137.128 | 51001     | 256          |
+| `HUB1`       | 192.168.137.200 | 51002     | 256          |
+| `HUB2`       | 192.168.137.201 | 51003     | 256          |
+| `HUB3`       | 192.168.137.202 | 51004     | 256          |
+| `NPLAY`      | 127.0.0.1       | --        | 256          |
 
 There is no instance index. The device type **is** the identifier. A client opens a session
 for a specific device type and receives only that device's data.
@@ -170,28 +170,28 @@ typedef struct {
 
 Channel count per device (`NATIVE_MAXCHANS` with `cbMAXPROCS=1`):
 
-| Type | Count | Formula |
-|------|-------|---------|
-| Front-end | 256 | `cbNUM_FE_CHANS` |
-| Analog input | 16 | `16 * 1` |
-| Analog output | 4 | `4 * 1` |
-| Audio output | 2 | `2 * 1` |
-| Digital input | 1 | `1 * 1` |
-| Serial | 1 | `1 * 1` |
-| Digital output | 4 | `4 * 1` |
-| **Total** | **284** | |
+| Type           | Count   | Formula          |
+|----------------|---------|------------------|
+| Front-end      | 256     | `cbNUM_FE_CHANS` |
+| Analog input   | 16      | `16 * 1`         |
+| Analog output  | 4       | `4 * 1`          |
+| Audio output   | 2       | `2 * 1`          |
+| Digital input  | 1       | `1 * 1`          |
+| Serial         | 1       | `1 * 1`          |
+| Digital output | 4       | `4 * 1`          |
+| **Total**      | **284** |                  |
 
 ### Per-Device Memory Footprint
 
-| Segment | Central-compat (4 instruments) | Native (1 device) | Savings |
-|---------|-------------------------------|-------------------|---------|
-| Config buffer | ~4 MB (880 ch, `[4]` arrays) | ~1 MB (284 ch, scalars) | ~75% |
-| Receive buffer | ~768 MB (768 FE ch) | ~256 MB (256 FE ch) | ~67% |
-| XmtGlobal | ~290 MB (5000 * max-UDP-size) | ~5 MB (5000 * 1024 bytes) | ~98% |
-| XmtLocal | ~116 MB (2000 * max-UDP-size) | ~2 MB (2000 * 1024 bytes) | ~98% |
-| Spike cache | large (832 analog ch) | ~1/3 (272 analog ch) | ~67% |
-| Status | ~few KB | ~few KB | -- |
-| **Total** | **~1.2 GB** | **~265 MB** | **~78%** |
+| Segment        | Central-compat (4 instruments) | Native (1 device)         | Savings  |
+|----------------|--------------------------------|---------------------------|----------|
+| Config buffer  | ~4 MB (880 ch, `[4]` arrays)   | ~1 MB (284 ch, scalars)   | ~75%     |
+| Receive buffer | ~768 MB (768 FE ch)            | ~256 MB (256 FE ch)       | ~67%     |
+| XmtGlobal      | ~290 MB (5000 * max-UDP-size)  | ~5 MB (5000 * 1024 bytes) | ~98%     |
+| XmtLocal       | ~116 MB (2000 * max-UDP-size)  | ~2 MB (2000 * 1024 bytes) | ~98%     |
+| Spike cache    | large (832 analog ch)          | ~1/3 (272 analog ch)      | ~67%     |
+| Status         | ~few KB                        | ~few KB                   | --       |
+| **Total**      | **~1.2 GB**                    | **~265 MB**               | **~78%** |
 
 The transmit buffers are dramatically smaller because they carry only config/command packets
 (max 1024 bytes each), not max-UDP-sized packets. Central's XmtGlobal is drained at 4
@@ -233,12 +233,12 @@ Central's config buffer has `[4]` arrays for up to 4 instruments. CereLink must 
 The mapping is hardcoded based on Central's compile-time `GEMSTART` setting. The current
 Central build uses `GEMSTART == 2`:
 
-| Instrument Index | Device | IP Address | Port |
-|-----------------|--------|------------|------|
-| 0 | Hub 1 | 192.168.137.200 | 51002 |
-| 1 | Hub 2 | 192.168.137.201 | 51003 |
-| 2 | Hub 3 | 192.168.137.202 | 51004 |
-| 3 | NSP | 192.168.137.128 | 51001 |
+| Instrument Index | Device | IP Address      | Port  |
+|------------------|--------|-----------------|-------|
+| 0                | Hub 1  | 192.168.137.200 | 51002 |
+| 1                | Hub 2  | 192.168.137.201 | 51003 |
+| 2                | Hub 3  | 192.168.137.202 | 51004 |
+| 3                | NSP    | 192.168.137.128 | 51001 |
 
 **Limitation**: This mapping assumes Central was compiled with `GEMSTART == 2`. An alternate
 build (`GEMSTART == 1`) uses a different ordering: NSP=0, Hub1=1, Hub2=2. CereLink does
@@ -270,18 +270,30 @@ session.readReceiveBuffer(packets, max_count, packets_read);
 This is less efficient than native mode (where the receive buffer only contains one device's
 packets), but the large buffer size (~768 MB) makes this a negligible cost.
 
-### Protocol Translation in Compat Mode (Phase 3 - Deferred)
+### Protocol Translation in Compat Mode (Phase 3 - Complete)
 
-Modern Central binaries use the same 4.1/4.2 protocol format as CereLink, so protocol
-translation is not needed for current deployments. Phase 3 will add translation support
-for older Central versions:
+When CereLink attaches to Central's shared memory, Central may be running an older protocol
+(3.11, 4.0, or 4.1). Central stores raw device packets in `cbRECbuffer` without translation.
+CereLink detects the protocol version and translates packets on-the-fly.
 
-1. Detect the protocol version (from `CentralLegacyCFGBUFF.sysinfo` version field)
-2. Translate packets from old format to current format using `PacketTranslator`
-3. Deliver current-format packets to the user callback
+**Protocol detection** reads `procinfo[0].version` from `CentralLegacyCFGBUFF`:
+- `version = (major << 16) | minor` (MAKELONG format)
+- major < 4 → Protocol 3.11 (8-byte headers, 32-bit timestamps)
+- major=4, minor=0 → Protocol 4.0 (16-byte headers, different field layout)
+- major=4, minor=1 → Protocol 4.1 (16-byte headers, current layout)
+- major=4, minor≥2 → Current protocol (no translation needed)
 
-This will reuse the same `PacketTranslator` infrastructure that `cbdev` uses for direct
-UDP connections to older devices.
+**Receive path** (`readReceiveBuffer`): Parses the protocol-specific header to extract
+`dlen`, copies raw bytes from the ring buffer, translates header + payload to current
+format using `PacketTranslator`, then applies the instrument filter on the translated
+header.
+
+**Transmit path** (`enqueuePacket`): Translates current-format packets to the legacy
+format before writing to the transmit ring buffer.
+
+Translation reuses the same `PacketTranslator` class that `cbdev` uses for direct UDP
+connections. `PacketTranslator` was moved from `cbdev` to `cbproto` (the shared protocol
+library) so that both `cbshm` and `cbdev` can access it.
 
 ### Config Buffer Access in Compat Mode
 
@@ -323,7 +335,7 @@ SdkSession::open(DeviceType::HUB1)
     |             - Use GEMSTART==2 mapping: Hub1 = instrument index 0
     |             - Set instrument filter (setInstrumentFilter) for receive buffer
     |             - Index into [4] arrays for config access via legacyCfg()
-    |             - Protocol translation deferred to Phase 3
+    |             - Detect protocol version, translate packets if non-current
     |
     +-- NO --> Can open "cbshm_hub1_signal"?
     |     |
@@ -403,8 +415,10 @@ SdkSession::open(DeviceType::HUB1)
 - **Data available**: `tailindex` < `headindex` (same wrap) or different wrap counters
 - **Buffer overrun**: `headwrap > tailwrap + 1` (writer lapped reader - data lost!)
 
-### Packet Format
-- First dword of each packet = packet size in dwords
+### Packet Size Calculation
+- Packet size = `header_32size + dlen` (read from the packet header, NOT the first dword)
+- Header size depends on protocol: 2 dwords (3.11), 4 dwords (4.0+)
+- `dlen` is extracted from the correct offset within the protocol-specific header struct
 - Variable-length packets
 - Handles wraparound mid-packet (copy in two parts)
 
@@ -439,41 +453,41 @@ CereLink's current `cbConfigBuffer` struct is **NOT binary-compatible** with Cen
 
 Field ordering is changed and fields are added/removed:
 
-| # | Central `cbCFGBUFF` | CereLink `cbConfigBuffer` |
-|---|---------------------|---------------------------|
-| 1 | `version` | `version` |
-| 2 | `sysflags` | `sysflags` |
-| 3 | **`optiontable`** | **`instrument_status[4]`** (NEW) |
-| 4 | **`colortable`** | `sysinfo` |
-| 5 | `sysinfo` | `procinfo[4]` |
-| 6 | `procinfo[4]` | `bankinfo[4][30]` |
-| 7 | `bankinfo[4][30]` | `groupinfo[4][8]` |
-| 8 | `groupinfo[4][8]` | `filtinfo[4][32]` |
-| 9 | `filtinfo[4][32]` | `adaptinfo[4]` |
-| 10 | `adaptinfo[4]` | `refelecinfo[4]` |
-| 11 | `refelecinfo[4]` | **`isLnc[4]`** (MOVED earlier) |
-| 12 | `chaninfo[880]` | `chaninfo[880]` |
-| 13 | `isSortingOptions` | `isSortingOptions` |
-| 14 | `isNTrodeInfo[..]` | `isNTrodeInfo[..]` |
-| 15 | `isWaveform[..][..]` | `isWaveform[..][..]` |
-| 16 | **`isLnc[4]`** | `isNPlay` |
-| 17 | `isNPlay` | `isVideoSource[..]` |
-| 18 | `isVideoSource[..]` | `isTrackObj[..]` |
-| 19 | `isTrackObj[..]` | `fileinfo` |
-| 20 | `fileinfo` | **`optiontable`** (MOVED later) |
-| 21 | **`hwndCentral`** | **`colortable`** (MOVED later) |
-| 22 | -- | (hwndCentral OMITTED) |
+| #  | Central `cbCFGBUFF`  | CereLink `cbConfigBuffer`        |
+|----|----------------------|----------------------------------|
+| 1  | `version`            | `version`                        |
+| 2  | `sysflags`           | `sysflags`                       |
+| 3  | **`optiontable`**    | **`instrument_status[4]`** (NEW) |
+| 4  | **`colortable`**     | `sysinfo`                        |
+| 5  | `sysinfo`            | `procinfo[4]`                    |
+| 6  | `procinfo[4]`        | `bankinfo[4][30]`                |
+| 7  | `bankinfo[4][30]`    | `groupinfo[4][8]`                |
+| 8  | `groupinfo[4][8]`    | `filtinfo[4][32]`                |
+| 9  | `filtinfo[4][32]`    | `adaptinfo[4]`                   |
+| 10 | `adaptinfo[4]`       | `refelecinfo[4]`                 |
+| 11 | `refelecinfo[4]`     | **`isLnc[4]`** (MOVED earlier)   |
+| 12 | `chaninfo[880]`      | `chaninfo[880]`                  |
+| 13 | `isSortingOptions`   | `isSortingOptions`               |
+| 14 | `isNTrodeInfo[..]`   | `isNTrodeInfo[..]`               |
+| 15 | `isWaveform[..][..]` | `isWaveform[..][..]`             |
+| 16 | **`isLnc[4]`**       | `isNPlay`                        |
+| 17 | `isNPlay`            | `isVideoSource[..]`              |
+| 18 | `isVideoSource[..]`  | `isTrackObj[..]`                 |
+| 19 | `isTrackObj[..]`     | `fileinfo`                       |
+| 20 | `fileinfo`           | **`optiontable`** (MOVED later)  |
+| 21 | **`hwndCentral`**    | **`colortable`** (MOVED later)   |
+| 22 | --                   | (hwndCentral OMITTED)            |
 
 Central compat mode requires a separate `CentralLegacyCFGBUFF` struct matching Central's
 exact layout to read the config buffer correctly.
 
 ### cbSTATUSbuffer / PC Status (PARTIALLY COMPATIBLE)
 
-| Difference | Central `cbPcStatus` | CereLink `CentralPCStatus` |
-|-----------|----------------------|----------------------------|
-| Type | C++ class (private/public) | Plain C struct |
-| `APP_WORKSPACE[10]` | Present (at end) | **Omitted** |
-| Overlap | Fields match in order up to `m_nGeminiSystem` | Same |
+| Difference          | Central `cbPcStatus`                          | CereLink `CentralPCStatus`  |
+|---------------------|-----------------------------------------------|-----------------------------|
+| Type                | C++ class (private/public)                    | Plain C struct              |
+| `APP_WORKSPACE[10]` | Present (at end)                              | **Omitted**                 |
+| Overlap             | Fields match in order up to `m_nGeminiSystem` | Same                        |
 
 CereLink's struct is a subset -- safe to read, safe to write (omitted field is at the end).
 
@@ -492,15 +506,15 @@ Same structure layouts and mechanisms.
 
 ### Compatibility Summary
 
-| Segment | Compatible? | Notes |
-|---------|-------------|-------|
-| cbCFGbuffer | **NO** | Field order differs; need `CentralLegacyCFGBUFF` |
-| cbRECbuffer | Yes | Same layout |
-| XmtGlobal | Yes | Same layout |
-| XmtLocal | Yes | Same layout |
-| cbSTATUSbuffer | Partial | CereLink is a subset (missing workspace at end) |
-| cbSPKbuffer | Yes | Same layout |
-| cbSIGNALevent | Yes | Same mechanism |
+| Segment        | Compatible?  | Notes                                            |
+|----------------|--------------|--------------------------------------------------|
+| cbCFGbuffer    | **NO**       | Field order differs; need `CentralLegacyCFGBUFF` |
+| cbRECbuffer    | Yes          | Same layout                                      |
+| XmtGlobal      | Yes          | Same layout                                      |
+| XmtLocal       | Yes          | Same layout                                      |
+| cbSTATUSbuffer | Partial      | CereLink is a subset (missing workspace at end)  |
+| cbSPKbuffer    | Yes          | Same layout                                      |
+| cbSIGNALevent  | Yes          | Same mechanism                                   |
 
 ## Implementation Status
 
@@ -546,11 +560,21 @@ Same structure layouts and mechanisms.
 - [x] 16 new unit tests (14 CentralCompat + 2 CentralLegacyTypes), all passing
 - [x] All existing tests unaffected (no regressions)
 
-### TODO (Protocol Translation - Phase 3)
+### Protocol Translation (Complete - Phase 3)
 
-- [ ] Detect Central's protocol version from `CentralLegacyCFGBUFF.sysinfo`
-- [ ] Translate packets from old format to current via `PacketTranslator`
-- [ ] Compat mode write path with protocol translation for older Central binaries
+- [x] Move `PacketTranslator` from `cbdev` to `cbproto` (shared protocol library)
+- [x] Convert `cbproto` from header-only (INTERFACE) to static library (STATIC)
+- [x] Detect Central's protocol version from `procinfo[0].version`
+- [x] Fix `readReceiveBuffer` to parse packet size from header (`header_32size + dlen`)
+  instead of reading the first dword (which is the `time` field, not packet size)
+- [x] Protocol-aware receive path: parse protocol-specific headers, translate to current format
+- [x] Protocol-aware transmit path: translate current format to legacy before writing
+- [x] 10 new protocol translation unit tests (version detection, read/transmit round-trip,
+  instrument filtering with current protocol), all passing
+- [x] All existing tests updated and passing (no regressions)
+
+### TODO
+
 - [ ] Runtime GEMSTART detection (currently hardcoded GEMSTART==2)
 
 ## Code Locations
@@ -571,11 +595,12 @@ Same structure layouts and mechanisms.
   - `include/cbproto/types.h` - Per-NSP constants (cbMAXPROCS=1, cbNUM_FE_CHANS=256)
   - `include/cbproto/cbproto.h` - Protocol packet definitions
   - `include/cbproto/connection.h` - Protocol version enum
+  - `include/cbproto/packet_translator.h` - Bidirectional packet translation between protocol versions
+  - `src/packet_translator.cpp` - PacketTranslator implementation (used by both cbshm and cbdev)
 
 - **Device Layer**: `src/cbdev/`
   - UDP communication with NSP hardware
   - Protocol detection (`src/protocol_detector.cpp`)
-  - Protocol translation (`src/packet_translator.cpp`)
   - Per-version session wrappers (`src/device_session_{311,400,410}.cpp`)
   - Used only in STANDALONE mode
 

@@ -13,6 +13,8 @@
 #include <cbshm/shmem_session.h>
 #include <cbproto/cbproto.h>       // For packet types and cbNSP1-4 constants
 #include <cbproto/instrument_id.h>
+#include <cbproto/connection.h>    // For cbproto_protocol_version_t
+#include <cbproto/packet_translator.h>
 #include <cstring>
 
 using namespace cbshm;
@@ -1489,16 +1491,17 @@ TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_FiltersReceiveBuffer) {
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
-    // Store packets from different instruments
-    // NOTE: readReceiveBuffer interprets the first dword (time field) as packet size in dwords.
-    // So time must equal cbPKT_HEADER_32SIZE + dlen for correct parsing.
+    // STANDALONE compat session initializes procinfo version to current,
+    // so readReceiveBuffer correctly parses current-format packets written by storePacket.
+    ASSERT_EQ(session.getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
+
+    // Store packets from different instruments with realistic timestamps
     uint32_t dlen = 4;
-    uint32_t pkt_size_dwords = cbPKT_HEADER_32SIZE + dlen;
 
     for (uint8_t inst = 0; inst < 4; ++inst) {
         cbPKT_GENERIC pkt;
         std::memset(&pkt, 0, sizeof(pkt));
-        pkt.cbpkt_header.time = pkt_size_dwords;  // Must match packet size for reader
+        pkt.cbpkt_header.time = 1000000000ULL + inst * 33333ULL;  // Realistic nanosecond timestamps
         pkt.cbpkt_header.chid = 1;  // Non-configuration packet
         pkt.cbpkt_header.instrument = inst;
         pkt.cbpkt_header.type = 0x01;
@@ -1526,14 +1529,13 @@ TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_NoFilter_ReturnsAll) {
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
-    // Store packets from different instruments
+    // Store packets from different instruments with realistic timestamps
     uint32_t dlen = 4;
-    uint32_t pkt_size_dwords = cbPKT_HEADER_32SIZE + dlen;
 
     for (uint8_t inst = 0; inst < 3; ++inst) {
         cbPKT_GENERIC pkt;
         std::memset(&pkt, 0, sizeof(pkt));
-        pkt.cbpkt_header.time = pkt_size_dwords;  // Must match packet size for reader
+        pkt.cbpkt_header.time = 2000000000ULL + inst * 33333ULL;  // Realistic nanosecond timestamps
         pkt.cbpkt_header.chid = 1;
         pkt.cbpkt_header.instrument = inst;
         pkt.cbpkt_header.type = 0x01;
@@ -1574,6 +1576,243 @@ TEST_F(CentralCompatShmemSessionTest, TransmitQueueRoundTrip) {
     EXPECT_EQ(out_pkt.data_u32[0], 0x12345678u);
 
     EXPECT_FALSE(session.hasTransmitPackets());
+}
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Central Compat Protocol Translation Tests
+/// @{
+
+class CentralCompatProtocolTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        test_name = "test_proto_" + std::to_string(test_counter++);
+    }
+
+    Result<ShmemSession> createCompatSession() {
+        return ShmemSession::create(
+            test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
+            test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
+            test_name + "_signal", Mode::STANDALONE, ShmemLayout::CENTRAL_COMPAT);
+    }
+
+    std::string test_name;
+    static int test_counter;
+};
+
+int CentralCompatProtocolTest::test_counter = 0;
+
+/// @brief Test protocol version detection: STANDALONE initializes to current
+TEST_F(CentralCompatProtocolTest, DetectProtocol_StandaloneDefault) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    // STANDALONE compat session initializes procinfo version to current (4.2)
+    EXPECT_EQ(session.getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
+}
+
+/// @brief Test that readReceiveBuffer correctly parses current-format packets
+TEST_F(CentralCompatProtocolTest, ReadCurrentFormat_WithRealisticTimestamps) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    EXPECT_EQ(session.getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
+
+    // Store packets (current format, written by storePacket)
+    for (uint8_t i = 0; i < 3; ++i) {
+        cbPKT_GENERIC pkt;
+        std::memset(&pkt, 0, sizeof(pkt));
+        pkt.cbpkt_header.time = 5000000000ULL + i * 33333ULL;
+        pkt.cbpkt_header.chid = 1;
+        pkt.cbpkt_header.instrument = i;
+        pkt.cbpkt_header.type = 0x01;
+        pkt.cbpkt_header.dlen = 4;
+        pkt.data_u32[0] = 0xCC00 + i;
+
+        ASSERT_TRUE(session.storePacket(pkt).isOk());
+    }
+
+    // Read packets (current-format parsing, no translation)
+    cbPKT_GENERIC read_pkts[10];
+    size_t packets_read = 0;
+    auto read_result = session.readReceiveBuffer(read_pkts, 10, packets_read);
+    ASSERT_TRUE(read_result.isOk()) << read_result.error();
+    EXPECT_EQ(packets_read, 3u);
+
+    for (size_t i = 0; i < packets_read; ++i) {
+        EXPECT_EQ(read_pkts[i].cbpkt_header.instrument, i);
+        EXPECT_EQ(read_pkts[i].data_u32[0], 0xCC00u + i);
+        EXPECT_EQ(read_pkts[i].cbpkt_header.dlen, 4u);
+    }
+}
+
+/// @brief Test version detection: 3.11
+TEST_F(CentralCompatProtocolTest, DetectProtocol_311) {
+    auto writer_result = createCompatSession();
+    ASSERT_TRUE(writer_result.isOk()) << writer_result.error();
+    auto& writer = writer_result.value();
+
+    // Set version to 3.11 (major=3, minor=11)
+    auto* cfg = writer.getLegacyConfigBuffer();
+    ASSERT_NE(cfg, nullptr);
+    cfg->procinfo[0].version = (3 << 16) | 11;
+
+    std::string name = test_name;
+    auto reader_result = ShmemSession::create(
+        name + "_cfg", name + "_rec", name + "_xmt",
+        name + "_xmt_local", name + "_status", name + "_spk",
+        name + "_signal", Mode::CLIENT, ShmemLayout::CENTRAL_COMPAT);
+    ASSERT_TRUE(reader_result.isOk()) << reader_result.error();
+    EXPECT_EQ(reader_result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_311);
+}
+
+/// @brief Test version detection: 4.0
+TEST_F(CentralCompatProtocolTest, DetectProtocol_400) {
+    // Create standalone, set version, then open CLIENT to pick it up
+    auto writer_result = createCompatSession();
+    ASSERT_TRUE(writer_result.isOk()) << writer_result.error();
+    auto& writer = writer_result.value();
+
+    auto* cfg = writer.getLegacyConfigBuffer();
+    ASSERT_NE(cfg, nullptr);
+    cfg->procinfo[0].version = (4 << 16) | 0;  // major=4, minor=0
+
+    std::string name = test_name;
+    auto reader_result = ShmemSession::create(
+        name + "_cfg", name + "_rec", name + "_xmt",
+        name + "_xmt_local", name + "_status", name + "_spk",
+        name + "_signal", Mode::CLIENT, ShmemLayout::CENTRAL_COMPAT);
+    ASSERT_TRUE(reader_result.isOk()) << reader_result.error();
+    EXPECT_EQ(reader_result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_400);
+}
+
+/// @brief Test version detection: 4.1
+TEST_F(CentralCompatProtocolTest, DetectProtocol_410) {
+    auto writer_result = createCompatSession();
+    ASSERT_TRUE(writer_result.isOk()) << writer_result.error();
+    auto& writer = writer_result.value();
+
+    auto* cfg = writer.getLegacyConfigBuffer();
+    ASSERT_NE(cfg, nullptr);
+    cfg->procinfo[0].version = (4 << 16) | 1;  // major=4, minor=1
+
+    std::string name = test_name;
+    auto reader_result = ShmemSession::create(
+        name + "_cfg", name + "_rec", name + "_xmt",
+        name + "_xmt_local", name + "_status", name + "_spk",
+        name + "_signal", Mode::CLIENT, ShmemLayout::CENTRAL_COMPAT);
+    ASSERT_TRUE(reader_result.isOk()) << reader_result.error();
+    EXPECT_EQ(reader_result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_410);
+}
+
+/// @brief Test version detection: 4.2 (current)
+TEST_F(CentralCompatProtocolTest, DetectProtocol_Current_42) {
+    auto writer_result = createCompatSession();
+    ASSERT_TRUE(writer_result.isOk()) << writer_result.error();
+    auto& writer = writer_result.value();
+
+    auto* cfg = writer.getLegacyConfigBuffer();
+    ASSERT_NE(cfg, nullptr);
+    cfg->procinfo[0].version = (4 << 16) | 2;  // major=4, minor=2
+
+    std::string name = test_name;
+    auto reader_result = ShmemSession::create(
+        name + "_cfg", name + "_rec", name + "_xmt",
+        name + "_xmt_local", name + "_status", name + "_spk",
+        name + "_signal", Mode::CLIENT, ShmemLayout::CENTRAL_COMPAT);
+    ASSERT_TRUE(reader_result.isOk()) << reader_result.error();
+    EXPECT_EQ(reader_result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
+}
+
+/// @brief Test readReceiveBuffer with instrument filter and current-format packets
+TEST_F(CentralCompatProtocolTest, InstrumentFilterWithCurrentProtocol) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    EXPECT_EQ(session.getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
+
+    // Store packets from 4 different instruments
+    for (uint8_t inst = 0; inst < 4; ++inst) {
+        cbPKT_GENERIC pkt;
+        std::memset(&pkt, 0, sizeof(pkt));
+        pkt.cbpkt_header.time = 3000000000ULL + inst * 33333ULL;
+        pkt.cbpkt_header.chid = 1;
+        pkt.cbpkt_header.instrument = inst;
+        pkt.cbpkt_header.type = 0x01;
+        pkt.cbpkt_header.dlen = 4;
+        pkt.data_u32[0] = 0xDD00 + inst;
+
+        ASSERT_TRUE(session.storePacket(pkt).isOk());
+    }
+
+    // Filter for instrument 3 only
+    session.setInstrumentFilter(3);
+
+    cbPKT_GENERIC read_pkts[10];
+    size_t packets_read = 0;
+    auto read_result = session.readReceiveBuffer(read_pkts, 10, packets_read);
+    ASSERT_TRUE(read_result.isOk()) << read_result.error();
+    EXPECT_EQ(packets_read, 1u);
+    EXPECT_EQ(read_pkts[0].cbpkt_header.instrument, 3);
+    EXPECT_EQ(read_pkts[0].data_u32[0], 0xDD03u);
+}
+
+/// @brief Test transmit round-trip with current protocol (no translation)
+TEST_F(CentralCompatProtocolTest, TransmitRoundTrip_CurrentProtocol) {
+    auto result = createCompatSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    EXPECT_EQ(session.getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
+
+    // Enqueue a packet
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+    pkt.cbpkt_header.type = 0x10;
+    pkt.cbpkt_header.dlen = 4;
+    pkt.cbpkt_header.instrument = 1;
+    pkt.data_u32[0] = 0xFEEDFACE;
+
+    ASSERT_TRUE(session.enqueuePacket(pkt).isOk());
+    EXPECT_TRUE(session.hasTransmitPackets());
+
+    // Dequeue and verify (no translation, so data should match exactly)
+    cbPKT_GENERIC out_pkt;
+    auto deq_result = session.dequeuePacket(out_pkt);
+    ASSERT_TRUE(deq_result.isOk());
+    EXPECT_TRUE(deq_result.value());
+    EXPECT_EQ(out_pkt.cbpkt_header.type, 0x10);
+    EXPECT_EQ(out_pkt.cbpkt_header.dlen, 4u);
+    EXPECT_EQ(out_pkt.cbpkt_header.instrument, 1);
+    EXPECT_EQ(out_pkt.data_u32[0], 0xFEEDFACEu);
+
+    EXPECT_FALSE(session.hasTransmitPackets());
+}
+
+/// @brief Non-compat layout always detects CURRENT protocol
+TEST_F(CentralCompatProtocolTest, NativeLayout_AlwaysCurrent) {
+    std::string name = test_name;
+    auto result = ShmemSession::create(
+        name + "_cfg", name + "_rec", name + "_xmt",
+        name + "_xmt_local", name + "_status", name + "_spk",
+        name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    ASSERT_TRUE(result.isOk()) << result.error();
+    EXPECT_EQ(result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
+}
+
+/// @brief CENTRAL layout always detects CURRENT protocol
+TEST_F(CentralCompatProtocolTest, CentralLayout_AlwaysCurrent) {
+    std::string name = test_name;
+    auto result = ShmemSession::create(
+        name + "_cfg", name + "_rec", name + "_xmt",
+        name + "_xmt_local", name + "_status", name + "_spk",
+        name + "_signal", Mode::STANDALONE, ShmemLayout::CENTRAL);
+    ASSERT_TRUE(result.isOk()) << result.error();
+    EXPECT_EQ(result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
 }
 
 /// @}

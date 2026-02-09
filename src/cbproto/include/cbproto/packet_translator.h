@@ -2,8 +2,8 @@
 // Created by Chadwick Boulay on 2025-11-17.
 //
 
-#ifndef CBSDK_PACKETTRANSLATOR_H
-#define CBSDK_PACKETTRANSLATOR_H
+#ifndef CBPROTO_PACKET_TRANSLATOR_H
+#define CBPROTO_PACKET_TRANSLATOR_H
 
 #include <cbproto/cbproto.h>
 #include <cstddef>  // for size_t
@@ -12,7 +12,7 @@
 
 // TODO: Finish the implementation of all the type-specific translation functions.
 
-namespace cbdev {
+namespace cbproto {
 
 typedef struct {
     uint32_t time;        ///< Ticks at 30 kHz
@@ -271,6 +271,6 @@ private:
     // No private members currently
 };
 
-} // namespace cbdev
+} // namespace cbproto
 
-#endif //CBSDK_PACKETTRANSLATOR_H
+#endif //CBPROTO_PACKET_TRANSLATOR_H

@@ -2,12 +2,9 @@
 // Created by Chadwick Boulay on 2025-11-17.
 //
 
-// Platform headers MUST be included first (before cbproto)
-#include "platform_first.h"
+#include <cbproto/packet_translator.h>
 
-#include "packet_translator.h"
-
-size_t cbdev::PacketTranslator::translate_DINP_pre400_to_current(const uint8_t* src_payload, cbPKT_DINP* dest) {
+size_t cbproto::PacketTranslator::translate_DINP_pre400_to_current(const uint8_t* src_payload, cbPKT_DINP* dest) {
     // 3.11 -> 4.0: Eliminated data array and added new fields:
     // uint32_t valueRead;
     // uint32_t bitsChanged;
@@ -18,13 +15,13 @@ size_t cbdev::PacketTranslator::translate_DINP_pre400_to_current(const uint8_t* 
     return dest->cbpkt_header.dlen;
 }
 
-size_t cbdev::PacketTranslator::translate_DINP_current_to_pre400(const cbPKT_DINP &src, uint8_t* dest_payload) {
+size_t cbproto::PacketTranslator::translate_DINP_current_to_pre400(const cbPKT_DINP &src, uint8_t* dest_payload) {
     // memcpy the 3 quadlets
     memcpy(dest_payload, &src.valueRead, 12);
     return 3;
 }
 
-size_t cbdev::PacketTranslator::translate_NPLAY_pre400_to_current(const uint8_t* src_payload, cbPKT_NPLAY* dest) {
+size_t cbproto::PacketTranslator::translate_NPLAY_pre400_to_current(const uint8_t* src_payload, cbPKT_NPLAY* dest) {
     // ftime, stime, etime, val fields all changed from uint32_t to PROCTIME (uint64_t).
     dest->ftime = static_cast<PROCTIME>(*reinterpret_cast<const uint32_t*>(src_payload)) * 1000000000/30000;
     dest->stime = static_cast<PROCTIME>(*reinterpret_cast<const uint32_t*>(src_payload + 4)) * 1000000000/30000;
@@ -42,7 +39,7 @@ size_t cbdev::PacketTranslator::translate_NPLAY_pre400_to_current(const uint8_t*
     return dest->cbpkt_header.dlen;
 }
 
-size_t cbdev::PacketTranslator::translate_NPLAY_current_to_pre400(const cbPKT_NPLAY &src, uint8_t* dest_payload) {
+size_t cbproto::PacketTranslator::translate_NPLAY_current_to_pre400(const cbPKT_NPLAY &src, uint8_t* dest_payload) {
     // ftime, stime, etime, val fields must be narrowed from PROCTIME (uint64_t) to uint32_t.
     *reinterpret_cast<uint32_t*>(dest_payload)       = static_cast<uint32_t>(src.ftime * 30000 / 1000000000);
     *reinterpret_cast<uint32_t*>(dest_payload + 4)   = static_cast<uint32_t>(src.stime * 30000 / 1000000000);
@@ -58,7 +55,7 @@ size_t cbdev::PacketTranslator::translate_NPLAY_current_to_pre400(const cbPKT_NP
     return src.cbpkt_header.dlen - 4;
 }
 
-size_t cbdev::PacketTranslator::translate_COMMENT_pre400_to_current(const uint8_t* src_payload, cbPKT_COMMENT* dest, const uint32_t hdr_timestamp) {
+size_t cbproto::PacketTranslator::translate_COMMENT_pre400_to_current(const uint8_t* src_payload, cbPKT_COMMENT* dest, const uint32_t hdr_timestamp) {
     // cbPKT_COMMENT's 2nd field is a `info` struct with fields:
     //   * In 3.11: `uint8_t type;`, `uint8_t flags`, and `uint8_t reserved[2];`
     //   * In 4.0: `uint8_t charset;` and `uint8_t reserved[3];`
@@ -88,7 +85,7 @@ size_t cbdev::PacketTranslator::translate_COMMENT_pre400_to_current(const uint8_
     return dest->cbpkt_header.dlen;
 }
 
-size_t cbdev::PacketTranslator::translate_COMMENT_current_to_pre400(const cbPKT_COMMENT &src, uint8_t* dest_payload) {
+size_t cbproto::PacketTranslator::translate_COMMENT_current_to_pre400(const cbPKT_COMMENT &src, uint8_t* dest_payload) {
     // dest_payload[0] = ??;  // type -- Is this related to modern charset?
     dest_payload[1] = 0x01;  // flags -- we always set to timeStarted
     // dest.data = timeStarted:
@@ -103,7 +100,7 @@ size_t cbdev::PacketTranslator::translate_COMMENT_current_to_pre400(const cbPKT_
     return src.cbpkt_header.dlen - 2;
 }
 
-size_t cbdev::PacketTranslator::translate_SYSPROTOCOLMONITOR_pre410_to_current(const uint8_t* src_payload, cbPKT_SYSPROTOCOLMONITOR* dest) {
+size_t cbproto::PacketTranslator::translate_SYSPROTOCOLMONITOR_pre410_to_current(const uint8_t* src_payload, cbPKT_SYSPROTOCOLMONITOR* dest) {
     dest->sentpkts = *reinterpret_cast<const uint32_t*>(src_payload);
     // 4.1 added uint32_t counter field at the end of the payload.
     //   If we are coming from protocol 3.11, we can use its header.time field because that was device ticks at 30 kHz.
@@ -113,13 +110,13 @@ size_t cbdev::PacketTranslator::translate_SYSPROTOCOLMONITOR_pre410_to_current(c
     return dest->cbpkt_header.dlen;
 }
 
-size_t cbdev::PacketTranslator::translate_SYSPROTOCOLMONITOR_current_to_pre410(const cbPKT_SYSPROTOCOLMONITOR &src, uint8_t* dest_payload) {
+size_t cbproto::PacketTranslator::translate_SYSPROTOCOLMONITOR_current_to_pre410(const cbPKT_SYSPROTOCOLMONITOR &src, uint8_t* dest_payload) {
     *reinterpret_cast<uint32_t*>(dest_payload) = src.sentpkts;
     // Ignore .counter field and drop it from dlen.
     return src.cbpkt_header.dlen - 1;
 }
 
-size_t cbdev::PacketTranslator::translate_CHANINFO_pre410_to_current(const uint8_t* src_payload, cbPKT_CHANINFO* dest) {
+size_t cbproto::PacketTranslator::translate_CHANINFO_pre410_to_current(const uint8_t* src_payload, cbPKT_CHANINFO* dest) {
     // Copy everything up to and including eopchar -- unchanged
     constexpr size_t payload_to_union = offsetof(cbPKT_CHANINFO, eopchar) + sizeof(dest->eopchar) - cbPKT_HEADER_SIZE;
     std::memcpy(&dest->chan, src_payload, payload_to_union);
@@ -145,7 +142,7 @@ size_t cbdev::PacketTranslator::translate_CHANINFO_pre410_to_current(const uint8
     return dest->cbpkt_header.dlen;
 }
 
-size_t cbdev::PacketTranslator::translate_CHANINFO_current_to_pre410(const cbPKT_CHANINFO &pkt, uint8_t* dest_payload) {
+size_t cbproto::PacketTranslator::translate_CHANINFO_current_to_pre410(const cbPKT_CHANINFO &pkt, uint8_t* dest_payload) {
     // Copy everything up to and including eopchar -- unchanged
     constexpr size_t payload_to_union = offsetof(cbPKT_CHANINFO, eopchar) + sizeof(pkt.eopchar) - cbPKT_HEADER_SIZE;
     memcpy(dest_payload, &pkt.chan, payload_to_union);
@@ -168,7 +165,7 @@ size_t cbdev::PacketTranslator::translate_CHANINFO_current_to_pre410(const cbPKT
     return result_dlen;
 }
 
-size_t cbdev::PacketTranslator::translate_CHANRESET_pre420_to_current(const uint8_t* src_payload, cbPKT_CHANRESET* dest) {
+size_t cbproto::PacketTranslator::translate_CHANRESET_pre420_to_current(const uint8_t* src_payload, cbPKT_CHANRESET* dest) {
     // In 4.2, cbPKT_CHANRESET renamed uint8_t monsource to uint8_t moninst and inserted uint8_t monchan.
     // First, we copy everything from outvalue (after monchan) onward.
     // Second, we copy everything up to and including monsource.
@@ -181,7 +178,7 @@ size_t cbdev::PacketTranslator::translate_CHANRESET_pre420_to_current(const uint
     return dest->cbpkt_header.dlen;
 }
 
-size_t cbdev::PacketTranslator::translate_CHANRESET_current_to_pre420(const cbPKT_CHANRESET &pkt, uint8_t* dest_payload) {
+size_t cbproto::PacketTranslator::translate_CHANRESET_current_to_pre420(const cbPKT_CHANRESET &pkt, uint8_t* dest_payload) {
     // In 4.2, cbPKT_CHANRESET renamed uint8_t monsource to uint8_t moninst and inserted uint8_t monchan.
     // First, we copy everything from outvalue (after monchan) onward.
     // Second, we copy everything up to and including monsource.

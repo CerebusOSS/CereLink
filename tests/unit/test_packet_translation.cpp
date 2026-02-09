@@ -16,11 +16,11 @@
 
 #include <gtest/gtest.h>
 #include "packet_test_helpers.h"
-#include "cbdev/packet_translator.h"
+#include <cbproto/packet_translator.h>
 #include <cstring>
 
 using namespace test_helpers;
-using namespace cbdev;
+using namespace cbproto;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // SYSPROTOCOLMONITOR Translation Tests

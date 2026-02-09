@@ -22,6 +22,7 @@
 // Include Central-compatible types which bring in protocol definitions
 #include <cbshm/central_types.h>
 #include <cbshm/native_types.h>
+#include <cbproto/connection.h>
 #include <memory>
 #include <string>
 #include <optional>
@@ -443,6 +444,15 @@ public:
     /// @brief Get current instrument filter
     /// @return Current filter (-1 = no filter)
     int32_t getInstrumentFilter() const;
+
+    /// @brief Get detected protocol version for CENTRAL_COMPAT mode
+    ///
+    /// In CENTRAL_COMPAT mode, Central may store packets in an older protocol format.
+    /// This returns the detected protocol version based on procinfo[0].version.
+    /// Returns CBPROTO_PROTOCOL_CURRENT for CENTRAL and NATIVE layouts.
+    ///
+    /// @return Detected protocol version
+    cbproto_protocol_version_t getCompatProtocolVersion() const;
 
     /// @}
 

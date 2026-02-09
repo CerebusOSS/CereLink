@@ -27,6 +27,7 @@
 #include <cbshm/shmem_session.h>
 #include <cbshm/central_types.h>
 #include <cbshm/native_types.h>
+#include <cbproto/packet_translator.h>
 #include <cstring>
 
 namespace cbshm {
@@ -90,6 +91,9 @@ struct ShmemSession::Impl {
 
     // Instrument filter for CENTRAL_COMPAT mode (-1 = no filter)
     int32_t instrument_filter;
+
+    // Detected protocol version for CENTRAL_COMPAT mode
+    cbproto_protocol_version_t compat_protocol;
 
     // Typed accessors for config buffer
     CentralConfigBuffer* centralCfg() { return static_cast<CentralConfigBuffer*>(cfg_buffer_raw); }
@@ -167,6 +171,7 @@ struct ShmemSession::Impl {
         , rec_tailindex(0)
         , rec_tailwrap(0)
         , instrument_filter(-1)
+        , compat_protocol(CBPROTO_PROTOCOL_CURRENT)
     {}
 
     ~Impl() {
@@ -471,6 +476,10 @@ struct ShmemSession::Impl {
         }
 
         is_open = true;
+
+        // Detect protocol version for CENTRAL_COMPAT mode
+        detectCompatProtocol();
+
         return Result<void>::ok();
     }
 
@@ -540,6 +549,13 @@ struct ShmemSession::Impl {
         auto* cfg = legacyCfg();
         std::memset(cfg, 0, cfg_buffer_size);
         cfg->version = cbVERSION_MAJOR * 100 + cbVERSION_MINOR;
+
+        // Set procinfo version so detectCompatProtocol() identifies current format.
+        // In STANDALONE mode, CereLink owns the memory and writes current-format packets.
+        // MAKELONG(minor, major) = (major << 16) | minor
+        for (int i = 0; i < CENTRAL_cbMAXPROCS; ++i) {
+            cfg->procinfo[i].version = (cbVERSION_MAJOR << 16) | cbVERSION_MINOR;
+        }
 
         // Initialize receive buffer
         std::memset(rec_buffer_raw, 0, rec_buffer_size);
@@ -628,6 +644,35 @@ struct ShmemSession::Impl {
             spike->cache[ch].chid = ch;
             spike->cache[ch].pktcnt = NATIVE_cbPKT_SPKCACHEPKTCNT;
             spike->cache[ch].pktsize = sizeof(cbPKT_SPK);
+        }
+    }
+
+    /// @brief Detect protocol version from config buffer (CENTRAL_COMPAT only)
+    void detectCompatProtocol() {
+        if (layout != ShmemLayout::CENTRAL_COMPAT) {
+            compat_protocol = CBPROTO_PROTOCOL_CURRENT;
+            return;
+        }
+
+        auto* cfg = legacyCfg();
+        if (!cfg) {
+            compat_protocol = CBPROTO_PROTOCOL_CURRENT;
+            return;
+        }
+
+        // procinfo[0].version = MAKELONG(minor, major) = (major << 16) | minor
+        uint32_t ver = cfg->procinfo[0].version;
+        uint16_t major = (ver >> 16) & 0xFFFF;
+        uint16_t minor = ver & 0xFFFF;
+
+        if (major < 4) {
+            compat_protocol = CBPROTO_PROTOCOL_311;
+        } else if (major == 4 && minor == 0) {
+            compat_protocol = CBPROTO_PROTOCOL_400;
+        } else if (major == 4 && minor == 1) {
+            compat_protocol = CBPROTO_PROTOCOL_410;
+        } else {
+            compat_protocol = CBPROTO_PROTOCOL_CURRENT;
         }
     }
 };
@@ -1060,10 +1105,59 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
         return Result<void>::error("Transmit buffer not initialized");
     }
 
+    // In CENTRAL_COMPAT mode with an older protocol, translate to the legacy format
+    const bool needs_translation = (m_impl->layout == ShmemLayout::CENTRAL_COMPAT &&
+                                     m_impl->compat_protocol != CBPROTO_PROTOCOL_CURRENT);
+
+    const uint8_t* write_data;
+    uint32_t write_size_bytes;
+
+    uint8_t translated_buf[cbPKT_MAX_SIZE];
+
+    if (needs_translation) {
+        if (m_impl->compat_protocol == CBPROTO_PROTOCOL_311) {
+            // Translate header: current (16 bytes) → 3.11 (8 bytes)
+            auto& dest_hdr = *reinterpret_cast<cbproto::cbPKT_HEADER_311*>(translated_buf);
+            dest_hdr.time = static_cast<uint32_t>(pkt.cbpkt_header.time * 30000ULL / 1000000000ULL);
+            dest_hdr.chid = pkt.cbpkt_header.chid;
+            dest_hdr.type = static_cast<uint8_t>(pkt.cbpkt_header.type);
+            dest_hdr.dlen = static_cast<uint8_t>(pkt.cbpkt_header.dlen);
+            // Translate payload
+            size_t dest_dlen = cbproto::PacketTranslator::translatePayload_current_to_311(pkt, translated_buf);
+            dest_hdr.dlen = static_cast<uint8_t>(dest_dlen);
+            write_size_bytes = cbproto::HEADER_SIZE_311 + dest_dlen * 4;
+        } else if (m_impl->compat_protocol == CBPROTO_PROTOCOL_400) {
+            // Translate header: current (16 bytes) → 4.0 (16 bytes, different field layout)
+            auto& dest_hdr = *reinterpret_cast<cbproto::cbPKT_HEADER_400*>(translated_buf);
+            dest_hdr.time = pkt.cbpkt_header.time;
+            dest_hdr.chid = pkt.cbpkt_header.chid;
+            dest_hdr.type = static_cast<uint8_t>(pkt.cbpkt_header.type);
+            dest_hdr.dlen = pkt.cbpkt_header.dlen;
+            dest_hdr.instrument = pkt.cbpkt_header.instrument;
+            dest_hdr.reserved = 0;
+            // Translate payload
+            size_t dest_dlen = cbproto::PacketTranslator::translatePayload_current_to_400(pkt, translated_buf);
+            dest_hdr.dlen = static_cast<uint16_t>(dest_dlen);
+            write_size_bytes = cbproto::HEADER_SIZE_400 + dest_dlen * 4;
+        } else {
+            // 4.1 (CBPROTO_PROTOCOL_410): header identical, only some payloads differ
+            std::memcpy(translated_buf, &pkt, cbPKT_HEADER_SIZE + pkt.cbpkt_header.dlen * 4);
+            size_t dest_dlen = cbproto::PacketTranslator::translatePayload_current_to_410(pkt, translated_buf);
+            auto& dest_hdr = *reinterpret_cast<cbPKT_HEADER*>(translated_buf);
+            dest_hdr.dlen = static_cast<uint16_t>(dest_dlen);
+            write_size_bytes = cbPKT_HEADER_SIZE + dest_dlen * 4;
+        }
+        write_data = translated_buf;
+    } else {
+        write_data = reinterpret_cast<const uint8_t*>(&pkt);
+        write_size_bytes = (cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen) * sizeof(uint32_t);
+    }
+
+    // Round up to dword-aligned size for ring buffer
+    uint32_t pkt_size_words = (write_size_bytes + 3) / 4;
+
     auto* xmt = m_impl->xmtGlobal();
     uint32_t* buf = m_impl->xmtGlobalBuffer();
-
-    uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
 
     uint32_t head = xmt->headindex;
     uint32_t tail = xmt->tailindex;
@@ -1076,9 +1170,9 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
         return Result<void>::error("Transmit buffer full");
     }
 
-    const uint32_t* pkt_data = reinterpret_cast<const uint32_t*>(&pkt);
+    const uint32_t* pkt_words = reinterpret_cast<const uint32_t*>(write_data);
     for (uint32_t i = 0; i < pkt_size_words; ++i) {
-        buf[head] = pkt_data[i];
+        buf[head] = pkt_words[i];
         head = (head + 1) % buflen;
     }
 
@@ -1535,6 +1629,10 @@ int32_t ShmemSession::getInstrumentFilter() const {
     return m_impl->instrument_filter;
 }
 
+cbproto_protocol_version_t ShmemSession::getCompatProtocolVersion() const {
+    return m_impl->compat_protocol;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Receive buffer reading methods
 
@@ -1560,6 +1658,9 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
         return Result<void>::ok();
     }
 
+    const bool needs_translation = (m_impl->layout == ShmemLayout::CENTRAL_COMPAT &&
+                                     m_impl->compat_protocol != CBPROTO_PROTOCOL_CURRENT);
+
     while (packets_read < max_packets) {
         if (m_impl->rec_tailwrap == head_wrap && m_impl->rec_tailindex == head_index) {
             break;
@@ -1572,7 +1673,27 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             return Result<void>::error("Receive buffer overrun - data lost");
         }
 
-        uint32_t pkt_size_dwords = buf[m_impl->rec_tailindex];
+        // Parse the packet header to determine packet size based on protocol version.
+        // Central writes raw device packets; the header format depends on the protocol.
+        uint32_t raw_header_32size;
+        uint32_t raw_dlen;
+
+        if (needs_translation && m_impl->compat_protocol == CBPROTO_PROTOCOL_311) {
+            raw_header_32size = cbproto::HEADER_SIZE_311 / sizeof(uint32_t);  // 2
+            auto* hdr = reinterpret_cast<const cbproto::cbPKT_HEADER_311*>(&buf[m_impl->rec_tailindex]);
+            raw_dlen = hdr->dlen;
+        } else if (needs_translation && m_impl->compat_protocol == CBPROTO_PROTOCOL_400) {
+            raw_header_32size = cbproto::HEADER_SIZE_400 / sizeof(uint32_t);  // 4
+            auto* hdr = reinterpret_cast<const cbproto::cbPKT_HEADER_400*>(&buf[m_impl->rec_tailindex]);
+            raw_dlen = hdr->dlen;
+        } else {
+            // 4.1+ / current / NATIVE / CENTRAL layouts: use current header format
+            raw_header_32size = cbPKT_HEADER_32SIZE;  // 4
+            auto* hdr = reinterpret_cast<const cbPKT_HEADER*>(&buf[m_impl->rec_tailindex]);
+            raw_dlen = hdr->dlen;
+        }
+
+        uint32_t pkt_size_dwords = raw_header_32size + raw_dlen;
 
         if (pkt_size_dwords == 0 || pkt_size_dwords > (sizeof(cbPKT_GENERIC) / sizeof(uint32_t))) {
             m_impl->rec_tailindex++;
@@ -1583,23 +1704,75 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             continue;
         }
 
-        uint32_t end_index = m_impl->rec_tailindex + pkt_size_dwords;
+        if (needs_translation) {
+            // Copy raw bytes from ring buffer into a temp buffer for translation.
+            // Packets never straddle the buffer boundary (Central wraps before that),
+            // but we handle it defensively.
+            uint8_t raw_buf[cbPKT_MAX_SIZE];
+            uint32_t raw_bytes = pkt_size_dwords * sizeof(uint32_t);
+            uint32_t end_index = m_impl->rec_tailindex + pkt_size_dwords;
 
-        if (end_index <= buflen) {
-            std::memcpy(&packets[packets_read],
-                       &buf[m_impl->rec_tailindex],
-                       pkt_size_dwords * sizeof(uint32_t));
+            if (end_index <= buflen) {
+                std::memcpy(raw_buf, &buf[m_impl->rec_tailindex], raw_bytes);
+            } else {
+                uint32_t first_part = (buflen - m_impl->rec_tailindex) * sizeof(uint32_t);
+                uint32_t second_part = raw_bytes - first_part;
+                std::memcpy(raw_buf, &buf[m_impl->rec_tailindex], first_part);
+                std::memcpy(raw_buf + first_part, &buf[0], second_part);
+            }
+
+            // Translate header + payload into the output slot
+            uint8_t* dest = reinterpret_cast<uint8_t*>(&packets[packets_read]);
+            auto& dest_hdr = packets[packets_read].cbpkt_header;
+
+            if (m_impl->compat_protocol == CBPROTO_PROTOCOL_311) {
+                auto* src_hdr = reinterpret_cast<const cbproto::cbPKT_HEADER_311*>(raw_buf);
+                // Translate header: 3.11 (8 bytes) → current (16 bytes)
+                dest_hdr.time = static_cast<PROCTIME>(src_hdr->time) * 1000000000ULL / 30000ULL;
+                dest_hdr.chid = src_hdr->chid;
+                dest_hdr.type = src_hdr->type;
+                dest_hdr.dlen = src_hdr->dlen;
+                dest_hdr.instrument = 0;
+                dest_hdr.reserved = 0;
+                // Translate payload
+                cbproto::PacketTranslator::translatePayload_311_to_current(raw_buf, dest);
+            } else if (m_impl->compat_protocol == CBPROTO_PROTOCOL_400) {
+                auto* src_hdr = reinterpret_cast<const cbproto::cbPKT_HEADER_400*>(raw_buf);
+                // Translate header: 4.0 (16 bytes, different field layout) → current (16 bytes)
+                dest_hdr.time = src_hdr->time;
+                dest_hdr.chid = src_hdr->chid;
+                dest_hdr.type = src_hdr->type;  // 8-bit type → 16-bit (zero-extended)
+                dest_hdr.dlen = src_hdr->dlen;
+                dest_hdr.instrument = src_hdr->instrument;
+                dest_hdr.reserved = 0;
+                // Translate payload
+                cbproto::PacketTranslator::translatePayload_400_to_current(raw_buf, dest);
+            } else {
+                // 4.1 (CBPROTO_PROTOCOL_410): header is identical, only some payloads differ
+                std::memcpy(dest, raw_buf, raw_bytes);
+                cbproto::PacketTranslator::translatePayload_410_to_current(dest, dest);
+            }
         } else {
-            uint32_t first_part_size = buflen - m_impl->rec_tailindex;
-            uint32_t second_part_size = pkt_size_dwords - first_part_size;
+            // No translation needed (4.2+, NATIVE, or CENTRAL layout).
+            // Copy directly from ring buffer to output.
+            uint32_t end_index = m_impl->rec_tailindex + pkt_size_dwords;
 
-            std::memcpy(&packets[packets_read],
-                       &buf[m_impl->rec_tailindex],
-                       first_part_size * sizeof(uint32_t));
+            if (end_index <= buflen) {
+                std::memcpy(&packets[packets_read],
+                           &buf[m_impl->rec_tailindex],
+                           pkt_size_dwords * sizeof(uint32_t));
+            } else {
+                uint32_t first_part_size = buflen - m_impl->rec_tailindex;
+                uint32_t second_part_size = pkt_size_dwords - first_part_size;
 
-            std::memcpy(reinterpret_cast<uint32_t*>(&packets[packets_read]) + first_part_size,
-                       &buf[0],
-                       second_part_size * sizeof(uint32_t));
+                std::memcpy(&packets[packets_read],
+                           &buf[m_impl->rec_tailindex],
+                           first_part_size * sizeof(uint32_t));
+
+                std::memcpy(reinterpret_cast<uint32_t*>(&packets[packets_read]) + first_part_size,
+                           &buf[0],
+                           second_part_size * sizeof(uint32_t));
+            }
         }
 
         // Advance tail past this packet (consumed from ring buffer regardless of filter)

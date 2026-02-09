@@ -14,7 +14,6 @@ set(CBDEV_SOURCES
     src/device_session_410.cpp
     src/device_factory.cpp
     src/protocol_detector.cpp
-    src/packet_translator.cpp
 )
 
 # Build as STATIC library
