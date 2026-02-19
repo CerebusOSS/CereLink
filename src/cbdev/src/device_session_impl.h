@@ -30,6 +30,7 @@
 #include <functional>
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <cstdint>
 
 namespace cbdev {
@@ -285,6 +286,23 @@ public:
     /// Check if receive thread is running
     /// @return true if thread is active
     [[nodiscard]] bool isReceiveThreadRunning() const override;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Clock Synchronization
+    /// @{
+
+    [[nodiscard]] std::optional<std::chrono::steady_clock::time_point>
+        toLocalTime(uint64_t device_time_ns) const override;
+
+    [[nodiscard]] std::optional<uint64_t>
+        toDeviceTime(std::chrono::steady_clock::time_point local_time) const override;
+
+    Result<void> sendClockProbe() override;
+
+    [[nodiscard]] std::optional<int64_t> getOffsetNs() const override;
+    [[nodiscard]] std::optional<int64_t> getUncertaintyNs() const override;
 
     /// @}
 

@@ -91,6 +91,10 @@ if(CBSDK_BUILD_TEST)
 endif(CBSDK_BUILD_TEST)
 
 ##########################################################################################
+# Validation Tools
+add_subdirectory(tools/validate_clock_sync)
+
+##########################################################################################
 # Sample Applications for New Architecture
 if(CBSDK_BUILD_SAMPLE)
     # New architecture examples

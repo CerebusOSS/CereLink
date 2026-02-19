@@ -14,6 +14,7 @@ set(CBDEV_SOURCES
     src/device_session_410.cpp
     src/device_factory.cpp
     src/protocol_detector.cpp
+    src/clock_sync.cpp
 )
 
 # Build as STATIC library

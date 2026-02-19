@@ -190,6 +190,30 @@ public:
         return m_device.setChannelsSpikeSortingSync(nChans, chanType, sortOptions, timeout);
     }
 
+    /// Clock sync delegation (uses m_device's ClockSync which is fed by
+    /// receivePacketsRaw and updateConfigFromBuffer on the same call path)
+    std::optional<std::chrono::steady_clock::time_point>
+        toLocalTime(uint64_t device_time_ns) const override {
+        return m_device.toLocalTime(device_time_ns);
+    }
+
+    std::optional<uint64_t>
+        toDeviceTime(std::chrono::steady_clock::time_point local_time) const override {
+        return m_device.toDeviceTime(local_time);
+    }
+
+    Result<void> sendClockProbe() override {
+        return m_device.sendClockProbe();
+    }
+
+    [[nodiscard]] std::optional<int64_t> getOffsetNs() const override {
+        return m_device.getOffsetNs();
+    }
+
+    [[nodiscard]] std::optional<int64_t> getUncertaintyNs() const override {
+        return m_device.getUncertaintyNs();
+    }
+
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////

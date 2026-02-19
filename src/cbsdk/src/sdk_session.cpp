@@ -697,6 +697,45 @@ const SdkConfig& SdkSession::getConfig() const {
     return m_impl->config;
 }
 
+///--------------------------------------------------------------------------------------------
+/// Clock Synchronization
+///--------------------------------------------------------------------------------------------
+
+std::optional<std::chrono::steady_clock::time_point>
+SdkSession::toLocalTime(uint64_t device_time_ns) const {
+    if (!m_impl->device_session)
+        return std::nullopt;
+    return m_impl->device_session->toLocalTime(device_time_ns);
+}
+
+std::optional<uint64_t>
+SdkSession::toDeviceTime(std::chrono::steady_clock::time_point local_time) const {
+    if (!m_impl->device_session)
+        return std::nullopt;
+    return m_impl->device_session->toDeviceTime(local_time);
+}
+
+Result<void> SdkSession::sendClockProbe() {
+    if (!m_impl->device_session)
+        return Result<void>::error("sendClockProbe() only available in STANDALONE mode");
+    auto r = m_impl->device_session->sendClockProbe();
+    if (r.isError())
+        return Result<void>::error(r.error());
+    return Result<void>::ok();
+}
+
+std::optional<int64_t> SdkSession::getClockOffsetNs() const {
+    if (!m_impl->device_session)
+        return std::nullopt;
+    return m_impl->device_session->getOffsetNs();
+}
+
+std::optional<int64_t> SdkSession::getClockUncertaintyNs() const {
+    if (!m_impl->device_session)
+        return std::nullopt;
+    return m_impl->device_session->getUncertaintyNs();
+}
+
 Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {
     // Enqueue packet to shared memory transmit buffer
     // Works in both STANDALONE and CLIENT modes:

@@ -20,6 +20,7 @@
 #include <cbproto/config.h>
 #include <cstddef>
 #include <functional>
+#include <optional>
 #include <vector>
 
 namespace cbdev {
@@ -269,6 +270,37 @@ public:
     /// Check if receive thread is running
     /// @return true if thread is active
     [[nodiscard]] virtual bool isReceiveThreadRunning() const = 0;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Clock Synchronization
+    /// @{
+
+    /// Convert a device timestamp (nanoseconds) to the host's steady_clock time_point.
+    /// @param device_time_ns  Device timestamp in nanoseconds
+    /// @return Corresponding host time, or nullopt if no sync data available
+    [[nodiscard]] virtual std::optional<std::chrono::steady_clock::time_point>
+        toLocalTime(uint64_t device_time_ns) const = 0;
+
+    /// Convert a host steady_clock time_point to device timestamp (nanoseconds).
+    /// @param local_time  Host time
+    /// @return Corresponding device timestamp in nanoseconds, or nullopt if no sync data available
+    [[nodiscard]] virtual std::optional<uint64_t>
+        toDeviceTime(std::chrono::steady_clock::time_point local_time) const = 0;
+
+    /// Send a clock synchronization probe (no-op SYSSETRUNLEV(RUNNING)).
+    /// Captures T1 (host send time) and completes measurement when SYSREPRUNLEV is received.
+    /// @return Success or error
+    virtual Result<void> sendClockProbe() = 0;
+
+    /// Current offset estimate: device_ns - steady_clock_ns.
+    /// @return Offset in nanoseconds, or nullopt if no sync data available
+    [[nodiscard]] virtual std::optional<int64_t> getOffsetNs() const = 0;
+
+    /// Uncertainty (half-RTT) from best probe, or INT64_MAX for one-way only.
+    /// @return Uncertainty in nanoseconds, or nullopt if no sync data available
+    [[nodiscard]] virtual std::optional<int64_t> getUncertaintyNs() const = 0;
 
     /// @}
 };

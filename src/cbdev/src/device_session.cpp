@@ -37,6 +37,7 @@
 #endif
 
 #include "device_session_impl.h"
+#include "clock_sync.h"
 #include <cbproto/cbproto.h>
 #include <cbproto/config.h>
 #include <cstring>
@@ -226,6 +227,16 @@ struct DeviceSession::Impl {
 
     // Device configuration (from REQCONFIGALL)
     cbproto::DeviceConfig device_config{};
+
+    // Clock synchronization
+    ClockSync clock_sync;
+    std::chrono::steady_clock::time_point last_recv_timestamp{};
+    struct PendingClockProbe {
+        std::chrono::steady_clock::time_point t1_local;
+        bool active = false;
+    };
+    PendingClockProbe pending_clock_probe;
+    std::mutex clock_probe_mutex;
 
     // General response waiting mechanism
     struct PendingResponse {
@@ -473,6 +484,11 @@ Result<int> DeviceSession::receivePacketsRaw(void* buffer, const size_t buffer_s
 
     // Receive UDP datagram into provided buffer (non-blocking)
     int bytes_recv = recv(m_impl->socket, (char*)buffer, buffer_size, 0);
+
+    // Capture host timestamp as early as possible after recv() returns data
+    if (bytes_recv > 0) {
+        m_impl->last_recv_timestamp = std::chrono::steady_clock::now();
+    }
 
     if (bytes_recv == SOCKET_ERROR_VALUE) {
         #ifdef _WIN32
@@ -834,6 +850,43 @@ Result<void> DeviceSession::performHandshakeSync(std::chrono::milliseconds timeo
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Clock Synchronization
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+Result<void> DeviceSession::sendClockProbe() {
+    if (!m_impl || !m_impl->connected)
+        return Result<void>::error("Device not connected");
+    {
+        std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
+        m_impl->pending_clock_probe.t1_local = std::chrono::steady_clock::now();
+        m_impl->pending_clock_probe.active = true;
+    }
+    return setSystemRunLevel(cbRUNLEVEL_RUNNING, 0, 0);
+}
+
+std::optional<std::chrono::steady_clock::time_point>
+DeviceSession::toLocalTime(uint64_t device_time_ns) const {
+    if (!m_impl) return std::nullopt;
+    return m_impl->clock_sync.toLocalTime(device_time_ns);
+}
+
+std::optional<uint64_t>
+DeviceSession::toDeviceTime(std::chrono::steady_clock::time_point local_time) const {
+    if (!m_impl) return std::nullopt;
+    return m_impl->clock_sync.toDeviceTime(local_time);
+}
+
+std::optional<int64_t> DeviceSession::getOffsetNs() const {
+    if (!m_impl) return std::nullopt;
+    return m_impl->clock_sync.getOffsetNs();
+}
+
+std::optional<int64_t> DeviceSession::getUncertaintyNs() const {
+    if (!m_impl) return std::nullopt;
+    return m_impl->clock_sync.getUncertaintyNs();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Channel Configuration
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1156,14 +1209,18 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
             else if ((header->type & 0xF0) == cbPKTTYPE_SYSREP) {
                 const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(buff_bytes + offset);
                 m_impl->device_config.sysinfo = *sysinfo;
-                // else if (header->type == cbPKTTYPE_SYSREPRUNLEV) {
-                //     if (sysinfo->runlevel == cbRUNLEVEL_HARDRESET) {
-                //         // TODO: Handle HARDRESET (signal event?)
-                //     }
-                //     else if (sysinfo->runlevel == cbRUNLEVEL_RUNNING && sysinfo->runflags & cbRUNFLAGS_LOCK) {
-                //         // TODO: Handle locked reset.
-                //     }
-                // }
+
+                // Complete pending clock sync probe on SYSREPRUNLEV
+                if (header->type == cbPKTTYPE_SYSREPRUNLEV) {
+                    std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
+                    if (m_impl->pending_clock_probe.active) {
+                        m_impl->clock_sync.addProbeSample(
+                            m_impl->pending_clock_probe.t1_local,
+                            header->time,
+                            m_impl->last_recv_timestamp);
+                        m_impl->pending_clock_probe.active = false;
+                    }
+                }
             }
             else if (header->type == cbPKTTYPE_GROUPREP) {
                 auto const *groupinfo = reinterpret_cast<const cbPKT_GROUPINFO*>(buff_bytes + offset);
@@ -1186,7 +1243,7 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 }
             }
             else if (header->type == cbPKTTYPE_SYSPROTOCOLMONITOR) {
-
+                m_impl->clock_sync.addOneWaySample(header->time, m_impl->last_recv_timestamp);
             }
             else if (header->type == cbPKTTYPE_ADAPTFILTREP) {
                 m_impl->device_config.adaptinfo = *reinterpret_cast<const cbPKT_ADAPTFILTINFO*>(buff_bytes + offset);
@@ -1254,17 +1311,17 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
             // else if (header->type == cbPKTTYPE_NMREP) {
             //     // NODO: Abandon NM support
             // }
-            // else if (header->type == cbPKTTYPE_WAVEFORMREP) {
-            //     const auto* waveformrep = reinterpret_cast<const cbPKT_AOUT_WAVEFORM*>(buff_bytes + offset);
-            //     uint16_t chan = waveformrep->chan;
-            //     // TODO: Support digital out waveforms. Do we care?
-            //     if (IsChanAnalogOut(chan)) {
-            //         chan -= cbGetNumAnalogChans() + 1;
-            //         if (chan < AOUT_NUM_GAIN_CHANS && waveformrep->trigNum < cbMAX_AOUT_TRIGGER) {
-            //             m_impl->device_config.waveform[chan][waveformrep->trigNum] = *waveformrep;
-            //         }
-            //     }
-            // }
+            else if (header->type == cbPKTTYPE_WAVEFORMREP) {
+                const auto* waveformrep = reinterpret_cast<const cbPKT_AOUT_WAVEFORM*>(buff_bytes + offset);
+                uint16_t chan = waveformrep->chan;
+                // Analog out channels start after analog input channels
+                if (chan > cbNUM_ANALOG_CHANS && chan <= cbNUM_ANALOG_CHANS + AOUT_NUM_GAIN_CHANS) {
+                    uint16_t aout_idx = chan - cbNUM_ANALOG_CHANS - 1;
+                    if (waveformrep->trigNum < cbMAX_AOUT_TRIGGER) {
+                        m_impl->device_config.waveform[aout_idx][waveformrep->trigNum] = *waveformrep;
+                    }
+                }
+            }
             // else if (header->type == cbPKTTYPE_NPLAYREP) {
             //     const auto* nplayrep = reinterpret_cast<const cbPKT_NPLAY*>(buff_bytes + offset);
             //     if (nplayrep->flags == cbNPLAY_FLAG_MAIN) {

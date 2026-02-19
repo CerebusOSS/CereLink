@@ -351,6 +351,34 @@ public:
     const SdkConfig& getConfig() const;
 
     ///--------------------------------------------------------------------------------------------
+    /// Clock Synchronization
+    ///--------------------------------------------------------------------------------------------
+
+    /// Convert a device timestamp (nanoseconds) to the host's steady_clock time_point.
+    /// @param device_time_ns Device timestamp in nanoseconds
+    /// @return Corresponding host time, or nullopt if no sync data available
+    std::optional<std::chrono::steady_clock::time_point>
+        toLocalTime(uint64_t device_time_ns) const;
+
+    /// Convert a host steady_clock time_point to device timestamp (nanoseconds).
+    /// @param local_time Host time
+    /// @return Corresponding device timestamp in nanoseconds, or nullopt if no sync data available
+    std::optional<uint64_t>
+        toDeviceTime(std::chrono::steady_clock::time_point local_time) const;
+
+    /// Send a clock synchronization probe to the device.
+    /// @return Result indicating success or error
+    Result<void> sendClockProbe();
+
+    /// Current offset estimate: device_ns - steady_clock_ns.
+    /// @return Offset in nanoseconds, or nullopt if no sync data available
+    std::optional<int64_t> getClockOffsetNs() const;
+
+    /// Uncertainty (half-RTT) from best probe, or INT64_MAX for one-way only.
+    /// @return Uncertainty in nanoseconds, or nullopt if no sync data available
+    std::optional<int64_t> getClockUncertaintyNs() const;
+
+    ///--------------------------------------------------------------------------------------------
     /// Packet Transmission
     ///--------------------------------------------------------------------------------------------
 
