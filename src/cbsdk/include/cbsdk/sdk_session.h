@@ -20,6 +20,7 @@
 #include <string>
 #include <functional>
 #include <memory>
+#include <chrono>
 #include <cstdint>
 #include <optional>
 #include <atomic>
