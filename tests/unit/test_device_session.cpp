@@ -11,7 +11,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include <gtest/gtest.h>
-#include "cbdev/device_session.h"
+#include "device_session_impl.h"
 #include <cstring>
 #include <thread>
 #include <chrono>
@@ -40,20 +40,20 @@ int DeviceSessionTest::test_counter = 0;
 // Configuration Tests
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(DeviceSessionTest, ConnectionParams_Predefined_NSP) {
-    auto config = ConnectionParams::forDevice(DeviceType::NSP);
+TEST_F(DeviceSessionTest, ConnectionParams_Predefined_LegacyNSP) {
+    auto config = ConnectionParams::forDevice(DeviceType::LEGACY_NSP);
 
-    EXPECT_EQ(config.type, DeviceType::NSP);
+    EXPECT_EQ(config.type, DeviceType::LEGACY_NSP);
     EXPECT_EQ(config.device_address, "192.168.137.128");
     EXPECT_EQ(config.client_address, "");  // Auto-detect
-    EXPECT_EQ(config.recv_port, 51001);
-    EXPECT_EQ(config.send_port, 51002);
+    EXPECT_EQ(config.recv_port, 51002);
+    EXPECT_EQ(config.send_port, 51001);
 }
 
 TEST_F(DeviceSessionTest, ConnectionParams_Predefined_Gemini) {
-    auto config = ConnectionParams::forDevice(DeviceType::GEMINI_NSP);
+    auto config = ConnectionParams::forDevice(DeviceType::NSP);
 
-    EXPECT_EQ(config.type, DeviceType::GEMINI_NSP);
+    EXPECT_EQ(config.type, DeviceType::NSP);
     EXPECT_EQ(config.device_address, "192.168.137.128");
     EXPECT_EQ(config.client_address, "");  // Auto-detect
     EXPECT_EQ(config.recv_port, 51001);  // Same port for send & recv
@@ -76,8 +76,8 @@ TEST_F(DeviceSessionTest, ConnectionParams_Predefined_NPlay) {
     EXPECT_EQ(config.type, DeviceType::NPLAY);
     EXPECT_EQ(config.device_address, "127.0.0.1");
     EXPECT_EQ(config.client_address, "127.0.0.1");  // Loopback, not 0.0.0.0
-    EXPECT_EQ(config.recv_port, 51001);
-    EXPECT_EQ(config.send_port, 51001);
+    EXPECT_EQ(config.recv_port, 51002);  // LEGACY_NSP_RECV_PORT (bcast)
+    EXPECT_EQ(config.send_port, 51001);  // LEGACY_NSP_SEND_PORT (cnt)
 }
 
 TEST_F(DeviceSessionTest, ConnectionParams_Custom) {
@@ -214,7 +214,7 @@ TEST_F(DeviceSessionTest, GetConfig) {
     ASSERT_TRUE(result.isOk()) << "Error: " << result.error();
 
     auto& session = result.value();
-    const auto& retrieved_config = session.getConfig();
+    const auto& retrieved_config = session.getConnectionParams();
 
     EXPECT_EQ(retrieved_config.device_address, "127.0.0.1");
     EXPECT_EQ(retrieved_config.client_address, "0.0.0.0");

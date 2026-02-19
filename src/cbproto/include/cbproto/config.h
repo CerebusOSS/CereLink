@@ -74,6 +74,9 @@ struct DeviceConfig {
     // Spike sorting configuration
     SpikeSorting            spike_sorting;                          ///< All spike sorting parameters
 
+    // Analog output waveform configuration
+    cbPKT_AOUT_WAVEFORM     waveform[AOUT_NUM_GAIN_CHANS][cbMAX_AOUT_TRIGGER]; ///< Waveform triggers per analog output
+
     // Recording configuration
     cbPKT_LNC               lnc;                                    ///< LNC parameters
     cbPKT_FILECFG           fileinfo;                               ///< File recording configuration

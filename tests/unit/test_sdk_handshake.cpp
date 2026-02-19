@@ -20,7 +20,7 @@
 #include <cbproto/cbproto.h>
 #include "cbshm/shmem_session.h"
 #include "cbdev/device_session.h"
-#include "cbsdk_v2/sdk_session.h"
+#include "cbsdk/sdk_session.h"
 
 using namespace cbsdk;
 

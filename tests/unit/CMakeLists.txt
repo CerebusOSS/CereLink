@@ -1,12 +1,6 @@
 # Unit Tests
 # Each module (cbproto, cbshm, cbdev, cbsdk) will have its own test suite
 
-# Only build if new architecture is enabled
-if(NOT CBSDK_BUILD_NEW_ARCH)
-    message(STATUS "Skipping unit tests for new architecture (CBSDK_BUILD_NEW_ARCH=OFF)")
-    return()
-endif()
-
 # GoogleTest will be fetched as needed
 include(FetchContent)
 FetchContent_Declare(
@@ -66,6 +60,7 @@ message(STATUS "Unit tests configured for cbshm")
 add_executable(cbdev_tests
     test_device_session.cpp
     test_packet_translation.cpp
+    test_clock_sync.cpp
     packet_test_helpers.cpp
 )
 
@@ -79,12 +74,33 @@ target_link_libraries(cbdev_tests
 target_include_directories(cbdev_tests
     BEFORE PRIVATE
         ${PROJECT_SOURCE_DIR}/src/cbdev/include
+        ${PROJECT_SOURCE_DIR}/src/cbdev/src
         ${PROJECT_SOURCE_DIR}/src/cbproto/include
 )
 
 gtest_discover_tests(cbdev_tests)
 
 message(STATUS "Unit tests configured for cbdev")
+
+# Standalone clock sync test (does not depend on socket/device test helpers)
+add_executable(clock_sync_tests
+    test_clock_sync.cpp
+)
+
+target_link_libraries(clock_sync_tests
+    PRIVATE
+        cbdev
+        GTest::gtest_main
+)
+
+target_include_directories(clock_sync_tests
+    BEFORE PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/cbdev/src
+)
+
+gtest_discover_tests(clock_sync_tests)
+
+message(STATUS "Unit tests configured for clock_sync")
 
 # cbsdk tests
 add_executable(cbsdk_tests
@@ -106,6 +122,7 @@ target_include_directories(cbsdk_tests
     BEFORE PRIVATE
         ${PROJECT_SOURCE_DIR}/src/cbsdk/include
         ${PROJECT_SOURCE_DIR}/src/cbdev/include
+        ${PROJECT_SOURCE_DIR}/src/cbdev/src
         ${PROJECT_SOURCE_DIR}/src/cbshm/include
         ${PROJECT_SOURCE_DIR}/src/cbproto/include
         ${PROJECT_SOURCE_DIR}/upstream
@@ -114,3 +131,25 @@ target_include_directories(cbsdk_tests
 gtest_discover_tests(cbsdk_tests)
 
 message(STATUS "Unit tests configured for cbsdk")
+
+# ccfutils tests (CCF <-> DeviceConfig conversion)
+add_executable(ccfutils_tests
+    test_ccf_config.cpp
+)
+
+target_link_libraries(ccfutils_tests
+    PRIVATE
+        ccfutils
+        cbproto
+        GTest::gtest_main
+)
+
+target_include_directories(ccfutils_tests
+    BEFORE PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/ccfutils/include
+        ${PROJECT_SOURCE_DIR}/src/cbproto/include
+)
+
+gtest_discover_tests(ccfutils_tests)
+
+message(STATUS "Unit tests configured for ccfutils")

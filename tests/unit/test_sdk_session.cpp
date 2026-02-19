@@ -18,8 +18,8 @@
 // Include protocol types and session headers
 #include <cbproto/cbproto.h>            // Protocol types
 #include "cbshm/shmem_session.h"      // For transmit callback test
-#include "cbdev/device_session.h"       // For loopback test
-#include "cbsdk_v2/sdk_session.h"       // SDK orchestration
+#include "device_session_impl.h"         // For loopback test (concrete DeviceSession)
+#include "cbsdk/sdk_session.h"       // SDK orchestration
 
 using namespace cbsdk;
 
