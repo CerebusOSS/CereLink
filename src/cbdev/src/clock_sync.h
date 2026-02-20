@@ -6,12 +6,13 @@
 /// @brief  Device clock to host steady_clock offset estimator
 ///
 /// Estimates the offset between the device's nanosecond clock and the host's
-/// std::chrono::steady_clock using request-response probes with asymmetry correction.
+/// std::chrono::steady_clock using request-response probes.
 ///
 /// Each probe gives T1 (host send), T3 (device timestamp), T4 (host recv).
-/// Offset = T3 - T1 - α * (T4 - T1), where α is the forward delay fraction (D1/RTT).
-/// The probe with minimum RTT is selected as the best estimate, since minimum RTT
-/// implies the least queuing/jitter.
+/// Offset = T3 - T1 - α * (T4 - T1), where α is the forward delay fraction
+/// (default 0.5 = symmetric NTP midpoint). The probe with minimum RTT is
+/// selected as the best estimate, since minimum RTT implies the least
+/// queuing/jitter.
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -32,9 +33,9 @@ public:
     using time_point = clock::time_point;
 
     struct Config {
-        double forward_delay_fraction = 2.0 / 3.0;  // α: assumed D1/(D1+D2)
-        size_t max_probe_samples = 20;
-        std::chrono::seconds max_probe_age = std::chrono::seconds{300};
+        double forward_delay_fraction = 0.5; // α: assumed D1/(D1+D2)
+        size_t max_probe_samples = 8;
+        std::chrono::seconds max_probe_age = std::chrono::seconds{15};
     };
 
     ClockSync();
