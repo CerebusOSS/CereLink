@@ -8,4 +8,11 @@ if(UNIX AND NOT APPLE)
         ${PROJECT_SOURCE_DIR}/src/cbsdk/include
         ${PROJECT_SOURCE_DIR}/src/cbdev/include
         ${PROJECT_SOURCE_DIR}/src/cbproto/include)
+
+    # probe_timing - Measure nPlay probe forward/reverse delays using PTP timestamps
+    # Standalone raw UDP tool (no cbsdk/cbdev dependency) for precise timing measurements
+    add_executable(probe_timing probe_timing.cpp)
+    target_link_libraries(probe_timing PRIVATE cbproto)
+    target_include_directories(probe_timing PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/cbproto/include)
 endif()

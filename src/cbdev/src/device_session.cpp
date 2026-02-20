@@ -856,12 +856,25 @@ Result<void> DeviceSession::performHandshakeSync(std::chrono::milliseconds timeo
 Result<void> DeviceSession::sendClockProbe() {
     if (!m_impl || !m_impl->connected)
         return Result<void>::error("Device not connected");
+
+    auto now = std::chrono::steady_clock::now();
     {
         std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
-        m_impl->pending_clock_probe.t1_local = std::chrono::steady_clock::now();
+        m_impl->pending_clock_probe.t1_local = now;
         m_impl->pending_clock_probe.active = true;
     }
-    return setSystemRunLevel(cbRUNLEVEL_RUNNING, 0, 0);
+
+    // Send nPlay packet as clock probe. The host send time goes in .stime;
+    // firmware writes a fresh clock_gettime(ptp_clkid) into .etime before echoing back.
+    cbPKT_NPLAY pkt{};
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_NPLAYSET;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_NPLAY;
+    pkt.stime = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            now.time_since_epoch()).count());
+
+    return sendPacket(*reinterpret_cast<const cbPKT_GENERIC*>(&pkt));
 }
 
 std::optional<std::chrono::steady_clock::time_point>
@@ -1210,17 +1223,8 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(buff_bytes + offset);
                 m_impl->device_config.sysinfo = *sysinfo;
 
-                // Complete pending clock sync probe on SYSREPRUNLEV
-                if (header->type == cbPKTTYPE_SYSREPRUNLEV) {
-                    std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
-                    if (m_impl->pending_clock_probe.active) {
-                        m_impl->clock_sync.addProbeSample(
-                            m_impl->pending_clock_probe.t1_local,
-                            header->time,
-                            m_impl->last_recv_timestamp);
-                        m_impl->pending_clock_probe.active = false;
-                    }
-                }
+                // Note: Clock sync probes now use nPlay packets (NPLAYREP), not SYSREPRUNLEV.
+                // SYSREPRUNLEV is still processed here for config tracking (sysinfo update above).
             }
             else if (header->type == cbPKTTYPE_GROUPREP) {
                 auto const *groupinfo = reinterpret_cast<const cbPKT_GROUPINFO*>(buff_bytes + offset);
@@ -1243,7 +1247,8 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 }
             }
             else if (header->type == cbPKTTYPE_SYSPROTOCOLMONITOR) {
-                m_impl->clock_sync.addOneWaySample(header->time, m_impl->last_recv_timestamp);
+                // Not used for clock sync — sent from firmware's 3rd thread after 2 queues,
+                // giving it an undefined timestamp delay.
             }
             else if (header->type == cbPKTTYPE_ADAPTFILTREP) {
                 m_impl->device_config.adaptinfo = *reinterpret_cast<const cbPKT_ADAPTFILTINFO*>(buff_bytes + offset);
@@ -1322,13 +1327,29 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                     }
                 }
             }
-            // else if (header->type == cbPKTTYPE_NPLAYREP) {
-            //     const auto* nplayrep = reinterpret_cast<const cbPKT_NPLAY*>(buff_bytes + offset);
-            //     if (nplayrep->flags == cbNPLAY_FLAG_MAIN) {
-            //         // TODO: Store nplay in config
-            //         m_impl->device_config.nplay = *nplayrep;
-            //     }
-            // }
+            else if (header->type == cbPKTTYPE_NPLAYREP) {
+                // Complete pending clock sync probe from nPlay echo.
+                const auto* nplay = reinterpret_cast<const cbPKT_NPLAY*>(buff_bytes + offset);
+                std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
+                if (m_impl->pending_clock_probe.active) {
+                    // New firmware (>=7.8 with clock sync mod) writes fresh
+                    // clock_gettime(ptp_clkid) into .etime — zero staleness.
+                    // Old firmware echoes the packet unchanged, so .etime stays 0
+                    // (we zero-initialize it). Fall back to header->time which is
+                    // the stale ptptime from the previous main loop iteration.
+                    constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
+                    const uint64_t device_time_ns = (nplay->etime != 0)
+                        ? nplay->etime
+                        : header->time + STALENESS_CORRECTION_NS;
+
+                    m_impl->clock_sync.addProbeSample(
+                        m_impl->pending_clock_probe.t1_local,
+                        device_time_ns,
+                        m_impl->last_recv_timestamp);
+
+                    m_impl->pending_clock_probe.active = false;
+                }
+            }
 
             std::lock_guard<std::mutex> lock(m_impl->pending_mutex);
             for (auto& pending : m_impl->pending_responses) {

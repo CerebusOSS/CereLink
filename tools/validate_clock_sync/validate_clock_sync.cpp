@@ -191,9 +191,31 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     auto& session = result.value();
-    fprintf(stderr, "Connected. Waiting for clock sync data...\n");
+    fprintf(stderr, "Connected.\n");
 
-    // Wait briefly for one-way samples to arrive (SYSPROTOCOLMONITOR)
+    // Enable raw streaming on channel 1 so we get group 6 data packets.
+    // RAW packets from the primary firmware thread carry recent PTP timestamps,
+    // providing better one-way clock sync samples than SYSPROTOCOLMONITOR.
+    {
+        cbPKT_CHANINFO pkt{};
+        pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        pkt.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
+        pkt.cbpkt_header.dlen = cbPKTDLEN_CHANINFO;
+        pkt.chan = 1;
+        pkt.ainpopts = cbAINP_RAWSTREAM;
+        auto send_result = session.sendPacket(
+            *reinterpret_cast<const cbPKT_GENERIC*>(&pkt));
+        if (send_result.isError()) {
+            fprintf(stderr, "Warning: failed to enable raw channel: %s\n",
+                    send_result.error().c_str());
+        } else {
+            fprintf(stderr, "Enabled raw streaming on channel 1\n");
+        }
+    }
+
+    fprintf(stderr, "Waiting for clock sync data...\n");
+
+    // Wait briefly for one-way samples to arrive
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
     // Install signal handlers for clean shutdown
