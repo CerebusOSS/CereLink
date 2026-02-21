@@ -866,10 +866,13 @@ Result<void> DeviceSession::sendClockProbe() {
 
     // Send nPlay packet as clock probe. The host send time goes in .stime;
     // firmware writes a fresh clock_gettime(ptp_clkid) into .etime before echoing back.
+    // Use an undefined mode (0xFFFF) so the device/nPlay server won't act on it
+    // but will still echo the packet back for our ping-pong clock loop.
     cbPKT_NPLAY pkt{};
     pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     pkt.cbpkt_header.type = cbPKTTYPE_NPLAYSET;
     pkt.cbpkt_header.dlen = cbPKTDLEN_NPLAY;
+    pkt.mode = 0xFFFF;
     pkt.stime = static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::nanoseconds>(
             now.time_since_epoch()).count());
