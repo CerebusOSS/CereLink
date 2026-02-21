@@ -40,6 +40,7 @@
 #include <cbsdk/sdk_session.h>
 
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <thread>
@@ -47,9 +48,44 @@
 #include <cstring>
 #include <fcntl.h>
 #include <getopt.h>
+#include <limits>
 #include <signal.h>
 #include <time.h>
 #include <unistd.h>
+
+/// Welford's online algorithm for running mean/variance/min/max.
+struct RunningStats {
+    int64_t n = 0;
+    double mean = 0.0;
+    double m2 = 0.0;       // sum of squared deviations
+    int64_t min_val = std::numeric_limits<int64_t>::max();
+    int64_t max_val = std::numeric_limits<int64_t>::min();
+
+    void update(int64_t x) {
+        ++n;
+        double d = static_cast<double>(x);
+        double delta = d - mean;
+        mean += delta / n;
+        m2 += delta * (d - mean);
+        if (x < min_val) min_val = x;
+        if (x > max_val) max_val = x;
+    }
+
+    double stddev() const {
+        return (n > 1) ? std::sqrt(m2 / (n - 1)) : 0.0;
+    }
+
+    void reset() { *this = RunningStats{}; }
+
+    void print(FILE* f, const char* label) const {
+        if (n == 0) {
+            fprintf(f, "%s: (no samples)\n", label);
+            return;
+        }
+        fprintf(f, "%s: n=%ld  mean=%.0f ns  stddev=%.0f ns  min=%ld ns  max=%ld ns\n",
+                label, n, mean, stddev(), min_val, max_val);
+    }
+};
 
 // Linux-specific: derive clockid_t from PTP device fd
 // See kernel docs: Documentation/ptp/ptp.txt
@@ -193,29 +229,9 @@ int main(int argc, char* argv[]) {
     auto& session = result.value();
     fprintf(stderr, "Connected.\n");
 
-    // Enable raw streaming on channel 1 so we get group 6 data packets.
-    // RAW packets from the primary firmware thread carry recent PTP timestamps,
-    // providing better one-way clock sync samples than SYSPROTOCOLMONITOR.
-    {
-        cbPKT_CHANINFO pkt{};
-        pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
-        pkt.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
-        pkt.cbpkt_header.dlen = cbPKTDLEN_CHANINFO;
-        pkt.chan = 1;
-        pkt.ainpopts = cbAINP_RAWSTREAM;
-        auto send_result = session.sendPacket(
-            *reinterpret_cast<const cbPKT_GENERIC*>(&pkt));
-        if (send_result.isError()) {
-            fprintf(stderr, "Warning: failed to enable raw channel: %s\n",
-                    send_result.error().c_str());
-        } else {
-            fprintf(stderr, "Enabled raw streaming on channel 1\n");
-        }
-    }
+    fprintf(stderr, "Waiting for initial clock probe response...\n");
 
-    fprintf(stderr, "Waiting for clock sync data...\n");
-
-    // Wait briefly for one-way samples to arrive
+    // Brief wait for first probe response
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
     // Install signal handlers for clean shutdown
@@ -223,7 +239,8 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, signal_handler);
 
     // Print TSV header
-    printf("# elapsed_s\tptp_offset_ns\tcs_offset_ns\tcs_uncertainty_ns\terror_ns\tphc_read_uncertainty_ns\n");
+    printf("# elapsed_s\tptp_offset_ns\tcs_offset_ns\tcs_uncertainty_ns"
+           "\terror_ns\tphc_read_unc_ns\tepoch_mean_ns\tepoch_stddev_ns\n");
     fflush(stdout);
 
     auto start_time = std::chrono::steady_clock::now();
@@ -231,6 +248,11 @@ int main(int argc, char* argv[]) {
     auto end_time = start_time + std::chrono::seconds(opts.duration_s);
     auto sample_interval = std::chrono::milliseconds(opts.sample_interval_ms);
     auto probe_interval = std::chrono::milliseconds(opts.probe_interval_ms);
+
+    RunningStats overall;       // all error samples
+    RunningStats epoch;         // error samples since last cs_offset change
+    int64_t prev_cs_offset = 0; // track when cs_offset changes (new probe selected)
+    bool have_prev_offset = false;
 
     // Send initial clock probe
     session.sendClockProbe();
@@ -265,13 +287,31 @@ int main(int argc, char* argv[]) {
             int64_t error_ns = cs_offset.value() - ptp_offset_ns;
             double elapsed_s = std::chrono::duration<double>(now - start_time).count();
 
-            printf("%.3f\t%ld\t%ld\t%ld\t%ld\t%ld\n",
+            // Detect probe epoch change (cs_offset changed → new best probe selected)
+            if (have_prev_offset && cs_offset.value() != prev_cs_offset) {
+                if (epoch.n > 0) {
+                    fprintf(stderr, "  epoch ended: n=%ld  mean=%.0f ns  stddev=%.0f ns  "
+                            "min=%ld ns  max=%ld ns\n",
+                            epoch.n, epoch.mean, epoch.stddev(),
+                            epoch.min_val, epoch.max_val);
+                }
+                epoch.reset();
+            }
+            prev_cs_offset = cs_offset.value();
+            have_prev_offset = true;
+
+            overall.update(error_ns);
+            epoch.update(error_ns);
+
+            printf("%.3f\t%ld\t%ld\t%ld\t%ld\t%ld\t%.0f\t%.0f\n",
                    elapsed_s,
                    ptp_offset_ns,
                    cs_offset.value(),
                    cs_uncertainty.value_or(0),
                    error_ns,
-                   phc_read_uncertainty_ns);
+                   phc_read_uncertainty_ns,
+                   epoch.mean,
+                   epoch.stddev());
             fflush(stdout);
         } else {
             double elapsed_s = std::chrono::duration<double>(now - start_time).count();
@@ -282,7 +322,14 @@ int main(int argc, char* argv[]) {
         std::this_thread::sleep_for(sample_interval);
     }
 
+    // Print final summaries
+    fprintf(stderr, "\n");
+    if (epoch.n > 0) {
+        epoch.print(stderr, "Last epoch");
+    }
+    overall.print(stderr, "Overall");
     fprintf(stderr, "Done. Shutting down...\n");
+
     session.stop();
     close(phc_fd);
     return 0;
