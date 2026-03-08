@@ -30,6 +30,7 @@ target_include_directories(cbdev
 target_link_libraries(cbdev
     PUBLIC
         cbproto  # Protocol definitions
+        cbutil   # Result<T> and shared utilities
 )
 
 # C++17 required

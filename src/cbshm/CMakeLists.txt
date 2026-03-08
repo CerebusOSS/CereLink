@@ -24,6 +24,7 @@ target_include_directories(cbshm
 target_link_libraries(cbshm
     PUBLIC
         cbproto  # Protocol definitions
+        cbutil   # Result<T> and shared utilities
 )
 
 # C++17 required

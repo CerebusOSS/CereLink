@@ -77,6 +77,7 @@ include(GNUInstallDirs)
 # New Modular Architecture
 message(STATUS "Building modular architecture")
 add_subdirectory(src/cbproto)
+add_subdirectory(src/cbutil)
 add_subdirectory(src/ccfutils)
 add_subdirectory(src/cbshm)
 add_subdirectory(src/cbdev)

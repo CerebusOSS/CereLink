@@ -25,6 +25,7 @@ target_include_directories(cbsdk
 target_link_libraries(cbsdk
     PUBLIC
         cbproto
+        cbutil
         cbshm
         cbdev
 )
