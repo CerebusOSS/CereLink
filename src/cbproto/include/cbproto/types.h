@@ -71,6 +71,7 @@ typedef int16_t A2D_DATA;
 
 #define cbNUM_FE_CHANS  256 ///< Front-end channels per NSP
 
+#define cbRAWGROUP      6   ///< Group number for raw data feed
 #define cbMAXGROUPS     8   ///< Number of sample rate groups
 #define cbMAXFILTS      32  ///< Maximum number of filters
 #define cbFIRST_DIGITAL_FILTER  13  ///< (0-based) filter number, must be less than cbMAXFILTS
@@ -111,6 +112,26 @@ typedef int16_t A2D_DATA;
 /// @brief Total number of channels
 #define cbMAXCHANS  (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS + \
                      cbNUM_DIGIN_CHANS + cbNUM_SERIAL_CHANS + cbNUM_DIGOUT_CHANS)
+
+#define cbFIRST_FE_CHAN       0   ///< First Front end channel (0-based)
+
+// Bank definitions - if any channel types exceed cbCHAN_PER_BANK, banks must be increased
+#define cbCHAN_PER_BANK       32                          ///< Channels per bank
+#define cbNUM_FE_BANKS        (cbNUM_FE_CHANS / cbCHAN_PER_BANK) ///< Front end banks
+#define cbNUM_ANAIN_BANKS     1                           ///< Analog Input banks
+#define cbNUM_ANAOUT_BANKS    1                           ///< Analog Output banks
+#define cbNUM_AUDOUT_BANKS    1                           ///< Audio Output banks
+#define cbNUM_DIGIN_BANKS     1                           ///< Digital Input banks
+#define cbNUM_SERIAL_BANKS    1                           ///< Serial Input banks
+#define cbNUM_DIGOUT_BANKS    1                           ///< Digital Output banks
+
+#define cbMAXBANKS  (cbNUM_FE_BANKS + cbNUM_ANAIN_BANKS + cbNUM_ANAOUT_BANKS + \
+                     cbNUM_AUDOUT_BANKS + cbNUM_DIGIN_BANKS + cbNUM_SERIAL_BANKS + \
+                     cbNUM_DIGOUT_BANKS)
+
+#define SCALE_LNC_COUNT        17
+#define SCALE_CONTINUOUS_COUNT 17
+#define SCALE_SPIKE_COUNT      23
 
 /// @}
 
@@ -159,6 +180,42 @@ typedef int16_t A2D_DATA;
 #define cbLEN_STR_IDENT         64      ///< Length of identity string
 #define cbLEN_STR_COMMENT       256     ///< Length of comment string
 #define cbMAX_COMMENT           128     ///< Maximum comment length (must be multiple of 4)
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Library Result Definitions
+/// @{
+
+typedef unsigned int cbRESULT;
+
+#define cbRESULT_OK                 0   ///< Function executed normally
+#define cbRESULT_NOLIBRARY          1   ///< The library was not properly initialized
+#define cbRESULT_NOCENTRALAPP       2   ///< Unable to access the central application
+#define cbRESULT_LIBINITERROR       3   ///< Error attempting to initialize library error
+#define cbRESULT_MEMORYUNAVAIL      4   ///< Not enough memory available to complete the operation
+#define cbRESULT_INVALIDADDRESS     5   ///< Invalid Processor or Bank address
+#define cbRESULT_INVALIDCHANNEL     6   ///< Invalid channel ID passed to function
+#define cbRESULT_INVALIDFUNCTION    7   ///< Channel exists, but requested function is not available
+#define cbRESULT_NOINTERNALCHAN     8   ///< No internal channels available to connect hardware stream
+#define cbRESULT_HARDWAREOFFLINE    9   ///< Hardware is offline or unavailable
+#define cbRESULT_DATASTREAMING     10   ///< Hardware is streaming data and cannot be configured
+#define cbRESULT_NONEWDATA         11   ///< There is no new data to be read in
+#define cbRESULT_DATALOST          12   ///< The Central App incoming data buffer has wrapped
+#define cbRESULT_INVALIDNTRODE     13   ///< Invalid NTrode number passed to function
+#define cbRESULT_BUFRECALLOCERR    14   ///< Receive buffer could not be allocated
+#define cbRESULT_BUFGXMTALLOCERR   15   ///< Global transmit buffer could not be allocated
+#define cbRESULT_BUFLXMTALLOCERR   16   ///< Local transmit buffer could not be allocated
+#define cbRESULT_BUFCFGALLOCERR    17   ///< Configuration buffer could not be allocated
+#define cbRESULT_BUFPCSTATALLOCERR 18   ///< PC status buffer could not be allocated
+#define cbRESULT_BUFSPKALLOCERR    19   ///< Spike cache buffer could not be allocated
+#define cbRESULT_EVSIGERR          20   ///< Couldn't create shared event signal
+#define cbRESULT_SOCKERR           21   ///< Generic socket creation error
+#define cbRESULT_SOCKOPTERR        22   ///< Socket option error (possibly permission issue)
+#define cbRESULT_SOCKMEMERR        23   ///< Socket memory assignment error
+#define cbRESULT_INSTINVALID       24   ///< Invalid range or instrument address
+#define cbRESULT_SOCKBIND          25   ///< Cannot bind to any address (possibly no Instrument network)
+#define cbRESULT_SYSLOCK           26   ///< Cannot (un)lock the system resources (possibly resource busy)
 
 /// @}
 
@@ -237,6 +294,16 @@ typedef struct {
 ///
 /// These structures are used within packet structures
 /// @{
+
+// Filter type flags (used in cbFILTDESC hptype/lptype fields)
+#define  cbFILTTYPE_PHYSICAL      0x0001
+#define  cbFILTTYPE_DIGITAL       0x0002
+#define  cbFILTTYPE_ADAPTIVE      0x0004
+#define  cbFILTTYPE_NONLINEAR     0x0008
+#define  cbFILTTYPE_BUTTERWORTH   0x0100
+#define  cbFILTTYPE_CHEBYCHEV     0x0200
+#define  cbFILTTYPE_BESSEL        0x0400
+#define  cbFILTTYPE_ELLIPTICAL    0x0800
 
 /// @brief Filter description structure
 ///
@@ -2092,34 +2159,25 @@ typedef struct {
 /// These are used in shared memory structures for Central application
 /// @{
 
-/* Avoid macro redefinition of COLORREF which conflicts with Windows typedef.
-   If building on Windows, let <windef.h> provide COLORREF; otherwise define it. */
-#if defined(_WIN32) || defined(_WIN64)
-  #include <windef.h>  // provides typedef DWORD COLORREF
-#else
-  #include <cstdint>
-  typedef uint32_t COLORREF;
-#endif
-
 /// @brief Color table for Central application
 ///
 /// Used for display configuration in Central
 typedef struct {
-    COLORREF winrsvd[48];       ///< Reserved for Windows
-    COLORREF dispback;          ///< Display background color
-    COLORREF dispgridmaj;       ///< Display major grid color
-    COLORREF dispgridmin;       ///< Display minor grid color
-    COLORREF disptext;          ///< Display text color
-    COLORREF dispwave;          ///< Display waveform color
-    COLORREF dispwavewarn;      ///< Display waveform warning color
-    COLORREF dispwaveclip;      ///< Display waveform clipping color
-    COLORREF dispthresh;        ///< Display threshold color
-    COLORREF dispmultunit;      ///< Display multi-unit color
-    COLORREF dispunit[16];      ///< Display unit colors (0 = unclassified)
-    COLORREF dispnoise;         ///< Display noise color
-    COLORREF dispchansel[3];    ///< Display channel selection colors
-    COLORREF disptemp[5];       ///< Display temporary colors
-    COLORREF disprsvd[14];      ///< Reserved display colors
+    uint32_t winrsvd[48];       ///< Reserved for Windows
+    uint32_t dispback;          ///< Display background color
+    uint32_t dispgridmaj;       ///< Display major grid color
+    uint32_t dispgridmin;       ///< Display minor grid color
+    uint32_t disptext;          ///< Display text color
+    uint32_t dispwave;          ///< Display waveform color
+    uint32_t dispwavewarn;      ///< Display waveform warning color
+    uint32_t dispwaveclip;      ///< Display waveform clipping color
+    uint32_t dispthresh;        ///< Display threshold color
+    uint32_t dispmultunit;      ///< Display multi-unit color
+    uint32_t dispunit[16];      ///< Display unit colors (0 = unclassified)
+    uint32_t dispnoise;         ///< Display noise color
+    uint32_t dispchansel[3];    ///< Display channel selection colors
+    uint32_t disptemp[5];       ///< Display temporary colors
+    uint32_t disprsvd[14];      ///< Reserved display colors
 } cbCOLORTABLE;
 
 /// @brief Option table for Central application
