@@ -230,6 +230,25 @@ public:
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
+    /// @name Clock Synchronization
+    /// @{
+
+    /// @brief Set clock sync offset (called by STANDALONE mode)
+    /// @param offset_ns device_ns - steady_clock_ns
+    /// @param uncertainty_ns Half-RTT uncertainty
+    void setClockSync(int64_t offset_ns, int64_t uncertainty_ns);
+
+    /// @brief Get clock sync offset (readable by CLIENT mode)
+    /// @return offset in nanoseconds, or nullopt if no sync data
+    std::optional<int64_t> getClockOffsetNs() const;
+
+    /// @brief Get clock sync uncertainty
+    /// @return uncertainty in nanoseconds, or nullopt if no sync data
+    std::optional<int64_t> getClockUncertaintyNs() const;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////
     /// @name Packet Routing (THE KEY FIX)
     /// @{
 

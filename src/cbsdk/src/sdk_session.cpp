@@ -15,12 +15,15 @@
 
 #include "cbsdk/sdk_session.h"
 #include "cbdev/device_factory.h"
+#include "cbdev/connection.h"
 #include "cbshm/shmem_session.h"
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <cstring>
 #include <iostream>
+#include <algorithm>
+#include <vector>
 
 namespace cbsdk {
 
@@ -69,6 +72,9 @@ struct SdkSession::Impl {
     PacketCallback packet_callback;
     ErrorCallback error_callback;
     std::mutex user_callback_mutex;
+
+    // Clock sync periodic probing (STANDALONE mode)
+    std::chrono::steady_clock::time_point last_clock_probe_time{};
 
     // Statistics
     SdkStats stats;
@@ -513,6 +519,19 @@ Result<void> SdkSession::start() {
         // Register datagram complete callback - signals after all packets in a datagram are processed
         m_impl->datagram_callback_handle = m_impl->device_session->registerDatagramCompleteCallback(
             [impl]() {
+                // Periodic clock sync probing
+                auto now = std::chrono::steady_clock::now();
+                if (now - impl->last_clock_probe_time > std::chrono::seconds(5)) {
+                    impl->device_session->sendClockProbe();
+                    impl->last_clock_probe_time = now;
+                }
+
+                // Propagate clock sync offset to shmem for CLIENT mode readers
+                if (auto offset = impl->device_session->getOffsetNs()) {
+                    auto uncertainty = impl->device_session->getUncertaintyNs().value_or(0);
+                    impl->shmem_session->setClockSync(*offset, uncertainty);
+                }
+
                 // Signal CLIENT processes that new data is available
                 impl->shmem_session->signalData();
 
@@ -703,16 +722,37 @@ const SdkConfig& SdkSession::getConfig() const {
 
 std::optional<std::chrono::steady_clock::time_point>
 SdkSession::toLocalTime(uint64_t device_time_ns) const {
-    if (!m_impl->device_session)
-        return std::nullopt;
-    return m_impl->device_session->toLocalTime(device_time_ns);
+    // STANDALONE: delegate to device_session's ClockSync
+    if (m_impl->device_session)
+        return m_impl->device_session->toLocalTime(device_time_ns);
+
+    // CLIENT: use clock offset from shmem
+    if (m_impl->shmem_session) {
+        auto offset = m_impl->shmem_session->getClockOffsetNs();
+        if (offset) {
+            const auto local_ns = static_cast<int64_t>(device_time_ns) - *offset;
+            return std::chrono::steady_clock::time_point(std::chrono::nanoseconds(local_ns));
+        }
+    }
+    return std::nullopt;
 }
 
 std::optional<uint64_t>
 SdkSession::toDeviceTime(std::chrono::steady_clock::time_point local_time) const {
-    if (!m_impl->device_session)
-        return std::nullopt;
-    return m_impl->device_session->toDeviceTime(local_time);
+    // STANDALONE: delegate to device_session's ClockSync
+    if (m_impl->device_session)
+        return m_impl->device_session->toDeviceTime(local_time);
+
+    // CLIENT: use clock offset from shmem
+    if (m_impl->shmem_session) {
+        auto offset = m_impl->shmem_session->getClockOffsetNs();
+        if (offset) {
+            const auto local_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                local_time.time_since_epoch()).count();
+            return static_cast<uint64_t>(local_ns + *offset);
+        }
+    }
+    return std::nullopt;
 }
 
 Result<void> SdkSession::sendClockProbe() {
@@ -725,15 +765,27 @@ Result<void> SdkSession::sendClockProbe() {
 }
 
 std::optional<int64_t> SdkSession::getClockOffsetNs() const {
-    if (!m_impl->device_session)
-        return std::nullopt;
-    return m_impl->device_session->getOffsetNs();
+    // STANDALONE: get from device_session's ClockSync
+    if (m_impl->device_session)
+        return m_impl->device_session->getOffsetNs();
+
+    // CLIENT: read from shmem
+    if (m_impl->shmem_session)
+        return m_impl->shmem_session->getClockOffsetNs();
+
+    return std::nullopt;
 }
 
 std::optional<int64_t> SdkSession::getClockUncertaintyNs() const {
-    if (!m_impl->device_session)
-        return std::nullopt;
-    return m_impl->device_session->getUncertaintyNs();
+    // STANDALONE: get from device_session's ClockSync
+    if (m_impl->device_session)
+        return m_impl->device_session->getUncertaintyNs();
+
+    // CLIENT: read from shmem
+    if (m_impl->shmem_session)
+        return m_impl->shmem_session->getClockUncertaintyNs();
+
+    return std::nullopt;
 }
 
 Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {

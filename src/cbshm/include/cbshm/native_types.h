@@ -117,6 +117,12 @@ typedef struct {
     // Application UI configuration
     cbOPTIONTABLE optiontable;                                  ///< Option table
     cbCOLORTABLE colortable;                                    ///< Color table
+
+    // Clock synchronization (written by STANDALONE, read by CLIENT)
+    int64_t clock_offset_ns;        ///< device_ns - steady_clock_ns (0 if unknown)
+    int64_t clock_uncertainty_ns;   ///< Half-RTT uncertainty in nanoseconds (0 if unknown)
+    uint32_t clock_sync_valid;      ///< Non-zero if clock_offset_ns is valid
+    uint32_t clock_sync_reserved;   ///< Reserved for alignment
 } NativeConfigBuffer;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

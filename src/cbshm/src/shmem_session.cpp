@@ -1825,4 +1825,44 @@ Result<void> ShmemSession::getReceiveBufferStats(uint32_t& received, uint32_t& a
     return Result<void>::ok();
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Clock Synchronization
+
+void ShmemSession::setClockSync(int64_t offset_ns, int64_t uncertainty_ns) {
+    if (!isOpen())
+        return;
+
+    if (m_impl->layout == ShmemLayout::NATIVE) {
+        auto* cfg = m_impl->nativeCfg();
+        cfg->clock_offset_ns = offset_ns;
+        cfg->clock_uncertainty_ns = uncertainty_ns;
+        cfg->clock_sync_valid = 1;
+    }
+    // CENTRAL and CENTRAL_COMPAT layouts don't have clock sync fields
+}
+
+std::optional<int64_t> ShmemSession::getClockOffsetNs() const {
+    if (!isOpen())
+        return std::nullopt;
+
+    if (m_impl->layout == ShmemLayout::NATIVE) {
+        const auto* cfg = m_impl->nativeCfg();
+        if (cfg->clock_sync_valid)
+            return cfg->clock_offset_ns;
+    }
+    return std::nullopt;
+}
+
+std::optional<int64_t> ShmemSession::getClockUncertaintyNs() const {
+    if (!isOpen())
+        return std::nullopt;
+
+    if (m_impl->layout == ShmemLayout::NATIVE) {
+        const auto* cfg = m_impl->nativeCfg();
+        if (cfg->clock_sync_valid)
+            return cfg->clock_uncertainty_ns;
+    }
+    return std::nullopt;
+}
+
 } // namespace cbshm
