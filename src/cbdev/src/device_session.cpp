@@ -10,23 +10,10 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "device_session_impl.h"
-#include <cbproto/cbproto.h>
-#include <cbproto/config.h>
-#include <cstring>
-#include <mutex>
-#include <condition_variable>
-#include <chrono>
-#include <algorithm>  // for std::remove
-#include <functional> // for std::function
-#include <thread>
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
 
-// Platform-specific includes
 #ifdef _WIN32
-    #include <winsock2.h>
-    #include <windows.h>
-    #include <iphlpapi.h>
-    #include <ws2tcpip.h>
     #pragma comment(lib, "iphlpapi.lib")
     typedef int socklen_t;
     #define INVALID_SOCKET_VALUE INVALID_SOCKET
@@ -48,6 +35,20 @@
     #define INVALID_SOCKET_VALUE -1
     #define SOCKET_ERROR_VALUE -1
 #endif
+
+#include "device_session_impl.h"
+#include "clock_sync.h"
+#include <cbproto/cbproto.h>
+#include <cbproto/config.h>
+#include <cstring>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
+#include <algorithm>  // for std::remove
+#include <functional> // for std::function
+#include <thread>
+#include <atomic>
+#include <vector>
 
 namespace {
     // Platform-specific socket close function
@@ -185,11 +186,11 @@ ConnectionParams ConnectionParams::forDevice(DeviceType type) {
             break;
 
         case DeviceType::NPLAY:
-            // nPlayServer: loopback for both device and client
+            // nPlayServer: loopback, different ports for send/recv
             conn_params.device_address = ConnectionDefaults::NPLAY_ADDRESS;
             conn_params.client_address = "127.0.0.1";  // Always use loopback for NPLAY
-            conn_params.recv_port = ConnectionDefaults::NPLAY_PORT;
-            conn_params.send_port = ConnectionDefaults::NPLAY_PORT;
+            conn_params.recv_port = ConnectionDefaults::LEGACY_NSP_RECV_PORT;
+            conn_params.send_port = ConnectionDefaults::LEGACY_NSP_SEND_PORT;
             break;
 
         case DeviceType::CUSTOM:
@@ -227,6 +228,16 @@ struct DeviceSession::Impl {
     // Device configuration (from REQCONFIGALL)
     cbproto::DeviceConfig device_config{};
 
+    // Clock synchronization
+    ClockSync clock_sync;
+    std::chrono::steady_clock::time_point last_recv_timestamp{};
+    struct PendingClockProbe {
+        std::chrono::steady_clock::time_point t1_local;
+        bool active = false;
+    };
+    PendingClockProbe pending_clock_probe;
+    std::mutex clock_probe_mutex;
+
     // General response waiting mechanism
     struct PendingResponse {
         std::function<bool(const cbPKT_HEADER*)> matcher;
@@ -238,12 +249,45 @@ struct DeviceSession::Impl {
     std::vector<std::shared_ptr<PendingResponse>> pending_responses;
     std::mutex pending_mutex;
 
+    // Callback registration
+    struct CallbackRegistration {
+        CallbackHandle handle;
+        ReceiveCallback callback;
+    };
+    struct DatagramCallbackRegistration {
+        CallbackHandle handle;
+        DatagramCompleteCallback callback;
+    };
+    std::vector<CallbackRegistration> receive_callbacks;
+    std::vector<DatagramCallbackRegistration> datagram_callbacks;
+    std::mutex callback_mutex;
+    CallbackHandle next_callback_handle = 1;  // 0 is reserved for "invalid"
+
+    // Receive thread state
+    std::thread receive_thread;
+    std::atomic<bool> receive_thread_running{false};
+    std::atomic<bool> receive_thread_stop_requested{false};
+
     // Platform-specific state
     #ifdef _WIN32
     bool wsa_initialized = false;
     #endif
 
+    void stopReceiveThreadInternal() {
+        if (receive_thread_running.load()) {
+            receive_thread_stop_requested.store(true);
+            if (receive_thread.joinable()) {
+                receive_thread.join();
+            }
+            receive_thread_running.store(false);
+            receive_thread_stop_requested.store(false);
+        }
+    }
+
     ~Impl() {
+        // Stop receive thread before closing socket
+        stopReceiveThreadInternal();
+
         if (socket != INVALID_SOCKET_VALUE) {
             closeSocket(socket);
         }
@@ -440,6 +484,11 @@ Result<int> DeviceSession::receivePacketsRaw(void* buffer, const size_t buffer_s
 
     // Receive UDP datagram into provided buffer (non-blocking)
     int bytes_recv = recv(m_impl->socket, (char*)buffer, buffer_size, 0);
+
+    // Capture host timestamp as early as possible after recv() returns data
+    if (bytes_recv > 0) {
+        m_impl->last_recv_timestamp = std::chrono::steady_clock::now();
+    }
 
     if (bytes_recv == SOCKET_ERROR_VALUE) {
         #ifdef _WIN32
@@ -801,6 +850,59 @@ Result<void> DeviceSession::performHandshakeSync(std::chrono::milliseconds timeo
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Clock Synchronization
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+Result<void> DeviceSession::sendClockProbe() {
+    if (!m_impl || !m_impl->connected)
+        return Result<void>::error("Device not connected");
+
+    auto now = std::chrono::steady_clock::now();
+    {
+        std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
+        m_impl->pending_clock_probe.t1_local = now;
+        m_impl->pending_clock_probe.active = true;
+    }
+
+    // Send nPlay packet as clock probe. The host send time goes in .stime;
+    // firmware writes a fresh clock_gettime(ptp_clkid) into .etime before echoing back.
+    // Use an undefined mode (0xFFFF) so the device/nPlay server won't act on it
+    // but will still echo the packet back for our ping-pong clock loop.
+    cbPKT_NPLAY pkt{};
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_NPLAYSET;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_NPLAY;
+    pkt.mode = 0xFFFF;
+    pkt.stime = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            now.time_since_epoch()).count());
+
+    return sendPacket(*reinterpret_cast<const cbPKT_GENERIC*>(&pkt));
+}
+
+std::optional<std::chrono::steady_clock::time_point>
+DeviceSession::toLocalTime(uint64_t device_time_ns) const {
+    if (!m_impl) return std::nullopt;
+    return m_impl->clock_sync.toLocalTime(device_time_ns);
+}
+
+std::optional<uint64_t>
+DeviceSession::toDeviceTime(std::chrono::steady_clock::time_point local_time) const {
+    if (!m_impl) return std::nullopt;
+    return m_impl->clock_sync.toDeviceTime(local_time);
+}
+
+std::optional<int64_t> DeviceSession::getOffsetNs() const {
+    if (!m_impl) return std::nullopt;
+    return m_impl->clock_sync.getOffsetNs();
+}
+
+std::optional<int64_t> DeviceSession::getUncertaintyNs() const {
+    if (!m_impl) return std::nullopt;
+    return m_impl->clock_sync.getUncertaintyNs();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Channel Configuration
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -855,13 +957,22 @@ bool DeviceSession::channelMatchesType(const cbPKT_CHANINFO& chaninfo, const Cha
     }
 }
 
-Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const bool disableOthers) {
+size_t DeviceSession::countChannelsOfType(const ChannelType chanType, const size_t maxCount) const {
+    if (!m_impl) return 0;
+
+    size_t count = 0;
+    for (uint32_t chan = 1; chan <= cbMAXCHANS && count < maxCount; ++chan) {
+        const auto& chaninfo = m_impl->device_config.chaninfo[chan - 1];
+        if (channelMatchesType(chaninfo, chanType)) {
+            count++;
+        }
+    }
+    return count;
+}
+
+Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const ChannelType chanType, const DeviceRate group_id, const bool disableOthers) {
     if (!m_impl || !m_impl->connected) {
         return Result<void>::error("Device not connected");
-    }
-
-    if (group_id > 6) {
-        return Result<void>::error("Invalid group ID (must be 0-6)");
     }
 
     // Build vector of packets for all matching channels
@@ -885,29 +996,29 @@ Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const Ch
         cbPKT_CHANINFO pkt = chaninfo;  // Copy current config
         pkt.chan = chan;
 
-        const auto grp = count < nChans ? group_id : 0;  // Set to group_id or disable (0)
+        const auto grp = count < nChans ? group_id : DeviceRate::NONE;  // Set to group_id or disable (0)
 
         // Apply group-specific logic
-        if (grp >= 1 && grp <= 5) {
+        if (grp != DeviceRate::NONE && grp != DeviceRate::SR_RAW) {
             pkt.cbpkt_header.type = cbPKTTYPE_CHANSETSMP; // only need SMP for this.
-            pkt.smpgroup = grp;
+            pkt.smpgroup = static_cast<uint32_t>(grp);
 
             // Set filter based on group mapping: {1: 5, 2: 6, 3: 7, 4: 10}
             constexpr uint32_t filter_map[] = {0, 5, 6, 7, 10, 0, 0};
-            pkt.smpfilter = filter_map[grp];
+            pkt.smpfilter = filter_map[static_cast<uint32_t>(grp)];
 
-            if (grp == 5) {
+            if (grp == DeviceRate::SR_30000) {
                 // Further disable raw stream (group 6) when enabling group 5; requires cbPKTTYPE_CHANSET
                 pkt.cbpkt_header.type = cbPKTTYPE_CHANSET;
                 pkt.ainpopts &= ~cbAINP_RAWSTREAM;  // Clear group 6 flag
             }
         }
-        else if (grp == 6) {
+        else if (grp == DeviceRate::SR_RAW) {
             // Group 6: Raw
             pkt.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
             pkt.ainpopts |= cbAINP_RAWSTREAM;  // Set group 6 flag
         }
-        else if (grp == 0) {
+        else if (grp == DeviceRate::NONE) {
             // Group 0: disable all groups including raw (group 6)
             pkt.cbpkt_header.type = cbPKTTYPE_CHANSET;
             pkt.smpgroup = 0;
@@ -927,20 +1038,23 @@ Result<void> DeviceSession::setChannelsGroupByType(const size_t nChans, const Ch
     return sendPackets(packets);
 }
 
-Result<void> DeviceSession::setChannelsGroupSync(const size_t nChans, const ChannelType chanType, const uint32_t group_id, const std::chrono::milliseconds timeout) {
-    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANAIN_CHANS : cbNUM_FE_CHANS;
-    clip_chans = clip_chans < nChans ? clip_chans : nChans;
+Result<void> DeviceSession::setChannelsGroupSync(const size_t nChans, const ChannelType chanType, const DeviceRate group_id, const std::chrono::milliseconds timeout) {
+    // Count matching channels, capped by requested count
+    const size_t total_matching = std::min(nChans, countChannelsOfType(chanType, cbMAXCHANS));
+    if (total_matching == 0) {
+        return Result<void>::error("No channels found matching type");
+    }
 
     return sendAndWait(
-        [this, clip_chans, chanType, group_id]() {
-            return setChannelsGroupByType(clip_chans, chanType, group_id, true);
+        [this, nChans, chanType, group_id]() {
+            return setChannelsGroupByType(nChans, chanType, group_id, true);
         },
         [](const cbPKT_HEADER* hdr) {
             return (hdr->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION &&
                    (hdr->type == cbPKTTYPE_CHANREPAINP || hdr->type == cbPKTTYPE_CHANREPSMP || hdr->type == cbPKTTYPE_CHANREP);
         },
         timeout,
-        clip_chans
+        total_matching
     );
 }
 
@@ -988,19 +1102,17 @@ Result<void> DeviceSession::setChannelsACInputCouplingByType(const size_t nChans
 }
 
 Result<void> DeviceSession::setChannelsACInputCouplingSync(const size_t nChans, const ChannelType chanType, const bool enabled, const std::chrono::milliseconds timeout) {
-    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANAIN_CHANS : cbNUM_FE_CHANS;
-    clip_chans = clip_chans < nChans ? clip_chans : nChans;
-
+    const size_t total_matching = std::min(nChans, countChannelsOfType(chanType, cbMAXCHANS));
     return sendAndWait(
-        [this, clip_chans, chanType, enabled]() {
-            return setChannelsACInputCouplingByType(clip_chans, chanType, enabled);
+        [this, nChans, chanType, enabled]() {
+            return setChannelsACInputCouplingByType(nChans, chanType, enabled);
         },
         [](const cbPKT_HEADER* hdr) {
             return (hdr->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION &&
                    hdr->type == cbPKTTYPE_CHANREPAINP;
         },
         timeout,
-        clip_chans
+        total_matching
     );
 }
 
@@ -1045,21 +1157,61 @@ Result<void> DeviceSession::setChannelsSpikeSortingByType(const size_t nChans, c
 }
 
 Result<void> DeviceSession::setChannelsSpikeSortingSync(const size_t nChans, const ChannelType chanType, const uint32_t sortOptions, const std::chrono::milliseconds timeout) {
-    size_t clip_chans = chanType == ChannelType::ANALOG_IN ? cbNUM_ANAIN_CHANS : cbNUM_FE_CHANS;
-    clip_chans = clip_chans < nChans ? clip_chans : nChans;
+    const size_t total_matching = std::min(nChans, countChannelsOfType(chanType, cbMAXCHANS));
 
     return sendAndWait(
-        [this, clip_chans, chanType, sortOptions]() {
-            return setChannelsSpikeSortingByType(clip_chans, chanType, sortOptions);
+        [this, nChans, chanType, sortOptions]() {
+            return setChannelsSpikeSortingByType(nChans, chanType, sortOptions);
         },
         [](const cbPKT_HEADER* hdr) {
             return (hdr->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION &&
                    hdr->type == cbPKTTYPE_CHANREPSPKTHR;
         },
         timeout,
-        clip_chans
+        total_matching
     );
 }
+
+Result<void> DeviceSession::setChannelConfig(const cbPKT_CHANINFO& chaninfo) {
+    if (!m_impl || !m_impl->connected) {
+        return Result<void>::error("Device not connected");
+    }
+    const auto& pkt = reinterpret_cast<const cbPKT_GENERIC&>(chaninfo);
+    return sendPacket(pkt);
+}
+
+Result<void> DeviceSession::setDigitalOutput(const uint32_t chan_id, const uint16_t value) {
+    if (!m_impl || !m_impl->connected) {
+        return Result<void>::error("Device not connected");
+    }
+    cbPKT_SET_DOUT pkt = {};
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_SET_DOUTSET;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_SET_DOUT;
+    pkt.chan = static_cast<uint16_t>(chan_id);
+    pkt.value = value;
+    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+}
+
+Result<void> DeviceSession::sendComment(const std::string& comment, const uint32_t rgba, const uint8_t charset) {
+    if (!m_impl || !m_impl->connected) {
+        return Result<void>::error("Device not connected");
+    }
+    cbPKT_COMMENT pkt = {};
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_COMMENTSET;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_COMMENT;
+    pkt.info.charset = charset;
+    pkt.timeStarted = 0;
+    pkt.rgba = rgba;
+
+    const size_t len = std::min(comment.size(), static_cast<size_t>(cbMAX_COMMENT - 1));
+    std::memcpy(pkt.comment, comment.c_str(), len);
+    pkt.comment[len] = '\0';
+
+    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Configuration Management
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1114,14 +1266,9 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
             else if ((header->type & 0xF0) == cbPKTTYPE_SYSREP) {
                 const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(buff_bytes + offset);
                 m_impl->device_config.sysinfo = *sysinfo;
-                // else if (header->type == cbPKTTYPE_SYSREPRUNLEV) {
-                //     if (sysinfo->runlevel == cbRUNLEVEL_HARDRESET) {
-                //         // TODO: Handle HARDRESET (signal event?)
-                //     }
-                //     else if (sysinfo->runlevel == cbRUNLEVEL_RUNNING && sysinfo->runflags & cbRUNFLAGS_LOCK) {
-                //         // TODO: Handle locked reset.
-                //     }
-                // }
+
+                // Note: Clock sync probes now use nPlay packets (NPLAYREP), not SYSREPRUNLEV.
+                // SYSREPRUNLEV is still processed here for config tracking (sysinfo update above).
             }
             else if (header->type == cbPKTTYPE_GROUPREP) {
                 auto const *groupinfo = reinterpret_cast<const cbPKT_GROUPINFO*>(buff_bytes + offset);
@@ -1144,7 +1291,8 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 }
             }
             else if (header->type == cbPKTTYPE_SYSPROTOCOLMONITOR) {
-
+                // Not used for clock sync — sent from firmware's 3rd thread after 2 queues,
+                // giving it an undefined timestamp delay.
             }
             else if (header->type == cbPKTTYPE_ADAPTFILTREP) {
                 m_impl->device_config.adaptinfo = *reinterpret_cast<const cbPKT_ADAPTFILTINFO*>(buff_bytes + offset);
@@ -1212,24 +1360,40 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
             // else if (header->type == cbPKTTYPE_NMREP) {
             //     // NODO: Abandon NM support
             // }
-            // else if (header->type == cbPKTTYPE_WAVEFORMREP) {
-            //     const auto* waveformrep = reinterpret_cast<const cbPKT_AOUT_WAVEFORM*>(buff_bytes + offset);
-            //     uint16_t chan = waveformrep->chan;
-            //     // TODO: Support digital out waveforms. Do we care?
-            //     if (IsChanAnalogOut(chan)) {
-            //         chan -= cbGetNumAnalogChans() + 1;
-            //         if (chan < AOUT_NUM_GAIN_CHANS && waveformrep->trigNum < cbMAX_AOUT_TRIGGER) {
-            //             m_impl->device_config.waveform[chan][waveformrep->trigNum] = *waveformrep;
-            //         }
-            //     }
-            // }
-            // else if (header->type == cbPKTTYPE_NPLAYREP) {
-            //     const auto* nplayrep = reinterpret_cast<const cbPKT_NPLAY*>(buff_bytes + offset);
-            //     if (nplayrep->flags == cbNPLAY_FLAG_MAIN) {
-            //         // TODO: Store nplay in config
-            //         m_impl->device_config.nplay = *nplayrep;
-            //     }
-            // }
+            else if (header->type == cbPKTTYPE_WAVEFORMREP) {
+                const auto* waveformrep = reinterpret_cast<const cbPKT_AOUT_WAVEFORM*>(buff_bytes + offset);
+                uint16_t chan = waveformrep->chan;
+                // Analog out channels start after analog input channels
+                if (chan > cbNUM_ANALOG_CHANS && chan <= cbNUM_ANALOG_CHANS + AOUT_NUM_GAIN_CHANS) {
+                    uint16_t aout_idx = chan - cbNUM_ANALOG_CHANS - 1;
+                    if (waveformrep->trigNum < cbMAX_AOUT_TRIGGER) {
+                        m_impl->device_config.waveform[aout_idx][waveformrep->trigNum] = *waveformrep;
+                    }
+                }
+            }
+            else if (header->type == cbPKTTYPE_NPLAYREP) {
+                // Complete pending clock sync probe from nPlay echo.
+                const auto* nplay = reinterpret_cast<const cbPKT_NPLAY*>(buff_bytes + offset);
+                std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
+                if (m_impl->pending_clock_probe.active) {
+                    // New firmware (>=7.8 with clock sync mod) writes fresh
+                    // clock_gettime(ptp_clkid) into .etime — zero staleness.
+                    // Old firmware echoes the packet unchanged, so .etime stays 0
+                    // (we zero-initialize it). Fall back to header->time which is
+                    // the stale ptptime from the previous main loop iteration.
+                    constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
+                    const uint64_t device_time_ns = (nplay->etime != 0)
+                        ? nplay->etime
+                        : header->time + STALENESS_CORRECTION_NS;
+
+                    m_impl->clock_sync.addProbeSample(
+                        m_impl->pending_clock_probe.t1_local,
+                        device_time_ns,
+                        m_impl->last_recv_timestamp);
+
+                    m_impl->pending_clock_probe.active = false;
+                }
+            }
 
             std::lock_guard<std::mutex> lock(m_impl->pending_mutex);
             for (auto& pending : m_impl->pending_responses) {
@@ -1245,6 +1409,137 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
 
         offset += packet_size;
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Receive Thread and Callbacks
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+CallbackHandle DeviceSession::registerReceiveCallback(ReceiveCallback callback) {
+    if (!m_impl || !callback) {
+        return 0;  // Invalid
+    }
+
+    std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
+    CallbackHandle handle = m_impl->next_callback_handle++;
+    m_impl->receive_callbacks.push_back({handle, std::move(callback)});
+    return handle;
+}
+
+CallbackHandle DeviceSession::registerDatagramCompleteCallback(DatagramCompleteCallback callback) {
+    if (!m_impl || !callback) {
+        return 0;  // Invalid
+    }
+
+    std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
+    CallbackHandle handle = m_impl->next_callback_handle++;
+    m_impl->datagram_callbacks.push_back({handle, std::move(callback)});
+    return handle;
+}
+
+void DeviceSession::unregisterCallback(CallbackHandle handle) {
+    if (!m_impl || handle == 0) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
+
+    // Check receive callbacks
+    auto& recv_cbs = m_impl->receive_callbacks;
+    recv_cbs.erase(
+        std::remove_if(recv_cbs.begin(), recv_cbs.end(),
+            [handle](const Impl::CallbackRegistration& reg) {
+                return reg.handle == handle;
+            }),
+        recv_cbs.end());
+
+    // Check datagram callbacks
+    auto& dg_cbs = m_impl->datagram_callbacks;
+    dg_cbs.erase(
+        std::remove_if(dg_cbs.begin(), dg_cbs.end(),
+            [handle](const Impl::DatagramCallbackRegistration& reg) {
+                return reg.handle == handle;
+            }),
+        dg_cbs.end());
+}
+
+Result<void> DeviceSession::startReceiveThread() {
+    if (!m_impl) {
+        return Result<void>::error("Device not initialized");
+    }
+
+    if (m_impl->receive_thread_running.load()) {
+        return Result<void>::error("Receive thread already running");
+    }
+
+    m_impl->receive_thread_stop_requested.store(false);
+    m_impl->receive_thread_running.store(true);
+
+    m_impl->receive_thread = std::thread([this]() {
+        // Receive buffer (on stack to avoid allocations)
+        uint8_t buffer[cbCER_UDP_SIZE_MAX];
+
+        while (!m_impl->receive_thread_stop_requested.load()) {
+            // Receive packets
+            auto result = receivePackets(buffer, sizeof(buffer));
+
+            if (result.isError()) {
+                // TODO: Could invoke an error callback here
+                continue;
+            }
+
+            const int bytes_received = result.value();
+            if (bytes_received == 0) {
+                // No data available - brief sleep to avoid busy-waiting
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
+                continue;
+            }
+
+            // Parse packets and invoke callbacks
+            size_t offset = 0;
+            while (offset + cbPKT_HEADER_SIZE <= static_cast<size_t>(bytes_received)) {
+                const auto* pkt = reinterpret_cast<const cbPKT_GENERIC*>(&buffer[offset]);
+                const size_t packet_size = cbPKT_HEADER_SIZE + (pkt->cbpkt_header.dlen * 4);
+
+                // Verify complete packet
+                if (offset + packet_size > static_cast<size_t>(bytes_received)) {
+                    break;  // Incomplete packet
+                }
+
+                // Invoke receive callbacks
+                {
+                    std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
+                    for (const auto& reg : m_impl->receive_callbacks) {
+                        reg.callback(*pkt);
+                    }
+                }
+
+                offset += packet_size;
+            }
+
+            // Invoke datagram complete callbacks
+            {
+                std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
+                for (const auto& reg : m_impl->datagram_callbacks) {
+                    reg.callback();
+                }
+            }
+        }
+
+        m_impl->receive_thread_running.store(false);
+    });
+
+    return Result<void>::ok();
+}
+
+void DeviceSession::stopReceiveThread() {
+    if (m_impl) {
+        m_impl->stopReceiveThreadInternal();
+    }
+}
+
+bool DeviceSession::isReceiveThreadRunning() const {
+    return m_impl && m_impl->receive_thread_running.load();
 }
 
 
@@ -1391,6 +1686,27 @@ const char* channelTypeToString(ChannelType type) {
             return "Digital Output";
         default:
             return "Invalid Channel Type";
+    }
+}
+
+const char* deviceRateToString(DeviceRate rate) {
+    switch (rate) {
+        case DeviceRate::NONE:
+            return "None";
+        case DeviceRate::SR_500:
+            return "500 S/s";
+        case DeviceRate::SR_1000:
+            return "1000 S/s";
+        case DeviceRate::SR_2000:
+            return "2000 S/s";
+        case DeviceRate::SR_10000:
+            return "10000 S/s";
+        case DeviceRate::SR_30000:
+            return "30000 S/s";
+        case DeviceRate::SR_RAW:
+            return "Raw Stream";
+        default:
+            return "Invalid Device Rate";
     }
 }
 

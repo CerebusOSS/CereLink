@@ -51,6 +51,18 @@ if(WIN32)
         _CRT_SECURE_NO_WARNINGS
         _WINSOCK_DEPRECATED_NO_WARNINGS
     )
+
+    # Ensure Windows SDK architecture macros are defined.
+    # Required when consumed as a dependency (FetchContent) where the consuming
+    # project may not properly propagate architecture settings.
+    # Without this, winnt.h fails with "No Target Architecture" error.
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")
+        add_compile_definitions(_ARM64_)
+    elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        add_compile_definitions(_AMD64_)
+    else()
+        add_compile_definitions(_X86_)
+    endif()
 endif(WIN32)
 
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
@@ -65,6 +77,7 @@ include(GNUInstallDirs)
 # New Modular Architecture
 message(STATUS "Building modular architecture")
 add_subdirectory(src/cbproto)
+add_subdirectory(src/cbutil)
 add_subdirectory(src/ccfutils)
 add_subdirectory(src/cbshm)
 add_subdirectory(src/cbdev)
@@ -77,6 +90,10 @@ if(CBSDK_BUILD_TEST)
     add_subdirectory(tests/unit)
     add_subdirectory(tests/integration)
 endif(CBSDK_BUILD_TEST)
+
+##########################################################################################
+# Validation Tools
+add_subdirectory(tools/validate_clock_sync)
 
 ##########################################################################################
 # Sample Applications for New Architecture

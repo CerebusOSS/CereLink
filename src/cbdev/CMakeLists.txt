@@ -14,7 +14,7 @@ set(CBDEV_SOURCES
     src/device_session_410.cpp
     src/device_factory.cpp
     src/protocol_detector.cpp
-    src/packet_translator.cpp
+    src/clock_sync.cpp
 )
 
 # Build as STATIC library
@@ -30,6 +30,7 @@ target_include_directories(cbdev
 target_link_libraries(cbdev
     PUBLIC
         cbproto  # Protocol definitions
+        cbutil   # Result<T> and shared utilities
 )
 
 # C++17 required
@@ -38,6 +39,7 @@ target_compile_features(cbdev PUBLIC cxx_std_17)
 # Platform-specific networking libraries
 if(WIN32)
     target_link_libraries(cbdev PRIVATE wsock32 ws2_32 iphlpapi)
+
 elseif(APPLE)
     # macOS networking (includes the IP_BOUND_IF fix!)
     target_link_libraries(cbdev PRIVATE pthread)

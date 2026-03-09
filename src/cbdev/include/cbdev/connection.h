@@ -52,6 +52,17 @@ enum class ChannelType : uint32_t {
     DIGITAL_OUT = CBPROTO_CHANNEL_TYPE_DIGITAL_OUT  ///< Digital output
 };
 
+/// Sampling rate enumeration
+enum class DeviceRate : uint32_t {
+    NONE        = CBPROTO_GROUP_RATE_NONE,
+    SR_500      = CBPROTO_GROUP_RATE_500Hz,
+    SR_1000     = CBPROTO_GROUP_RATE_1000Hz,
+    SR_2000     = CBPROTO_GROUP_RATE_2000Hz,
+    SR_10000    = CBPROTO_GROUP_RATE_10000Hz,
+    SR_30000    = CBPROTO_GROUP_RATE_30000Hz,
+    SR_RAW      = CBPROTO_GROUP_RATE_RAW
+};
+
 /// Convert protocol version to string for logging
 /// @param version Protocol version
 /// @return Human-readable string
@@ -66,6 +77,12 @@ const char* deviceTypeToString(DeviceType type);
 /// @param type Channel type
 /// @return Human-readable string
 const char* channelTypeToString(ChannelType type);
+
+/// Convert device rate to string for logging
+/// @param rate Device rate
+/// @return Human-readable string
+const char* deviceRateToString(DeviceRate rate);
+
 
 /// Connection parameters for device communication
 /// Note: This contains network/socket configuration only.
@@ -118,13 +135,12 @@ namespace ConnectionDefaults {
     constexpr const char* DEFAULT_CLIENT_ADDRESS = "";  // Auto-detect (was 192.168.137.199)
 
     // Ports
-    constexpr uint16_t LEGACY_NSP_RECV_PORT   = cbNET_UDP_PORT_CNT;
-    constexpr uint16_t LEGACY_NSP_SEND_PORT   = cbNET_UDP_PORT_BCAST;
+    constexpr uint16_t LEGACY_NSP_RECV_PORT   = cbNET_UDP_PORT_BCAST;
+    constexpr uint16_t LEGACY_NSP_SEND_PORT   = cbNET_UDP_PORT_CNT;
     constexpr uint16_t NSP_PORT        = cbNET_UDP_PORT_GEMINI_NSP;
     constexpr uint16_t HUB1_PORT       = cbNET_UDP_PORT_GEMINI_HUB;  // cbNET_UDP_PORT_GEMINI_HUB (both send & recv)
     constexpr uint16_t HUB2_PORT       = cbNET_UDP_PORT_GEMINI_HUB2;  // cbNET_UDP_PORT_GEMINI_HUB2 (both send & recv)
     constexpr uint16_t HUB3_PORT       = cbNET_UDP_PORT_GEMINI_HUB3;  // cbNET_UDP_PORT_GEMINI_HUB3 (both send & recv)
-    constexpr uint16_t NPLAY_PORT             = 51001;  // nPlayServer port
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

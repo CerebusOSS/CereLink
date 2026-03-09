@@ -1,4 +1,4 @@
-// =STS=> CCFUtilsBinary.cpp[4874].aa02   open     SMID:2 
+// =STS=> CCFUtilsBinary.cpp[4874].aa02   open     SMID:2
 //////////////////////////////////////////////////////////////////////
 //
 // (c) Copyright 2012-2013 Blackrock Microsystems
@@ -12,6 +12,9 @@
 // $NoKeywords: $
 //
 //////////////////////////////////////////////////////////////////////
+
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
 
 #include <ccfutils/compat/platform.h>
 #include "CCFUtilsBinary.h"

@@ -89,6 +89,25 @@ typedef enum cbproto_channel_type {
 
 /// @}
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Device Rate Type Enumeration
+/// @brief Enumeration of Cerebus sampling group rates
+///
+/// @{
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+typedef enum cbproto_group_rate {
+    CBPROTO_GROUP_RATE_NONE     = 0,
+    CBPROTO_GROUP_RATE_500Hz    = 1,
+    CBPROTO_GROUP_RATE_1000Hz   = 2,
+    CBPROTO_GROUP_RATE_2000Hz   = 3,
+    CBPROTO_GROUP_RATE_10000Hz  = 4,
+    CBPROTO_GROUP_RATE_30000Hz  = 5,
+    CBPROTO_GROUP_RATE_RAW      = 6
+} cbproto_group_rate_t;
+
+/// @}
+
 #ifdef __cplusplus
 }
 #endif

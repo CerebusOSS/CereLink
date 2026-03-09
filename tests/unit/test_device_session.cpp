@@ -41,14 +41,14 @@ int DeviceSessionTest::test_counter = 0;
 // Configuration Tests
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(DeviceSessionTest, ConnectionParams_Predefined_NSP) {
-    auto config = ConnectionParams::forDevice(DeviceType::NSP);
+TEST_F(DeviceSessionTest, ConnectionParams_Predefined_LegacyNSP) {
+    auto config = ConnectionParams::forDevice(DeviceType::LEGACY_NSP);
 
-    EXPECT_EQ(config.type, DeviceType::NSP);
+    EXPECT_EQ(config.type, DeviceType::LEGACY_NSP);
     EXPECT_EQ(config.device_address, "192.168.137.128");
     EXPECT_EQ(config.client_address, "");  // Auto-detect
-    EXPECT_EQ(config.recv_port, 51001);
-    EXPECT_EQ(config.send_port, 51002);
+    EXPECT_EQ(config.recv_port, 51002);
+    EXPECT_EQ(config.send_port, 51001);
 }
 
 TEST_F(DeviceSessionTest, ConnectionParams_Predefined_Gemini) {
@@ -77,8 +77,8 @@ TEST_F(DeviceSessionTest, ConnectionParams_Predefined_NPlay) {
     EXPECT_EQ(config.type, DeviceType::NPLAY);
     EXPECT_EQ(config.device_address, "127.0.0.1");
     EXPECT_EQ(config.client_address, "127.0.0.1");  // Loopback, not 0.0.0.0
-    EXPECT_EQ(config.recv_port, 51001);
-    EXPECT_EQ(config.send_port, 51001);
+    EXPECT_EQ(config.recv_port, 51002);  // LEGACY_NSP_RECV_PORT (bcast)
+    EXPECT_EQ(config.send_port, 51001);  // LEGACY_NSP_SEND_PORT (cnt)
 }
 
 TEST_F(DeviceSessionTest, ConnectionParams_Custom) {
@@ -181,6 +181,22 @@ TEST_F(DeviceSessionTest, SendPackets_Multiple) {
     EXPECT_TRUE(send_result.isOk()) << "Error: " << send_result.error();
 }
 
+TEST_F(DeviceSessionTest, SendPacket_AfterClose) {
+    auto config = ConnectionParams::custom("127.0.0.1", "0.0.0.0", 51013, 51014);
+    auto result = createDeviceSession(config, ProtocolVersion::PROTOCOL_CURRENT);
+    ASSERT_TRUE(result.isOk());
+
+    auto& session = result.value();
+    session.close();
+
+    cbPKT_GENERIC pkt;
+    std::memset(&pkt, 0, sizeof(pkt));
+
+    auto send_result = session.sendPacket(pkt);
+    EXPECT_TRUE(send_result.isError());
+    EXPECT_NE(send_result.error().find("not connected"), std::string::npos);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Packet Receive Tests (Loopback)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -197,7 +213,7 @@ TEST_F(DeviceSessionTest, GetConnectionParams) {
     // Use loopback and 0.0.0.0 for binding (guaranteed to work)
     auto config = ConnectionParams::custom("127.0.0.1", "0.0.0.0", 51035, 51036);
     auto result = createDeviceSession(config, ProtocolVersion::PROTOCOL_CURRENT);
-    ASSERT_TRUE(result.isOk()) << "Error: " << result.error();
+    ASSERT_TRUE(result.isOk());
 
     auto& session = result.value();
     const auto& retrieved_config = session->getConnectionParams();

@@ -1,95 +1,82 @@
 # cbdev - Device Transport Layer
 
-**Status:** Phase 3 - ✅ **COMPLETE** (2025-11-11)
+Low-level C++ library for UDP communication with Cerebus neural recording devices.
 
-## Purpose
+## Scope
 
-Internal C++ library that handles all device communication via UDP sockets.
+- UDP socket management (send/receive) with platform-specific handling (Windows/macOS/Linux)
+- Automatic protocol version detection and packet translation (3.11, 4.0, 4.1, current)
+- Device handshake, configuration request, and run-level control
+- Receive thread with callback registration
+- Clock synchronization (probe-based offset estimation)
 
-## Core Functionality
+cbdev does **not** handle shared memory (see `cbshm`) or high-level data management (see `cbsdk`).
 
-1. **Socket Management**
-   - Create/bind/connect UDP sockets
-   - Platform-specific socket options (Windows/POSIX)
-   - **macOS multi-interface fix included!** (IP_BOUND_IF)
+## Public API
 
-2. **Packet Send/Receive**
-   - `sendPacket()` / `sendPackets()` - transmit to device
-   - `pollPacket()` - synchronous receive with timeout
-   - `startReceiveThread()` - asynchronous receive with callbacks
+### Headers
 
-3. **Device Configuration**
-   - Default addresses for Legacy NSP, Gemini NSP, Gemini Hub1/2/3, NPlay
-   - Default client address: 192.168.137.199
-   - Legacy NSP: different ports (recv=51001, send=51002)
-   - Gemini devices: same port for both send & recv
-   - NPlay: loopback (127.0.0.1) for both device and client
+| Header             | Contents                                                                                                |
+|--------------------|---------------------------------------------------------------------------------------------------------|
+| `connection.h`     | `ConnectionParams`, `DeviceType`, `ProtocolVersion`, `ChannelType`, `DeviceRate` enums, factory helpers |
+| `device_session.h` | `IDeviceSession` interface, callback types                                                              |
+| `device_factory.h` | `createDeviceSession()` factory function                                                                |
+| `result.h`         | `Result<T>` error-handling type                                                                         |
 
-4. **Statistics & Monitoring**
-   - Packet counters (sent/received)
-   - Byte counters (sent/received)
-   - Error tracking (send_errors, recv_errors)
-   - Connection health status
-
-## Key Design Decisions
-
-- **C++ only, internal use:** Not exposed to public API
-- **Uses upstream protocol:** Includes cbproto/cbproto.h directly for packet types
-- **Callback-based receive:** Flexible for both sync and async use
-- **Platform-aware:** Includes macOS IP_BOUND_IF handling
-- **Result<T> pattern:** Consistent error handling (no exceptions)
-- **Thread-safe statistics:** Mutex-protected counters
-
-## Current Status
-
-- [x] Directory structure created
-- [x] CMake integration added (STATIC library, 599KB)
-- [x] DeviceSession class designed and implemented
-- [x] UDP socket implementation (Windows/POSIX)
-- [x] Device address defaults configured
-- [x] Callback system implemented
-- [x] Statistics tracking added
-- [x] 22 unit tests written and passing
-
-## API Preview
+### Usage
 
 ```cpp
-namespace cbdev {
-    struct DeviceConfig {
-        std::string address;
-        uint16_t recvPort;
-        uint16_t sendPort;
-    };
+#include <cbdev/device_factory.h>
 
-    using PacketCallback = std::function<void(const cbPKT_GENERIC*, size_t)>;
+// Create session for a specific device type (auto-detects protocol)
+auto params = cbdev::ConnectionParams::forDevice(cbdev::DeviceType::HUB1);
+auto result = cbdev::createDeviceSession(params);
+if (result.isError()) { /* handle error */ }
+auto device = std::move(result.value());
 
-    class DeviceSession {
-    public:
-        Result open(const DeviceConfig& config);
-        void close();
+// Register callback and start receiving
+auto handle = device->registerReceiveCallback([](const cbPKT_GENERIC& pkt) {
+    // Called on receive thread -- keep fast
+});
+device->startReceiveThread();
 
-        Result sendPacket(const cbPKT_GENERIC& pkt);
-        void setPacketCallback(PacketCallback callback);
-        Result startReceiveThread();
+// Synchronous handshake (brings device to RUNNING)
+device->performHandshakeSync(std::chrono::milliseconds(2000));
 
-        bool isConnected() const;
-        Stats getStats() const;
-    };
-}
+// Send packets, query config, etc.
+const auto& chanInfo = *device->getChanInfo(1);
+device->sendPacket(myPacket);
+
+// Clock sync
+device->sendClockProbe();
+auto offset = device->getOffsetNs();  // device_ns - host_ns
+
+// Cleanup
+device->stopReceiveThread();
+device->unregisterCallback(handle);
 ```
 
-## Implementation Notes
+## Supported Devices
 
-### macOS Multi-Interface Handling
+| Device     | Address         | Protocol               |
+|------------|-----------------|------------------------|
+| Legacy NSP | 192.168.137.128 | 3.11 (auto-translated) |
+| Gemini NSP | 192.168.137.128 | 4.x                    |
+| Hub1       | 192.168.137.200 | 4.x                    |
+| Hub2       | 192.168.137.201 | 4.x                    |
+| Hub3       | 192.168.137.202 | 4.x                    |
+| nPlay      | 127.0.0.1       | 3.11 or 4.x            |
 
-This module will incorporate the macOS networking fix developed earlier:
-- Use `0.0.0.0` as client IP when multiple interfaces active
-- Skip `SO_DONTROUTE` when binding to specific IP
-- Optional `IP_BOUND_IF` for interface binding
+## Architecture
 
-See: `src/central/UDPsocket.cpp` lines 154-161, 280-295
+```
+createDeviceSession(params, version)
+        │
+        ├─ CURRENT ──► DeviceSession (direct UDP)
+        ├─ 4.10 ────► DeviceSession_410 → DeviceSession
+        ├─ 4.00 ────► DeviceSession_400 → DeviceSession
+        ├─ 3.11 ────► DeviceSession_311 → DeviceSession
+        └─ UNKNOWN ─► ProtocolDetector → (one of the above)
+```
 
-## References
-
-- Current UDP code: `src/central/UDPsocket.cpp`, `src/central/Instrument.cpp`
-- macOS fix: `README.md` (Platform-Specific Networking Notes)
+Protocol wrappers (`DeviceSession_*`) extend `DeviceSessionWrapper`, overriding only `receivePackets()` and `sendPacket()` to translate between the device's wire format and the current protocol used internally.

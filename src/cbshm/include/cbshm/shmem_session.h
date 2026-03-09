@@ -21,74 +21,17 @@
 
 // Include Central-compatible types which bring in protocol definitions
 #include <cbshm/central_types.h>
+#include <cbshm/native_types.h>
+#include <cbproto/connection.h>
+#include <cbutil/result.h>
 #include <memory>
 #include <string>
-#include <optional>
 #include <cstdint>
 
 namespace cbshm {
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Result type for operations that can fail
-///
-/// Provides simple error handling without exceptions
-///
 template<typename T>
-class Result {
-public:
-    static Result<T> ok(T value) {
-        Result<T> r;
-        r.m_ok = true;
-        r.m_value = std::move(value);
-        return r;
-    }
-
-    static Result<T> error(const std::string& msg) {
-        Result<T> r;
-        r.m_ok = false;
-        r.m_error = msg;
-        return r;
-    }
-
-    bool isOk() const { return m_ok; }
-    bool isError() const { return !m_ok; }
-
-    const T& value() const { return m_value.value(); }
-    T& value() { return m_value.value(); }
-    const std::string& error() const { return m_error; }
-
-private:
-    bool m_ok = false;
-    std::optional<T> m_value;
-    std::string m_error;
-};
-
-// Specialization for void (operations with no return value)
-template<>
-class Result<void> {
-public:
-    static Result<void> ok() {
-        Result<void> r;
-        r.m_ok = true;
-        return r;
-    }
-
-    static Result<void> error(const std::string& msg) {
-        Result<void> r;
-        r.m_ok = false;
-        r.m_error = msg;
-        return r;
-    }
-
-    bool isOk() const { return m_ok; }
-    bool isError() const { return !m_ok; }
-
-    const std::string& error() const { return m_error; }
-
-private:
-    bool m_ok = false;
-    std::string m_error;
-};
+using Result = cbutil::Result<T>;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Operating mode for shared memory session
@@ -96,6 +39,17 @@ private:
 enum class Mode {
     STANDALONE,  ///< First client, creates shared memory (owns device)
     CLIENT       ///< Subsequent client, attaches to existing shared memory
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Buffer layout for shared memory session
+///
+/// Controls buffer sizes, struct types, and bounds checking.
+///
+enum class ShmemLayout {
+    CENTRAL,         ///< CereLink's own Central-compatible layout (cbConfigBuffer)
+    CENTRAL_COMPAT,  ///< Central's actual binary layout (CentralLegacyCFGBUFF)
+    NATIVE           ///< Native single-instrument layout (NativeConfigBuffer)
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -122,11 +76,13 @@ public:
     /// @param spk_name Spike cache buffer shared memory name (e.g., "cbSPKbuffer")
     /// @param signal_event_name Signal event name (e.g., "cbSIGNALevent")
     /// @param mode Operating mode (STANDALONE or CLIENT)
+    /// @param layout Buffer layout (CENTRAL or NATIVE, default CENTRAL for backward compat)
     /// @return Result containing ShmemSession on success, error message on failure
     static Result<ShmemSession> create(const std::string& cfg_name, const std::string& rec_name,
                                         const std::string& xmt_name, const std::string& xmt_local_name,
                                         const std::string& status_name, const std::string& spk_name,
-                                        const std::string& signal_event_name, Mode mode);
+                                        const std::string& signal_event_name, Mode mode,
+                                        ShmemLayout layout = ShmemLayout::CENTRAL);
 
     /// @brief Destructor - closes shared memory and releases resources
     ~ShmemSession();
@@ -150,6 +106,10 @@ public:
     /// @brief Get the current operating mode
     /// @return STANDALONE or CLIENT
     Mode getMode() const;
+
+    /// @brief Get the current buffer layout
+    /// @return CENTRAL or NATIVE
+    ShmemLayout getLayout() const;
 
     /// @}
 
@@ -238,18 +198,53 @@ public:
     /// @name Configuration Buffer Direct Access
     /// @{
 
-    /// @brief Get direct pointer to configuration buffer
+    /// @brief Get direct pointer to Central configuration buffer
     ///
     /// Provides direct access to the shared memory config buffer for zero-copy
     /// operations. Used by SdkSession to connect DeviceSession's config buffer
     /// to shared memory.
     ///
-    /// @return Pointer to configuration buffer, or nullptr if not available
+    /// @return Pointer to configuration buffer, or nullptr if not CENTRAL layout
     cbConfigBuffer* getConfigBuffer();
 
-    /// @brief Get direct pointer to configuration buffer (const version)
-    /// @return Const pointer to configuration buffer, or nullptr if not available
+    /// @brief Get direct pointer to Central configuration buffer (const version)
+    /// @return Const pointer to configuration buffer, or nullptr if not CENTRAL layout
     const cbConfigBuffer* getConfigBuffer() const;
+
+    /// @brief Get direct pointer to native configuration buffer
+    /// @return Pointer to native configuration buffer, or nullptr if not NATIVE layout
+    NativeConfigBuffer* getNativeConfigBuffer();
+
+    /// @brief Get direct pointer to native configuration buffer (const version)
+    /// @return Const pointer to native configuration buffer, or nullptr if not NATIVE layout
+    const NativeConfigBuffer* getNativeConfigBuffer() const;
+
+    /// @brief Get direct pointer to Central legacy configuration buffer
+    /// @return Pointer to legacy config buffer, or nullptr if not CENTRAL_COMPAT layout
+    CentralLegacyCFGBUFF* getLegacyConfigBuffer();
+
+    /// @brief Get direct pointer to Central legacy configuration buffer (const version)
+    /// @return Const pointer to legacy config buffer, or nullptr if not CENTRAL_COMPAT layout
+    const CentralLegacyCFGBUFF* getLegacyConfigBuffer() const;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name Clock Synchronization
+    /// @{
+
+    /// @brief Set clock sync offset (called by STANDALONE mode)
+    /// @param offset_ns device_ns - steady_clock_ns
+    /// @param uncertainty_ns Half-RTT uncertainty
+    void setClockSync(int64_t offset_ns, int64_t uncertainty_ns);
+
+    /// @brief Get clock sync offset (readable by CLIENT mode)
+    /// @return offset in nanoseconds, or nullopt if no sync data
+    std::optional<int64_t> getClockOffsetNs() const;
+
+    /// @brief Get clock sync uncertainty
+    /// @return uncertainty in nanoseconds, or nullopt if no sync data
+    std::optional<int64_t> getClockUncertaintyNs() const;
 
     /// @}
 
@@ -390,6 +385,34 @@ public:
     /// @param spike Output parameter to receive spike packet
     /// @return Result<bool> - true if spike available, false if cache empty
     Result<bool> getRecentSpike(uint32_t channel, cbPKT_SPK& spike) const;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////
+    /// @name Instrument Filtering (CENTRAL_COMPAT mode)
+    /// @{
+
+    /// @brief Set instrument filter for receive buffer reads
+    ///
+    /// In CENTRAL_COMPAT mode, Central's receive buffer contains packets from ALL
+    /// instruments. This filter causes readReceiveBuffer() to only return packets
+    /// matching the specified instrument index.
+    ///
+    /// @param instrument_index 0-based instrument index to filter for, or -1 for no filter (default)
+    void setInstrumentFilter(int32_t instrument_index);
+
+    /// @brief Get current instrument filter
+    /// @return Current filter (-1 = no filter)
+    int32_t getInstrumentFilter() const;
+
+    /// @brief Get detected protocol version for CENTRAL_COMPAT mode
+    ///
+    /// In CENTRAL_COMPAT mode, Central may store packets in an older protocol format.
+    /// This returns the detected protocol version based on procinfo[0].version.
+    /// Returns CBPROTO_PROTOCOL_CURRENT for CENTRAL and NATIVE layouts.
+    ///
+    /// @return Detected protocol version
+    cbproto_protocol_version_t getCompatProtocolVersion() const;
 
     /// @}
 

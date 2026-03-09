@@ -9,11 +9,18 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
+
 #include "device_session_311.h"
-#include "packet_translator.h"
+#include <cbproto/packet_translator.h>
 #include <cstring>
 
 namespace cbdev {
+
+using cbproto::PacketTranslator;
+using cbproto::cbPKT_HEADER_311;
+using cbproto::HEADER_SIZE_311;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// Protocol 3.11 Packet Header Layout (8 bytes total)
@@ -85,7 +92,7 @@ Result<int> DeviceSession_311::receivePackets(void* buffer, const size_t buffer_
         }
         // Copy-convert the header data
         const auto src_header = *reinterpret_cast<const cbPKT_HEADER_311*>(&src_buffer[src_offset]);
-        auto dest_header = *reinterpret_cast<cbPKT_HEADER *>(&dest_buffer[dest_offset]);
+        auto& dest_header = *reinterpret_cast<cbPKT_HEADER *>(&dest_buffer[dest_offset]);
         // Read 3.11 header fields using byte offsets
         dest_header.time = static_cast<PROCTIME>(src_header.time) * 1000000000/30000;
         dest_header.chid = src_header.chid;
@@ -142,7 +149,7 @@ Result<void> DeviceSession_311::sendPacket(const cbPKT_GENERIC& pkt) {
     }
 
     // -- Header --
-    auto dest_header = *reinterpret_cast<cbPKT_HEADER_311*>(&dest[0]);
+    auto& dest_header = *reinterpret_cast<cbPKT_HEADER_311*>(&dest[0]);
     dest_header.time = static_cast<uint32_t>(pkt.cbpkt_header.time * 30000 / 1000000000);
     dest_header.chid = pkt.cbpkt_header.chid;
     dest_header.type = static_cast<uint8_t>(pkt.cbpkt_header.type);  // Narrowing!

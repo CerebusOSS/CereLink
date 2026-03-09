@@ -7,6 +7,9 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
+
 #include <cbdev/device_factory.h>
 #include "device_session_impl.h"
 #include "device_session_311.h"

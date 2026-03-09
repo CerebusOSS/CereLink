@@ -110,9 +110,3 @@ target_link_libraries(event_data_tests
 
 add_test(NAME event_data_tests COMMAND event_data_tests)
 
-##
-# New Architecture Tests (experimental)
-if(CBSDK_BUILD_NEW_ARCH)
-    add_subdirectory(unit)
-    add_subdirectory(integration)
-endif()

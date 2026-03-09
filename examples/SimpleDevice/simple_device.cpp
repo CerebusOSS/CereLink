@@ -146,26 +146,21 @@ int main(int argc, char* argv[]) {
     std::atomic<uint64_t> spike_count{0};
     std::atomic<uint64_t> config_count{0};
 
-    session.setPacketCallback([&](const cbPKT_GENERIC* pkts, size_t count) {
-        packet_count += count;
+    session.registerPacketCallback([&](const cbPKT_GENERIC& pkt) {
+        packet_count++;
 
-        // Count packet types
-        for (size_t i = 0; i < count; ++i) {
-            const auto& pkt = pkts[i];
+        // Count spikes
+        if (pkt.cbpkt_header.type == cbPKTTYPE_CHANREPSPK) {
+            spike_count++;
+        }
 
-            // Count spikes
-            if (pkt.cbpkt_header.type == cbPKTTYPE_CHANREPSPK) {
-                spike_count++;
-            }
+        // Count config packets
+        if (pkt.cbpkt_header.chid == cbPKTCHAN_CONFIGURATION) {
+            config_count++;
 
-            // Count config packets
-            if (pkt.cbpkt_header.chid == cbPKTCHAN_CONFIGURATION) {
-                config_count++;
-
-                // Print first few config packets
-                if (config_count <= 10) {
-                    printPacket(pkt);
-                }
+            // Print first few config packets
+            if (config_count <= 10) {
+                printPacket(pkt);
             }
         }
     });

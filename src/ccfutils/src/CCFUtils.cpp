@@ -1,4 +1,4 @@
-// =STS=> CCFUtils.cpp[1691].aa28   open     SMID:29 
+// =STS=> CCFUtils.cpp[1691].aa28   open     SMID:29
 //////////////////////////////////////////////////////////////////////
 //
 // (c) Copyright 2003-2008 Cyberkinetics, Inc.
@@ -13,6 +13,9 @@
 // $NoKeywords: $
 //
 //////////////////////////////////////////////////////////////////////
+
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
 
 #include <ccfutils/compat/platform.h>
 #include "../include/CCFUtils.h"

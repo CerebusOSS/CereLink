@@ -37,7 +37,7 @@ int CbsdkCApiTest::test_counter = 0;
 TEST_F(CbsdkCApiTest, Config_Default) {
     cbsdk_config_t config = cbsdk_config_default();
 
-    EXPECT_EQ(config.device_type, CBPROTO_DEVICE_TYPE_LEGACY_NSP);
+    EXPECT_EQ(config.device_type, CBPROTO_DEVICE_TYPE_NSP);
     EXPECT_EQ(config.callback_queue_depth, 16384);
 }
 

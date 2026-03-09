@@ -24,6 +24,7 @@ target_include_directories(cbshm
 target_link_libraries(cbshm
     PUBLIC
         cbproto  # Protocol definitions
+        cbutil   # Result<T> and shared utilities
 )
 
 # C++17 required
@@ -33,6 +34,7 @@ target_compile_features(cbshm PUBLIC cxx_std_17)
 if(WIN32)
     # Windows shared memory APIs (kernel32 is linked by default)
     target_compile_definitions(cbshm PRIVATE _WIN32_WINNT=0x0601)
+
 elseif(APPLE)
     # macOS shared memory APIs
     target_link_libraries(cbshm PRIVATE pthread)

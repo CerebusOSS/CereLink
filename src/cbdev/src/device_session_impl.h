@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @file   device_session.h
+/// @file   device_session_impl.h
 /// @author CereLink Development Team
 /// @date   2025-01-15
 ///
@@ -11,8 +11,17 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifndef CBDEV_DEVICE_SESSION_H
-#define CBDEV_DEVICE_SESSION_H
+#ifndef CBDEV_DEVICE_SESSION_IMPL_H
+#define CBDEV_DEVICE_SESSION_IMPL_H
+
+// Platform headers MUST be included first (before cbproto)
+#include "platform_first.h"
+
+#ifdef _WIN32
+    typedef SOCKET SocketHandle;
+#else
+    typedef int SocketHandle;
+#endif
 
 #include <cbdev/device_session.h>
 #include <cbdev/connection.h>
@@ -21,21 +30,16 @@
 #include <functional>
 #include <chrono>
 #include <memory>
-
-#ifdef _WIN32
-    #include <winsock2.h>
-    typedef SOCKET SocketHandle;
-#else
-    typedef int SocketHandle;
-#endif
+#include <optional>
+#include <cstdint>
 
 namespace cbdev {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Minimal UDP socket wrapper for device communication (current protocol)
 ///
-/// Provides synchronous send/receive operations only. No threads, callbacks, or state management.
-/// Implements IDeviceSession for protocol abstraction.
+/// Provides synchronous send/receive operations, with optional receive thread for
+/// callback-based packet handling. Implements IDeviceSession for protocol abstraction.
 ///
 class DeviceSession : public IDeviceSession {
 public:
@@ -144,16 +148,23 @@ public:
     /// @name Channel Configuration
     /// @{
 
-    /// Set sampling group for first N channels of a specific type
-    Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, uint32_t group_id, bool disableOthers) override;
+    /// Count channels matching a specific type
+    [[nodiscard]] size_t countChannelsOfType(ChannelType chanType, size_t maxCount) const override;
 
-    Result<void> setChannelsGroupSync(size_t nChans, ChannelType chanType, uint32_t group_id, std::chrono::milliseconds timeout) override;
+    /// Set sampling group for first N channels of a specific type
+    Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, DeviceRate group_id, bool disableOthers) override;
+
+    Result<void> setChannelsGroupSync(size_t nChans, ChannelType chanType, DeviceRate group_id, std::chrono::milliseconds timeout) override;
 
     /// Set AC input coupling for first N channels of a specific type
     Result<void> setChannelsACInputCouplingByType(size_t nChans, ChannelType chanType, bool enabled) override;
 
     /// Set spike sorting options for first N channels
     Result<void> setChannelsSpikeSortingByType(size_t nChans, ChannelType chanType, uint32_t sortOptions) override;
+
+    Result<void> setChannelConfig(const cbPKT_CHANINFO& chaninfo) override;
+    Result<void> setDigitalOutput(uint32_t chan_id, uint16_t value) override;
+    Result<void> sendComment(const std::string& comment, uint32_t rgba = 0, uint8_t charset = 0) override;
 
     /// @}
 
@@ -246,6 +257,59 @@ public:
 
     /// @}
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Receive Thread and Callbacks
+    /// @{
+
+    /// Register a callback to be invoked for each received packet
+    /// @param callback Function to call for each packet
+    /// @return Handle for unregistration, or 0 on failure
+    /// @note Callbacks run on the receive thread - keep them fast to avoid packet loss!
+    /// @note Multiple callbacks can be registered and will be called in registration order
+    CallbackHandle registerReceiveCallback(ReceiveCallback callback) override;
+
+    /// Register a callback to be invoked after all packets in a datagram are processed
+    /// @param callback Function to call after datagram processing
+    /// @return Handle for unregistration, or 0 on failure
+    /// @note Use this for batch operations like signaling shared memory
+    CallbackHandle registerDatagramCompleteCallback(DatagramCompleteCallback callback) override;
+
+    /// Unregister a previously registered callback
+    /// @param handle Handle returned by registerReceiveCallback or registerDatagramCompleteCallback
+    void unregisterCallback(CallbackHandle handle) override;
+
+    /// Start the receive thread
+    /// @return Success or error if thread cannot be started
+    /// @note Thread calls receivePackets() in a loop and invokes registered callbacks
+    Result<void> startReceiveThread() override;
+
+    /// Stop the receive thread
+    /// @note Blocks until thread terminates
+    void stopReceiveThread() override;
+
+    /// Check if receive thread is running
+    /// @return true if thread is active
+    [[nodiscard]] bool isReceiveThreadRunning() const override;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Clock Synchronization
+    /// @{
+
+    [[nodiscard]] std::optional<std::chrono::steady_clock::time_point>
+        toLocalTime(uint64_t device_time_ns) const override;
+
+    [[nodiscard]] std::optional<uint64_t>
+        toDeviceTime(std::chrono::steady_clock::time_point local_time) const override;
+
+    Result<void> sendClockProbe() override;
+
+    [[nodiscard]] std::optional<int64_t> getOffsetNs() const override;
+    [[nodiscard]] std::optional<int64_t> getUncertaintyNs() const override;
+
+    /// @}
+
 private:
     /// Private constructor (use create() factory)
     DeviceSession() = default;
@@ -276,4 +340,4 @@ private:
 
 } // namespace cbdev
 
-#endif // CBDEV_DEVICE_SESSION_H
+#endif // CBDEV_DEVICE_SESSION_IMPL_H

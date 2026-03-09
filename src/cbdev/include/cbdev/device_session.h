@@ -19,9 +19,30 @@
 #include <cbproto/cbproto.h>
 #include <cbproto/config.h>
 #include <cstddef>
+#include <functional>
+#include <optional>
+#include <string>
 #include <vector>
 
 namespace cbdev {
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Callback Types for Receive Thread
+/// @{
+
+/// Callback invoked for each received packet
+/// @param pkt The received packet (reference valid only during callback invocation)
+/// @note Callbacks run on the receive thread - keep them fast to avoid packet loss!
+using ReceiveCallback = std::function<void(const cbPKT_GENERIC& pkt)>;
+
+/// Callback invoked after all packets in a UDP datagram have been processed
+/// @note Use this for batch operations like signaling shared memory
+using DatagramCompleteCallback = std::function<void()>;
+
+/// Handle for callback registration (used for unregistration)
+using CallbackHandle = uint32_t;
+
+/// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Abstract interface for device communication
@@ -172,6 +193,12 @@ public:
     /// @name Channel Configuration
     /// @{
 
+    /// Count channels matching a specific type
+    /// @param chanType Channel type filter (e.g., ChannelType::FRONTEND)
+    /// @param maxCount Maximum number to count (use cbMAXCHANS for all)
+    /// @return Number of channels matching the type criteria
+    [[nodiscard]] virtual size_t countChannelsOfType(ChannelType chanType, size_t maxCount = cbMAXCHANS) const = 0;
+
     /// Set sampling group for first N channels of a specific type
     /// Groups 1-4 disable groups 1-5 but not 6. Group 5 disables all others. Group 6 disables 5 but no others.
     /// Group 0 disables all groups including raw.
@@ -180,9 +207,9 @@ public:
     /// @param group_id Group ID (0-6)
     /// @param disableOthers Whether channels not in the first nChans of type chanType should have their group set to 0
     /// @return Success or error
-    virtual Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, uint32_t group_id, bool disableOthers) = 0;
+    virtual Result<void> setChannelsGroupByType(size_t nChans, ChannelType chanType, DeviceRate group_id, bool disableOthers) = 0;
 
-    virtual Result<void> setChannelsGroupSync(size_t nChans, ChannelType chanType, uint32_t group_id, std::chrono::milliseconds timeout) = 0;
+    virtual Result<void> setChannelsGroupSync(size_t nChans, ChannelType chanType, DeviceRate group_id, std::chrono::milliseconds timeout) = 0;
 
     /// Set AC input coupling (offset correction) for first N channels of a specific type (asynchronous)
     /// @param nChans Number of channels to configure (use cbMAXCHANS for all channels of type)
@@ -207,6 +234,93 @@ public:
     virtual Result<void> setChannelsSpikeSortingByType(size_t nChans, ChannelType chanType, uint32_t sortOptions) = 0;
 
     virtual Result<void> setChannelsSpikeSortingSync(size_t nChans, ChannelType chanType, uint32_t sortOptions, std::chrono::milliseconds timeout) = 0;
+
+    /// Set full channel configuration
+    /// Sends a cbPKT_CHANINFO (as CHANSET) to the device
+    /// @param chaninfo Complete channel info packet
+    /// @return Success or error
+    virtual Result<void> setChannelConfig(const cbPKT_CHANINFO& chaninfo) = 0;
+
+    /// Set digital output value
+    /// @param chan_id 1-based channel ID of a digital output channel
+    /// @param value Digital output value
+    /// @return Success or error
+    virtual Result<void> setDigitalOutput(uint32_t chan_id, uint16_t value) = 0;
+
+    /// Send a comment into the data stream
+    /// @param comment Comment text (max cbMAX_COMMENT-1 chars)
+    /// @param rgba Color as RGBA uint32_t (0 = white)
+    /// @param charset Character set (0 = ANSI)
+    /// @return Success or error
+    virtual Result<void> sendComment(const std::string& comment, uint32_t rgba = 0, uint8_t charset = 0) = 0;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Receive Thread and Callbacks
+    /// @{
+
+    /// Register a callback to be invoked for each received packet
+    /// @param callback Function to call for each packet
+    /// @return Handle for unregistration, or 0 on failure
+    /// @note Callbacks run on the receive thread - keep them fast to avoid packet loss!
+    /// @note Use the cbsdk API to leverage shared memory and queueing for slower callbacks.
+    /// @note Multiple callbacks can be registered and will be called in registration order
+    virtual CallbackHandle registerReceiveCallback(ReceiveCallback callback) = 0;
+
+    /// Register a callback to be invoked after all packets in a datagram are processed
+    /// @param callback Function to call after datagram processing
+    /// @return Handle for unregistration, or 0 on failure
+    /// @note Use this for batch operations like signaling shared memory
+    virtual CallbackHandle registerDatagramCompleteCallback(DatagramCompleteCallback callback) = 0;
+
+    /// Unregister a previously registered callback
+    /// @param handle Handle returned by registerReceiveCallback or registerDatagramCompleteCallback
+    virtual void unregisterCallback(CallbackHandle handle) = 0;
+
+    /// Start the receive thread
+    /// @return Success or error if thread cannot be started
+    /// @note Thread calls receivePackets() in a loop and invokes registered callbacks
+    virtual Result<void> startReceiveThread() = 0;
+
+    /// Stop the receive thread
+    /// @note Blocks until thread terminates
+    virtual void stopReceiveThread() = 0;
+
+    /// Check if receive thread is running
+    /// @return true if thread is active
+    [[nodiscard]] virtual bool isReceiveThreadRunning() const = 0;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Clock Synchronization
+    /// @{
+
+    /// Convert a device timestamp (nanoseconds) to the host's steady_clock time_point.
+    /// @param device_time_ns  Device timestamp in nanoseconds
+    /// @return Corresponding host time, or nullopt if no sync data available
+    [[nodiscard]] virtual std::optional<std::chrono::steady_clock::time_point>
+        toLocalTime(uint64_t device_time_ns) const = 0;
+
+    /// Convert a host steady_clock time_point to device timestamp (nanoseconds).
+    /// @param local_time  Host time
+    /// @return Corresponding device timestamp in nanoseconds, or nullopt if no sync data available
+    [[nodiscard]] virtual std::optional<uint64_t>
+        toDeviceTime(std::chrono::steady_clock::time_point local_time) const = 0;
+
+    /// Send a clock synchronization probe (no-op SYSSETRUNLEV(RUNNING)).
+    /// Captures T1 (host send time) and completes measurement when SYSREPRUNLEV is received.
+    /// @return Success or error
+    virtual Result<void> sendClockProbe() = 0;
+
+    /// Current offset estimate: device_ns - steady_clock_ns.
+    /// @return Offset in nanoseconds, or nullopt if no sync data available
+    [[nodiscard]] virtual std::optional<int64_t> getOffsetNs() const = 0;
+
+    /// Uncertainty (half-RTT) from best probe, or INT64_MAX for one-way only.
+    /// @return Uncertainty in nanoseconds, or nullopt if no sync data available
+    [[nodiscard]] virtual std::optional<int64_t> getUncertaintyNs() const = 0;
 
     /// @}
 };

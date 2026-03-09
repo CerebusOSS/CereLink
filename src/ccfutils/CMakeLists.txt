@@ -75,10 +75,12 @@ set(CCFUTILS_SOURCES
     src/CCFUtilsXml.cpp
     src/CCFUtilsXmlItems.cpp
     src/XmlFile.cpp
+    src/ccf_config.cpp
 )
 
 set(CCFUTILS_HEADERS
     include/CCFUtils.h
+    include/ccfutils/ccf_config.h
 )
 
 set(CCFUTILS_INTERNAL_HEADERS

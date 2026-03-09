@@ -20,7 +20,7 @@
 #include <cstring>
 
 using namespace test_helpers;
-using namespace cbdev;
+using namespace cbproto;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // SYSPROTOCOLMONITOR Translation Tests
