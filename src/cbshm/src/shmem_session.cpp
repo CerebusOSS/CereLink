@@ -488,6 +488,13 @@ struct ShmemSession::Impl {
 
         is_open = true;
 
+        // In CLIENT mode, sync our read position to the current head so we only
+        // read NEW packets, not stale data that was already in the ring buffer.
+        if (mode == Mode::CLIENT) {
+            rec_tailindex = recHeadindex();
+            rec_tailwrap = recHeadwrap();
+        }
+
         // Detect protocol version for CENTRAL_COMPAT mode
         detectCompatProtocol();
 

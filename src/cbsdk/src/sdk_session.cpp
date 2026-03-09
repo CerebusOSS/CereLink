@@ -259,29 +259,13 @@ SdkSession::~SdkSession() {
     }
 }
 
-// Helper function to map DeviceType to instance number
-// Central uses instance numbers to distinguish multiple devices:
-// - Instance 0: NSP (first device)
-// - Instance 1: Hub1 (second device)
-// - Instance 2: Hub2 (third device)
-// - Instance 3: Hub3 (fourth device)
-static int getInstanceNumber(DeviceType type) {
-    switch (type) {
-        case DeviceType::LEGACY_NSP:
-            return 0;
-        case DeviceType::NSP:
-            return 0;  // NSP is always instance 0
-        case DeviceType::HUB1:
-            return 1;
-        case DeviceType::HUB2:
-            return 2;
-        case DeviceType::HUB3:
-            return 3;
-        case DeviceType::NPLAY:
-            return 0;  // nPlay uses instance 0
-        default:
-            return 0;
-    }
+// Helper function to map DeviceType to shared memory instance number.
+// Central creates a SINGLE shared memory instance (0) for ALL instruments in a
+// Gemini system. The different instruments (Hub1-3, NSP) share the same buffers
+// and are distinguished by instrument INDEX within the buffers, not by separate
+// shared memory instances. Therefore all device types map to instance 0.
+static int getInstanceNumber(DeviceType /*type*/) {
+    return 0;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -532,6 +516,12 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
         if (start_result.isError()) {
             return Result<SdkSession>::error("Failed to start session: " + start_result.error());
         }
+    } else {
+        // CLIENT mode - start the shmem receive thread (no device session needed)
+        auto start_result = session.start();
+        if (start_result.isError()) {
+            return Result<SdkSession>::error("Failed to start CLIENT session: " + start_result.error());
+        }
     }
 
     return Result<SdkSession>::ok(std::move(session));
@@ -759,8 +749,60 @@ Result<void> SdkSession::start() {
         // This eliminates an extra data copy and thread overhead
 
         m_impl->shmem_receive_thread_running.store(true);
-        m_impl->shmem_receive_thread = std::make_unique<std::thread>([this]() {
-            shmemReceiveThreadLoop();
+        Impl* impl = m_impl.get();
+        m_impl->shmem_receive_thread = std::make_unique<std::thread>([impl]() {
+            // CLIENT mode receive thread: reads from Central's cbRECbuffer, dispatches to callbacks
+            constexpr size_t MAX_BATCH = 128;
+            cbPKT_GENERIC packets[MAX_BATCH];
+
+            while (impl->shmem_receive_thread_running.load()) {
+                auto wait_result = impl->shmem_session->waitForData(250);
+                if (wait_result.isError()) {
+                    std::lock_guard<std::mutex> lock(impl->user_callback_mutex);
+                    if (impl->error_callback) {
+                        impl->error_callback("Error waiting for shared memory signal: " + wait_result.error());
+                    }
+                    continue;
+                }
+
+                if (!wait_result.value()) {
+                    continue;  // Timeout
+                }
+
+                // Drain all available packets from the ring buffer (not just one batch).
+                // This is important when the signal fires infrequently (e.g., Central
+                // signals ~100 times/sec) — reading only one batch per wake-up would
+                // cap throughput at signal_rate × batch_size.
+                bool had_error = false;
+                size_t packets_read = 0;
+                do {
+                    packets_read = 0;
+                    auto read_result = impl->shmem_session->readReceiveBuffer(packets, MAX_BATCH, packets_read);
+                    if (read_result.isError()) {
+                        {
+                            std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                            impl->stats.shmem_store_errors++;
+                        }
+                        std::lock_guard<std::mutex> lock(impl->user_callback_mutex);
+                        if (impl->error_callback) {
+                            impl->error_callback("Error reading from shared memory: " + read_result.error());
+                        }
+                        had_error = true;
+                        break;
+                    }
+
+                    if (packets_read > 0) {
+                        {
+                            std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                            impl->stats.packets_delivered_to_callback += packets_read;
+                        }
+                        for (size_t i = 0; i < packets_read; i++) {
+                            impl->dispatchPacket(packets[i]);
+                        }
+                    }
+                } while (packets_read == MAX_BATCH && impl->shmem_receive_thread_running.load());
+                if (had_error) continue;
+            }
         });
     }
 
@@ -1490,72 +1532,6 @@ request_config:
 
     // Success - device is now in RUNNING state
     return Result<void>::ok();
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-// Private Methods
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-void SdkSession::shmemReceiveThreadLoop() {
-    // This is the shared memory receive thread (CLIENT mode only)
-    // Waits for signal from STANDALONE, reads packets from cbRECbuffer, invokes user callback directly
-    //
-    // Note: In CLIENT mode, we don't need a separate callback dispatcher thread because:
-    // 1. Reading from cbRECbuffer is not time-critical (unlike UDP receive which must be fast)
-    // 2. The 200MB buffer provides ample buffering even if callbacks are slow
-    // 3. This avoids an extra data copy through packet_queue
-
-    constexpr size_t MAX_BATCH = 128;  // Read up to 128 packets at a time
-    cbPKT_GENERIC packets[MAX_BATCH];
-
-    while (m_impl->shmem_receive_thread_running.load()) {
-        // Wait for signal from STANDALONE (efficient, no polling!)
-        auto wait_result = m_impl->shmem_session->waitForData(250);  // 250ms timeout
-        if (wait_result.isError()) {
-            // Error waiting - invoke error callback
-            std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
-            if (m_impl->error_callback) {
-                m_impl->error_callback("Error waiting for shared memory signal: " + wait_result.error());
-            }
-            continue;
-        }
-
-        if (!wait_result.value()) {
-            // Timeout - no signal received, loop again
-            continue;
-        }
-
-        // Signal received! Read available packets from cbRECbuffer
-        size_t packets_read = 0;
-        auto read_result = m_impl->shmem_session->readReceiveBuffer(packets, MAX_BATCH, packets_read);
-        if (read_result.isError()) {
-            // Buffer overrun or other error
-            {
-                std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
-                m_impl->stats.shmem_store_errors++;  // Reuse this stat for read errors
-            }
-
-            // Invoke error callback
-            std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
-            if (m_impl->error_callback) {
-                m_impl->error_callback("Error reading from shared memory: " + read_result.error());
-            }
-            continue;
-        }
-
-        if (packets_read > 0) {
-            // Update stats
-            {
-                std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
-                m_impl->stats.packets_delivered_to_callback += packets_read;
-            }
-
-            // Dispatch to typed callbacks
-            for (size_t i = 0; i < static_cast<size_t>(packets_read); i++) {
-                m_impl->dispatchPacket(packets[i]);
-            }
-        }
-    }
 }
 
 } // namespace cbsdk

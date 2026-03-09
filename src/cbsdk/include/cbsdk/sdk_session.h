@@ -518,9 +518,6 @@ private:
     /// Private constructor (use create() factory method)
     SdkSession();
 
-    /// Shared memory receive thread loop (CLIENT mode only - reads from cbRECbuffer)
-    void shmemReceiveThreadLoop();
-
     /// Wait for SYSREP packet (helper for handshaking)
     /// @param timeout_ms Timeout in milliseconds
     /// @param expected_runlevel Expected runlevel (0 = any SYSREP)
