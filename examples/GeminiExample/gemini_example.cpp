@@ -218,35 +218,30 @@ int main(int argc, char* argv[]) {
             device->session = std::make_unique<cbsdk::SdkSession>(std::move(result.value()));
 
             // Set up packet callback
-            device->session->setPacketCallback([dev = device.get()](const cbPKT_GENERIC* pkts, size_t count) {
-                dev->packet_count.fetch_add(count);
+            device->session->registerPacketCallback([dev = device.get()](const cbPKT_GENERIC& pkt) {
+                dev->packet_count.fetch_add(1);
 
                 // Track timestamps for interval analysis (only sample group packets - type 0x0006)
-                for (size_t i = 0; i < count; ++i) {
-                    if (pkts[i].cbpkt_header.type == 0x0006) {
-                        dev->timestamps.addTimestamp(pkts[i].cbpkt_header.time);
-                    }
+                if (pkt.cbpkt_header.type == 0x0006) {
+                    dev->timestamps.addTimestamp(pkt.cbpkt_header.time);
+                }
 
-                    // Detect SYSREP packets (type 0x10-0x1F)
-                    if ((pkts[i].cbpkt_header.type & 0xF0) == 0x10) {
-                        // Cast to cbPKT_SYSINFO to read runlevel
-                        const cbPKT_SYSINFO* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkts[i]);
-                        std::cout << "[" << dev->name << "] SYSREP packet received - runlevel: "
-                                  << sysinfo->runlevel << "\n";
-                    }
+                // Detect SYSREP packets (type 0x10-0x1F)
+                if ((pkt.cbpkt_header.type & 0xF0) == 0x10) {
+                    const cbPKT_SYSINFO* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
+                    std::cout << "[" << dev->name << "] SYSREP packet received - runlevel: "
+                              << sysinfo->runlevel << "\n";
                 }
 
                 // Print first few packets for demonstration (including instrument ID)
                 static std::map<std::string, uint64_t> printed_counts;
                 if (printed_counts[dev->name] < 5) {
-                    for (size_t i = 0; i < count && printed_counts[dev->name] < 5; ++i) {
-                        std::cout << "[" << dev->name << "] Packet type: 0x"
-                                  << std::hex << std::setw(4) << std::setfill('0')
-                                  << pkts[i].cbpkt_header.type << std::dec
-                                  << ", dlen: " << pkts[i].cbpkt_header.dlen
-                                  << ", instrument: " << static_cast<int>(pkts[i].cbpkt_header.instrument) << "\n";
-                        printed_counts[dev->name]++;
-                    }
+                    std::cout << "[" << dev->name << "] Packet type: 0x"
+                              << std::hex << std::setw(4) << std::setfill('0')
+                              << pkt.cbpkt_header.type << std::dec
+                              << ", dlen: " << pkt.cbpkt_header.dlen
+                              << ", instrument: " << static_cast<int>(pkt.cbpkt_header.instrument) << "\n";
+                    printed_counts[dev->name]++;
                 }
             });
 

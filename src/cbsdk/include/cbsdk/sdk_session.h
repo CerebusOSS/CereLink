@@ -181,13 +181,43 @@ struct SdkStats {
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Channel Type (for typed event callbacks)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Channel type classification for event callback filtering
+enum class ChannelType {
+    ANY,          ///< Matches all event channels (catch-all)
+    FRONTEND,     ///< Front-end electrode channels (1..cbNUM_FE_CHANS)
+    ANALOG_IN,    ///< Analog input channels
+    ANALOG_OUT,   ///< Analog output channels
+    AUDIO,        ///< Audio output channels
+    DIGITAL_IN,   ///< Digital input channels
+    SERIAL,       ///< Serial input channels
+    DIGITAL_OUT,  ///< Digital output channels
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Callback Types
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// User callback for received packets (runs on callback thread, can be slow)
-/// @param pkts Pointer to array of packets
-/// @param count Number of packets in array
-using PacketCallback = std::function<void(const cbPKT_GENERIC* pkts, size_t count)>;
+/// Callback handle for unregistering callbacks
+using CallbackHandle = uint32_t;
+
+/// Generic callback for all packets (runs on callback thread, can be slow)
+/// @param pkt The received packet
+using PacketCallback = std::function<void(const cbPKT_GENERIC& pkt)>;
+
+/// Event callback for spike/digital/serial event packets (chid = 1..cbMAXCHANS)
+/// @param pkt The received event packet
+using EventCallback = std::function<void(const cbPKT_GENERIC& pkt)>;
+
+/// Group callback for continuous sample data packets (chid == 0)
+/// @param pkt The received group packet (pkt.cbpkt_header.type is the group ID 1-6)
+using GroupCallback = std::function<void(const cbPKT_GROUP& pkt)>;
+
+/// Config callback for system/configuration packets (chid & 0x8000)
+/// @param pkt The received config packet
+using ConfigCallback = std::function<void(const cbPKT_GENERIC& pkt)>;
 
 /// Error callback for queue overflow and other errors
 /// @param error_message Description of the error
@@ -207,24 +237,22 @@ using ErrorCallback = std::function<void(const std::string& error_message)>;
 /// Example usage:
 /// @code
 ///   SdkConfig config;
-///   config.device_address = "192.168.137.128";
+///   config.device_type = DeviceType::HUB1;
 ///
 ///   auto result = SdkSession::create(config);
 ///   if (result.isOk()) {
 ///       auto& session = result.value();
 ///
-///       session.setPacketCallback([](const cbPKT_GENERIC* pkts, size_t count) {
-///           // Process packets (can be slow)
+///       // Register typed callbacks (all run on callback thread, off the queue)
+///       session.registerEventCallback(ChannelType::FRONTEND, [](const cbPKT_GENERIC& pkt) {
+///           // Handle spike events
 ///       });
-///
-///       session.setErrorCallback([](const std::string& error) {
-///           std::cerr << "Error: " << error << std::endl;
+///       session.registerGroupCallback(5, [](const cbPKT_GENERIC& pkt) {
+///           // Handle 30kHz continuous data
 ///       });
 ///
 ///       session.start();
-///
 ///       // ... do work ...
-///
 ///       session.stop();
 ///   }
 /// @endcode
@@ -264,13 +292,35 @@ public:
     bool isRunning() const;
 
     ///--------------------------------------------------------------------------------------------
-    /// Callbacks
+    /// Callbacks (all run on dedicated callback thread, off the queue — may be slow)
     ///--------------------------------------------------------------------------------------------
 
-    /// Set callback for received packets
-    /// Callback runs on dedicated callback thread (can be slow)
-    /// @param callback Function to call with received packets
-    void setPacketCallback(PacketCallback callback);
+    /// Register callback for all packets (catch-all)
+    /// @param callback Function to call for every received packet
+    /// @return Handle for unregistration
+    CallbackHandle registerPacketCallback(PacketCallback callback) const;
+
+    /// Register callback for event packets (spikes, digital events, etc.)
+    /// @param channel_type Channel type filter (ANY matches all event channels)
+    /// @param callback Function to call for matching events
+    /// @return Handle for unregistration
+    CallbackHandle registerEventCallback(ChannelType channel_type, EventCallback callback) const;
+
+    /// Register callback for continuous sample group packets
+    /// @param group_id Group ID (1-6, where 6 is raw)
+    /// @param callback Function to call for matching group packets
+    /// @return Handle for unregistration
+    CallbackHandle registerGroupCallback(uint8_t group_id, GroupCallback callback) const;
+
+    /// Register callback for config/system packets
+    /// @param packet_type Packet type to match (e.g. cbPKTTYPE_COMMENTREP, cbPKTTYPE_SYSREPRUNLEV)
+    /// @param callback Function to call for matching config packets
+    /// @return Handle for unregistration
+    CallbackHandle registerConfigCallback(uint16_t packet_type, ConfigCallback callback) const;
+
+    /// Unregister a previously registered callback
+    /// @param handle Handle returned by any register*Callback method
+    void unregisterCallback(CallbackHandle handle) const;
 
     /// Set callback for errors (queue overflow, etc.)
     /// @param callback Function to call when errors occur

@@ -28,6 +28,48 @@
 namespace cbsdk {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Channel type classification helper (capability-based)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Classify a channel using its capability flags from device config.
+/// This matches the logic in cbdev::DeviceSession::channelMatchesType and pycbsdk.
+static ChannelType classifyChannelByCaps(const cbPKT_CHANINFO& chaninfo) {
+    const uint32_t caps = chaninfo.chancaps;
+
+    // Channel must exist and be connected
+    if ((cbCHAN_EXISTS | cbCHAN_CONNECTED) != (caps & (cbCHAN_EXISTS | cbCHAN_CONNECTED)))
+        return ChannelType::ANY;
+
+    // Front-end: analog input + isolated
+    if ((cbCHAN_AINP | cbCHAN_ISOLATED) == (caps & (cbCHAN_AINP | cbCHAN_ISOLATED)))
+        return ChannelType::FRONTEND;
+
+    // Analog input (not isolated)
+    if (cbCHAN_AINP == (caps & (cbCHAN_AINP | cbCHAN_ISOLATED)))
+        return ChannelType::ANALOG_IN;
+
+    // Analog output: check audio flag to distinguish
+    if (cbCHAN_AOUT == (caps & cbCHAN_AOUT)) {
+        if (cbAOUT_AUDIO == (chaninfo.aoutcaps & cbAOUT_AUDIO))
+            return ChannelType::AUDIO;
+        return ChannelType::ANALOG_OUT;
+    }
+
+    // Digital input: check serial vs regular
+    if (cbCHAN_DINP == (caps & cbCHAN_DINP)) {
+        if (chaninfo.dinpcaps & cbDINP_SERIALMASK)
+            return ChannelType::SERIAL;
+        return ChannelType::DIGITAL_IN;
+    }
+
+    // Digital output
+    if (cbCHAN_DOUT == (caps & cbCHAN_DOUT))
+        return ChannelType::DIGITAL_OUT;
+
+    return ChannelType::ANY;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // SdkSession::Impl - Internal Implementation
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -68,8 +110,22 @@ struct SdkSession::Impl {
     std::mutex handshake_mutex;
     std::condition_variable handshake_cv;
 
-    // User callbacks
-    PacketCallback packet_callback;
+    // User callbacks — typed dispatch (all run on callback thread)
+    struct TypedCallback {
+        CallbackHandle handle;
+        enum class Kind { PACKET, EVENT, GROUP, CONFIG } kind;
+        // Discriminant fields (only relevant for their kind)
+        ChannelType channel_type;  // EVENT
+        uint8_t group_id;          // GROUP
+        uint16_t packet_type;      // CONFIG
+        // The actual callback (stored in a variant-like union via std::function)
+        PacketCallback packet_cb;
+        EventCallback event_cb;
+        GroupCallback group_cb;
+        ConfigCallback config_cb;
+    };
+    std::vector<TypedCallback> typed_callbacks;
+    CallbackHandle next_callback_handle = 1;
     ErrorCallback error_callback;
     std::mutex user_callback_mutex;
 
@@ -82,6 +138,61 @@ struct SdkSession::Impl {
 
     // Running state
     std::atomic<bool> is_running{false};
+
+    /// Dispatch a single packet to all matching typed callbacks.
+    /// Called on the callback thread (off the queue).
+    void dispatchPacket(const cbPKT_GENERIC& pkt) {
+        std::lock_guard<std::mutex> lock(user_callback_mutex);
+
+        const uint16_t chid = pkt.cbpkt_header.chid;
+
+        for (const auto& cb : typed_callbacks) {
+            switch (cb.kind) {
+            case TypedCallback::Kind::PACKET:
+                if (cb.packet_cb) cb.packet_cb(pkt);
+                break;
+
+            case TypedCallback::Kind::EVENT:
+                // Event packets have chid in 1..cbMAXCHANS (not 0, not config)
+                if (chid != 0 && !(chid & cbPKTCHAN_CONFIGURATION)) {
+                    if (cb.channel_type == ChannelType::ANY) {
+                        if (cb.event_cb) cb.event_cb(pkt);
+                    } else {
+                        // Use capability-based classification from device config or shmem
+                        const cbPKT_CHANINFO* chaninfo = nullptr;
+                        cbPKT_CHANINFO chaninfo_copy{};
+                        if (device_session) {
+                            chaninfo = device_session->getChanInfo(chid);
+                        } else if (shmem_session) {
+                            auto r = shmem_session->getChanInfo(chid - 1);
+                            if (r.isOk()) {
+                                chaninfo_copy = r.value();
+                                chaninfo = &chaninfo_copy;
+                            }
+                        }
+                        if (chaninfo && cb.channel_type == classifyChannelByCaps(*chaninfo)) {
+                            if (cb.event_cb) cb.event_cb(pkt);
+                        }
+                    }
+                }
+                break;
+
+            case TypedCallback::Kind::GROUP:
+                // Group packets have chid == 0; type field is the group ID
+                if (chid == 0 && pkt.cbpkt_header.type == cb.group_id) {
+                    if (cb.group_cb) cb.group_cb(reinterpret_cast<const cbPKT_GROUP&>(pkt));
+                }
+                break;
+
+            case TypedCallback::Kind::CONFIG:
+                // Config packets have chid & 0x8000
+                if ((chid & cbPKTCHAN_CONFIGURATION) && pkt.cbpkt_header.type == cb.packet_type) {
+                    if (cb.config_cb) cb.config_cb(pkt);
+                }
+                break;
+            }
+        }
+    }
 
     ~Impl() {
         // Stop device receive thread (managed by DeviceSession)
@@ -431,31 +542,28 @@ Result<void> SdkSession::start() {
         Impl* impl = m_impl.get();
         m_impl->callback_thread = std::make_unique<std::thread>([impl]() {
             // This is the callback thread - runs user callbacks (can be slow)
-            constexpr size_t MAX_BATCH = 16;  // Opportunistic batching
+            constexpr size_t MAX_BATCH = 32;
             cbPKT_GENERIC packets[MAX_BATCH];
 
             while (impl->callback_thread_running.load()) {
                 size_t count = 0;
 
-                // Drain all available packets from queue (non-blocking)
+                // Drain available packets from queue (non-blocking)
                 while (count < MAX_BATCH && impl->packet_queue.pop(packets[count])) {
                     count++;
                 }
 
                 if (count > 0) {
-                    // We have packets - mark not waiting and invoke callback
                     impl->callback_thread_waiting.store(false, std::memory_order_relaxed);
 
-                    // Update stats
                     {
                         std::lock_guard<std::mutex> lock(impl->stats_mutex);
                         impl->stats.packets_delivered_to_callback += count;
                     }
 
-                    // Invoke user callback (can be slow!)
-                    std::lock_guard<std::mutex> lock(impl->user_callback_mutex);
-                    if (impl->packet_callback) {
-                        impl->packet_callback(packets, count);
+                    // Dispatch each packet to matching typed callbacks
+                    for (size_t i = 0; i < count; i++) {
+                        impl->dispatchPacket(packets[i]);
                     }
                 } else {
                     // No packets available - wait for notification
@@ -687,9 +795,59 @@ bool SdkSession::isRunning() const {
     return m_impl && m_impl->is_running.load();
 }
 
-void SdkSession::setPacketCallback(PacketCallback callback) {
+CallbackHandle SdkSession::registerPacketCallback(PacketCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
-    m_impl->packet_callback = std::move(callback);
+    const auto handle = m_impl->next_callback_handle++;
+    Impl::TypedCallback tc{};
+    tc.handle = handle;
+    tc.kind = Impl::TypedCallback::Kind::PACKET;
+    tc.packet_cb = std::move(callback);
+    m_impl->typed_callbacks.push_back(std::move(tc));
+    return handle;
+}
+
+CallbackHandle SdkSession::registerEventCallback(const ChannelType channel_type, EventCallback callback) const {
+    std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
+    const auto handle = m_impl->next_callback_handle++;
+    Impl::TypedCallback tc{};
+    tc.handle = handle;
+    tc.kind = Impl::TypedCallback::Kind::EVENT;
+    tc.channel_type = channel_type;
+    tc.event_cb = std::move(callback);
+    m_impl->typed_callbacks.push_back(std::move(tc));
+    return handle;
+}
+
+CallbackHandle SdkSession::registerGroupCallback(const uint8_t group_id, GroupCallback callback) const {
+    std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
+    const auto handle = m_impl->next_callback_handle++;
+    Impl::TypedCallback tc{};
+    tc.handle = handle;
+    tc.kind = Impl::TypedCallback::Kind::GROUP;
+    tc.group_id = group_id;
+    tc.group_cb = std::move(callback);
+    m_impl->typed_callbacks.push_back(std::move(tc));
+    return handle;
+}
+
+CallbackHandle SdkSession::registerConfigCallback(const uint16_t packet_type, ConfigCallback callback) const {
+    std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
+    const auto handle = m_impl->next_callback_handle++;
+    Impl::TypedCallback tc{};
+    tc.handle = handle;
+    tc.kind = Impl::TypedCallback::Kind::CONFIG;
+    tc.packet_type = packet_type;
+    tc.config_cb = std::move(callback);
+    m_impl->typed_callbacks.push_back(std::move(tc));
+    return handle;
+}
+
+void SdkSession::unregisterCallback(CallbackHandle handle) const {
+    std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
+    auto& cbs = m_impl->typed_callbacks;
+    cbs.erase(std::remove_if(cbs.begin(), cbs.end(),
+        [handle](const Impl::TypedCallback& tc) { return tc.handle == handle; }),
+        cbs.end());
 }
 
 void SdkSession::setErrorCallback(ErrorCallback callback) {
@@ -716,6 +874,23 @@ const SdkConfig& SdkSession::getConfig() const {
     return m_impl->config;
 }
 
+///--------------------------------------------------------------------------------------------
+/// Channel Configuration
+///--------------------------------------------------------------------------------------------
+
+/// Helper: map cbsdk::ChannelType to cbdev::ChannelType
+static cbdev::ChannelType toDevChannelType(const ChannelType chanType) {
+    switch (chanType) {
+        case ChannelType::FRONTEND:    return cbdev::ChannelType::FRONTEND;
+        case ChannelType::ANALOG_IN:   return cbdev::ChannelType::ANALOG_IN;
+        case ChannelType::ANALOG_OUT:  return cbdev::ChannelType::ANALOG_OUT;
+        case ChannelType::AUDIO:       return cbdev::ChannelType::AUDIO;
+        case ChannelType::DIGITAL_IN:  return cbdev::ChannelType::DIGITAL_IN;
+        case ChannelType::SERIAL:      return cbdev::ChannelType::SERIAL;
+        case ChannelType::DIGITAL_OUT: return cbdev::ChannelType::DIGITAL_OUT;
+        default:                       return cbdev::ChannelType::FRONTEND;
+    }
+}
 ///--------------------------------------------------------------------------------------------
 /// Clock Synchronization
 ///--------------------------------------------------------------------------------------------

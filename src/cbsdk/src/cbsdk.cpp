@@ -28,6 +28,7 @@ struct cbsdk_session_impl {
     // C callback storage
     cbsdk_packet_callback_fn packet_callback;
     void* packet_callback_user_data;
+    cbsdk::CallbackHandle packet_callback_handle;
 
     cbsdk_error_callback_fn error_callback;
     void* error_callback_user_data;
@@ -35,6 +36,7 @@ struct cbsdk_session_impl {
     cbsdk_session_impl()
         : packet_callback(nullptr)
         , packet_callback_user_data(nullptr)
+        , packet_callback_handle(0)
         , error_callback(nullptr)
         , error_callback_user_data(nullptr)
     {}
@@ -226,22 +228,24 @@ void cbsdk_session_set_packet_callback(cbsdk_session_t session,
     }
 
     try {
-        // Store C callback
+        // Unregister previous callback if any
+        if (session->packet_callback_handle != 0) {
+            session->cpp_session->unregisterCallback(session->packet_callback_handle);
+            session->packet_callback_handle = 0;
+        }
+
         session->packet_callback = callback;
         session->packet_callback_user_data = user_data;
 
         if (callback) {
-            // Wrap C callback in C++ lambda
-            session->cpp_session->setPacketCallback(
-                [session](const cbPKT_GENERIC* pkts, size_t count) {
+            // Register per-packet callback, forward to C batch-style callback with count=1
+            session->packet_callback_handle = session->cpp_session->registerPacketCallback(
+                [session](const cbPKT_GENERIC& pkt) {
                     if (session->packet_callback) {
-                        session->packet_callback(pkts, count, session->packet_callback_user_data);
+                        session->packet_callback(&pkt, 1, session->packet_callback_user_data);
                     }
                 }
             );
-        } else {
-            // Clear callback
-            session->cpp_session->setPacketCallback(nullptr);
         }
 
     } catch (...) {

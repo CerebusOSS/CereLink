@@ -143,7 +143,7 @@ TEST_F(SdkSessionTest, SetCallbacks) {
     bool packet_callback_invoked = false;
     bool error_callback_invoked = false;
 
-    session.setPacketCallback([&packet_callback_invoked](const cbPKT_GENERIC* pkts, size_t count) {
+    session.registerPacketCallback([&packet_callback_invoked](const cbPKT_GENERIC& pkt) {
         packet_callback_invoked = true;
     });
 
@@ -168,8 +168,8 @@ TEST_F(SdkSessionTest, ReceivePackets_Loopback) {
 
     // Set up callback to count packets
     std::atomic<int> packets_received{0};
-    session.setPacketCallback([&packets_received](const cbPKT_GENERIC* pkts, size_t count) {
-        packets_received.fetch_add(count);
+    session.registerPacketCallback([&packets_received](const cbPKT_GENERIC& pkt) {
+        packets_received.fetch_add(1);
     });
 
     // Session is already started by create()
