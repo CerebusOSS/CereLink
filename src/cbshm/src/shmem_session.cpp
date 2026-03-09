@@ -380,15 +380,26 @@ struct ShmemSession::Impl {
 
         // Helper lambda to create/map a segment
         auto createSegment = [&](const std::string& name, size_t size, HANDLE& mapping, void*& buffer) -> Result<void> {
-            mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, nullptr, access, 0, static_cast<DWORD>(size), name.c_str());
-            if (!mapping) {
-                return Result<void>::error("Failed to create file mapping: " + name);
+            DWORD size_high = static_cast<DWORD>((static_cast<uint64_t>(size)) >> 32);
+            DWORD size_low = static_cast<DWORD>(size & 0xFFFFFFFF);
+
+            if (mode == Mode::STANDALONE) {
+                mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, nullptr, access, size_high, size_low, name.c_str());
+            } else {
+                mapping = OpenFileMappingA(map_access, FALSE, name.c_str());
             }
-            buffer = MapViewOfFile(mapping, map_access, 0, 0, size);
+            if (!mapping) {
+                DWORD err = GetLastError();
+                return Result<void>::error("Failed to create/open file mapping '" + name +
+                    "' (size=" + std::to_string(size) + ", err=" + std::to_string(err) + ")");
+            }
+            buffer = MapViewOfFile(mapping, map_access, 0, 0, (mode == Mode::STANDALONE) ? size : 0);
             if (!buffer) {
+                DWORD err = GetLastError();
                 CloseHandle(mapping);
                 mapping = nullptr;
-                return Result<void>::error("Failed to map view of file: " + name);
+                return Result<void>::error("Failed to map view of file '" + name +
+                    "' (size=" + std::to_string(size) + ", err=" + std::to_string(err) + ")");
             }
             return Result<void>::ok();
         };
@@ -1073,7 +1084,10 @@ Result<void> ShmemSession::storePacket(const cbPKT_GENERIC& pkt) {
         // Log error but don't fail - config updates may still work
     }
 
-    // TODO: Removed config parsing as that now happens in the device code.
+    // NOTE: Config parsing (PROCINFO, BANKINFO, etc.) is NOT done here.
+    // Config parsing belongs in the device session (DeviceSession::updateConfigFromBuffer),
+    // which owns the device_config struct. shmem is a transport layer only.
+    // Use setProcInfo()/setBankInfo()/etc. directly to update the config buffer.
 
     return Result<void>::ok();
 }

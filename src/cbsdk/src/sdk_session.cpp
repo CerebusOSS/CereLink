@@ -141,6 +141,11 @@ struct SdkSession::Impl {
     // Running state
     std::atomic<bool> is_running{false};
 
+    // Shutdown guard — set during stop()/~Impl() to make callbacks bail out immediately.
+    // Separate from is_running because callbacks must work before is_running is set
+    // (e.g., during the handshake phase in start()).
+    std::atomic<bool> shutting_down{false};
+
     /// Dispatch a single packet to all matching typed callbacks.
     /// Called on the callback thread (off the queue).
     void dispatchPacket(const cbPKT_GENERIC& pkt) {
@@ -197,16 +202,20 @@ struct SdkSession::Impl {
     }
 
     ~Impl() {
-        // Stop device receive thread (managed by DeviceSession)
+        // Mark as shutting down so callbacks bail out immediately
+        shutting_down.store(true, std::memory_order_release);
+        is_running.store(false);
+
         if (device_session) {
-            device_session->stopReceiveThread();
-            // Unregister callbacks
+            // Unregister callbacks first (blocks until any in-progress callback completes)
             if (receive_callback_handle != 0) {
                 device_session->unregisterCallback(receive_callback_handle);
             }
             if (datagram_callback_handle != 0) {
                 device_session->unregisterCallback(datagram_callback_handle);
             }
+            // Then stop device receive thread
+            device_session->stopReceiveThread();
         }
         // Stop device send thread
         if (device_send_thread_running.load()) {
@@ -581,6 +590,12 @@ Result<void> SdkSession::start() {
         // Register receive callback - handles each packet from device
         m_impl->receive_callback_handle = m_impl->device_session->registerReceiveCallback(
             [impl](const cbPKT_GENERIC& pkt) {
+                // Guard: bail out if session is shutting down to avoid accessing
+                // members during destruction (prevents intermittent SIGSEGV in debug mode)
+                if (impl->shutting_down.load(std::memory_order_acquire)) {
+                    return;
+                }
+
                 // Check for SYSREP packets (handshake responses)
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
                     const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
@@ -629,6 +644,11 @@ Result<void> SdkSession::start() {
         // Register datagram complete callback - signals after all packets in a datagram are processed
         m_impl->datagram_callback_handle = m_impl->device_session->registerDatagramCompleteCallback(
             [impl]() {
+                // Guard: bail out if session is shutting down
+                if (impl->shutting_down.load(std::memory_order_acquire)) {
+                    return;
+                }
+
                 // Periodic clock sync probing
                 auto now = std::chrono::steady_clock::now();
                 if (now - impl->last_clock_probe_time > std::chrono::seconds(5)) {
@@ -754,12 +774,14 @@ void SdkSession::stop() {
     }
 
     m_impl->is_running.store(false);
+    m_impl->shutting_down.store(true, std::memory_order_release);
 
     // Stop device threads (if STANDALONE mode)
     if (m_impl->device_session) {
-        // Stop device receive thread (managed by DeviceSession)
-        m_impl->device_session->stopReceiveThread();
-        // Unregister callbacks
+        // Unregister callbacks FIRST — this blocks until any in-progress callback
+        // completes (via callback_mutex), then removes them so no new invocations
+        // can start. Combined with the shutting_down guard in the callbacks themselves,
+        // this ensures no callback accesses Impl members during/after shutdown.
         if (m_impl->receive_callback_handle != 0) {
             m_impl->device_session->unregisterCallback(m_impl->receive_callback_handle);
             m_impl->receive_callback_handle = 0;
@@ -768,6 +790,8 @@ void SdkSession::stop() {
             m_impl->device_session->unregisterCallback(m_impl->datagram_callback_handle);
             m_impl->datagram_callback_handle = 0;
         }
+        // Stop device receive thread (managed by DeviceSession)
+        m_impl->device_session->stopReceiveThread();
         // Stop device send thread
         if (m_impl->device_send_thread_running.load()) {
             m_impl->device_send_thread_running.store(false);
