@@ -130,9 +130,13 @@ target_include_directories(cbsdk_tests
         ${PROJECT_SOURCE_DIR}/upstream
 )
 
-gtest_discover_tests(cbsdk_tests)
+# Prefix cbsdk test names so CI can easily exclude device-dependent tests.
+# Once a mock device is implemented, the "device." prefix can be removed.
+gtest_discover_tests(cbsdk_tests
+    TEST_PREFIX "device."
+)
 
-message(STATUS "Unit tests configured for cbsdk")
+message(STATUS "Unit tests configured for cbsdk (prefixed with 'device.' for CI filtering)")
 
 # ccfutils tests (CCF <-> DeviceConfig conversion)
 add_executable(ccfutils_tests
