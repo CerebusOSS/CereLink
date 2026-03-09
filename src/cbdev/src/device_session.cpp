@@ -1490,12 +1490,16 @@ Result<void> DeviceSession::startReceiveThread() {
     m_impl->receive_thread_running.store(true);
 
     m_impl->receive_thread = std::thread([this]() {
-        // Receive buffer (on stack to avoid allocations)
-        uint8_t buffer[cbCER_UDP_SIZE_MAX];
+        // Receive buffer with padding. The extra sizeof(cbPKT_GENERIC) bytes ensure
+        // that reinterpret_cast<cbPKT_GENERIC*>(&buffer[offset]) always has a full
+        // struct's worth of readable memory, even for packets near the end of a
+        // datagram. Without this, callbacks that copy the full 1024-byte struct
+        // (e.g., SPSCQueue::push) would read past the buffer into unmapped memory.
+        uint8_t buffer[cbCER_UDP_SIZE_MAX + sizeof(cbPKT_GENERIC)] = {};
 
         while (!m_impl->receive_thread_stop_requested.load()) {
-            // Receive packets
-            auto result = receivePackets(buffer, sizeof(buffer));
+            // Receive packets (only fill the actual datagram portion, not the padding)
+            auto result = receivePackets(buffer, cbCER_UDP_SIZE_MAX);
 
             if (result.isError()) {
                 // TODO: Could invoke an error callback here
