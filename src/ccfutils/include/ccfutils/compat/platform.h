@@ -19,8 +19,7 @@
         #define WIN32
     #endif
 
-    // Already defined by Windows headers, but ensure they're available
-    // (no need to redefine, just document them)
+    #include <windows.h>
 
 #endif // _WIN32
 

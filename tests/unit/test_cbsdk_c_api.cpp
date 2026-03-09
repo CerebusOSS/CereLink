@@ -10,7 +10,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include <gtest/gtest.h>
-#include "cbsdk_v2/cbsdk.h"
+#include "cbsdk/cbsdk.h"
 #include <cstring>
 
 /// Test fixture for C API tests
@@ -37,7 +37,7 @@ int CbsdkCApiTest::test_counter = 0;
 TEST_F(CbsdkCApiTest, Config_Default) {
     cbsdk_config_t config = cbsdk_config_default();
 
-    EXPECT_EQ(config.device_type, CBSDK_DEVICE_LEGACY_NSP);
+    EXPECT_EQ(config.device_type, CBPROTO_DEVICE_TYPE_LEGACY_NSP);
     EXPECT_EQ(config.callback_queue_depth, 16384);
 }
 
@@ -59,7 +59,7 @@ TEST_F(CbsdkCApiTest, Create_NullConfig) {
 
 TEST_F(CbsdkCApiTest, Create_Success) {
     cbsdk_config_t config = cbsdk_config_default();
-    config.device_type = CBSDK_DEVICE_NPLAY;
+    config.device_type = CBPROTO_DEVICE_TYPE_NPLAY;
 
     cbsdk_session_t session = nullptr;
     cbsdk_result_t result = cbsdk_session_create(&session, &config);
@@ -81,7 +81,7 @@ TEST_F(CbsdkCApiTest, Destroy_NullSession) {
 
 TEST_F(CbsdkCApiTest, StartStop) {
     cbsdk_config_t config = cbsdk_config_default();
-    config.device_type = CBSDK_DEVICE_NPLAY;
+    config.device_type = CBPROTO_DEVICE_TYPE_NPLAY;
 
     cbsdk_session_t session = nullptr;
     ASSERT_EQ(cbsdk_session_create(&session, &config), CBSDK_RESULT_SUCCESS);
@@ -99,7 +99,7 @@ TEST_F(CbsdkCApiTest, StartStop) {
 
 TEST_F(CbsdkCApiTest, StartTwice_Error) {
     cbsdk_config_t config = cbsdk_config_default();
-    config.device_type = CBSDK_DEVICE_NPLAY;
+    config.device_type = CBPROTO_DEVICE_TYPE_NPLAY;
     // config.recv_port =53005;
     // config.send_port =53006;
 
@@ -143,7 +143,7 @@ static void error_callback(const char* error_message, void* user_data) {
 
 TEST_F(CbsdkCApiTest, SetCallbacks) {
     cbsdk_config_t config = cbsdk_config_default();
-    config.device_type = CBSDK_DEVICE_NPLAY;
+    config.device_type = CBPROTO_DEVICE_TYPE_NPLAY;
     // config.recv_port =53007;
     // config.send_port =53008;
 
@@ -169,7 +169,7 @@ TEST_F(CbsdkCApiTest, SetCallbacks) {
 
 TEST_F(CbsdkCApiTest, Statistics_InitiallyZero) {
     cbsdk_config_t config = cbsdk_config_default();
-    config.device_type = CBSDK_DEVICE_NPLAY;
+    config.device_type = CBPROTO_DEVICE_TYPE_NPLAY;
     // config.recv_port =53009;
     // config.send_port =53010;
 
@@ -196,7 +196,7 @@ TEST_F(CbsdkCApiTest, Statistics_GetStats_NullSession) {
 
 TEST_F(CbsdkCApiTest, Statistics_GetStats_NullStats) {
     cbsdk_config_t config = cbsdk_config_default();
-    config.device_type = CBSDK_DEVICE_NPLAY;
+    config.device_type = CBPROTO_DEVICE_TYPE_NPLAY;
     // config.recv_port =53011;
     // config.send_port =53012;
 
@@ -211,7 +211,7 @@ TEST_F(CbsdkCApiTest, Statistics_GetStats_NullStats) {
 
 TEST_F(CbsdkCApiTest, Statistics_ResetStats) {
     cbsdk_config_t config = cbsdk_config_default();
-    config.device_type = CBSDK_DEVICE_NPLAY;
+    config.device_type = CBPROTO_DEVICE_TYPE_NPLAY;
     // config.recv_port =53013;
     // config.send_port =53014;
 

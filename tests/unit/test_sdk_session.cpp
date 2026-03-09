@@ -19,7 +19,8 @@
 #include <cbproto/cbproto.h>            // Protocol types
 #include "cbshm/shmem_session.h"      // For transmit callback test
 #include "cbdev/device_session.h"       // For loopback test
-#include "cbsdk_v2/sdk_session.h"       // SDK orchestration
+#include "cbdev/device_factory.h"       // For createDeviceSession
+#include "cbsdk/sdk_session.h"          // SDK orchestration
 
 using namespace cbsdk;
 
@@ -181,7 +182,7 @@ TEST_F(SdkSessionTest, ReceivePackets_Loopback) {
     // Create a separate device session to send packets
     // Sender: bind to different port (51002) but send to receiver's port (51001)
     auto dev_config = cbdev::ConnectionParams::custom("127.0.0.1", "127.0.0.1", 51002, 51001);
-    auto dev_result = cbdev::DeviceSession::create(dev_config);
+    auto dev_result = cbdev::createDeviceSession(dev_config, cbdev::ProtocolVersion::PROTOCOL_CURRENT);
     ASSERT_TRUE(dev_result.isOk()) << "Error: " << dev_result.error();
     auto& dev_session = dev_result.value();
 
@@ -191,7 +192,7 @@ TEST_F(SdkSessionTest, ReceivePackets_Loopback) {
         std::memset(&pkt, 0, sizeof(pkt));
         pkt.cbpkt_header.type = 0x10 + i;
         pkt.cbpkt_header.dlen = 0;
-        dev_session.sendPacket(pkt);
+        dev_session->sendPacket(pkt);
     }
 
     // Wait for packets to be received

@@ -1,11 +1,7 @@
 # Integration Tests
 # Tests cross-module interactions (cbdev + cbshm, cbsdk end-to-end, etc.)
 
-# Only build if new architecture is enabled
-if(NOT CBSDK_BUILD_NEW_ARCH)
-    message(STATUS "Skipping integration tests for new architecture (CBSDK_BUILD_NEW_ARCH=OFF)")
-    return()
-endif()
+# Note: gated by CBSDK_BUILD_TEST in top-level CMakeLists.txt
 
 # GoogleTest framework (shared with unit tests)
 include(FetchContent)

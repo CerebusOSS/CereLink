@@ -1,11 +1,7 @@
 # Unit Tests
 # Each module (cbproto, cbshm, cbdev, cbsdk) will have its own test suite
 
-# Only build if new architecture is enabled
-if(NOT CBSDK_BUILD_NEW_ARCH)
-    message(STATUS "Skipping unit tests for new architecture (CBSDK_BUILD_NEW_ARCH=OFF)")
-    return()
-endif()
+# Note: gated by CBSDK_BUILD_TEST in top-level CMakeLists.txt
 
 # GoogleTest will be fetched as needed
 include(FetchContent)
@@ -78,6 +74,7 @@ target_link_libraries(cbdev_tests
 target_include_directories(cbdev_tests
     BEFORE PRIVATE
         ${PROJECT_SOURCE_DIR}/src/cbdev/include
+        ${PROJECT_SOURCE_DIR}/src/cbdev/src
         ${PROJECT_SOURCE_DIR}/src/cbproto/include
 )
 

@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 #include "packet_test_helpers.h"
-#include "cbdev/packet_translator.h"
+#include "packet_translator.h"
 #include <cstring>
 
 using namespace test_helpers;
