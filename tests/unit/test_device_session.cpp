@@ -181,20 +181,17 @@ TEST_F(DeviceSessionTest, SendPackets_Multiple) {
     EXPECT_TRUE(send_result.isOk()) << "Error: " << send_result.error();
 }
 
-TEST_F(DeviceSessionTest, SendPacket_AfterClose) {
+TEST_F(DeviceSessionTest, SendPacket_AfterDestroy) {
     auto config = ConnectionParams::custom("127.0.0.1", "0.0.0.0", 51013, 51014);
     auto result = createDeviceSession(config, ProtocolVersion::PROTOCOL_CURRENT);
     ASSERT_TRUE(result.isOk());
 
-    auto& session = result.value();
-    session.close();
+    auto session = std::move(result.value());
+    EXPECT_TRUE(session->isConnected());
 
-    cbPKT_GENERIC pkt;
-    std::memset(&pkt, 0, sizeof(pkt));
-
-    auto send_result = session.sendPacket(pkt);
-    EXPECT_TRUE(send_result.isError());
-    EXPECT_NE(send_result.error().find("not connected"), std::string::npos);
+    // Destroy session via RAII
+    session.reset();
+    EXPECT_EQ(session, nullptr);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

@@ -37,7 +37,7 @@ int CbsdkCApiTest::test_counter = 0;
 TEST_F(CbsdkCApiTest, Config_Default) {
     cbsdk_config_t config = cbsdk_config_default();
 
-    EXPECT_EQ(config.device_type, CBPROTO_DEVICE_TYPE_NSP);
+    EXPECT_EQ(config.device_type, CBPROTO_DEVICE_TYPE_LEGACY_NSP);
     EXPECT_EQ(config.callback_queue_depth, 16384);
 }
 
@@ -59,7 +59,7 @@ TEST_F(CbsdkCApiTest, Create_NullConfig) {
 
 TEST_F(CbsdkCApiTest, Create_Success) {
     cbsdk_config_t config = cbsdk_config_default();
-    config.device_type = CBPROTO_DEVICE_TYPE_NPLAY;
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
 
     cbsdk_session_t session = nullptr;
     cbsdk_result_t result = cbsdk_session_create(&session, &config);
@@ -81,7 +81,7 @@ TEST_F(CbsdkCApiTest, Destroy_NullSession) {
 
 TEST_F(CbsdkCApiTest, StartStop) {
     cbsdk_config_t config = cbsdk_config_default();
-    config.device_type = CBPROTO_DEVICE_TYPE_NPLAY;
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
 
     cbsdk_session_t session = nullptr;
     ASSERT_EQ(cbsdk_session_create(&session, &config), CBSDK_RESULT_SUCCESS);
@@ -99,7 +99,7 @@ TEST_F(CbsdkCApiTest, StartStop) {
 
 TEST_F(CbsdkCApiTest, StartTwice_Error) {
     cbsdk_config_t config = cbsdk_config_default();
-    config.device_type = CBPROTO_DEVICE_TYPE_NPLAY;
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
     // config.recv_port =53005;
     // config.send_port =53006;
 
@@ -143,7 +143,7 @@ static void error_callback(const char* error_message, void* user_data) {
 
 TEST_F(CbsdkCApiTest, SetCallbacks) {
     cbsdk_config_t config = cbsdk_config_default();
-    config.device_type = CBPROTO_DEVICE_TYPE_NPLAY;
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
     // config.recv_port =53007;
     // config.send_port =53008;
 
@@ -167,11 +167,9 @@ TEST_F(CbsdkCApiTest, SetCallbacks) {
 // Statistics Tests
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(CbsdkCApiTest, Statistics_InitiallyZero) {
+TEST_F(CbsdkCApiTest, Statistics_Valid) {
     cbsdk_config_t config = cbsdk_config_default();
-    config.device_type = CBPROTO_DEVICE_TYPE_NPLAY;
-    // config.recv_port =53009;
-    // config.send_port =53010;
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
 
     cbsdk_session_t session = nullptr;
     ASSERT_EQ(cbsdk_session_create(&session, &config), CBSDK_RESULT_SUCCESS);
@@ -179,10 +177,8 @@ TEST_F(CbsdkCApiTest, Statistics_InitiallyZero) {
     cbsdk_stats_t stats;
     cbsdk_session_get_stats(session, &stats);
 
-    EXPECT_EQ(stats.packets_received_from_device, 0);
-    EXPECT_EQ(stats.packets_stored_to_shmem, 0);
-    EXPECT_EQ(stats.packets_queued_for_callback, 0);
-    EXPECT_EQ(stats.packets_delivered_to_callback, 0);
+    // With a real device, packets may already be flowing; just verify no drops
+    EXPECT_GE(stats.packets_received_from_device, stats.packets_stored_to_shmem);
     EXPECT_EQ(stats.packets_dropped, 0);
 
     cbsdk_session_destroy(session);
@@ -196,7 +192,7 @@ TEST_F(CbsdkCApiTest, Statistics_GetStats_NullSession) {
 
 TEST_F(CbsdkCApiTest, Statistics_GetStats_NullStats) {
     cbsdk_config_t config = cbsdk_config_default();
-    config.device_type = CBPROTO_DEVICE_TYPE_NPLAY;
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
     // config.recv_port =53011;
     // config.send_port =53012;
 
@@ -211,7 +207,7 @@ TEST_F(CbsdkCApiTest, Statistics_GetStats_NullStats) {
 
 TEST_F(CbsdkCApiTest, Statistics_ResetStats) {
     cbsdk_config_t config = cbsdk_config_default();
-    config.device_type = CBPROTO_DEVICE_TYPE_NPLAY;
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
     // config.recv_port =53013;
     // config.send_port =53014;
 

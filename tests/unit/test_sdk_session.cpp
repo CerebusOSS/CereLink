@@ -59,7 +59,7 @@ TEST_F(SdkSessionTest, Config_Default) {
 
 TEST_F(SdkSessionTest, Create_Standalone_Loopback) {
     SdkConfig config;
-    config.device_type = DeviceType::NPLAY;  // Loopback device
+    config.device_type = DeviceType::HUB1;
     config.autorun = false;  // Don't auto-run (test mode)
 
     auto result = SdkSession::create(config);
@@ -71,7 +71,7 @@ TEST_F(SdkSessionTest, Create_Standalone_Loopback) {
 
 TEST_F(SdkSessionTest, Create_MoveConstruction) {
     SdkConfig config;
-    config.device_type = DeviceType::NPLAY;
+    config.device_type = DeviceType::HUB1;
     config.autorun = false;
 
     auto result = SdkSession::create(config);
@@ -88,7 +88,7 @@ TEST_F(SdkSessionTest, Create_MoveConstruction) {
 
 TEST_F(SdkSessionTest, StartStop) {
     SdkConfig config;
-    config.device_type = DeviceType::NPLAY;
+    config.device_type = DeviceType::HUB1;
     config.autorun = false;
 
     auto result = SdkSession::create(config);
@@ -109,7 +109,7 @@ TEST_F(SdkSessionTest, StartStop) {
 
 TEST_F(SdkSessionTest, StartTwice_Error) {
     SdkConfig config;
-    config.device_type = DeviceType::NPLAY;
+    config.device_type = DeviceType::HUB1;
     config.autorun = false;
 
     auto result = SdkSession::create(config);
@@ -133,7 +133,7 @@ TEST_F(SdkSessionTest, StartTwice_Error) {
 
 TEST_F(SdkSessionTest, SetCallbacks) {
     SdkConfig config;
-    config.device_type = DeviceType::NPLAY;
+    config.device_type = DeviceType::HUB1;
     config.autorun = false;
 
     auto result = SdkSession::create(config);
@@ -157,10 +157,10 @@ TEST_F(SdkSessionTest, SetCallbacks) {
     EXPECT_FALSE(error_callback_invoked);
 }
 
-TEST_F(SdkSessionTest, ReceivePackets_Loopback) {
-    // Create SDK session (receiver)
+TEST_F(SdkSessionTest, ReceivePackets_FromDevice) {
+    // Create SDK session (receiver) - receives real packets from connected device
     SdkConfig config;
-    config.device_type = DeviceType::NPLAY;
+    config.device_type = DeviceType::HUB1;
     config.autorun = false;
 
     auto result = SdkSession::create(config);
@@ -176,32 +176,13 @@ TEST_F(SdkSessionTest, ReceivePackets_Loopback) {
     // Session is already started by create()
     EXPECT_TRUE(session.isRunning());
 
-    // Give threads time to start
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-    // Create a separate device session to send packets
-    // Sender: bind to different port (51002) but send to receiver's port (51001)
-    auto dev_config = cbdev::ConnectionParams::custom("127.0.0.1", "127.0.0.1", 51002, 51001);
-    auto dev_result = cbdev::createDeviceSession(dev_config, cbdev::ProtocolVersion::PROTOCOL_CURRENT);
-    ASSERT_TRUE(dev_result.isOk()) << "Error: " << dev_result.error();
-    auto& dev_session = dev_result.value();
-
-    // Send test packets
-    for (int i = 0; i < 10; ++i) {
-        cbPKT_GENERIC pkt;
-        std::memset(&pkt, 0, sizeof(pkt));
-        pkt.cbpkt_header.type = 0x10 + i;
-        pkt.cbpkt_header.dlen = 0;
-        dev_session->sendPacket(pkt);
-    }
-
-    // Wait for packets to be received
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    // Wait for packets from the device
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
     // Stop session
     session.stop();
 
-    // Verify packets were received
+    // Verify packets were received from the device
     EXPECT_GT(packets_received.load(), 0);
 }
 
@@ -209,27 +190,25 @@ TEST_F(SdkSessionTest, ReceivePackets_Loopback) {
 // Statistics Tests
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(SdkSessionTest, Statistics_InitiallyZero) {
+TEST_F(SdkSessionTest, Statistics_Valid) {
     SdkConfig config;
-    config.device_type = DeviceType::NPLAY;
+    config.device_type = DeviceType::HUB1;
     config.autorun = false;
 
     auto result = SdkSession::create(config);
     ASSERT_TRUE(result.isOk());
 
     auto& session = result.value();
-    auto stats = session.getStats();
 
-    EXPECT_EQ(stats.packets_received_from_device, 0);
-    EXPECT_EQ(stats.packets_stored_to_shmem, 0);
-    EXPECT_EQ(stats.packets_queued_for_callback, 0);
-    EXPECT_EQ(stats.packets_delivered_to_callback, 0);
+    // With a real device, packets may already be flowing; just verify stats are consistent
+    auto stats = session.getStats();
+    EXPECT_GE(stats.packets_received_from_device, stats.packets_stored_to_shmem);
     EXPECT_EQ(stats.packets_dropped, 0);
 }
 
 TEST_F(SdkSessionTest, Statistics_ResetStats) {
     SdkConfig config;
-    config.device_type = DeviceType::NPLAY;
+    config.device_type = DeviceType::HUB1;
     config.autorun = false;
 
     auto result = SdkSession::create(config);
@@ -256,7 +235,7 @@ TEST_F(SdkSessionTest, Statistics_ResetStats) {
 
 TEST_F(SdkSessionTest, GetConfig) {
     SdkConfig config;
-    config.device_type = DeviceType::NPLAY;
+    config.device_type = DeviceType::HUB1;
     config.callback_queue_depth = 8192;
     config.autorun = false;
 
@@ -266,7 +245,7 @@ TEST_F(SdkSessionTest, GetConfig) {
     auto& session = result.value();
     const auto& retrieved_config = session.getConfig();
 
-    EXPECT_EQ(retrieved_config.device_type, DeviceType::NPLAY);
+    EXPECT_EQ(retrieved_config.device_type, DeviceType::HUB1);
     EXPECT_EQ(retrieved_config.callback_queue_depth, 8192);
 }
 

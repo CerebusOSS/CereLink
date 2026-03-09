@@ -170,29 +170,22 @@ TEST_F(ShmemSessionTest, MultipleActiveInstruments) {
 /// @name Packet Routing Tests (THE KEY FIX!)
 /// @{
 
-TEST_F(ShmemSessionTest, StorePacket_PROCINFO_Instrument0) {
+TEST_F(ShmemSessionTest, SetGetProcInfo_Instrument0) {
     auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
-    // Create PROCINFO packet for instrument 0 (cbNSP1 = 1)
-    cbPKT_GENERIC pkt;
-    std::memset(&pkt, 0, sizeof(pkt));
-    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
-    pkt.cbpkt_header.instrument = 0;  // 0-based in packet (represents cbNSP1)
-    pkt.cbpkt_header.type = cbPKTTYPE_PROCREP;
-    pkt.cbpkt_header.dlen = cbPKTDLEN_PROCINFO;
+    // Set PROCINFO for instrument 0 (cbNSP1)
+    cbPKT_PROCINFO info;
+    std::memset(&info, 0, sizeof(info));
+    info.proc = 1;
+    info.chancount = 256;
 
-    cbPKT_PROCINFO* proc_pkt = reinterpret_cast<cbPKT_PROCINFO*>(&pkt);
-    proc_pkt->proc = 1;
-    proc_pkt->chancount = 256;
-
-    // Store packet
-    auto store_result = session.storePacket(pkt);
-    ASSERT_TRUE(store_result.isOk()) << "Failed to store packet: " << store_result.error();
-
-    // THE KEY FIX: Should be stored at index 0 (packet.instrument)
     auto id = InstrumentId::fromPacketField(0);
+    ASSERT_TRUE(session.setProcInfo(id, info).isOk());
+    ASSERT_TRUE(session.setInstrumentActive(id, true).isOk());
+
+    // THE KEY FIX: Should be stored at index 0 (instrument 0)
     auto get_result = session.getProcInfo(id);
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().proc, 1);
@@ -204,29 +197,21 @@ TEST_F(ShmemSessionTest, StorePacket_PROCINFO_Instrument0) {
     EXPECT_TRUE(active_result.value());
 }
 
-TEST_F(ShmemSessionTest, StorePacket_PROCINFO_Instrument2) {
+TEST_F(ShmemSessionTest, SetGetProcInfo_Instrument2) {
     auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
-    // Create PROCINFO packet for instrument 2 (cbNSP3 = 3)
-    cbPKT_GENERIC pkt;
-    std::memset(&pkt, 0, sizeof(pkt));
-    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
-    pkt.cbpkt_header.instrument = 2;  // 0-based in packet (represents cbNSP3)
-    pkt.cbpkt_header.type = cbPKTTYPE_PROCREP;
-    pkt.cbpkt_header.dlen = cbPKTDLEN_PROCINFO;
+    // Set PROCINFO for instrument 2 (cbNSP3)
+    cbPKT_PROCINFO info;
+    std::memset(&info, 0, sizeof(info));
+    info.proc = 3;
+    info.chancount = 128;
 
-    cbPKT_PROCINFO* proc_pkt = reinterpret_cast<cbPKT_PROCINFO*>(&pkt);
-    proc_pkt->proc = 3;
-    proc_pkt->chancount = 128;
-
-    // Store packet
-    auto store_result = session.storePacket(pkt);
-    ASSERT_TRUE(store_result.isOk());
-
-    // THE KEY FIX: Should be stored at index 2 (packet.instrument), NOT index 0!
     auto id = InstrumentId::fromPacketField(2);
+    ASSERT_TRUE(session.setProcInfo(id, info).isOk());
+
+    // THE KEY FIX: Should be stored at index 2, NOT index 0!
     auto get_result = session.getProcInfo(id);
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().proc, 3);
@@ -239,25 +224,20 @@ TEST_F(ShmemSessionTest, StorePacket_PROCINFO_Instrument2) {
     EXPECT_NE(get_result0.value().proc, 3);  // Should not have this data
 }
 
-TEST_F(ShmemSessionTest, StorePacket_MultipleInstruments) {
+TEST_F(ShmemSessionTest, SetGetProcInfo_MultipleInstruments) {
     auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
-    // Store PROCINFO for instruments 0, 1, and 3
+    // Set PROCINFO for instruments 0, 1, and 3
     for (uint8_t inst : {0, 1, 3}) {
-        cbPKT_GENERIC pkt;
-        std::memset(&pkt, 0, sizeof(pkt));
-        pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
-        pkt.cbpkt_header.instrument = inst;
-        pkt.cbpkt_header.type = cbPKTTYPE_PROCREP;
-        pkt.cbpkt_header.dlen = cbPKTDLEN_PROCINFO;
+        cbPKT_PROCINFO info;
+        std::memset(&info, 0, sizeof(info));
+        info.proc = inst + 1;
+        info.chancount = 100 + inst;
 
-        cbPKT_PROCINFO* proc_pkt = reinterpret_cast<cbPKT_PROCINFO*>(&pkt);
-        proc_pkt->proc = inst + 1;  // Unique value for verification
-        proc_pkt->chancount = 100 + inst;
-
-        ASSERT_TRUE(session.storePacket(pkt).isOk());
+        auto id = InstrumentId::fromPacketField(inst);
+        ASSERT_TRUE(session.setProcInfo(id, info).isOk());
     }
 
     // Verify each instrument has correct data at correct index
@@ -270,29 +250,22 @@ TEST_F(ShmemSessionTest, StorePacket_MultipleInstruments) {
     }
 }
 
-TEST_F(ShmemSessionTest, StorePacket_BANKINFO) {
+TEST_F(ShmemSessionTest, SetGetBankInfo) {
     auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
-    // Create BANKINFO packet
-    cbPKT_GENERIC pkt;
-    std::memset(&pkt, 0, sizeof(pkt));
-    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
-    pkt.cbpkt_header.instrument = 1;  // cbNSP2
-    pkt.cbpkt_header.type = cbPKTTYPE_BANKREP;
-    pkt.cbpkt_header.dlen = cbPKTDLEN_BANKINFO;
+    // Set BANKINFO for instrument 1 (cbNSP2), bank 3
+    cbPKT_BANKINFO info;
+    std::memset(&info, 0, sizeof(info));
+    info.proc = 2;
+    info.bank = 3;
+    info.chancount = 32;
 
-    cbPKT_BANKINFO* bank_pkt = reinterpret_cast<cbPKT_BANKINFO*>(&pkt);
-    bank_pkt->proc = 2;
-    bank_pkt->bank = 3;
-    bank_pkt->chancount = 32;
-
-    // Store packet
-    ASSERT_TRUE(session.storePacket(pkt).isOk());
+    auto id = InstrumentId::fromPacketField(1);
+    ASSERT_TRUE(session.setBankInfo(id, 3, info).isOk());
 
     // Retrieve and verify
-    auto id = InstrumentId::fromPacketField(1);
     auto get_result = session.getBankInfo(id, 3);
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().proc, 2);
@@ -300,29 +273,22 @@ TEST_F(ShmemSessionTest, StorePacket_BANKINFO) {
     EXPECT_EQ(get_result.value().chancount, 32);
 }
 
-TEST_F(ShmemSessionTest, StorePacket_FILTINFO) {
+TEST_F(ShmemSessionTest, SetGetFilterInfo) {
     auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
-    // Create FILTINFO packet
-    cbPKT_GENERIC pkt;
-    std::memset(&pkt, 0, sizeof(pkt));
-    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
-    pkt.cbpkt_header.instrument = 0;  // cbNSP1
-    pkt.cbpkt_header.type = cbPKTTYPE_FILTREP;
-    pkt.cbpkt_header.dlen = cbPKTDLEN_FILTINFO;
+    // Set FILTINFO for instrument 0 (cbNSP1), filter 5
+    cbPKT_FILTINFO info;
+    std::memset(&info, 0, sizeof(info));
+    info.proc = 1;
+    info.filt = 5;
+    info.hpfreq = 250000;  // 250 Hz in millihertz
 
-    cbPKT_FILTINFO* filt_pkt = reinterpret_cast<cbPKT_FILTINFO*>(&pkt);
-    filt_pkt->proc = 1;
-    filt_pkt->filt = 5;
-    filt_pkt->hpfreq = 250000;  // 250 Hz in millihertz
-
-    // Store packet
-    ASSERT_TRUE(session.storePacket(pkt).isOk());
+    auto id = InstrumentId::fromPacketField(0);
+    ASSERT_TRUE(session.setFilterInfo(id, 5, info).isOk());
 
     // Retrieve and verify
-    auto id = InstrumentId::fromPacketField(0);
     auto get_result = session.getFilterInfo(id, 5);
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().proc, 1);

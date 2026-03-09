@@ -13,6 +13,8 @@
 #include <cbshm/native_types.h>
 #include <cbshm/central_types.h>
 #include <cbproto/cbproto.h>
+#include <memory>
+#include <cstring>
 
 using namespace cbshm;
 
@@ -110,16 +112,18 @@ TEST(NativeTypesTest, ConfigBufferHasExpectedFields) {
 }
 
 TEST(NativeTypesTest, TransmitBufferLayout) {
-    NativeTransmitBuffer xmt = {};
+    // Heap-allocate: NativeTransmitBuffer is ~5 MB (too large for stack)
+    auto xmt = std::make_unique<NativeTransmitBuffer>();
+    std::memset(xmt.get(), 0, sizeof(NativeTransmitBuffer));
 
-    EXPECT_EQ(xmt.transmitted, 0u);
-    EXPECT_EQ(xmt.headindex, 0u);
-    EXPECT_EQ(xmt.tailindex, 0u);
-    EXPECT_EQ(xmt.last_valid_index, 0u);
-    EXPECT_EQ(xmt.bufferlen, 0u);
+    EXPECT_EQ(xmt->transmitted, 0u);
+    EXPECT_EQ(xmt->headindex, 0u);
+    EXPECT_EQ(xmt->tailindex, 0u);
+    EXPECT_EQ(xmt->last_valid_index, 0u);
+    EXPECT_EQ(xmt->bufferlen, 0u);
 
     // Buffer should be large enough for the configured number of slots
-    EXPECT_EQ(sizeof(xmt.buffer) / sizeof(uint32_t), NATIVE_cbXMT_GLOBAL_BUFFLEN);
+    EXPECT_EQ(sizeof(xmt->buffer) / sizeof(uint32_t), NATIVE_cbXMT_GLOBAL_BUFFLEN);
 }
 
 TEST(NativeTypesTest, LocalTransmitBufferLayout) {
@@ -190,24 +194,26 @@ TEST(CentralLegacyTypesTest, SizeCloseToConfigBuffer) {
 TEST(CentralLegacyTypesTest, FieldOrderMatchesCentral) {
     // Verify that optiontable comes right after sysflags (Central's layout)
     // In CereLink's cbConfigBuffer, optiontable is at the END
-    CentralLegacyCFGBUFF legacy = {};
+    // Heap-allocate: CentralLegacyCFGBUFF is multi-MB (too large for stack)
+    auto legacy = std::make_unique<CentralLegacyCFGBUFF>();
+    std::memset(legacy.get(), 0, sizeof(CentralLegacyCFGBUFF));
 
     // Access fields to verify they compile and are accessible
-    legacy.version = 42;
-    legacy.sysflags = 1;
-    legacy.optiontable = {};
-    legacy.colortable = {};
-    legacy.sysinfo = {};
-    legacy.procinfo[0] = {};
-    legacy.procinfo[3] = {};
-    legacy.bankinfo[0][0] = {};
-    legacy.chaninfo[0] = {};
-    legacy.chaninfo[CENTRAL_cbMAXCHANS - 1] = {};
-    legacy.isLnc[0] = {};
-    legacy.isLnc[3] = {};
-    legacy.fileinfo = {};
+    legacy->version = 42;
+    legacy->sysflags = 1;
+    legacy->optiontable = {};
+    legacy->colortable = {};
+    legacy->sysinfo = {};
+    legacy->procinfo[0] = {};
+    legacy->procinfo[3] = {};
+    legacy->bankinfo[0][0] = {};
+    legacy->chaninfo[0] = {};
+    legacy->chaninfo[CENTRAL_cbMAXCHANS - 1] = {};
+    legacy->isLnc[0] = {};
+    legacy->isLnc[3] = {};
+    legacy->fileinfo = {};
 
-    EXPECT_EQ(legacy.version, 42u);
+    EXPECT_EQ(legacy->version, 42u);
 }
 
 /// @}
