@@ -190,6 +190,18 @@ public:
         return m_device.setChannelsSpikeSortingSync(nChans, chanType, sortOptions, timeout);
     }
 
+    Result<void> setChannelConfig(const cbPKT_CHANINFO& chaninfo) override {
+        return m_device.setChannelConfig(chaninfo);
+    }
+
+    Result<void> setDigitalOutput(const uint32_t chan_id, const uint16_t value) override {
+        return m_device.setDigitalOutput(chan_id, value);
+    }
+
+    Result<void> sendComment(const std::string& comment, const uint32_t rgba, const uint8_t charset) override {
+        return m_device.sendComment(comment, rgba, charset);
+    }
+
     /// Clock sync delegation (uses m_device's ClockSync which is fed by
     /// receivePacketsRaw and updateConfigFromBuffer on the same call path)
     std::optional<std::chrono::steady_clock::time_point>

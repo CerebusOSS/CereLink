@@ -21,6 +21,7 @@
 #include <cstddef>
 #include <functional>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace cbdev {
@@ -233,6 +234,25 @@ public:
     virtual Result<void> setChannelsSpikeSortingByType(size_t nChans, ChannelType chanType, uint32_t sortOptions) = 0;
 
     virtual Result<void> setChannelsSpikeSortingSync(size_t nChans, ChannelType chanType, uint32_t sortOptions, std::chrono::milliseconds timeout) = 0;
+
+    /// Set full channel configuration
+    /// Sends a cbPKT_CHANINFO (as CHANSET) to the device
+    /// @param chaninfo Complete channel info packet
+    /// @return Success or error
+    virtual Result<void> setChannelConfig(const cbPKT_CHANINFO& chaninfo) = 0;
+
+    /// Set digital output value
+    /// @param chan_id 1-based channel ID of a digital output channel
+    /// @param value Digital output value
+    /// @return Success or error
+    virtual Result<void> setDigitalOutput(uint32_t chan_id, uint16_t value) = 0;
+
+    /// Send a comment into the data stream
+    /// @param comment Comment text (max cbMAX_COMMENT-1 chars)
+    /// @param rgba Color as RGBA uint32_t (0 = white)
+    /// @param charset Character set (0 = ANSI)
+    /// @return Success or error
+    virtual Result<void> sendComment(const std::string& comment, uint32_t rgba = 0, uint8_t charset = 0) = 0;
 
     /// @}
 

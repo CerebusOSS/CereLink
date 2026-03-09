@@ -1171,6 +1171,47 @@ Result<void> DeviceSession::setChannelsSpikeSortingSync(const size_t nChans, con
         total_matching
     );
 }
+
+Result<void> DeviceSession::setChannelConfig(const cbPKT_CHANINFO& chaninfo) {
+    if (!m_impl || !m_impl->connected) {
+        return Result<void>::error("Device not connected");
+    }
+    const auto& pkt = reinterpret_cast<const cbPKT_GENERIC&>(chaninfo);
+    return sendPacket(pkt);
+}
+
+Result<void> DeviceSession::setDigitalOutput(const uint32_t chan_id, const uint16_t value) {
+    if (!m_impl || !m_impl->connected) {
+        return Result<void>::error("Device not connected");
+    }
+    cbPKT_SET_DOUT pkt = {};
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_SET_DOUTSET;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_SET_DOUT;
+    pkt.chan = static_cast<uint16_t>(chan_id);
+    pkt.value = value;
+    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+}
+
+Result<void> DeviceSession::sendComment(const std::string& comment, const uint32_t rgba, const uint8_t charset) {
+    if (!m_impl || !m_impl->connected) {
+        return Result<void>::error("Device not connected");
+    }
+    cbPKT_COMMENT pkt = {};
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_COMMENTSET;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_COMMENT;
+    pkt.info.charset = charset;
+    pkt.timeStarted = 0;
+    pkt.rgba = rgba;
+
+    const size_t len = std::min(comment.size(), static_cast<size_t>(cbMAX_COMMENT - 1));
+    std::memcpy(pkt.comment, comment.c_str(), len);
+    pkt.comment[len] = '\0';
+
+    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Configuration Management
 ///////////////////////////////////////////////////////////////////////////////////////////////////

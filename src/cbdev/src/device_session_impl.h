@@ -162,6 +162,10 @@ public:
     /// Set spike sorting options for first N channels
     Result<void> setChannelsSpikeSortingByType(size_t nChans, ChannelType chanType, uint32_t sortOptions) override;
 
+    Result<void> setChannelConfig(const cbPKT_CHANINFO& chaninfo) override;
+    Result<void> setDigitalOutput(uint32_t chan_id, uint16_t value) override;
+    Result<void> sendComment(const std::string& comment, uint32_t rgba = 0, uint8_t charset = 0) override;
+
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
