@@ -17,6 +17,8 @@
 #include "cbdev/device_factory.h"
 #include "cbdev/connection.h"
 #include "cbshm/shmem_session.h"
+#include <ccfutils/ccf_config.h>
+#include <CCFUtils.h>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -874,6 +876,62 @@ const SdkConfig& SdkSession::getConfig() const {
     return m_impl->config;
 }
 
+const cbPKT_SYSINFO* SdkSession::getSysInfo() const {
+    if (m_impl->device_session)
+        return &m_impl->device_session->getSysInfo();
+    if (m_impl->shmem_session) {
+        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
+        if (native)
+            return &native->sysinfo;
+    }
+    return nullptr;
+}
+
+const cbPKT_CHANINFO* SdkSession::getChanInfo(const uint32_t chan_id) const {
+    if (m_impl->device_session)
+        return m_impl->device_session->getChanInfo(chan_id);
+    if (m_impl->shmem_session && chan_id >= 1 && chan_id <= cbMAXCHANS) {
+        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
+        if (native)
+            return &native->chaninfo[chan_id - 1];
+    }
+    return nullptr;
+}
+
+const cbPKT_GROUPINFO* SdkSession::getGroupInfo(uint32_t group_id) const {
+    if (group_id == 0 || group_id > cbMAXGROUPS)
+        return nullptr;
+    if (m_impl->device_session) {
+        const auto& config = m_impl->device_session->getDeviceConfig();
+        return &config.groupinfo[group_id - 1];
+    }
+    if (m_impl->shmem_session) {
+        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
+        if (native)
+            return &native->groupinfo[group_id - 1];
+    }
+    return nullptr;
+}
+
+const cbPKT_FILTINFO* SdkSession::getFilterInfo(const uint32_t filter_id) const {
+    if (filter_id >= cbMAXFILTS)
+        return nullptr;
+    if (m_impl->device_session) {
+        const auto& config = m_impl->device_session->getDeviceConfig();
+        return &config.filtinfo[filter_id];
+    }
+    if (m_impl->shmem_session) {
+        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
+        if (native)
+            return &native->filtinfo[filter_id];
+    }
+    return nullptr;
+}
+
+uint32_t SdkSession::getRunLevel() const {
+    return m_impl->device_runlevel.load(std::memory_order_acquire);
+}
+
 ///--------------------------------------------------------------------------------------------
 /// Channel Configuration
 ///--------------------------------------------------------------------------------------------
@@ -891,6 +949,282 @@ static cbdev::ChannelType toDevChannelType(const ChannelType chanType) {
         default:                       return cbdev::ChannelType::FRONTEND;
     }
 }
+
+
+Result<void> SdkSession::setChannelSampleGroup(const size_t nChans, const ChannelType chanType,
+                                                uint32_t group_id, const bool disableOthers) {
+    // STANDALONE mode: delegate to device session (has full config + direct send)
+    if (m_impl->device_session) {
+        const auto r = m_impl->device_session->setChannelsGroupByType(
+            nChans, toDevChannelType(chanType), static_cast<cbdev::DeviceRate>(group_id), disableOthers);
+        if (r.isError())
+            return Result<void>::error(r.error());
+        return Result<void>::ok();
+    }
+
+    // CLIENT mode: build packets from shmem chaninfo and send through shmem transmit queue
+    if (!m_impl->shmem_session)
+        return Result<void>::error("No session available");
+
+    size_t count = 0;
+    for (uint32_t chan = 1; chan <= cbMAXCHANS; ++chan) {
+        if (!disableOthers && count >= nChans)
+            break;
+
+        auto ci_result = m_impl->shmem_session->getChanInfo(chan - 1);
+        if (ci_result.isError())
+            continue;
+        auto chaninfo = ci_result.value();
+
+        if (classifyChannelByCaps(chaninfo) != chanType)
+            continue;
+
+        const auto grp = count < nChans ? group_id : 0u;
+        chaninfo.chan = chan;
+
+        if (grp > 0 && grp < 6) {
+            chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSETSMP;
+            chaninfo.smpgroup = grp;
+            constexpr uint32_t filter_map[] = {0, 5, 6, 7, 10, 0, 0};
+            chaninfo.smpfilter = filter_map[grp];
+            if (grp == 5) {
+                chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSET;
+                chaninfo.ainpopts &= ~cbAINP_RAWSTREAM;
+            }
+        } else if (grp == 6) {
+            chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
+            chaninfo.ainpopts |= cbAINP_RAWSTREAM;
+        } else {
+            chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSET;
+            chaninfo.smpgroup = 0;
+            chaninfo.ainpopts &= ~cbAINP_RAWSTREAM;
+        }
+
+        auto r = sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
+        if (r.isError())
+            return r;
+        count++;
+    }
+
+    if (count == 0)
+        return Result<void>::error("No channels found matching type");
+    return Result<void>::ok();
+}
+
+Result<void> SdkSession::setChannelSpikeSorting(const size_t nChans, const ChannelType chanType,
+                                                 const uint32_t sortOptions) {
+    // STANDALONE mode: delegate to device session
+    if (m_impl->device_session) {
+        const auto r = m_impl->device_session->setChannelsSpikeSortingByType(
+            nChans, toDevChannelType(chanType), sortOptions);
+        if (r.isError())
+            return Result<void>::error(r.error());
+        return Result<void>::ok();
+    }
+
+    // CLIENT mode: build packets from shmem chaninfo
+    if (!m_impl->shmem_session)
+        return Result<void>::error("No session available");
+
+    size_t count = 0;
+    for (uint32_t chan = 1; chan <= cbMAXCHANS && count < nChans; ++chan) {
+        auto ci_result = m_impl->shmem_session->getChanInfo(chan - 1);
+        if (ci_result.isError())
+            continue;
+        auto chaninfo = ci_result.value();
+
+        if (classifyChannelByCaps(chaninfo) != chanType)
+            continue;
+
+        chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSETSPKTHR;
+        chaninfo.chan = chan;
+        chaninfo.spkopts &= ~cbAINPSPK_ALLSORT;
+        chaninfo.spkopts |= sortOptions;
+
+        auto r = sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
+        if (r.isError())
+            return r;
+        count++;
+    }
+
+    if (count == 0)
+        return Result<void>::error("No channels found matching type");
+    return Result<void>::ok();
+}
+
+Result<void> SdkSession::setChannelConfig(const cbPKT_CHANINFO& chaninfo) {
+    if (m_impl->device_session)
+        return m_impl->device_session->setChannelConfig(chaninfo);
+    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
+}
+
+///--------------------------------------------------------------------------------------------
+/// Comments
+///--------------------------------------------------------------------------------------------
+
+Result<void> SdkSession::sendComment(const std::string& comment, const uint32_t rgba, const uint8_t charset) {
+    if (m_impl->device_session)
+        return m_impl->device_session->sendComment(comment, rgba, charset);
+
+    // CLIENT mode fallback: build packet and route through shmem
+    cbPKT_COMMENT pkt = {};
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_COMMENTSET;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_COMMENT;
+    pkt.info.charset = charset;
+    pkt.timeStarted = 0;
+    pkt.rgba = rgba;
+
+    const size_t len = std::min(comment.size(), static_cast<size_t>(cbMAX_COMMENT - 1));
+    std::memcpy(pkt.comment, comment.c_str(), len);
+    pkt.comment[len] = '\0';
+
+    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+}
+
+///--------------------------------------------------------------------------------------------
+/// File Recording (Central-only commands, always routed through shmem)
+///--------------------------------------------------------------------------------------------
+
+Result<void> SdkSession::startCentralRecording(const std::string& filename, const std::string& comment) {
+    cbPKT_FILECFG pkt = {};
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_SETFILECFG;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_FILECFG;
+
+    const size_t fnlen = std::min(filename.size(), sizeof(pkt.filename) - 1);
+    std::memcpy(pkt.filename, filename.c_str(), fnlen);
+    pkt.filename[fnlen] = '\0';
+
+    const size_t cmtlen = std::min(comment.size(), sizeof(pkt.comment) - 1);
+    std::memcpy(pkt.comment, comment.c_str(), cmtlen);
+    pkt.comment[cmtlen] = '\0';
+
+    pkt.options = cbFILECFG_OPT_NONE;
+    pkt.recording = 1;
+
+    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+}
+
+Result<void> SdkSession::stopCentralRecording() {
+    cbPKT_FILECFG pkt = {};
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_SETFILECFG;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_FILECFG;
+    pkt.options = cbFILECFG_OPT_NONE;
+    pkt.recording = 0;
+
+    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+}
+
+///--------------------------------------------------------------------------------------------
+/// Digital Output
+///--------------------------------------------------------------------------------------------
+
+Result<void> SdkSession::setDigitalOutput(const uint32_t chan_id, const uint16_t value) {
+    if (m_impl->device_session)
+        return m_impl->device_session->setDigitalOutput(chan_id, value);
+
+    // CLIENT mode fallback: build packet and route through shmem
+    cbPKT_SET_DOUT pkt = {};
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_SET_DOUTSET;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_SET_DOUT;
+    pkt.chan = static_cast<uint16_t>(chan_id);
+    pkt.value = value;
+
+    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+}
+
+///--------------------------------------------------------------------------------------------
+/// CCF Configuration Files
+///--------------------------------------------------------------------------------------------
+
+/// Populate a cbCCF struct from a NativeConfigBuffer (CLIENT mode).
+/// Mirrors the logic in ccf::extractDeviceConfig() but reads from NativeConfigBuffer fields.
+static void extractFromNativeConfig(const cbshm::NativeConfigBuffer& native, cbCCF& ccf_data)
+{
+    // Digital filters: copy the 4 custom filters
+    for (int i = 0; i < cbNUM_DIGITAL_FILTERS; ++i)
+        ccf_data.filtinfo[i] = native.filtinfo[cbFIRST_DIGITAL_FILTER + i];
+
+    // Channel info
+    for (int i = 0; i < cbMAXCHANS; ++i)
+        ccf_data.isChan[i] = native.chaninfo[i];
+
+    // Adaptive filter
+    ccf_data.isAdaptInfo = native.adaptinfo;
+
+    // Spike sorting
+    ccf_data.isSS_Detect = native.pktDetect;
+    ccf_data.isSS_ArtifactReject = native.pktArtifReject;
+    for (int i = 0; i < cbNUM_ANALOG_CHANS; ++i)
+        ccf_data.isSS_NoiseBoundary[i] = native.pktNoiseBoundary[i];
+    ccf_data.isSS_Statistics = native.pktStatistics;
+
+    // Spike sorting status: set elapsed minutes to 99 (Central convention)
+    ccf_data.isSS_Status = native.pktStatus;
+    ccf_data.isSS_Status.cntlNumUnits.fElapsedMinutes = 99;
+    ccf_data.isSS_Status.cntlUnitStats.fElapsedMinutes = 99;
+
+    // System info: set type to SYSSETSPKLEN
+    ccf_data.isSysInfo = native.sysinfo;
+    ccf_data.isSysInfo.cbpkt_header.type = cbPKTTYPE_SYSSETSPKLEN;
+
+    // N-trodes
+    for (int i = 0; i < cbMAXNTRODES; ++i)
+        ccf_data.isNTrodeInfo[i] = native.isNTrodeInfo[i];
+
+    // LNC
+    ccf_data.isLnc = native.isLnc;
+
+    // Waveforms: copy and clear active flag
+    for (int i = 0; i < AOUT_NUM_GAIN_CHANS; ++i)
+        for (int j = 0; j < cbMAX_AOUT_TRIGGER; ++j) {
+            ccf_data.isWaveform[i][j] = native.isWaveform[i][j];
+            ccf_data.isWaveform[i][j].active = 0;
+        }
+}
+
+Result<void> SdkSession::saveCCF(const std::string& filename) {
+    cbCCF ccf_data{};
+
+    if (m_impl->device_session) {
+        ccf::extractDeviceConfig(m_impl->device_session->getDeviceConfig(), ccf_data);
+    } else if (m_impl->shmem_session) {
+        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
+        if (!native)
+            return Result<void>::error("No configuration available in shared memory");
+        extractFromNativeConfig(*native, ccf_data);
+    } else {
+        return Result<void>::error("No session available");
+    }
+
+    CCFUtils writer(false, &ccf_data);
+    auto result = writer.WriteCCFNoPrompt(filename.c_str());
+    if (result != ccf::CCFRESULT_SUCCESS)
+        return Result<void>::error("Failed to write CCF file");
+    return Result<void>::ok();
+}
+
+Result<void> SdkSession::loadCCF(const std::string& filename) {
+    cbCCF ccf_data{};
+    CCFUtils reader(false, &ccf_data);
+
+    auto result = reader.ReadCCF(filename.c_str(), true);
+    if (result < ccf::CCFRESULT_SUCCESS)
+        return Result<void>::error("Failed to read CCF file");
+
+    auto packets = ccf::buildConfigPackets(ccf_data);
+    for (const auto& pkt : packets) {
+        auto send_result = sendPacket(pkt);
+        if (send_result.isError())
+            return send_result;
+    }
+
+    return Result<void>::ok();
+}
+
 ///--------------------------------------------------------------------------------------------
 /// Clock Synchronization
 ///--------------------------------------------------------------------------------------------
@@ -1004,7 +1338,7 @@ bool SdkSession::waitForSysrep(uint32_t timeout_ms, uint32_t expected_runlevel) 
 }
 
 ///--------------------------------------------------------------------------------------------
-/// Device Handshaking Methods (STANDALONE mode only)
+/// Device Handshaking Methods
 ///--------------------------------------------------------------------------------------------
 
 Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags) {
@@ -1013,25 +1347,32 @@ Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque,
 
 Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags,
                                            uint32_t wait_for_runlevel, uint32_t timeout_ms) {
-    if (!m_impl->device_session) {
-        return Result<void>::error("setSystemRunLevel() only available in STANDALONE mode");
-    }
-
     // Reset handshake state before sending
     m_impl->received_sysrep.store(false, std::memory_order_relaxed);
 
-    // Send the runlevel packet to device (packet creation handled by DeviceSession)
-    auto send_result = m_impl->device_session->setSystemRunLevel(runlevel, resetque, runflags);
-    if (send_result.isError()) {
-        return Result<void>::error(send_result.error());
+    // Send the runlevel packet
+    Result<void> send_result = Result<void>::error("No session available");
+    if (m_impl->device_session) {
+        send_result = m_impl->device_session->setSystemRunLevel(runlevel, resetque, runflags);
+    } else {
+        // CLIENT mode: build packet and send through shmem
+        cbPKT_SYSINFO pkt = {};
+        pkt.cbpkt_header.time = 1;
+        pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        pkt.cbpkt_header.type = cbPKTTYPE_SYSSETRUNLEV;
+        pkt.cbpkt_header.dlen = cbPKTDLEN_SYSINFO;
+        pkt.runlevel = runlevel;
+        pkt.resetque = resetque;
+        pkt.runflags = runflags;
+        send_result = sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
     }
+    if (send_result.isError())
+        return send_result;
 
-    // Wait for SYSREP response (synchronous behavior)
-    // wait_for_runlevel: 0 = any SYSREP, non-zero = wait for specific runlevel
+    // Wait for SYSREP response
     if (!waitForSysrep(timeout_ms, wait_for_runlevel)) {
-        if (wait_for_runlevel != 0) {
+        if (wait_for_runlevel != 0)
             return Result<void>::error("No SYSREP response with expected runlevel " + std::to_string(wait_for_runlevel));
-        }
         return Result<void>::error("No SYSREP response received for setSystemRunLevel");
     }
 
@@ -1039,32 +1380,32 @@ Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque,
 }
 
 Result<void> SdkSession::requestConfiguration(uint32_t timeout_ms) {
-    if (!m_impl->device_session) {
-        return Result<void>::error("requestConfiguration() only available in STANDALONE mode");
-    }
-
     // Reset handshake state before sending
     m_impl->received_sysrep.store(false, std::memory_order_relaxed);
 
-    // Send the configuration request packet to device (packet creation handled by DeviceSession)
-    auto send_result = m_impl->device_session->requestConfiguration();
-    if (send_result.isError()) {
-        return Result<void>::error(send_result.error());
+    // Send REQCONFIGALL
+    Result<void> send_result = Result<void>::error("No session available");
+    if (m_impl->device_session) {
+        send_result = m_impl->device_session->requestConfiguration();
+    } else {
+        cbPKT_GENERIC pkt = {};
+        pkt.cbpkt_header.time = 1;
+        pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        pkt.cbpkt_header.type = cbPKTTYPE_REQCONFIGALL;
+        pkt.cbpkt_header.dlen = 0;
+        send_result = sendPacket(pkt);
     }
+    if (send_result.isError())
+        return send_result;
 
-    // Wait for final SYSREP packet from config flood (synchronous behavior)
-    // The device sends many config packets and finishes with a SYSREP containing current runlevel
-    if (!waitForSysrep(timeout_ms)) {
+    // Wait for final SYSREP from config flood
+    if (!waitForSysrep(timeout_ms))
         return Result<void>::error("No SYSREP response received for requestConfiguration");
-    }
 
     return Result<void>::ok();
 }
 
 Result<void> SdkSession::performStartupHandshake(uint32_t timeout_ms) {
-    if (!m_impl->device_session) {
-        return Result<void>::error("performStartupHandshake() only available in STANDALONE mode");
-    }
 
     // Complete device startup sequence to transition device from any state to RUNNING
     //
@@ -1185,10 +1526,9 @@ void SdkSession::shmemReceiveThreadLoop() {
                 m_impl->stats.packets_delivered_to_callback += packets_read;
             }
 
-            // Invoke user callback directly (no queueing, no extra copy!)
-            std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
-            if (m_impl->packet_callback) {
-                m_impl->packet_callback(packets, packets_read);
+            // Dispatch to typed callbacks
+            for (size_t i = 0; i < static_cast<size_t>(packets_read); i++) {
+                m_impl->dispatchPacket(packets[i]);
             }
         }
     }

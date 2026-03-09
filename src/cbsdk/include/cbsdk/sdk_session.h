@@ -345,6 +345,104 @@ public:
     /// @return Reference to SDK configuration
     const SdkConfig& getConfig() const;
 
+    /// Get system information
+    /// @return Pointer to system info packet, or nullptr if not available
+    const cbPKT_SYSINFO* getSysInfo() const;
+
+    /// Get channel information
+    /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+    /// @return Pointer to channel info, or nullptr if invalid/unavailable
+    const cbPKT_CHANINFO* getChanInfo(uint32_t chan_id) const;
+
+    /// Get sample group information
+    /// @param group_id Group ID (1-6)
+    /// @return Pointer to group info, or nullptr if invalid/unavailable
+    const cbPKT_GROUPINFO* getGroupInfo(uint32_t group_id) const;
+
+    /// Get filter information
+    /// @param filter_id Filter ID (0 to cbMAXFILTS-1)
+    /// @return Pointer to filter info, or nullptr if invalid/unavailable
+    const cbPKT_FILTINFO* getFilterInfo(uint32_t filter_id) const;
+
+    /// Get current device run level
+    /// @return Current run level (cbRUNLEVEL_*), or 0 if unknown
+    uint32_t getRunLevel() const;
+
+    ///--------------------------------------------------------------------------------------------
+    /// Channel Configuration
+    ///--------------------------------------------------------------------------------------------
+
+    /// Set sampling group for channels of a specific type
+    /// @param nChans Number of channels to configure (cbMAXCHANS for all)
+    /// @param chanType Channel type filter
+    /// @param group_id Sampling group (0-6)
+    /// @param disableOthers Disable sampling on channels not in the first nChans of type
+    /// @return Result indicating success or error
+    Result<void> setChannelSampleGroup(size_t nChans, ChannelType chanType,
+                                       uint32_t group_id, bool disableOthers = false);
+
+    /// Set spike sorting options for channels of a specific type
+    /// @param nChans Number of channels to configure
+    /// @param chanType Channel type filter
+    /// @param sortOptions Spike sorting option flags (cbAINPSPK_*)
+    /// @return Result indicating success or error
+    Result<void> setChannelSpikeSorting(size_t nChans, ChannelType chanType,
+                                        uint32_t sortOptions);
+
+    /// Set full channel configuration by packet
+    /// @param chaninfo Complete channel info packet to send
+    /// @return Result indicating success or error
+    Result<void> setChannelConfig(const cbPKT_CHANINFO& chaninfo);
+
+    ///--------------------------------------------------------------------------------------------
+    /// Comments
+    ///--------------------------------------------------------------------------------------------
+
+    /// Send a comment string to the device (appears in recorded data)
+    /// @param comment Comment text (max 127 chars)
+    /// @param rgba Color as RGBA uint32_t (default 0 = white)
+    /// @param charset Character set (0 = ANSI)
+    /// @return Result indicating success or error
+    Result<void> sendComment(const std::string& comment, uint32_t rgba = 0, uint8_t charset = 0);
+
+    ///--------------------------------------------------------------------------------------------
+    /// File Recording
+    ///--------------------------------------------------------------------------------------------
+
+    /// Start file recording on the device (Central recording)
+    /// @param filename Base filename (without extension)
+    /// @param comment Recording comment
+    /// @return Result indicating success or error
+    Result<void> startCentralRecording(const std::string& filename, const std::string& comment = "");
+
+    /// Stop file recording on the device (Central recording)
+    /// @return Result indicating success or error
+    Result<void> stopCentralRecording();
+
+    ///--------------------------------------------------------------------------------------------
+    /// Analog/Digital Output
+    ///--------------------------------------------------------------------------------------------
+
+    /// Set digital output value
+    /// @param chan_id Channel ID (1-based) of a digital output channel
+    /// @param value Digital output value (bitmask)
+    /// @return Result indicating success or error
+    Result<void> setDigitalOutput(uint32_t chan_id, uint16_t value);
+
+    ///--------------------------------------------------------------------------------------------
+    /// CCF Configuration Files
+    ///--------------------------------------------------------------------------------------------
+
+    /// Save the current device configuration to a CCF (XML) file
+    /// @param filename Path to the CCF file to write
+    /// @return Result indicating success or error
+    Result<void> saveCCF(const std::string& filename);
+
+    /// Load a CCF file and apply its configuration to the device
+    /// @param filename Path to the CCF file to read
+    /// @return Result indicating success or error
+    Result<void> loadCCF(const std::string& filename);
+
     ///--------------------------------------------------------------------------------------------
     /// Clock Synchronization
     ///--------------------------------------------------------------------------------------------

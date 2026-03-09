@@ -28,6 +28,8 @@ target_link_libraries(cbsdk
         cbutil
         cbshm
         cbdev
+    PRIVATE
+        $<BUILD_INTERFACE:ccfutils>
 )
 
 # C++17 for implementation, C compatible API
