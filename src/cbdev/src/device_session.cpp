@@ -420,6 +420,20 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
 #endif
             return Result<DeviceSession>::error("Failed to set non-blocking mode");
         }
+    } else {
+        // For blocking sockets, set a receive timeout so the receive thread
+        // can periodically check its stop flag and shut down cleanly.
+#ifdef _WIN32
+        DWORD timeout_ms = 250;
+        setsockopt(session.m_impl->socket, SOL_SOCKET, SO_RCVTIMEO,
+                   (const char*)&timeout_ms, sizeof(timeout_ms));
+#else
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 250000;  // 250ms
+        setsockopt(session.m_impl->socket, SOL_SOCKET, SO_RCVTIMEO,
+                   (const char*)&tv, sizeof(tv));
+#endif
     }
 
     // Bind to client address and receive port
@@ -493,13 +507,13 @@ Result<int> DeviceSession::receivePacketsRaw(void* buffer, const size_t buffer_s
     if (bytes_recv == SOCKET_ERROR_VALUE) {
         #ifdef _WIN32
         int err = WSAGetLastError();
-        if (err == WSAEWOULDBLOCK) {
-            return Result<int>::ok(0);  // No data available
+        if (err == WSAEWOULDBLOCK || err == WSAETIMEDOUT) {
+            return Result<int>::ok(0);  // No data available (non-blocking or timeout)
         }
         return Result<int>::error("recv failed: " + std::to_string(err));
         #else
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return Result<int>::ok(0);  // No data available
+            return Result<int>::ok(0);  // No data available (non-blocking or timeout)
         }
         return Result<int>::error("recv failed: " + std::string(strerror(errno)));
         #endif
