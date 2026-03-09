@@ -83,9 +83,15 @@ constexpr uint32_t CENTRAL_cbCER_UDP_SIZE_MAX = 58080;
 constexpr uint32_t CENTRAL_cbXMT_GLOBAL_BUFFLEN = ((CENTRAL_cbCER_UDP_SIZE_MAX / 4) * 5000 + 2);  ///< Room for 5000 packet-sized slots
 constexpr uint32_t CENTRAL_cbXMT_LOCAL_BUFFLEN = ((CENTRAL_cbCER_UDP_SIZE_MAX / 4) * 2000 + 2);   ///< Room for 2000 packet-sized slots
 
+/// N-Trode count (Central uses cbNUM_FE_CHANS / 2, not cbNUM_ANALOG_CHANS / 2)
+constexpr uint32_t CENTRAL_cbMAXNTRODES = CENTRAL_cbNUM_FE_CHANS / 2;  ///< = 384
+
+/// Analog output gain channels (Central's multi-instrument count)
+constexpr uint32_t CENTRAL_AOUT_NUM_GAIN_CHANS = CENTRAL_cbNUM_ANAOUT_CHANS + CENTRAL_cbNUM_AUDOUT_CHANS;  ///< = 24
+
 /// Spike cache constants
 constexpr uint32_t CENTRAL_cbPKT_SPKCACHEPKTCNT = 400;                          ///< Packets per channel cache
-constexpr uint32_t CENTRAL_cbPKT_SPKCACHELINECNT = CENTRAL_cbNUM_ANALOG_CHANS;  ///< One cache per analog channel
+constexpr uint32_t CENTRAL_cbPKT_SPKCACHELINECNT = CENTRAL_cbMAXCHANS;          ///< One cache per channel (Central uses cbMAXCHANS, not cbNUM_ANALOG_CHANS)
 
 /// Receive buffer size
 constexpr uint32_t CENTRAL_cbRECBUFFLEN = CENTRAL_cbNUM_FE_CHANS * 65536 * 4 - 1;
@@ -130,8 +136,8 @@ struct CentralLegacyCFGBUFF {
     cbPKT_REFELECFILTINFO refelecinfo[CENTRAL_cbMAXPROCS];
     cbPKT_CHANINFO    chaninfo[CENTRAL_cbMAXCHANS];
     cbSPIKE_SORTING   isSortingOptions;
-    cbPKT_NTRODEINFO  isNTrodeInfo[cbMAXNTRODES];
-    cbPKT_AOUT_WAVEFORM isWaveform[AOUT_NUM_GAIN_CHANS][cbMAX_AOUT_TRIGGER];
+    cbPKT_NTRODEINFO  isNTrodeInfo[CENTRAL_cbMAXNTRODES];
+    cbPKT_AOUT_WAVEFORM isWaveform[CENTRAL_AOUT_NUM_GAIN_CHANS][cbMAX_AOUT_TRIGGER];
     cbPKT_LNC         isLnc[CENTRAL_cbMAXPROCS];
     cbPKT_NPLAY       isNPlay;
     cbVIDEOSOURCE     isVideoSource[cbMAXVIDEOSOURCE];
@@ -230,6 +236,23 @@ enum class NSPStatus : uint32_t {
     NSP_INVALID = 4
 };
 
+/// @brief App workspace entry (matches Central's APP_WORKSPACE from Launching.h)
+///
+/// Central uses `enLaunchView` (C++ enum, sizeof(int) = 4 bytes) for the application field.
+/// We use uint32_t for ABI compatibility.
+///
+constexpr uint32_t CENTRAL_cbMAXAPPWORKSPACES = 10;
+
+struct CentralAppWorkspace {
+    uint32_t m_nWorkspace;          ///< Workspace number (1-based)
+    uint32_t m_nApplication;        ///< Application index (enLaunchView in Central, uint32_t for ABI compat)
+    uint32_t m_nChannel;            ///< Channel number displayed (1-based)
+    uint32_t m_nLeft;
+    uint32_t m_nTop;
+    uint32_t m_nRight;
+    uint32_t m_nBottom;
+};
+
 struct CentralPCStatus {
     // Public data
     cbPKT_UNIT_SELECTION isSelection[CENTRAL_cbMAXPROCS];   ///< Unit selection per instrument
@@ -250,6 +273,7 @@ struct CentralPCStatus {
     NSPStatus m_nNspStatus[CENTRAL_cbMAXPROCS];             ///< NSP status per instrument
     uint32_t m_nNumNTrodesPerInstrument[CENTRAL_cbMAXPROCS];///< NTrode count per instrument
     uint32_t m_nGeminiSystem;                               ///< Gemini system flag
+    CentralAppWorkspace m_icAppWorkspace[CENTRAL_cbMAXAPPWORKSPACES]; ///< App workspace config
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
