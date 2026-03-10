@@ -183,6 +183,8 @@ static_assert(CENTRAL_cbMAXGROUPS == cbCONFIG_MAXGROUPS, "CENTRAL_cbMAXGROUPS mu
 static_assert(CENTRAL_cbMAXFILTS == cbCONFIG_MAXFILTS, "CENTRAL_cbMAXFILTS must equal cbCONFIG_MAXFILTS");
 static_assert(CENTRAL_cbMAXCHANS == cbCONFIG_MAXCHANS, "CENTRAL_cbMAXCHANS must equal cbCONFIG_MAXCHANS");
 static_assert(CENTRAL_cbMAXBANKS == cbCONFIG_MAXBANKS, "CENTRAL_cbMAXBANKS must equal cbCONFIG_MAXBANKS");
+static_assert(CENTRAL_cbMAXNTRODES == cbCONFIG_MAXNTRODES, "CENTRAL_cbMAXNTRODES must equal cbCONFIG_MAXNTRODES");
+static_assert(CENTRAL_AOUT_NUM_GAIN_CHANS == cbCONFIG_AOUT_NUM_GAIN_CHANS, "CENTRAL_AOUT_NUM_GAIN_CHANS must equal cbCONFIG_AOUT_NUM_GAIN_CHANS");
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Local transmit buffer (IPC-only packets)
