@@ -1199,13 +1199,33 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
         return Result<void>::error("Transmit buffer full");
     }
 
+    // Two-pass write protocol (matches Central's cbSendPacket):
+    // Central's consumer skips entries where the first uint32_t (time field) is 0.
+    // 1. Write everything EXCEPT the first uint32_t (time field stays 0 = "not ready")
+    // 2. Atomically write the first uint32_t (time field) to signal "packet ready"
     const uint32_t* pkt_words = reinterpret_cast<const uint32_t*>(write_data);
-    for (uint32_t i = 0; i < pkt_size_words; ++i) {
+
+    // Save the position where time will go
+    uint32_t time_position = head;
+
+    // Pass 1: skip first word (leave it 0), write the rest
+    buf[head] = 0;  // Ensure time field is 0 while writing payload
+    head = (head + 1) % buflen;
+    for (uint32_t i = 1; i < pkt_size_words; ++i) {
         buf[head] = pkt_words[i];
         head = (head + 1) % buflen;
     }
 
+    // Advance head index so the consumer knows data is present
     xmt->headindex = head;
+
+    // Pass 2: atomically write the time field to mark packet as ready
+#ifdef _WIN32
+    InterlockedExchange(reinterpret_cast<volatile LONG*>(&buf[time_position]),
+                        static_cast<LONG>(pkt_words[0]));
+#else
+    __atomic_store_n(&buf[time_position], pkt_words[0], __ATOMIC_SEQ_CST);
+#endif
     return Result<void>::ok();
 }
 
