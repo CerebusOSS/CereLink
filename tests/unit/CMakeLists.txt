@@ -151,7 +151,6 @@ target_include_directories(cbsdk_tests
         ${PROJECT_SOURCE_DIR}/src/cbdev/src
         ${PROJECT_SOURCE_DIR}/src/cbshm/include
         ${PROJECT_SOURCE_DIR}/src/cbproto/include
-        ${PROJECT_SOURCE_DIR}/upstream
 )
 
 # Prefix cbsdk test names so CI can easily exclude device-dependent tests.

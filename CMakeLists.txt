@@ -1,8 +1,7 @@
-# CereLink New Modular Architecture Build System
+# CereLink Build System
 # Author: chadwick.boulay@gmail.com
 #
-# This builds the new modular cbdev-based architecture.
-# For the legacy cbsdk library and tools, see old/CMakeLists.txt
+# Modular architecture: cbproto → cbshm → cbdev → cbsdk
 
 cmake_minimum_required(VERSION 3.16)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake" ${CMAKE_MODULE_PATH})
@@ -34,8 +33,6 @@ cmake_dependent_option(CBSDK_BUILD_TEST "Build tests" ON
 cmake_dependent_option(CBSDK_BUILD_SAMPLE "Build sample applications" ON
     "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
 
-# Legacy build option
-option(CBSDK_BUILD_LEGACY "Build legacy cbsdk library and tools" OFF)
 
 ##########################################################################################
 # Misc Configuration
@@ -103,16 +100,7 @@ if(CBSDK_BUILD_SAMPLE)
 endif(CBSDK_BUILD_SAMPLE)
 
 ##########################################################################################
-# Legacy Build (Optional)
-if(CBSDK_BUILD_LEGACY)
-    message(STATUS "Building legacy cbsdk library and tools")
-    add_subdirectory(old)
-endif(CBSDK_BUILD_LEGACY)
-
-##########################################################################################
-# Installation for new architecture
-# (Legacy installation is handled in old/CMakeLists.txt)
-
+# Installation
 # The actual installation targets are defined in the subdirectories:
 # - src/cbproto/CMakeLists.txt installs cbproto
 # - src/cbshm/CMakeLists.txt installs cbshm
