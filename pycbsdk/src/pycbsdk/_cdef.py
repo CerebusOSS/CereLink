@@ -187,6 +187,30 @@ cbsdk_result_t cbsdk_session_set_digital_output(cbsdk_session_t session,
 cbsdk_result_t cbsdk_session_set_runlevel(cbsdk_session_t session,
     uint32_t runlevel);
 
+// CCF configuration files
+cbsdk_result_t cbsdk_session_save_ccf(cbsdk_session_t session, const char* filename);
+cbsdk_result_t cbsdk_session_load_ccf(cbsdk_session_t session, const char* filename);
+
+// Recording control (Central)
+cbsdk_result_t cbsdk_session_start_central_recording(cbsdk_session_t session,
+    const char* filename, const char* comment);
+cbsdk_result_t cbsdk_session_stop_central_recording(cbsdk_session_t session);
+cbsdk_result_t cbsdk_session_open_central_file_dialog(cbsdk_session_t session);
+cbsdk_result_t cbsdk_session_close_central_file_dialog(cbsdk_session_t session);
+
+// Spike sorting
+cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
+    cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
+    uint32_t sort_options);
+
+// Clock synchronization
+cbsdk_result_t cbsdk_session_get_clock_offset(cbsdk_session_t session, int64_t* offset_ns);
+cbsdk_result_t cbsdk_session_get_clock_uncertainty(cbsdk_session_t session, int64_t* uncertainty_ns);
+cbsdk_result_t cbsdk_session_send_clock_probe(cbsdk_session_t session);
+
+// Utility
+int64_t cbsdk_get_steady_clock_ns(void);
+
 // Error handling & version
 const char* cbsdk_get_error_message(cbsdk_result_t result);
 const char* cbsdk_get_version(void);

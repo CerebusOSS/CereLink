@@ -475,6 +475,17 @@ CBSDK_API cbsdk_result_t cbsdk_session_start_central_recording(
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_stop_central_recording(cbsdk_session_t session);
 
+/// Open Central's File Storage dialog
+/// Must be called before start_central_recording (wait ~250ms after for dialog to initialize)
+/// @param session Session handle (must not be NULL)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_open_central_file_dialog(cbsdk_session_t session);
+
+/// Close Central's File Storage dialog
+/// @param session Session handle (must not be NULL)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_close_central_file_dialog(cbsdk_session_t session);
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Spike Sorting
 ///////////////////////////////////////////////////////////////////////////////////////////////////

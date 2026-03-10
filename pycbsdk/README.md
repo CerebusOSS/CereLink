@@ -84,6 +84,33 @@ session = Session(device_type="HUB1", callback_queue_depth=16384)
 - `session.set_digital_output(chan_id, value)` — set digital output
 - `session.set_runlevel(level)` — change system run level
 - `session.set_channel_sample_group(n, "FRONTEND", group_id)` — configure sampling
+- `session.set_channel_spike_sorting(n, "FRONTEND", sort_options)` — configure spike sorting
+
+**CCF Configuration Files**:
+
+- `session.save_ccf("config.ccf")` — save current device config to XML file
+- `session.load_ccf("config.ccf")` — load config from file and apply to device
+
+**Recording Control** (requires Central):
+
+- `session.start_central_recording("filename", comment="session 1")` — start recording
+- `session.stop_central_recording()` — stop recording
+
+**Clock Synchronization**:
+
+```python
+# Convert device timestamp to Python's time.monotonic()
+@session.on_event("FRONTEND")
+def on_spike(header, data):
+    t = session.device_to_monotonic(header.time)
+    latency_ms = (time.monotonic() - t) * 1000
+    print(f"Spike latency: {latency_ms:.1f} ms")
+```
+
+- `session.device_to_monotonic(device_time_ns)` — convert device timestamp to `time.monotonic()` seconds
+- `session.clock_offset_ns` — raw clock offset (device_ns - steady_clock_ns), or None
+- `session.clock_uncertainty_ns` — uncertainty (half-RTT), or None
+- `session.send_clock_probe()` — send a sync probe
 
 **Statistics**:
 

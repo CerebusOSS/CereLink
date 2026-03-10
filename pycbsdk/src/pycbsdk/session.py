@@ -4,6 +4,7 @@ Pythonic session wrapper for the CereLink SDK.
 
 from __future__ import annotations
 
+import time as _time
 import threading
 from dataclasses import dataclass, field
 from typing import Callable, Optional
@@ -122,6 +123,8 @@ class Session:
         self._callback_refs: list = []
         self._lock = threading.Lock()
         self._closed = False
+        # Calibrate monotonic ↔ steady_clock offset for device_to_monotonic()
+        self._mono_to_steady_offset_ns = self._calibrate_monotonic_offset()
 
     def __enter__(self):
         return self
@@ -444,6 +447,194 @@ class Session:
             ),
             "Failed to set channel sample group",
         )
+
+    # --- CCF Configuration Files ---
+
+    def save_ccf(self, filename: str):
+        """Save the current device configuration to a CCF (XML) file.
+
+        Args:
+            filename: Path to the CCF file to write.
+        """
+        _check(
+            _get_lib().cbsdk_session_save_ccf(self._session, filename.encode()),
+            "Failed to save CCF",
+        )
+
+    def load_ccf(self, filename: str):
+        """Load a CCF file and apply its configuration to the device.
+
+        Reads the CCF file and sends the configuration packets to the device.
+        The device must be connected in STANDALONE mode.
+
+        Args:
+            filename: Path to the CCF file to read.
+        """
+        _check(
+            _get_lib().cbsdk_session_load_ccf(self._session, filename.encode()),
+            "Failed to load CCF",
+        )
+
+    # --- Recording Control ---
+
+    def start_central_recording(self, filename: str, comment: str = ""):
+        """Start Central file recording on the device.
+
+        Requires Central to be running.
+
+        Args:
+            filename: Base filename without extension.
+            comment: Recording comment.
+        """
+        _lib = _get_lib()
+        _check(
+            _lib.cbsdk_session_start_central_recording(
+                self._session, filename.encode(),
+                comment.encode() if comment else ffi.NULL,
+            ),
+            "Failed to start Central recording",
+        )
+
+    def stop_central_recording(self):
+        """Stop Central file recording on the device."""
+        _check(
+            _get_lib().cbsdk_session_stop_central_recording(self._session),
+            "Failed to stop Central recording",
+        )
+
+    def open_central_file_dialog(self):
+        """Open Central's File Storage dialog.
+
+        Must be called before start_central_recording().
+        Wait ~250ms after this call for the dialog to initialize.
+        """
+        _check(
+            _get_lib().cbsdk_session_open_central_file_dialog(self._session),
+            "Failed to open Central file dialog",
+        )
+
+    def close_central_file_dialog(self):
+        """Close Central's File Storage dialog."""
+        _check(
+            _get_lib().cbsdk_session_close_central_file_dialog(self._session),
+            "Failed to close Central file dialog",
+        )
+
+    # --- Spike Sorting ---
+
+    def set_channel_spike_sorting(
+        self,
+        n_chans: int,
+        channel_type: str,
+        sort_options: int,
+    ):
+        """Set spike sorting options for channels of a specific type.
+
+        Args:
+            n_chans: Number of channels to configure.
+            channel_type: Channel type filter (e.g., "FRONTEND").
+            sort_options: Spike sorting option flags (cbAINPSPK_*).
+        """
+        _lib = _get_lib()
+        ct_upper = channel_type.upper()
+        if ct_upper not in CHANNEL_TYPES:
+            raise ValueError(f"Unknown channel_type: {channel_type!r}")
+        c_type = getattr(_lib, CHANNEL_TYPES[ct_upper])
+        _check(
+            _lib.cbsdk_session_set_channel_spike_sorting(
+                self._session, n_chans, c_type, sort_options
+            ),
+            "Failed to set spike sorting",
+        )
+
+    # --- Clock Synchronization ---
+
+    @staticmethod
+    def _calibrate_monotonic_offset() -> int:
+        """Compute offset between time.monotonic() and C++ steady_clock.
+
+        On Linux, macOS, and Windows with Python 3.12+, both clocks use the
+        same underlying source (CLOCK_MONOTONIC / mach_absolute_time /
+        QueryPerformanceCounter) so the offset is exactly 0.
+
+        On older Windows Python (<3.12), time.monotonic() may use
+        GetTickCount64 while steady_clock uses QueryPerformanceCounter,
+        so we measure the offset empirically.
+
+        Returns:
+            steady_clock_ns - monotonic_ns (int).
+        """
+        import sys
+        import platform
+
+        if platform.system() != "Windows" or sys.version_info >= (3, 12):
+            return 0
+
+        # Windows < 3.12: clocks may differ, measure empirically
+        _lib = _get_lib()
+        t1 = _time.monotonic()
+        steady_ns = _lib.cbsdk_get_steady_clock_ns()
+        t2 = _time.monotonic()
+        mono_ns = int((t1 + t2) / 2 * 1_000_000_000)
+        return steady_ns - mono_ns
+
+    @property
+    def clock_offset_ns(self) -> Optional[int]:
+        """Clock offset in nanoseconds (device_ns - host_ns), or None if unavailable."""
+        _lib = _get_lib()
+        offset = ffi.new("int64_t *")
+        result = _lib.cbsdk_session_get_clock_offset(self._session, offset)
+        if result != 0:
+            return None
+        return offset[0]
+
+    @property
+    def clock_uncertainty_ns(self) -> Optional[int]:
+        """Clock uncertainty (half-RTT) in nanoseconds, or None if unavailable."""
+        _lib = _get_lib()
+        uncertainty = ffi.new("int64_t *")
+        result = _lib.cbsdk_session_get_clock_uncertainty(self._session, uncertainty)
+        if result != 0:
+            return None
+        return uncertainty[0]
+
+    def send_clock_probe(self):
+        """Send a clock synchronization probe to the device."""
+        _check(
+            _get_lib().cbsdk_session_send_clock_probe(self._session),
+            "Failed to send clock probe",
+        )
+
+    def device_to_monotonic(self, device_time_ns: int) -> float:
+        """Convert a device timestamp to ``time.monotonic()`` seconds.
+
+        Chains two offsets:
+        1. device_ns → steady_clock_ns  (via clock_offset_ns from device sync)
+        2. steady_clock_ns → monotonic_ns  (via calibration at session creation)
+
+        Args:
+            device_time_ns: Device timestamp in nanoseconds (e.g., header.time).
+
+        Returns:
+            Corresponding ``time.monotonic()`` value in seconds.
+
+        Raises:
+            RuntimeError: If no clock sync data is available yet.
+
+        Example::
+
+            @session.on_event("FRONTEND")
+            def on_spike(header, data):
+                t = session.device_to_monotonic(header.time)
+                latency_ms = (time.monotonic() - t) * 1000
+                print(f"Spike latency: {latency_ms:.1f} ms")
+        """
+        offset = self.clock_offset_ns
+        if offset is None:
+            raise RuntimeError("No clock sync data available")
+        steady_ns = device_time_ns - offset
+        mono_ns = steady_ns - self._mono_to_steady_offset_ns
+        return mono_ns / 1_000_000_000
 
     # --- Commands ---
 

@@ -710,6 +710,30 @@ cbsdk_result_t cbsdk_session_stop_central_recording(cbsdk_session_t session) {
     }
 }
 
+cbsdk_result_t cbsdk_session_open_central_file_dialog(cbsdk_session_t session) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->openCentralFileDialog();
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_close_central_file_dialog(cbsdk_session_t session) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->closeCentralFileDialog();
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Spike Sorting
 ///////////////////////////////////////////////////////////////////////////////////////////////////
