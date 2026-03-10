@@ -306,7 +306,7 @@ TEST_F(SdkSessionTest, SPSCQueue_Overflow) {
 // Helper to print packet header for debugging
 void print_packet_header(const char* label, const cbPKT_GENERIC& pkt) {
     printf("%s:\n", label);
-    printf("  time: 0x%08X (%u)\n", pkt.cbpkt_header.time, pkt.cbpkt_header.time);
+    printf("  time: 0x%08llu (%llu)\n", pkt.cbpkt_header.time, pkt.cbpkt_header.time);
     printf("  chid: 0x%04X\n", pkt.cbpkt_header.chid);
     printf("  type: 0x%02X\n", pkt.cbpkt_header.type);
     printf("  dlen: %u\n", pkt.cbpkt_header.dlen);
