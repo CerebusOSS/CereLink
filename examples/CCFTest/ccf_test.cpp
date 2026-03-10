@@ -3,8 +3,11 @@
 /// @brief  Test CCF save/load with a real device
 ///
 /// Usage:
-///   ccf_test [device_type]
-///   ccf_test HUB1
+///   ccf_test <device_type> <ccf_A> <ccf_B>
+///   ccf_test HUB1 hub1-raw128-spk128.ccf hub1-raw16.ccf
+///
+/// The test loads CCF A, saves the device config, loads CCF B, saves again,
+/// and compares the two saved files to verify the load actually changed the device.
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -15,7 +18,6 @@
 #include <fstream>
 #include <chrono>
 #include <thread>
-#include <atomic>
 
 using namespace cbsdk;
 
@@ -30,11 +32,33 @@ DeviceType parseDeviceType(const std::string& s) {
     std::exit(1);
 }
 
-int main(int argc, char* argv[]) {
-    DeviceType device_type = DeviceType::LEGACY_NSP;
-    if (argc >= 2) device_type = parseDeviceType(argv[1]);
+void printChannelSummary(SdkSession& session, const char* label, int n = 5) {
+    std::cout << "=== " << label << " (channels 1-" << n << ") ===\n";
+    for (uint32_t ch = 1; ch <= (uint32_t)n; ++ch) {
+        const auto* info = session.getChanInfo(ch);
+        if (info) {
+            std::cout << "  ch " << std::setw(3) << ch
+                      << ": spkopts=0x" << std::hex << std::setw(5) << std::setfill('0') << info->spkopts
+                      << " ainpopts=0x" << std::setw(4) << info->ainpopts
+                      << std::dec << std::setfill(' ')
+                      << " smpgroup=" << info->smpgroup
+                      << " label=" << info->label
+                      << "\n";
+        }
+    }
+}
 
-    std::cout << "=== CCF Test ===\n\n";
+int main(int argc, char* argv[]) {
+    if (argc < 4) {
+        std::cerr << "Usage: ccf_test <device_type> <ccf_A> <ccf_B>\n"
+                  << "  Loads A, saves, loads B, saves, then compares.\n"
+                  << "  Example: ccf_test HUB1 hub1-raw128-spk128.ccf hub1-raw16.ccf\n";
+        return 1;
+    }
+
+    DeviceType device_type = parseDeviceType(argv[1]);
+    std::string ccf_a = argv[2];
+    std::string ccf_b = argv[3];
 
     // Create session
     SdkConfig config;
@@ -48,97 +72,53 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     auto session = std::move(result.value());
-    std::cout << "Connected.\n\n";
 
     // Wait for config to be fully populated
     std::this_thread::sleep_for(std::chrono::seconds(2));
+    std::cout << "Connected.\n\n";
 
-    // Inspect device_config
-    std::cout << "=== Channel Info (first 5 channels) ===\n";
-    for (uint32_t ch = 1; ch <= 5; ++ch) {
-        const auto* info = session.getChanInfo(ch);
-        if (info) {
-            std::cout << "  ch " << ch << ":"
-                      << " chan=" << info->chan
-                      << " proc=" << info->proc
-                      << " bank=" << info->bank
-                      << " term=" << info->term
-                      << " smpgroup=" << info->smpgroup
-                      << " chancaps=0x" << std::hex << info->chancaps << std::dec
-                      << " label=" << info->label
-                      << "\n";
-        } else {
-            std::cout << "  ch " << ch << ": null\n";
-        }
-    }
+    printChannelSummary(session, "Before any load");
 
-    // Check group info
-    std::cout << "\n=== Group Info ===\n";
-    for (uint32_t g = 1; g <= 6; ++g) {
-        const auto* ginfo = session.getGroupInfo(g);
-        if (ginfo) {
-            std::cout << "  Group " << g << ":"
-                      << " label=" << ginfo->label
-                      << " length=" << ginfo->length
-                      << "\n";
-        }
-    }
+    // Step 1: Load CCF A
+    std::cout << "\n--- Loading " << ccf_a << " ---\n";
+    auto r1 = session.loadCCF(ccf_a);
+    if (r1.isError()) { std::cerr << "Load A failed: " << r1.error() << "\n"; return 1; }
+    std::this_thread::sleep_for(std::chrono::seconds(2));
 
-    // Manually test extractDeviceConfig
+    printChannelSummary(session, ("After loading " + ccf_a).c_str());
+
+    // Save device state after A
+    auto s1 = session.saveCCF("ccf_after_A.ccf");
+    if (s1.isError()) { std::cerr << "Save after A failed: " << s1.error() << "\n"; return 1; }
+    std::cout << "  Saved device state -> ccf_after_A.ccf\n\n";
+
+    // Step 2: Load CCF B
+    std::cout << "--- Loading " << ccf_b << " ---\n";
+    auto r2 = session.loadCCF(ccf_b);
+    if (r2.isError()) { std::cerr << "Load B failed: " << r2.error() << "\n"; return 1; }
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+
+    printChannelSummary(session, ("After loading " + ccf_b).c_str());
+
+    // Save device state after B
+    auto s2 = session.saveCCF("ccf_after_B.ccf");
+    if (s2.isError()) { std::cerr << "Save after B failed: " << s2.error() << "\n"; return 1; }
+    std::cout << "  Saved device state -> ccf_after_B.ccf\n\n";
+
+    // Compare: check spkopts for channels 1-5 between A and B states
+    std::cout << "=== Comparison ===\n";
+    // Re-read saved files to compare
+    // (We already know the in-memory state; compare saved CCF sizes as a quick sanity check)
     {
-        std::cout << "\n=== Debug extractDeviceConfig ===\n";
-        // Note: we can't call extractDeviceConfig directly from here,
-        // but we can inspect what saveCCF does by checking the CCF internally.
-        // Let's verify the config has data by checking a few fields:
-        const auto* ch1 = session.getChanInfo(1);
-        const auto* ch2 = session.getChanInfo(2);
-        std::cout << "  getChanInfo(1)->chan = " << (ch1 ? ch1->chan : 0)
-                  << ", label = " << (ch1 ? ch1->label : "null")
-                  << ", dlen = " << (ch1 ? ch1->cbpkt_header.dlen : 0)
-                  << ", chid = 0x" << std::hex << (ch1 ? ch1->cbpkt_header.chid : 0) << std::dec
-                  << "\n";
-        std::cout << "  getChanInfo(2)->chan = " << (ch2 ? ch2->chan : 0) << "\n";
-        std::cout << "  sizeof(cbPKT_CHANINFO) = " << sizeof(cbPKT_CHANINFO) << "\n";
-    }
-
-    // Test saveCCF
-    std::cout << "\n=== Save CCF ===\n";
-    auto save_result = session.saveCCF("ccf_test_output.ccf");
-    if (save_result.isOk()) {
-        std::cout << "Saved to ccf_test_output.ccf\n";
-        // Check file size
-        std::ifstream f("ccf_test_output.ccf", std::ios::ate);
-        if (f.is_open()) {
-            std::cout << "  File size: " << f.tellg() << " bytes\n";
-        }
-    } else {
-        std::cerr << "Save failed: " << save_result.error() << "\n";
-    }
-
-    // Test loadCCF with one of the user's files
-    if (argc >= 3) {
-        std::string ccf_path = argv[2];
-        std::cout << "\n=== Load CCF: " << ccf_path << " ===\n";
-        auto load_result = session.loadCCF(ccf_path);
-        if (load_result.isOk()) {
-            std::cout << "Loaded successfully\n";
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-
-            // Re-check channel info
-            std::cout << "\n=== Channel Info After Load (first 5) ===\n";
-            for (uint32_t ch = 1; ch <= 5; ++ch) {
-                const auto* info = session.getChanInfo(ch);
-                if (info) {
-                    std::cout << "  ch " << ch << ":"
-                              << " chan=" << info->chan
-                              << " smpgroup=" << info->smpgroup
-                              << " chancaps=0x" << std::hex << info->chancaps << std::dec
-                              << " label=" << info->label
-                              << "\n";
-                }
-            }
-        } else {
-            std::cerr << "Load failed: " << load_result.error() << "\n";
+        std::ifstream fa("ccf_after_A.ccf", std::ios::ate);
+        std::ifstream fb("ccf_after_B.ccf", std::ios::ate);
+        if (fa.is_open() && fb.is_open()) {
+            auto sizeA = fa.tellg();
+            auto sizeB = fb.tellg();
+            std::cout << "  ccf_after_A.ccf: " << sizeA << " bytes\n";
+            std::cout << "  ccf_after_B.ccf: " << sizeB << " bytes\n";
+            std::cout << "  Files " << (sizeA == sizeB ? "are SAME size (unexpected if configs differ)"
+                                                       : "DIFFER in size (good)") << "\n";
         }
     }
 

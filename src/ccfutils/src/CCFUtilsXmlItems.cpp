@@ -1212,7 +1212,7 @@ void ccf::ReadItem(XmlFile * const xml, T item[], int count)
         subcount = mapItemCount[strSubKey];
         mapItemCount[strSubKey] = subcount + 1;
         if (subcount)
-            strSubKey += std::to_string(subcount);
+            strSubKey += "<" + std::to_string(subcount) + ">";
         T tmp;
         // Initialize with possible item
         int num = ItemNumber(xml, tmp, strSubKey);
@@ -1281,7 +1281,7 @@ void ccf::ReadItem(XmlFile * const xml, T pItem[], int count1, int count2, std::
             subcount = mapItemCount[strSubKey];
             mapItemCount[strSubKey] = subcount + 1;
             if (subcount)
-                strSubKey += std::to_string(subcount);
+                strSubKey += "<" + std::to_string(subcount) + ">";
             ReadItem(xml, pItem[i], count2, strSubKey);
         }
     }
