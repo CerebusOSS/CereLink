@@ -27,7 +27,6 @@
 #include <vector>
 #include <memory>
 #include <map>
-#include <unistd.h>  // for getpid()
 #include <condition_variable>
 #include <cerrno>
 
