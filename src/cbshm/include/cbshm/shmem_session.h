@@ -477,6 +477,15 @@ public:
     /// @return Result indicating success or failure
     Result<void> resetSignal();
 
+    /// @brief Get last timestamp from receive buffer
+    ///
+    /// Returns the most recent packet timestamp written to the receive buffer.
+    /// Used by sendPacket to stamp outgoing packets with a non-zero time
+    /// (Central's xmt consumer skips packets with time=0).
+    ///
+    /// @return Last timestamp, or 0 if receive buffer not initialized
+    PROCTIME getLastTime() const;
+
     /// @}
 
 private:

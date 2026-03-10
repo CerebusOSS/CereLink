@@ -1647,6 +1647,13 @@ Result<void> ShmemSession::resetSignal() {
 #endif
 }
 
+PROCTIME ShmemSession::getLastTime() const {
+    if (!m_impl || !m_impl->is_open || !m_impl->rec_buffer_raw) {
+        return 0;
+    }
+    return m_impl->recLasttime();
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Instrument Filtering
 
