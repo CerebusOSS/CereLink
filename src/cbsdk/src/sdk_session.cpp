@@ -1368,13 +1368,20 @@ Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {
     // Works in both STANDALONE and CLIENT modes:
     // - STANDALONE: send thread will dequeue and transmit
     // - CLIENT: STANDALONE process's send thread will pick it up
-    auto result = m_impl->shmem_session->enqueuePacket(pkt);
+    if (!m_impl) {
+        return Result<void>::error("sendPacket: m_impl is null");
+    }
+    if (!m_impl->shmem_session) {
+        return Result<void>::error("sendPacket: shmem_session is null");
+    }
+
+    // Stamp packet time from receive buffer (Central's xmt consumer skips packets with time=0)
+    cbPKT_GENERIC stamped = pkt;
+    PROCTIME t = m_impl->shmem_session->getLastTime();
+    stamped.cbpkt_header.time = (t != 0) ? t : 1;
+
+    auto result = m_impl->shmem_session->enqueuePacket(stamped);
     if (result.isOk()) {
-        // Wake up send thread if in STANDALONE mode
-        if (m_impl->device_session) {
-            // Notify send thread that packets are available
-            // (device_session checks hasTransmitPackets via callback)
-        }
         return Result<void>::ok();
     } else {
         return Result<void>::error(result.error());
