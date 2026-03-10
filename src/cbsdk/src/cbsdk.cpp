@@ -512,6 +512,113 @@ uint32_t cbsdk_session_get_channel_chancaps(cbsdk_session_t session, uint32_t ch
     }
 }
 
+cbproto_channel_type_t cbsdk_session_get_channel_type(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) {
+        return static_cast<cbproto_channel_type_t>(-1);
+    }
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        if (!info) return static_cast<cbproto_channel_type_t>(-1);
+
+        const uint32_t caps = info->chancaps;
+        if ((cbCHAN_EXISTS | cbCHAN_CONNECTED) != (caps & (cbCHAN_EXISTS | cbCHAN_CONNECTED)))
+            return static_cast<cbproto_channel_type_t>(-1);
+
+        if ((cbCHAN_AINP | cbCHAN_ISOLATED) == (caps & (cbCHAN_AINP | cbCHAN_ISOLATED)))
+            return CBPROTO_CHANNEL_TYPE_FRONTEND;
+        if (cbCHAN_AINP == (caps & (cbCHAN_AINP | cbCHAN_ISOLATED)))
+            return CBPROTO_CHANNEL_TYPE_ANALOG_IN;
+        if (cbCHAN_AOUT == (caps & cbCHAN_AOUT)) {
+            if (cbAOUT_AUDIO == (info->aoutcaps & cbAOUT_AUDIO))
+                return CBPROTO_CHANNEL_TYPE_AUDIO;
+            return CBPROTO_CHANNEL_TYPE_ANALOG_OUT;
+        }
+        if (cbCHAN_DINP == (caps & cbCHAN_DINP)) {
+            if (info->dinpcaps & cbDINP_SERIALMASK)
+                return CBPROTO_CHANNEL_TYPE_SERIAL;
+            return CBPROTO_CHANNEL_TYPE_DIGITAL_IN;
+        }
+        if (cbCHAN_DOUT == (caps & cbCHAN_DOUT))
+            return CBPROTO_CHANNEL_TYPE_DIGITAL_OUT;
+
+        return static_cast<cbproto_channel_type_t>(-1);
+    } catch (...) {
+        return static_cast<cbproto_channel_type_t>(-1);
+    }
+}
+
+uint32_t cbsdk_session_get_channel_smpfilter(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        return info ? info->smpfilter : 0;
+    } catch (...) { return 0; }
+}
+
+uint32_t cbsdk_session_get_channel_spkfilter(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        return info ? info->spkfilter : 0;
+    } catch (...) { return 0; }
+}
+
+uint32_t cbsdk_session_get_channel_spkopts(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        return info ? info->spkopts : 0;
+    } catch (...) { return 0; }
+}
+
+int32_t cbsdk_session_get_channel_spkthrlevel(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        return info ? info->spkthrlevel : 0;
+    } catch (...) { return 0; }
+}
+
+uint32_t cbsdk_session_get_channel_ainpopts(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        return info ? info->ainpopts : 0;
+    } catch (...) { return 0; }
+}
+
+uint32_t cbsdk_session_get_channel_lncrate(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        return info ? info->lncrate : 0;
+    } catch (...) { return 0; }
+}
+
+uint32_t cbsdk_session_get_channel_refelecchan(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        return info ? info->refelecchan : 0;
+    } catch (...) { return 0; }
+}
+
+int16_t cbsdk_session_get_channel_amplrejpos(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        return info ? info->amplrejpos : 0;
+    } catch (...) { return 0; }
+}
+
+int16_t cbsdk_session_get_channel_amplrejneg(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        return info ? info->amplrejneg : 0;
+    } catch (...) { return 0; }
+}
+
 const char* cbsdk_session_get_group_label(cbsdk_session_t session, uint32_t group_id) {
     if (!session || !session->cpp_session) {
         return nullptr;
@@ -585,6 +692,154 @@ cbsdk_result_t cbsdk_session_set_channel_config(
     } catch (...) {
         return CBSDK_RESULT_INTERNAL_ERROR;
     }
+}
+
+/// Helper: read-modify-write a channel config field
+/// Gets current chaninfo from shared memory, calls `modify` on a copy, sends the packet.
+static cbsdk_result_t modify_and_send_chaninfo(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    uint16_t pkt_type,
+    std::function<void(cbPKT_CHANINFO&)> modify) {
+    if (!session || !session->cpp_session) return CBSDK_RESULT_INVALID_PARAMETER;
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        if (!info) return CBSDK_RESULT_INVALID_PARAMETER;
+        cbPKT_CHANINFO ci = *info;
+        ci.chan = chan_id;
+        ci.cbpkt_header.type = pkt_type;
+        modify(ci);
+        auto r = session->cpp_session->sendPacket(
+            reinterpret_cast<const cbPKT_GENERIC&>(ci));
+        return r.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_set_channel_label(
+    cbsdk_session_t session, uint32_t chan_id, const char* label) {
+    if (!label) return CBSDK_RESULT_INVALID_PARAMETER;
+    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETLABEL,
+        [label](cbPKT_CHANINFO& ci) {
+            std::strncpy(ci.label, label, sizeof(ci.label) - 1);
+            ci.label[sizeof(ci.label) - 1] = '\0';
+        });
+}
+
+cbsdk_result_t cbsdk_session_set_channel_smpfilter(
+    cbsdk_session_t session, uint32_t chan_id, uint32_t filter_id) {
+    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETSMP,
+        [filter_id](cbPKT_CHANINFO& ci) {
+            ci.smpfilter = filter_id;
+        });
+}
+
+cbsdk_result_t cbsdk_session_set_channel_spkfilter(
+    cbsdk_session_t session, uint32_t chan_id, uint32_t filter_id) {
+    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETSPK,
+        [filter_id](cbPKT_CHANINFO& ci) {
+            ci.spkfilter = filter_id;
+        });
+}
+
+cbsdk_result_t cbsdk_session_set_channel_ainpopts(
+    cbsdk_session_t session, uint32_t chan_id, uint32_t ainpopts) {
+    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETAINP,
+        [ainpopts](cbPKT_CHANINFO& ci) {
+            ci.ainpopts = ainpopts;
+        });
+}
+
+cbsdk_result_t cbsdk_session_set_channel_lncrate(
+    cbsdk_session_t session, uint32_t chan_id, uint32_t lncrate) {
+    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETAINP,
+        [lncrate](cbPKT_CHANINFO& ci) {
+            ci.lncrate = lncrate;
+        });
+}
+
+cbsdk_result_t cbsdk_session_set_channel_spkopts(
+    cbsdk_session_t session, uint32_t chan_id, uint32_t spkopts) {
+    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETSPKTHR,
+        [spkopts](cbPKT_CHANINFO& ci) {
+            ci.spkopts = spkopts;
+        });
+}
+
+cbsdk_result_t cbsdk_session_set_channel_spkthrlevel(
+    cbsdk_session_t session, uint32_t chan_id, int32_t level) {
+    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETSPKTHR,
+        [level](cbPKT_CHANINFO& ci) {
+            ci.spkthrlevel = level;
+        });
+}
+
+cbsdk_result_t cbsdk_session_set_channel_autothreshold(
+    cbsdk_session_t session, uint32_t chan_id, bool enabled) {
+    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETAUTOTHRESHOLD,
+        [enabled](cbPKT_CHANINFO& ci) {
+            if (enabled)
+                ci.spkopts |= cbAINPSPK_THRAUTO;
+            else
+                ci.spkopts &= ~cbAINPSPK_THRAUTO;
+        });
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Bulk Configuration Access
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+uint32_t cbsdk_session_get_sysfreq(cbsdk_session_t session) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        const cbPKT_SYSINFO* info = session->cpp_session->getSysInfo();
+        return info ? info->sysfreq : 0;
+    } catch (...) { return 0; }
+}
+
+uint32_t cbsdk_get_num_filters(void) {
+    return cbMAXFILTS;
+}
+
+const char* cbsdk_session_get_filter_label(cbsdk_session_t session, uint32_t filter_id) {
+    if (!session || !session->cpp_session) return nullptr;
+    try {
+        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
+        return info ? info->label : nullptr;
+    } catch (...) { return nullptr; }
+}
+
+uint32_t cbsdk_session_get_filter_hpfreq(cbsdk_session_t session, uint32_t filter_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
+        return info ? info->hpfreq : 0;
+    } catch (...) { return 0; }
+}
+
+uint32_t cbsdk_session_get_filter_hporder(cbsdk_session_t session, uint32_t filter_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
+        return info ? info->hporder : 0;
+    } catch (...) { return 0; }
+}
+
+uint32_t cbsdk_session_get_filter_lpfreq(cbsdk_session_t session, uint32_t filter_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
+        return info ? info->lpfreq : 0;
+    } catch (...) { return 0; }
+}
+
+uint32_t cbsdk_session_get_filter_lporder(cbsdk_session_t session, uint32_t filter_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
+        return info ? info->lporder : 0;
+    } catch (...) { return 0; }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

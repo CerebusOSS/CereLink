@@ -354,6 +354,66 @@ CBSDK_API uint32_t cbsdk_session_get_channel_smpgroup(cbsdk_session_t session, u
 /// @return Channel capabilities (cbCHAN_* flags), or 0 on error
 CBSDK_API uint32_t cbsdk_session_get_channel_chancaps(cbsdk_session_t session, uint32_t chan_id);
 
+/// Get a channel's type classification based on its capabilities
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Channel type, or -1 if invalid
+CBSDK_API cbproto_channel_type_t cbsdk_session_get_channel_type(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get a channel's continuous-time pathway filter ID
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Filter ID, or 0 on error
+CBSDK_API uint32_t cbsdk_session_get_channel_smpfilter(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get a channel's spike pathway filter ID
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Filter ID, or 0 on error
+CBSDK_API uint32_t cbsdk_session_get_channel_spkfilter(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get a channel's spike processing options
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Spike options (cbAINPSPK_* flags), or 0 on error
+CBSDK_API uint32_t cbsdk_session_get_channel_spkopts(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get a channel's spike threshold level
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Spike threshold level, or 0 on error
+CBSDK_API int32_t cbsdk_session_get_channel_spkthrlevel(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get a channel's analog input options (LNC, reference electrode, etc.)
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Analog input options (cbAINP_* flags), or 0 on error
+CBSDK_API uint32_t cbsdk_session_get_channel_ainpopts(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get a channel's line noise cancellation adaptation rate
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return LNC rate, or 0 on error
+CBSDK_API uint32_t cbsdk_session_get_channel_lncrate(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get a channel's software reference electrode channel
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Reference electrode channel ID, or 0 on error
+CBSDK_API uint32_t cbsdk_session_get_channel_refelecchan(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get a channel's positive amplitude rejection threshold
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Positive amplitude rejection value, or 0 on error
+CBSDK_API int16_t cbsdk_session_get_channel_amplrejpos(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get a channel's negative amplitude rejection threshold
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Negative amplitude rejection value, or 0 on error
+CBSDK_API int16_t cbsdk_session_get_channel_amplrejneg(cbsdk_session_t session, uint32_t chan_id);
+
 /// Get a sample group's label
 /// @param session Session handle (must not be NULL)
 /// @param group_id Group ID (1-6)
@@ -397,6 +457,129 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_channel_sample_group(
 CBSDK_API cbsdk_result_t cbsdk_session_set_channel_config(
     cbsdk_session_t session,
     const cbPKT_CHANINFO* chaninfo);
+
+/// Set a channel's label
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param label New label string (max 15 chars, null-terminated)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_label(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    const char* label);
+
+/// Set a channel's continuous-time pathway filter
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param filter_id Filter ID (0 to cbMAXFILTS-1)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_smpfilter(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    uint32_t filter_id);
+
+/// Set a channel's spike pathway filter
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param filter_id Filter ID (0 to cbMAXFILTS-1)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_spkfilter(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    uint32_t filter_id);
+
+/// Set a channel's analog input options (LNC mode, reference electrode, etc.)
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param ainpopts Analog input option flags (cbAINP_* flags)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_ainpopts(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    uint32_t ainpopts);
+
+/// Set a channel's line noise cancellation adaptation rate
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param lncrate LNC rate
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_lncrate(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    uint32_t lncrate);
+
+/// Set a channel's spike processing options
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param spkopts Spike option flags (cbAINPSPK_* flags)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_spkopts(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    uint32_t spkopts);
+
+/// Set a channel's spike threshold level
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param level Threshold level
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_spkthrlevel(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    int32_t level);
+
+/// Enable or disable auto-thresholding for a channel
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param enabled true to enable, false to disable
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_autothreshold(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    bool enabled);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Bulk Configuration Access
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Get the system sampling frequency
+/// @param session Session handle (must not be NULL)
+/// @return System frequency in Hz, or 0 if unavailable
+CBSDK_API uint32_t cbsdk_session_get_sysfreq(cbsdk_session_t session);
+
+/// Get the number of available filters
+/// @return cbMAXFILTS (compile-time constant)
+CBSDK_API uint32_t cbsdk_get_num_filters(void);
+
+/// Get a filter's label
+/// @param session Session handle (must not be NULL)
+/// @param filter_id Filter ID (0 to cbMAXFILTS-1)
+/// @return Pointer to label string, or NULL if invalid
+CBSDK_API const char* cbsdk_session_get_filter_label(cbsdk_session_t session, uint32_t filter_id);
+
+/// Get a filter's high-pass corner frequency
+/// @param session Session handle (must not be NULL)
+/// @param filter_id Filter ID (0 to cbMAXFILTS-1)
+/// @return High-pass frequency in milliHertz, or 0 if invalid
+CBSDK_API uint32_t cbsdk_session_get_filter_hpfreq(cbsdk_session_t session, uint32_t filter_id);
+
+/// Get a filter's high-pass order
+/// @param session Session handle (must not be NULL)
+/// @param filter_id Filter ID (0 to cbMAXFILTS-1)
+/// @return High-pass filter order, or 0 if invalid
+CBSDK_API uint32_t cbsdk_session_get_filter_hporder(cbsdk_session_t session, uint32_t filter_id);
+
+/// Get a filter's low-pass corner frequency
+/// @param session Session handle (must not be NULL)
+/// @param filter_id Filter ID (0 to cbMAXFILTS-1)
+/// @return Low-pass frequency in milliHertz, or 0 if invalid
+CBSDK_API uint32_t cbsdk_session_get_filter_lpfreq(cbsdk_session_t session, uint32_t filter_id);
+
+/// Get a filter's low-pass order
+/// @param session Session handle (must not be NULL)
+/// @param filter_id Filter ID (0 to cbMAXFILTS-1)
+/// @return Low-pass filter order, or 0 if invalid
+CBSDK_API uint32_t cbsdk_session_get_filter_lporder(cbsdk_session_t session, uint32_t filter_id);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Commands

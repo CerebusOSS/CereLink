@@ -177,6 +177,45 @@ cbsdk_result_t cbsdk_session_set_channel_sample_group(
     cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
     uint32_t group_id, _Bool disable_others);
 
+// Per-channel getters
+cbproto_channel_type_t cbsdk_session_get_channel_type(cbsdk_session_t session, uint32_t chan_id);
+uint32_t cbsdk_session_get_channel_smpfilter(cbsdk_session_t session, uint32_t chan_id);
+uint32_t cbsdk_session_get_channel_spkfilter(cbsdk_session_t session, uint32_t chan_id);
+uint32_t cbsdk_session_get_channel_spkopts(cbsdk_session_t session, uint32_t chan_id);
+int32_t  cbsdk_session_get_channel_spkthrlevel(cbsdk_session_t session, uint32_t chan_id);
+uint32_t cbsdk_session_get_channel_ainpopts(cbsdk_session_t session, uint32_t chan_id);
+uint32_t cbsdk_session_get_channel_lncrate(cbsdk_session_t session, uint32_t chan_id);
+uint32_t cbsdk_session_get_channel_refelecchan(cbsdk_session_t session, uint32_t chan_id);
+int16_t  cbsdk_session_get_channel_amplrejpos(cbsdk_session_t session, uint32_t chan_id);
+int16_t  cbsdk_session_get_channel_amplrejneg(cbsdk_session_t session, uint32_t chan_id);
+
+// Per-channel setters
+cbsdk_result_t cbsdk_session_set_channel_label(cbsdk_session_t session,
+    uint32_t chan_id, const char* label);
+cbsdk_result_t cbsdk_session_set_channel_smpfilter(cbsdk_session_t session,
+    uint32_t chan_id, uint32_t filter_id);
+cbsdk_result_t cbsdk_session_set_channel_spkfilter(cbsdk_session_t session,
+    uint32_t chan_id, uint32_t filter_id);
+cbsdk_result_t cbsdk_session_set_channel_ainpopts(cbsdk_session_t session,
+    uint32_t chan_id, uint32_t ainpopts);
+cbsdk_result_t cbsdk_session_set_channel_lncrate(cbsdk_session_t session,
+    uint32_t chan_id, uint32_t lncrate);
+cbsdk_result_t cbsdk_session_set_channel_spkopts(cbsdk_session_t session,
+    uint32_t chan_id, uint32_t spkopts);
+cbsdk_result_t cbsdk_session_set_channel_spkthrlevel(cbsdk_session_t session,
+    uint32_t chan_id, int32_t level);
+cbsdk_result_t cbsdk_session_set_channel_autothreshold(cbsdk_session_t session,
+    uint32_t chan_id, _Bool enabled);
+
+// Bulk configuration access
+uint32_t cbsdk_session_get_sysfreq(cbsdk_session_t session);
+uint32_t cbsdk_get_num_filters(void);
+const char* cbsdk_session_get_filter_label(cbsdk_session_t session, uint32_t filter_id);
+uint32_t cbsdk_session_get_filter_hpfreq(cbsdk_session_t session, uint32_t filter_id);
+uint32_t cbsdk_session_get_filter_hporder(cbsdk_session_t session, uint32_t filter_id);
+uint32_t cbsdk_session_get_filter_lpfreq(cbsdk_session_t session, uint32_t filter_id);
+uint32_t cbsdk_session_get_filter_lporder(cbsdk_session_t session, uint32_t filter_id);
+
 // Instrument time
 cbsdk_result_t cbsdk_session_get_time(cbsdk_session_t session, uint64_t* time);
 

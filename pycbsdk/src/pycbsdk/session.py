@@ -400,6 +400,57 @@ class Session:
         """Get a channel's capability flags."""
         return _get_lib().cbsdk_session_get_channel_chancaps(self._session, chan_id)
 
+    def get_channel_type(self, chan_id: int) -> Optional[str]:
+        """Get a channel's type classification.
+
+        Returns one of the CHANNEL_TYPES keys ("FRONTEND", "ANALOG_IN", etc.)
+        or None if the channel is invalid or not connected.
+        """
+        _lib = _get_lib()
+        result = _lib.cbsdk_session_get_channel_type(self._session, chan_id)
+        ct = int(ffi.cast("int", result))
+        _REVERSE_CHANNEL_TYPES = {
+            0: "FRONTEND", 1: "ANALOG_IN", 2: "ANALOG_OUT",
+            3: "AUDIO", 4: "DIGITAL_IN", 5: "SERIAL", 6: "DIGITAL_OUT",
+        }
+        return _REVERSE_CHANNEL_TYPES.get(ct)
+
+    def get_channel_smpfilter(self, chan_id: int) -> int:
+        """Get a channel's continuous-time pathway filter ID."""
+        return _get_lib().cbsdk_session_get_channel_smpfilter(self._session, chan_id)
+
+    def get_channel_spkfilter(self, chan_id: int) -> int:
+        """Get a channel's spike pathway filter ID."""
+        return _get_lib().cbsdk_session_get_channel_spkfilter(self._session, chan_id)
+
+    def get_channel_spkopts(self, chan_id: int) -> int:
+        """Get a channel's spike processing options (cbAINPSPK_* flags)."""
+        return _get_lib().cbsdk_session_get_channel_spkopts(self._session, chan_id)
+
+    def get_channel_spkthrlevel(self, chan_id: int) -> int:
+        """Get a channel's spike threshold level."""
+        return _get_lib().cbsdk_session_get_channel_spkthrlevel(self._session, chan_id)
+
+    def get_channel_ainpopts(self, chan_id: int) -> int:
+        """Get a channel's analog input options (cbAINP_* flags)."""
+        return _get_lib().cbsdk_session_get_channel_ainpopts(self._session, chan_id)
+
+    def get_channel_lncrate(self, chan_id: int) -> int:
+        """Get a channel's line noise cancellation adaptation rate."""
+        return _get_lib().cbsdk_session_get_channel_lncrate(self._session, chan_id)
+
+    def get_channel_refelecchan(self, chan_id: int) -> int:
+        """Get a channel's software reference electrode channel."""
+        return _get_lib().cbsdk_session_get_channel_refelecchan(self._session, chan_id)
+
+    def get_channel_amplrejpos(self, chan_id: int) -> int:
+        """Get a channel's positive amplitude rejection threshold."""
+        return _get_lib().cbsdk_session_get_channel_amplrejpos(self._session, chan_id)
+
+    def get_channel_amplrejneg(self, chan_id: int) -> int:
+        """Get a channel's negative amplitude rejection threshold."""
+        return _get_lib().cbsdk_session_get_channel_amplrejneg(self._session, chan_id)
+
     def get_group_label(self, group_id: int) -> Optional[str]:
         """Get a sample group's label (group_id 1-6)."""
         _lib = _get_lib()
@@ -447,6 +498,134 @@ class Session:
             ),
             "Failed to set channel sample group",
         )
+
+    def set_channel_label(self, chan_id: int, label: str):
+        """Set a channel's label."""
+        _check(
+            _get_lib().cbsdk_session_set_channel_label(
+                self._session, chan_id, label.encode()
+            ),
+            "Failed to set channel label",
+        )
+
+    def set_channel_smpfilter(self, chan_id: int, filter_id: int):
+        """Set a channel's continuous-time pathway filter."""
+        _check(
+            _get_lib().cbsdk_session_set_channel_smpfilter(
+                self._session, chan_id, filter_id
+            ),
+            "Failed to set channel smpfilter",
+        )
+
+    def set_channel_spkfilter(self, chan_id: int, filter_id: int):
+        """Set a channel's spike pathway filter."""
+        _check(
+            _get_lib().cbsdk_session_set_channel_spkfilter(
+                self._session, chan_id, filter_id
+            ),
+            "Failed to set channel spkfilter",
+        )
+
+    def set_channel_ainpopts(self, chan_id: int, ainpopts: int):
+        """Set a channel's analog input options (cbAINP_* flags)."""
+        _check(
+            _get_lib().cbsdk_session_set_channel_ainpopts(
+                self._session, chan_id, ainpopts
+            ),
+            "Failed to set channel ainpopts",
+        )
+
+    def set_channel_lncrate(self, chan_id: int, rate: int):
+        """Set a channel's line noise cancellation adaptation rate."""
+        _check(
+            _get_lib().cbsdk_session_set_channel_lncrate(
+                self._session, chan_id, rate
+            ),
+            "Failed to set channel lncrate",
+        )
+
+    def set_channel_spkopts(self, chan_id: int, spkopts: int):
+        """Set a channel's spike processing options (cbAINPSPK_* flags)."""
+        _check(
+            _get_lib().cbsdk_session_set_channel_spkopts(
+                self._session, chan_id, spkopts
+            ),
+            "Failed to set channel spkopts",
+        )
+
+    def set_channel_spkthrlevel(self, chan_id: int, level: int):
+        """Set a channel's spike threshold level."""
+        _check(
+            _get_lib().cbsdk_session_set_channel_spkthrlevel(
+                self._session, chan_id, level
+            ),
+            "Failed to set channel spkthrlevel",
+        )
+
+    def set_channel_autothreshold(self, chan_id: int, enabled: bool):
+        """Enable or disable auto-thresholding for a channel."""
+        _check(
+            _get_lib().cbsdk_session_set_channel_autothreshold(
+                self._session, chan_id, enabled
+            ),
+            "Failed to set channel autothreshold",
+        )
+
+    def configure_channel(self, chan_id: int, **kwargs):
+        """Configure one or more attributes of a single channel.
+
+        This is a convenience method that dispatches to the individual setters.
+        Each keyword argument maps to a channel attribute.
+
+        Args:
+            chan_id: 1-based channel ID.
+
+        Keyword Args:
+            label (str): Channel label (max 15 chars).
+            smpgroup (int): Sample group (0-6, 0 disables).
+            smpfilter (int): Continuous-time filter ID.
+            spkfilter (int): Spike pathway filter ID.
+            ainpopts (int): Analog input option flags.
+            lncrate (int): LNC adaptation rate.
+            spkopts (int): Spike processing option flags.
+            spkthrlevel (int): Spike threshold level.
+            autothreshold (bool): Auto-threshold enable.
+
+        Example::
+
+            session.configure_channel(1,
+                smpgroup=5,
+                smpfilter=6,
+                autothreshold=True,
+            )
+        """
+        _dispatch = {
+            "label": self.set_channel_label,
+            "smpfilter": self.set_channel_smpfilter,
+            "spkfilter": self.set_channel_spkfilter,
+            "ainpopts": self.set_channel_ainpopts,
+            "lncrate": self.set_channel_lncrate,
+            "spkopts": self.set_channel_spkopts,
+            "spkthrlevel": self.set_channel_spkthrlevel,
+            "autothreshold": self.set_channel_autothreshold,
+        }
+        for key, value in kwargs.items():
+            if key == "smpgroup":
+                # Special case: smpgroup goes through the batch setter for one channel
+                chan_type = self.get_channel_type(chan_id)
+                if chan_type and chan_type in CHANNEL_TYPES:
+                    _lib = _get_lib()
+                    c_type = getattr(_lib, CHANNEL_TYPES[chan_type])
+                    _check(
+                        _lib.cbsdk_session_set_channel_sample_group(
+                            self._session, 1, c_type, value, False
+                        ),
+                        "Failed to set smpgroup",
+                    )
+            elif key in _dispatch:
+                _dispatch[key](chan_id, value)
+            else:
+                raise ValueError(f"Unknown channel attribute: {key!r}")
 
     # --- CCF Configuration Files ---
 
@@ -821,6 +1000,120 @@ class Session:
                 pass
 
         return buf[:, :count[0]]
+
+    # --- Bulk Configuration ---
+
+    @property
+    def sysfreq(self) -> int:
+        """System sampling frequency in Hz (e.g., 30000)."""
+        return _get_lib().cbsdk_session_get_sysfreq(self._session)
+
+    @staticmethod
+    def num_filters() -> int:
+        """Number of available filters (cbMAXFILTS)."""
+        return _get_lib().cbsdk_get_num_filters()
+
+    def get_filter_info(self, filter_id: int) -> Optional[dict]:
+        """Get a filter's description.
+
+        Args:
+            filter_id: Filter ID (0 to num_filters()-1).
+
+        Returns:
+            Dict with keys ``label``, ``hpfreq``, ``hporder``, ``lpfreq``,
+            ``lporder``. Frequencies are in milliHertz. Returns None if invalid.
+        """
+        _lib = _get_lib()
+        ptr = _lib.cbsdk_session_get_filter_label(self._session, filter_id)
+        if ptr == ffi.NULL:
+            return None
+        return {
+            "label": ffi.string(ptr).decode(),
+            "hpfreq": _lib.cbsdk_session_get_filter_hpfreq(self._session, filter_id),
+            "hporder": _lib.cbsdk_session_get_filter_hporder(self._session, filter_id),
+            "lpfreq": _lib.cbsdk_session_get_filter_lpfreq(self._session, filter_id),
+            "lporder": _lib.cbsdk_session_get_filter_lporder(self._session, filter_id),
+        }
+
+    def get_channel_config(self, chan_id: int) -> Optional[dict]:
+        """Get full configuration for a single channel.
+
+        Args:
+            chan_id: 1-based channel ID.
+
+        Returns:
+            Dict with channel configuration fields, or None if the channel
+            is invalid or not connected.
+        """
+        chan_type = self.get_channel_type(chan_id)
+        if chan_type is None:
+            return None
+        return {
+            "label": self.get_channel_label(chan_id) or "",
+            "type": chan_type,
+            "chancaps": self.get_channel_chancaps(chan_id),
+            "smpgroup": self.get_channel_smpgroup(chan_id),
+            "smpfilter": self.get_channel_smpfilter(chan_id),
+            "spkfilter": self.get_channel_spkfilter(chan_id),
+            "spkopts": self.get_channel_spkopts(chan_id),
+            "spkthrlevel": self.get_channel_spkthrlevel(chan_id),
+            "ainpopts": self.get_channel_ainpopts(chan_id),
+            "lncrate": self.get_channel_lncrate(chan_id),
+            "refelecchan": self.get_channel_refelecchan(chan_id),
+            "amplrejpos": self.get_channel_amplrejpos(chan_id),
+            "amplrejneg": self.get_channel_amplrejneg(chan_id),
+        }
+
+    def get_config(self) -> dict:
+        """Get bulk device configuration.
+
+        Returns a dictionary with system-level info, per-channel configuration
+        (only for existing/connected channels), and group memberships.
+
+        Returns:
+            Dict with keys:
+                - ``sysfreq`` (int): System sampling frequency in Hz.
+                - ``channels`` (dict): Mapping of chan_id -> channel config dict.
+                - ``groups`` (dict): Mapping of group_id -> group info dict.
+                - ``filters`` (dict): Mapping of filter_id -> filter info dict.
+
+        Example::
+
+            config = session.get_config()
+            for chan_id, info in config["channels"].items():
+                print(f"Ch {chan_id}: {info['label']} type={info['type']}")
+        """
+        _lib = _get_lib()
+        max_chans = _lib.cbsdk_get_max_chans()
+
+        channels = {}
+        for chan_id in range(1, max_chans + 1):
+            info = self.get_channel_config(chan_id)
+            if info is not None:
+                channels[chan_id] = info
+
+        groups = {}
+        for group_id in range(1, 7):
+            label = self.get_group_label(group_id)
+            ch_list = self.get_group_channels(group_id)
+            groups[group_id] = {
+                "label": label or "",
+                "channels": ch_list,
+            }
+
+        num_filt = _lib.cbsdk_get_num_filters()
+        filters = {}
+        for filt_id in range(num_filt):
+            info = self.get_filter_info(filt_id)
+            if info is not None and info["label"]:
+                filters[filt_id] = info
+
+        return {
+            "sysfreq": self.sysfreq,
+            "channels": channels,
+            "groups": groups,
+            "filters": filters,
+        }
 
     # --- Version ---
 
