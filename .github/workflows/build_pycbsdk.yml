@@ -3,7 +3,7 @@ name: Build pycbsdk Wheels
 on:
   workflow_dispatch:
   push:
-    branches: [master, cboulay/modularize]
+    branches: [master]
     paths:
       - 'src/**'
       - 'pycbsdk/**'
