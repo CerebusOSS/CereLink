@@ -682,7 +682,7 @@ cbsdk_result_t cbsdk_session_load_ccf(cbsdk_session_t session, const char* filen
 // Recording Control
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-cbsdk_result_t cbsdk_session_start_recording(
+cbsdk_result_t cbsdk_session_start_central_recording(
     cbsdk_session_t session,
     const char* filename,
     const char* comment) {
@@ -698,7 +698,7 @@ cbsdk_result_t cbsdk_session_start_recording(
     }
 }
 
-cbsdk_result_t cbsdk_session_stop_recording(cbsdk_session_t session) {
+cbsdk_result_t cbsdk_session_stop_central_recording(cbsdk_session_t session) {
     if (!session || !session->cpp_session) {
         return CBSDK_RESULT_INVALID_PARAMETER;
     }

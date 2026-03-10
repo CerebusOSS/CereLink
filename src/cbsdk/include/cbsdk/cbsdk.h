@@ -460,20 +460,20 @@ CBSDK_API cbsdk_result_t cbsdk_session_load_ccf(cbsdk_session_t session, const c
 // Recording Control
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Start file recording on the device
+/// Start Central file recording on the device
 /// @param session Session handle (must not be NULL)
 /// @param filename Base filename without extension (must not be NULL)
 /// @param comment Recording comment (can be NULL or empty)
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
-CBSDK_API cbsdk_result_t cbsdk_session_start_recording(
+CBSDK_API cbsdk_result_t cbsdk_session_start_central_recording(
     cbsdk_session_t session,
     const char* filename,
     const char* comment);
 
-/// Stop file recording on the device
+/// Stop Central file recording on the device
 /// @param session Session handle (must not be NULL)
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
-CBSDK_API cbsdk_result_t cbsdk_session_stop_recording(cbsdk_session_t session);
+CBSDK_API cbsdk_result_t cbsdk_session_stop_central_recording(cbsdk_session_t session);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Spike Sorting

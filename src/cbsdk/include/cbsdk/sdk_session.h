@@ -409,6 +409,20 @@ public:
     /// File Recording
     ///--------------------------------------------------------------------------------------------
 
+    /// Open Central's File Storage dialog (required before startCentralRecording)
+    ///
+    /// The old cbsdk/cbpy required a two-step sequence to start recording:
+    /// 1. openCentralFileDialog() — sends cbFILECFG_OPT_OPEN
+    /// 2. Wait ~250ms for Central to open the dialog
+    /// 3. startCentralRecording() — sends recording=1
+    ///
+    /// @return Result indicating success or error
+    Result<void> openCentralFileDialog();
+
+    /// Close Central's File Storage dialog
+    /// @return Result indicating success or error
+    Result<void> closeCentralFileDialog();
+
     /// Start file recording on the device (Central recording)
     /// @param filename Base filename (without extension)
     /// @param comment Recording comment
@@ -538,6 +552,10 @@ private:
     /// @param timeout_ms Timeout in milliseconds
     /// @return Result indicating success or error
     Result<void> requestConfiguration(uint32_t timeout_ms);
+
+    /// Send a FILECFG packet (shared helper for recording commands)
+    Result<void> sendFileCfgPacket(uint32_t options, uint32_t recording,
+                                   const std::string& filename, const std::string& comment);
 
     /// Platform-specific implementation
     struct Impl;

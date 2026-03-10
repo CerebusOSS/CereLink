@@ -7,6 +7,7 @@ set(CBSDK_EXAMPLES
     "simple_device:SimpleDevice/simple_device.cpp"
     "central_client:CentralClient/central_client.cpp"
     "ccf_test:CCFTest/ccf_test.cpp"
+    "recording_test:RecordingTest/recording_test.cpp"
 )
 
 # cbdev examples (link against cbdev only - no cbshm, no cbsdk)

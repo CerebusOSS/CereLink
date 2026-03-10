@@ -1129,8 +1129,9 @@ Result<void> SdkSession::setChannelConfig(const cbPKT_CHANINFO& chaninfo) {
 ///--------------------------------------------------------------------------------------------
 
 Result<void> SdkSession::sendComment(const std::string& comment, const uint32_t rgba, const uint8_t charset) {
-    if (m_impl->device_session)
+    if (m_impl->device_session) {
         return m_impl->device_session->sendComment(comment, rgba, charset);
+    }
 
     // CLIENT mode fallback: build packet and route through shmem
     cbPKT_COMMENT pkt = {};
@@ -1152,35 +1153,59 @@ Result<void> SdkSession::sendComment(const std::string& comment, const uint32_t 
 /// File Recording (Central-only commands, always routed through shmem)
 ///--------------------------------------------------------------------------------------------
 
-Result<void> SdkSession::startCentralRecording(const std::string& filename, const std::string& comment) {
+Result<void> SdkSession::sendFileCfgPacket(uint32_t options, uint32_t recording,
+                                            const std::string& filename, const std::string& comment) {
     cbPKT_FILECFG pkt = {};
     pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
     pkt.cbpkt_header.type = cbPKTTYPE_SETFILECFG;
     pkt.cbpkt_header.dlen = cbPKTDLEN_FILECFG;
+    pkt.options = options;
+    pkt.extctrl = 0;
+    pkt.recording = recording;
 
-    const size_t fnlen = std::min(filename.size(), sizeof(pkt.filename) - 1);
-    std::memcpy(pkt.filename, filename.c_str(), fnlen);
-    pkt.filename[fnlen] = '\0';
+    if (!filename.empty()) {
+        const size_t fnlen = std::min(filename.size(), sizeof(pkt.filename) - 1);
+        std::memcpy(pkt.filename, filename.c_str(), fnlen);
+        pkt.filename[fnlen] = '\0';
+    }
 
-    const size_t cmtlen = std::min(comment.size(), sizeof(pkt.comment) - 1);
-    std::memcpy(pkt.comment, comment.c_str(), cmtlen);
-    pkt.comment[cmtlen] = '\0';
+    if (!comment.empty()) {
+        const size_t cmtlen = std::min(comment.size(), sizeof(pkt.comment) - 1);
+        std::memcpy(pkt.comment, comment.c_str(), cmtlen);
+        pkt.comment[cmtlen] = '\0';
+    }
 
-    pkt.options = cbFILECFG_OPT_NONE;
-    pkt.recording = 1;
+    // Fill username with computer name (Central uses this to identify the requester)
+#ifdef _WIN32
+    DWORD cchBuff = sizeof(pkt.username);
+    GetComputerNameA(pkt.username, &cchBuff);
+#else
+    const char* host = getenv("HOSTNAME");
+    if (host) {
+        strncpy(pkt.username, host, sizeof(pkt.username) - 1);
+        pkt.username[sizeof(pkt.username) - 1] = '\0';
+    }
+#endif
 
-    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+    cbPKT_GENERIC generic = {};
+    std::memcpy(&generic, &pkt, sizeof(pkt));
+    return sendPacket(generic);
+}
+
+Result<void> SdkSession::openCentralFileDialog() {
+    return sendFileCfgPacket(cbFILECFG_OPT_OPEN, 0, "", "");
+}
+
+Result<void> SdkSession::closeCentralFileDialog() {
+    return sendFileCfgPacket(cbFILECFG_OPT_CLOSE, 0, "", "");
+}
+
+Result<void> SdkSession::startCentralRecording(const std::string& filename, const std::string& comment) {
+    return sendFileCfgPacket(cbFILECFG_OPT_NONE, 1, filename, comment);
 }
 
 Result<void> SdkSession::stopCentralRecording() {
-    cbPKT_FILECFG pkt = {};
-    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
-    pkt.cbpkt_header.type = cbPKTTYPE_SETFILECFG;
-    pkt.cbpkt_header.dlen = cbPKTDLEN_FILECFG;
-    pkt.options = cbFILECFG_OPT_NONE;
-    pkt.recording = 0;
-
-    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+    return sendFileCfgPacket(cbFILECFG_OPT_NONE, 0, "", "");
 }
 
 ///--------------------------------------------------------------------------------------------
