@@ -145,21 +145,21 @@ bool iequals(const std::string& a, const std::string& b)
 }
 
 pugi::xml_node find_or_create(pugi::xml_node& parent, const std::string& name) {
-    pugi::xml_node node = parent.child(name.c_str());
+    pugi::xml_node node = parent.child(name);
 
     // If the node doesn't exist, create a new one
     if (!node) {
-        node = parent.append_child(name.c_str());
+        node = parent.append_child(name);
     }
 
     return node;
 }
 
 pugi::xml_attribute find_or_create_attribute(pugi::xml_node& node, const std::string& name) {
-    pugi::xml_attribute attr = node.attribute(name.c_str());
+    pugi::xml_attribute attr = node.attribute(name);
     // If the attribute doesn't exist, add a new one
     if (!attr)
-        attr = node.append_attribute(name.c_str());
+        attr = node.append_attribute(name);
     return attr;
 }
 
@@ -321,7 +321,7 @@ bool XmlFile::beginGroup(std::string nodeName, const std::map<std::string, std::
             parent = m_doc;
         }
         int count = 0;
-        for(pugi::xml_node node = parent.child(strTagName.c_str()); node; node = node.next_sibling(strTagName.c_str()))
+        for(pugi::xml_node node = parent.child(strTagName); node; node = node.next_sibling(strTagName))
         {
             count++;
             if (count == index + 1)
@@ -334,7 +334,7 @@ bool XmlFile::beginGroup(std::string nodeName, const std::map<std::string, std::
         for (int j = 0; j < (index + 1 - count); ++j)
         {
             bRet = true;
-            set = parent.append_child(strTagName.c_str());
+            set = parent.append_child(strTagName);
         }
         // Add all the parent nodes without attribute or value
         if (i < level - 1)
@@ -416,7 +416,7 @@ bool XmlFile::beginGroup(std::string nodeName, const std::map<std::string, std::
                 }
                 if (setAsText)
                 {
-                    set.text().set(text.c_str());
+                    set.text().set(text);
                 }
             }
         }
@@ -429,7 +429,7 @@ bool XmlFile::beginGroup(std::string nodeName, const std::map<std::string, std::
         const std::string& attrName = iterator->first;
         const std::any& attrValue = iterator->second;
         if (attrValue.type() == typeid(std::string))
-            find_or_create_attribute(set, attrName) = std::any_cast<std::string>(attrValue).c_str();
+            find_or_create_attribute(set, attrName) = std::any_cast<const std::string &>(attrValue);
         else if (attrValue.type() == typeid(const char*))
             find_or_create_attribute(set, attrName) = std::any_cast<const char*>(attrValue);
         else if (attrValue.type() == typeid(int))
@@ -443,7 +443,7 @@ bool XmlFile::beginGroup(std::string nodeName, const std::map<std::string, std::
         else if (attrValue.type() == typeid(double))
             find_or_create_attribute(set, attrName) = std::any_cast<double>(attrValue);
         else
-            find_or_create_attribute(set, attrName) = anyToString(attrValue).c_str();
+            find_or_create_attribute(set, attrName) = anyToString(attrValue);
     }
     return bRet;
 }
@@ -544,7 +544,7 @@ std::string XmlFile::attribute(const std::string & attrName)
     {
         // Get the current node
         pugi::xml_node node = m_nodes.back();
-        res = node.attribute(attrName.c_str()).value();
+        res = node.attribute(attrName).value();
     }
     return res;
 }
@@ -616,12 +616,12 @@ bool XmlFile::contains(const std::string & nodeName)
     // If it is the first node
     if (m_nodes.empty())
     {
-        set = m_doc.child(nodepath[0].c_str());
+        set = m_doc.child(nodepath[0]);
     } else {
         // Get the parent node
         parent = m_nodes.back();
         // Look if the node exists then get it
-        set = parent.child(nodepath[0].c_str());
+        set = parent.child(nodepath[0]);
     }
     if (!set)
         return false; // not found
@@ -630,7 +630,7 @@ bool XmlFile::contains(const std::string & nodeName)
     for (int i = 1; i < level; ++i)
     {
         parent = set;
-        set = parent.child(nodepath[i].c_str());
+        set = parent.child(nodepath[i]);
         if (!set)
             return false; // not found
     }
