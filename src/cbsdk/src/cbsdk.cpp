@@ -14,6 +14,7 @@
 
 #include "cbsdk/cbsdk.h"
 #include "cbsdk/sdk_session.h"
+#include <chrono>
 #include <cstring>
 #include <memory>
 
@@ -647,6 +648,149 @@ cbsdk_result_t cbsdk_session_set_runlevel(
     } catch (...) {
         return CBSDK_RESULT_INTERNAL_ERROR;
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// CCF Configuration Files
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+cbsdk_result_t cbsdk_session_save_ccf(cbsdk_session_t session, const char* filename) {
+    if (!session || !session->cpp_session || !filename) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->saveCCF(filename);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_load_ccf(cbsdk_session_t session, const char* filename) {
+    if (!session || !session->cpp_session || !filename) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->loadCCF(filename);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Recording Control
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+cbsdk_result_t cbsdk_session_start_recording(
+    cbsdk_session_t session,
+    const char* filename,
+    const char* comment) {
+    if (!session || !session->cpp_session || !filename) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        std::string comment_str = comment ? comment : "";
+        auto result = session->cpp_session->startCentralRecording(filename, comment_str);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_stop_recording(cbsdk_session_t session) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->stopCentralRecording();
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Spike Sorting
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    uint32_t sort_options) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->setChannelSpikeSorting(
+            n_chans, to_cpp_channel_type(chan_type), sort_options);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Clock Synchronization
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+cbsdk_result_t cbsdk_session_get_clock_offset(
+    cbsdk_session_t session,
+    int64_t* offset_ns) {
+    if (!session || !session->cpp_session || !offset_ns) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->getClockOffsetNs();
+        if (!result.has_value()) {
+            return CBSDK_RESULT_NOT_RUNNING;
+        }
+        *offset_ns = result.value();
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_get_clock_uncertainty(
+    cbsdk_session_t session,
+    int64_t* uncertainty_ns) {
+    if (!session || !session->cpp_session || !uncertainty_ns) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->getClockUncertaintyNs();
+        if (!result.has_value()) {
+            return CBSDK_RESULT_NOT_RUNNING;
+        }
+        *uncertainty_ns = result.value();
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_send_clock_probe(cbsdk_session_t session) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->sendClockProbe();
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Utility
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+int64_t cbsdk_get_steady_clock_ns(void) {
+    auto now = std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        now.time_since_epoch()).count();
 }
 
 } // extern "C"

@@ -441,6 +441,91 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_runlevel(
     uint32_t runlevel);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// CCF Configuration Files
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Save the current device configuration to a CCF (XML) file
+/// @param session Session handle (must not be NULL)
+/// @param filename Path to the CCF file to write (must not be NULL)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_save_ccf(cbsdk_session_t session, const char* filename);
+
+/// Load a CCF file and apply its configuration to the device
+/// @param session Session handle (must not be NULL)
+/// @param filename Path to the CCF file to read (must not be NULL)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_load_ccf(cbsdk_session_t session, const char* filename);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Recording Control
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Start file recording on the device
+/// @param session Session handle (must not be NULL)
+/// @param filename Base filename without extension (must not be NULL)
+/// @param comment Recording comment (can be NULL or empty)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_start_recording(
+    cbsdk_session_t session,
+    const char* filename,
+    const char* comment);
+
+/// Stop file recording on the device
+/// @param session Session handle (must not be NULL)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_stop_recording(cbsdk_session_t session);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Spike Sorting
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Set spike sorting options for channels of a specific type
+/// @param session Session handle (must not be NULL)
+/// @param n_chans Number of channels to configure
+/// @param chan_type Channel type filter
+/// @param sort_options Spike sorting option flags (cbAINPSPK_*)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    uint32_t sort_options);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Clock Synchronization
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Get the current clock offset: device_ns - steady_clock_ns
+/// @param session Session handle (must not be NULL)
+/// @param[out] offset_ns Pointer to receive offset in nanoseconds
+/// @return CBSDK_RESULT_SUCCESS if offset is available, CBSDK_RESULT_NOT_RUNNING if no sync data
+CBSDK_API cbsdk_result_t cbsdk_session_get_clock_offset(
+    cbsdk_session_t session,
+    int64_t* offset_ns);
+
+/// Get the clock uncertainty (half-RTT from best probe)
+/// @param session Session handle (must not be NULL)
+/// @param[out] uncertainty_ns Pointer to receive uncertainty in nanoseconds
+/// @return CBSDK_RESULT_SUCCESS if available, CBSDK_RESULT_NOT_RUNNING if no sync data
+CBSDK_API cbsdk_result_t cbsdk_session_get_clock_uncertainty(
+    cbsdk_session_t session,
+    int64_t* uncertainty_ns);
+
+/// Send a clock synchronization probe to the device
+/// @param session Session handle (must not be NULL)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_send_clock_probe(cbsdk_session_t session);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Utility
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Get the current value of std::chrono::steady_clock in nanoseconds since epoch.
+/// Useful for correlating C++ steady_clock with other time sources (e.g., Python time.monotonic).
+/// @return Nanoseconds since steady_clock epoch
+CBSDK_API int64_t cbsdk_get_steady_clock_ns(void);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Error Handling
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 

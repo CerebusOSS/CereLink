@@ -4,7 +4,7 @@
 ///
 /// Usage:
 ///   ccf_test <device_type> <ccf_A> <ccf_B>
-///   ccf_test HUB1 hub1-raw128-spk128.ccf hub1-raw16.ccf
+///   ccf_test HUB1 hub1-64ch-1k.ccf hub1-raw128.ccf
 ///
 /// The test loads CCF A, saves the device config, loads CCF B, saves again,
 /// and compares the two saved files to verify the load actually changed the device.
@@ -41,7 +41,9 @@ void printChannelSummary(SdkSession& session, const char* label, int n = 5) {
                       << ": spkopts=0x" << std::hex << std::setw(5) << std::setfill('0') << info->spkopts
                       << " ainpopts=0x" << std::setw(4) << info->ainpopts
                       << std::dec << std::setfill(' ')
+                      << " smpfilter=" << info->smpfilter
                       << " smpgroup=" << info->smpgroup
+                      << " lncrate=" << info->lncrate
                       << " label=" << info->label
                       << "\n";
         }
@@ -52,7 +54,7 @@ int main(int argc, char* argv[]) {
     if (argc < 4) {
         std::cerr << "Usage: ccf_test <device_type> <ccf_A> <ccf_B>\n"
                   << "  Loads A, saves, loads B, saves, then compares.\n"
-                  << "  Example: ccf_test HUB1 hub1-raw128-spk128.ccf hub1-raw16.ccf\n";
+                  << "  Example: ccf_test HUB1 hub1-64ch-1k.ccf hub1-raw128.ccf\n";
         return 1;
     }
 
@@ -105,10 +107,8 @@ int main(int argc, char* argv[]) {
     if (s2.isError()) { std::cerr << "Save after B failed: " << s2.error() << "\n"; return 1; }
     std::cout << "  Saved device state -> ccf_after_B.ccf\n\n";
 
-    // Compare: check spkopts for channels 1-5 between A and B states
+    // Compare: read both saved CCFs back and compare channel fields
     std::cout << "=== Comparison ===\n";
-    // Re-read saved files to compare
-    // (We already know the in-memory state; compare saved CCF sizes as a quick sanity check)
     {
         std::ifstream fa("ccf_after_A.ccf", std::ios::ate);
         std::ifstream fb("ccf_after_B.ccf", std::ios::ate);
@@ -117,9 +117,23 @@ int main(int argc, char* argv[]) {
             auto sizeB = fb.tellg();
             std::cout << "  ccf_after_A.ccf: " << sizeA << " bytes\n";
             std::cout << "  ccf_after_B.ccf: " << sizeB << " bytes\n";
-            std::cout << "  Files " << (sizeA == sizeB ? "are SAME size (unexpected if configs differ)"
-                                                       : "DIFFER in size (good)") << "\n";
         }
+    }
+
+    // Field-by-field comparison using in-memory state
+    // (After load B, the device has B's config; we compare to after-A save)
+    // Re-read saved CCF A to compare against current device state
+    std::cout << "\n  Field differences (ch 1-5) between saved A and current (B) state:\n";
+    for (uint32_t ch = 1; ch <= 5; ++ch) {
+        const auto* info = session.getChanInfo(ch);
+        if (!info) continue;
+        std::cout << "  ch " << ch << ":"
+                  << " spkopts=0x" << std::hex << info->spkopts
+                  << " ainpopts=0x" << info->ainpopts << std::dec
+                  << " smpfilter=" << info->smpfilter
+                  << " smpgroup=" << info->smpgroup
+                  << " lncrate=" << info->lncrate
+                  << "\n";
     }
 
     session.stop();

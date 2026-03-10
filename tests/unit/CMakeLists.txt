@@ -159,3 +159,30 @@ target_include_directories(ccfutils_tests
 gtest_discover_tests(ccfutils_tests)
 
 message(STATUS "Unit tests configured for ccfutils")
+
+# ccfutils XML read/write tests (uses test fixture files, no device needed)
+add_executable(ccfutils_xml_tests
+    test_ccf_xml.cpp
+)
+
+target_link_libraries(ccfutils_xml_tests
+    PRIVATE
+        ccfutils
+        cbproto
+        GTest::gtest_main
+)
+
+target_include_directories(ccfutils_xml_tests
+    BEFORE PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/ccfutils/include
+        ${PROJECT_SOURCE_DIR}/src/cbproto/include
+)
+
+target_compile_definitions(ccfutils_xml_tests
+    PRIVATE
+        CCF_TEST_DATA_DIR="${PROJECT_SOURCE_DIR}/tests"
+)
+
+gtest_discover_tests(ccfutils_xml_tests)
+
+message(STATUS "Unit tests configured for ccfutils XML read/write")
