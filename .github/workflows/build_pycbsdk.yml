@@ -81,7 +81,14 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           pip install auditwheel patchelf
-          auditwheel repair pycbsdk/dist/*.whl -w pycbsdk/wheelhouse/ --plat manylinux_2_17_x86_64
+          # Detect the compatible manylinux tag for this toolchain
+          PLAT=$(auditwheel show pycbsdk/dist/*.whl 2>&1 | grep -oP 'manylinux_\d+_\d+_x86_64' | head -1)
+          if [ -z "$PLAT" ]; then
+            echo "auditwheel could not determine a manylinux tag, tagging as linux_x86_64"
+            PLAT="linux_x86_64"
+          fi
+          echo "Repairing wheel for platform: $PLAT"
+          auditwheel repair pycbsdk/dist/*.whl -w pycbsdk/wheelhouse/ --plat "$PLAT"
           rm pycbsdk/dist/*.whl
           mv pycbsdk/wheelhouse/*.whl pycbsdk/dist/
 
