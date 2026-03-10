@@ -39,7 +39,7 @@ jobs:
             lib_pattern: "libcbsdk.so"
           - name: macos-universal
             os: macos-latest
-            cmake_extra: "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+            cmake_extra: ""
             lib_pattern: "libcbsdk.dylib"
 
     steps:
