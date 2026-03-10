@@ -58,9 +58,8 @@ gtest_discover_tests(cbshm_tests)
 
 message(STATUS "Unit tests configured for cbshm")
 
-# cbdev tests
+# cbdev tests (non-device-dependent: packet translation, clock sync)
 add_executable(cbdev_tests
-    test_device_session.cpp
     test_packet_translation.cpp
     test_clock_sync.cpp
     packet_test_helpers.cpp
@@ -83,6 +82,31 @@ target_include_directories(cbdev_tests
 gtest_discover_tests(cbdev_tests)
 
 message(STATUS "Unit tests configured for cbdev")
+
+# cbdev device session tests (require network/device, excluded from CI)
+add_executable(cbdev_device_tests
+    test_device_session.cpp
+)
+
+target_link_libraries(cbdev_device_tests
+    PRIVATE
+        cbdev
+        cbproto
+        GTest::gtest_main
+)
+
+target_include_directories(cbdev_device_tests
+    BEFORE PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/cbdev/include
+        ${PROJECT_SOURCE_DIR}/src/cbdev/src
+        ${PROJECT_SOURCE_DIR}/src/cbproto/include
+)
+
+gtest_discover_tests(cbdev_device_tests
+    TEST_PREFIX "device."
+)
+
+message(STATUS "Unit tests configured for cbdev device sessions (prefixed with 'device.' for CI filtering)")
 
 # Standalone clock sync test (does not depend on socket/device test helpers)
 add_executable(clock_sync_tests
