@@ -457,6 +457,59 @@ CBSDK_API cbsdk_result_t cbsdk_session_save_ccf(cbsdk_session_t session, const c
 CBSDK_API cbsdk_result_t cbsdk_session_load_ccf(cbsdk_session_t session, const char* filename);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Instrument Time
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Get most recent device timestamp from shared memory
+/// On Gemini (protocol 4.0+) this is PTP nanoseconds.
+/// On legacy NSP (protocol 3.x) this is 30kHz ticks.
+/// @param session Session handle (must not be NULL)
+/// @param[out] time Pointer to receive raw device timestamp (must not be NULL)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_get_time(cbsdk_session_t session, uint64_t* time);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Patient Information
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Set patient information (embedded in recorded files)
+/// Must be called before starting recording.
+/// @param session Session handle (must not be NULL)
+/// @param id Patient identification string (must not be NULL)
+/// @param firstname Patient first name (can be NULL)
+/// @param lastname Patient last name (can be NULL)
+/// @param dob_month Birth month (1-12, 0 = unset)
+/// @param dob_day Birth day (1-31, 0 = unset)
+/// @param dob_year Birth year (e.g. 1990, 0 = unset)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_patient_info(
+    cbsdk_session_t session,
+    const char* id,
+    const char* firstname,
+    const char* lastname,
+    uint32_t dob_month,
+    uint32_t dob_day,
+    uint32_t dob_year);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Analog Output
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Set analog output monitoring (route a channel's audio to an analog/audio output)
+/// @param session Session handle (must not be NULL)
+/// @param aout_chan_id 1-based channel ID of the analog/audio output channel
+/// @param monitor_chan_id 1-based channel ID of the channel to monitor
+/// @param track_last If true, track last channel clicked in Central
+/// @param spike_only If true, monitor spike signal; if false, monitor continuous signal
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_analog_output_monitor(
+    cbsdk_session_t session,
+    uint32_t aout_chan_id,
+    uint32_t monitor_chan_id,
+    bool track_last,
+    bool spike_only);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Recording Control
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 

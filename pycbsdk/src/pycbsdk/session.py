@@ -475,6 +475,82 @@ class Session:
             "Failed to load CCF",
         )
 
+    # --- Instrument Time ---
+
+    @property
+    def time(self) -> int:
+        """Most recent device timestamp from shared memory.
+
+        On Gemini (protocol 4.0+) this is PTP nanoseconds.
+        On legacy NSP (protocol 3.x) this is 30kHz ticks.
+
+        To convert to host ``time.monotonic()``, use :meth:`device_to_monotonic`.
+        """
+        _lib = _get_lib()
+        t = ffi.new("uint64_t *")
+        _check(_lib.cbsdk_session_get_time(self._session, t), "Failed to get time")
+        return t[0]
+
+    # --- Patient Information ---
+
+    def set_patient_info(
+        self,
+        id: str,
+        firstname: str = "",
+        lastname: str = "",
+        dob_month: int = 0,
+        dob_day: int = 0,
+        dob_year: int = 0,
+    ):
+        """Set patient information for recorded files.
+
+        Must be called before starting recording for info to be included.
+
+        Args:
+            id: Patient identification string (required).
+            firstname: Patient first name.
+            lastname: Patient last name.
+            dob_month: Birth month (1-12, 0 = unset).
+            dob_day: Birth day (1-31, 0 = unset).
+            dob_year: Birth year (e.g. 1990, 0 = unset).
+        """
+        _lib = _get_lib()
+        _check(
+            _lib.cbsdk_session_set_patient_info(
+                self._session,
+                id.encode(),
+                firstname.encode() if firstname else ffi.NULL,
+                lastname.encode() if lastname else ffi.NULL,
+                dob_month, dob_day, dob_year,
+            ),
+            "Failed to set patient info",
+        )
+
+    # --- Analog Output ---
+
+    def set_analog_output_monitor(
+        self,
+        aout_channel: int,
+        monitor_channel: int,
+        track_last: bool = True,
+        spike_only: bool = False,
+    ):
+        """Route a channel's signal to an analog/audio output for monitoring.
+
+        Args:
+            aout_channel: 1-based channel ID of the analog/audio output.
+            monitor_channel: 1-based channel ID of the channel to monitor.
+            track_last: If True, track last channel clicked in Central.
+            spike_only: If True, monitor spike signal; if False, monitor continuous.
+        """
+        _check(
+            _get_lib().cbsdk_session_set_analog_output_monitor(
+                self._session, aout_channel, monitor_channel,
+                track_last, spike_only,
+            ),
+            "Failed to set analog output monitor",
+        )
+
     # --- Recording Control ---
 
     def start_central_recording(self, filename: str, comment: str = ""):

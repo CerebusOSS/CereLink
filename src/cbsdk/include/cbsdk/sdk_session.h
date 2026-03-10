@@ -368,6 +368,12 @@ public:
     /// @return Current run level (cbRUNLEVEL_*), or 0 if unknown
     uint32_t getRunLevel() const;
 
+    /// Get most recent device timestamp from shared memory
+    /// On Gemini (protocol 4.0+) this is PTP nanoseconds.
+    /// On legacy NSP (protocol 3.x, CBPROTO_311) this is 30kHz ticks.
+    /// @return Raw device timestamp, or 0 if not available
+    uint64_t getTime() const;
+
     ///--------------------------------------------------------------------------------------------
     /// Channel Configuration
     ///--------------------------------------------------------------------------------------------
@@ -442,6 +448,33 @@ public:
     /// @param value Digital output value (bitmask)
     /// @return Result indicating success or error
     Result<void> setDigitalOutput(uint32_t chan_id, uint16_t value);
+
+    /// Set analog output monitoring (route a channel's audio to an analog/audio output)
+    /// @param aout_chan_id 1-based channel ID of the analog/audio output channel
+    /// @param monitor_chan_id 1-based channel ID of the channel to monitor
+    /// @param track_last If true, track last channel clicked in raster plot
+    /// @param spike_only If true, only play spikes; if false, play continuous
+    /// @return Result indicating success or error
+    Result<void> setAnalogOutputMonitor(uint32_t aout_chan_id, uint32_t monitor_chan_id,
+                                         bool track_last = true, bool spike_only = false);
+
+    ///--------------------------------------------------------------------------------------------
+    /// Patient Information
+    ///--------------------------------------------------------------------------------------------
+
+    /// Set patient information (embedded in recorded files)
+    /// Must be called before starting recording for the info to be included.
+    /// @param id Patient identification string (max 127 chars)
+    /// @param firstname Patient first name (max 127 chars)
+    /// @param lastname Patient last name (max 127 chars)
+    /// @param dob_month Birth month (1-12, 0 = unset)
+    /// @param dob_day Birth day (1-31, 0 = unset)
+    /// @param dob_year Birth year (e.g. 1990, 0 = unset)
+    /// @return Result indicating success or error
+    Result<void> setPatientInfo(const std::string& id,
+                                const std::string& firstname = "",
+                                const std::string& lastname = "",
+                                uint32_t dob_month = 0, uint32_t dob_day = 0, uint32_t dob_year = 0);
 
     ///--------------------------------------------------------------------------------------------
     /// CCF Configuration Files

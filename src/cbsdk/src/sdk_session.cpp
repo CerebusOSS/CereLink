@@ -998,6 +998,12 @@ uint32_t SdkSession::getRunLevel() const {
     return m_impl->device_runlevel.load(std::memory_order_acquire);
 }
 
+uint64_t SdkSession::getTime() const {
+    if (!m_impl || !m_impl->shmem_session)
+        return 0;
+    return m_impl->shmem_session->getLastTime();
+}
+
 ///--------------------------------------------------------------------------------------------
 /// Channel Configuration
 ///--------------------------------------------------------------------------------------------
@@ -1206,6 +1212,64 @@ Result<void> SdkSession::startCentralRecording(const std::string& filename, cons
 
 Result<void> SdkSession::stopCentralRecording() {
     return sendFileCfgPacket(cbFILECFG_OPT_NONE, 0, "", "");
+}
+
+///--------------------------------------------------------------------------------------------
+/// Patient Information
+///--------------------------------------------------------------------------------------------
+
+Result<void> SdkSession::setPatientInfo(const std::string& id,
+                                         const std::string& firstname,
+                                         const std::string& lastname,
+                                         uint32_t dob_month, uint32_t dob_day, uint32_t dob_year) {
+    cbPKT_PATIENTINFO pkt = {};
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_SETPATIENTINFO;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_PATIENTINFO;
+
+    std::strncpy(pkt.ID, id.c_str(), cbMAX_PATIENTSTRING - 1);
+    std::strncpy(pkt.firstname, firstname.c_str(), cbMAX_PATIENTSTRING - 1);
+    std::strncpy(pkt.lastname, lastname.c_str(), cbMAX_PATIENTSTRING - 1);
+    pkt.DOBMonth = dob_month;
+    pkt.DOBDay = dob_day;
+    pkt.DOBYear = dob_year;
+
+    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+}
+
+///--------------------------------------------------------------------------------------------
+/// Analog Output Monitoring
+///--------------------------------------------------------------------------------------------
+
+Result<void> SdkSession::setAnalogOutputMonitor(uint32_t aout_chan_id, uint32_t monitor_chan_id,
+                                                 bool track_last, bool spike_only) {
+    if (aout_chan_id < 1 || aout_chan_id > cbMAXCHANS)
+        return Result<void>::error("Invalid analog output channel ID");
+
+    const cbPKT_CHANINFO* info = getChanInfo(aout_chan_id);
+    if (!info)
+        return Result<void>::error("Channel info not available for channel " + std::to_string(aout_chan_id));
+
+    // Copy current config and modify analog output fields
+    cbPKT_CHANINFO chaninfo = *info;
+
+    // Set monitor channel
+    chaninfo.monchan = static_cast<uint16_t>(monitor_chan_id);
+
+    // Read-modify-write analog output options (preserve existing flags)
+    uint32_t opts = chaninfo.aoutopts;
+    opts &= ~(cbAOUT_MONITORSMP | cbAOUT_MONITORSPK | cbAOUT_TRACK);
+    if (spike_only)
+        opts |= cbAOUT_MONITORSPK;
+    else
+        opts |= cbAOUT_MONITORSMP;
+    if (track_last)
+        opts |= cbAOUT_TRACK;
+    chaninfo.aoutopts = opts;
+
+    // Send as CHANSET
+    chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSET;
+    return setChannelConfig(chaninfo);
 }
 
 ///--------------------------------------------------------------------------------------------

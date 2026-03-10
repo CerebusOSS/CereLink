@@ -679,6 +679,71 @@ cbsdk_result_t cbsdk_session_load_ccf(cbsdk_session_t session, const char* filen
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Instrument Time
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+cbsdk_result_t cbsdk_session_get_time(cbsdk_session_t session, uint64_t* time) {
+    if (!session || !session->cpp_session || !time) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        *time = session->cpp_session->getTime();
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Patient Information
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+cbsdk_result_t cbsdk_session_set_patient_info(
+    cbsdk_session_t session,
+    const char* id,
+    const char* firstname,
+    const char* lastname,
+    uint32_t dob_month,
+    uint32_t dob_day,
+    uint32_t dob_year) {
+    if (!session || !session->cpp_session || !id) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->setPatientInfo(
+            id,
+            firstname ? firstname : "",
+            lastname ? lastname : "",
+            dob_month, dob_day, dob_year);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Analog Output
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+cbsdk_result_t cbsdk_session_set_analog_output_monitor(
+    cbsdk_session_t session,
+    uint32_t aout_chan_id,
+    uint32_t monitor_chan_id,
+    bool track_last,
+    bool spike_only) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->setAnalogOutputMonitor(
+            aout_chan_id, monitor_chan_id, track_last, spike_only);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Recording Control
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 

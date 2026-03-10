@@ -177,6 +177,19 @@ cbsdk_result_t cbsdk_session_set_channel_sample_group(
     cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
     uint32_t group_id, _Bool disable_others);
 
+// Instrument time
+cbsdk_result_t cbsdk_session_get_time(cbsdk_session_t session, uint64_t* time);
+
+// Patient information
+cbsdk_result_t cbsdk_session_set_patient_info(cbsdk_session_t session,
+    const char* id, const char* firstname, const char* lastname,
+    uint32_t dob_month, uint32_t dob_day, uint32_t dob_year);
+
+// Analog output
+cbsdk_result_t cbsdk_session_set_analog_output_monitor(cbsdk_session_t session,
+    uint32_t aout_chan_id, uint32_t monitor_chan_id,
+    _Bool track_last, _Bool spike_only);
+
 // Commands
 cbsdk_result_t cbsdk_session_send_comment(cbsdk_session_t session,
     const char* comment, uint32_t rgba, uint8_t charset);
