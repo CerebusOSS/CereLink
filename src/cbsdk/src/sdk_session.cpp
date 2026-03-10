@@ -25,6 +25,7 @@
 #include <cstring>
 #include <iostream>
 #include <algorithm>
+#include <array>
 #include <vector>
 
 namespace cbsdk {
@@ -128,6 +129,24 @@ struct SdkSession::Impl {
     ErrorCallback error_callback;
     std::mutex user_callback_mutex;
 
+    // Channel type cache — pre-computed at config time, avoids per-packet getChanInfo() (Phase 3, Fix 10)
+    std::array<ChannelType, cbMAXCHANS> channel_type_cache;
+    bool channel_cache_valid = false;
+
+    void rebuildChannelTypeCache() {
+        for (uint32_t ch = 0; ch < cbMAXCHANS; ++ch) {
+            const cbPKT_CHANINFO* ci = nullptr;
+            if (device_session) {
+                ci = device_session->getChanInfo(ch + 1);
+            } else if (shmem_session) {
+                const auto* native = shmem_session->getNativeConfigBuffer();
+                if (native) ci = &native->chaninfo[ch];
+            }
+            channel_type_cache[ch] = ci ? classifyChannelByCaps(*ci) : ChannelType::ANY;
+        }
+        channel_cache_valid = true;
+    }
+
     // Clock sync periodic probing (STANDALONE mode)
     std::chrono::steady_clock::time_point last_clock_probe_time{};
 
@@ -215,24 +234,14 @@ struct SdkSession::Impl {
         }
 
         if (chid != 0 && !(chid & cbPKTCHAN_CONFIGURATION)) {
+            // Look up cached channel type (Phase 3, Fix 10)
+            ChannelType pkt_chan_type = ChannelType::ANY;
+            if (channel_cache_valid && chid >= 1 && chid <= cbMAXCHANS) {
+                pkt_chan_type = channel_type_cache[chid - 1];
+            }
             for (const auto& cb : snap_event) {
-                if (cb.channel_type == ChannelType::ANY) {
+                if (cb.channel_type == ChannelType::ANY || cb.channel_type == pkt_chan_type) {
                     if (cb.cb) cb.cb(pkt);
-                } else {
-                    const cbPKT_CHANINFO* chaninfo = nullptr;
-                    cbPKT_CHANINFO chaninfo_copy{};
-                    if (device_session) {
-                        chaninfo = device_session->getChanInfo(chid);
-                    } else if (shmem_session) {
-                        auto r = shmem_session->getChanInfo(chid - 1);
-                        if (r.isOk()) {
-                            chaninfo_copy = r.value();
-                            chaninfo = &chaninfo_copy;
-                        }
-                    }
-                    if (chaninfo && cb.channel_type == classifyChannelByCaps(*chaninfo)) {
-                        if (cb.cb) cb.cb(pkt);
-                    }
                 }
             }
         } else if (chid == 0) {
@@ -571,6 +580,8 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
         if (start_result.isError()) {
             return Result<SdkSession>::error("Failed to start CLIENT session: " + start_result.error());
         }
+        // Build channel type cache from existing shmem config
+        session.m_impl->rebuildChannelTypeCache();
     }
 
     return Result<SdkSession>::ok(std::move(session));
@@ -1641,6 +1652,8 @@ request_config:
     }
 
     // Success - device is now in RUNNING state
+    // Build channel type cache now that config is populated
+    m_impl->rebuildChannelTypeCache();
     return Result<void>::ok();
 }
 

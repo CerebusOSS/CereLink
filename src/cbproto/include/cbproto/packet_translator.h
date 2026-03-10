@@ -46,48 +46,32 @@ public:
         const auto* src_payload = &src[HEADER_SIZE_311];
         auto& dest_header = *reinterpret_cast<cbPKT_HEADER*>(dest);
 
-        if (dest_header.type == cbPKTTYPE_NPLAYREP) {
+        switch (dest_header.type) {
+        case cbPKTTYPE_NPLAYREP:
             return translate_NPLAY_pre400_to_current(src_payload, reinterpret_cast<cbPKT_NPLAY *>(dest));
-        }
-        if (dest_header.type == cbPKTTYPE_COMMENTREP) {
+        case cbPKTTYPE_COMMENTREP:
             return translate_COMMENT_pre400_to_current(
                 src_payload, reinterpret_cast<cbPKT_COMMENT *>(dest), *reinterpret_cast<const uint32_t*>(src));
-        }
-        if ((dest_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
-            return translate_CHANINFO_pre410_to_current(src_payload, reinterpret_cast<cbPKT_CHANINFO *>(dest));
-        }
-        if (dest_header.type == cbPKTTYPE_SYSPROTOCOLMONITOR) {
+        case cbPKTTYPE_SYSPROTOCOLMONITOR:
+            // cbPKTTYPE_SYSPROTOCOLMONITOR == 0x01 == cbPKTTYPE_PREVREPLNC (pre-4.2)
+            // SYSPROTOCOLMONITOR translation takes priority; PREVREPLNC remap is N/A for 3.11
             return translate_SYSPROTOCOLMONITOR_pre410_to_current(src_payload, reinterpret_cast<cbPKT_SYSPROTOCOLMONITOR*>(dest));
-        }
-        if (dest_header.type == cbPKTTYPE_CHANRESETREP) {
-            // This is supposed to be a CHANREP type packet but the bitmask filters it out.
+        case cbPKTTYPE_CHANRESETREP:
             return translate_CHANRESET_pre420_to_current(src_payload, reinterpret_cast<cbPKT_CHANRESET*>(dest));
-        }
-        if (dest_header.type == 0x01) {
-            // In 4.2, cbPKTTYPE_PREVREPLNC changed from 0x01 to 0x04.
-            dest_header.type = 0x04;
-            return dest_header.dlen;
-        }
-        if (dest_header.chid > 0) {
-            // else if spike packets to cache -- no change to payload
-            // else if channel preview -- no change to payload
-            // TODO: cbPKT_DINP -- on hold because we cannot retrieve chaninfo here.
-            // info = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1];
-            // if ((info.chancaps & cbCHAN_DINP) &&
-            // ((0 != (info.dinpopts & cbDINP_MASK)) || (0 != (info.dinpopts & cbDINP_SERIALMASK)))) {
-            //     return translate_DINP_pre400_to_current(src, reinterpret_cast<cbPKT_DINP *>(dest));
-            // }
-            // cbGetDinpOptions(const uint32_t chan, uint32_t *options, uint32_t *eopchar, const uint32_t nInstance)
-            //     if (!) return cbRESULT_INVALIDFUNCTION;
-            // if (options)
-            // if (eopchar) *eopchar = cb_cfg_buffer_ptr[nIdx]->chaninfo[chan - 1].eopchar;
+        default:
+            // CHANREP family (0x40-0x4F) — bitmask check, can't be a case label
+            if ((dest_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
+                return translate_CHANINFO_pre410_to_current(src_payload, reinterpret_cast<cbPKT_CHANINFO *>(dest));
+            }
+            // TODO: cbPKT_DINP — needs chaninfo, unavailable here
+            break;
         }
 
         // No explicit change. Do a memcpy and report the original dlen (already in dest header).
         if (dest_header.dlen > 0) {
             std::memcpy(&dest[cbPKT_HEADER_SIZE],
                        src_payload,
-                       dest_header.dlen * 4);  // or copy_quadlets << 2?
+                       dest_header.dlen * 4);
         }
         return dest_header.dlen;
     }
@@ -99,20 +83,17 @@ public:
         auto& dest_header = *reinterpret_cast<cbPKT_HEADER*>(dest);
         const auto* src_payload = &src[HEADER_SIZE_400];
 
-        // Now handle payloads that changed in 4.1+
-        if (dest_header.type == cbPKTTYPE_SYSPROTOCOLMONITOR) {
+        switch (dest_header.type) {
+        case cbPKTTYPE_SYSPROTOCOLMONITOR:
+            // cbPKTTYPE_SYSPROTOCOLMONITOR == 0x01; PREVREPLNC remap is N/A for 4.0
             return translate_SYSPROTOCOLMONITOR_pre410_to_current(src_payload, reinterpret_cast<cbPKT_SYSPROTOCOLMONITOR*>(dest));
-        }
-        if ((dest_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
-            return translate_CHANINFO_pre410_to_current(src_payload, reinterpret_cast<cbPKT_CHANINFO *>(dest));
-        }
-        if (dest_header.type == cbPKTTYPE_CHANRESETREP) {
+        case cbPKTTYPE_CHANRESETREP:
             return translate_CHANRESET_pre420_to_current(src_payload, reinterpret_cast<cbPKT_CHANRESET*>(dest));
-        }
-        if (dest_header.type == 0x01) {
-            // In 4.2, cbPKTTYPE_PREVREPLNC changed from 0x01 to 0x04.
-            dest_header.type = 0x04;
-            return dest_header.dlen;
+        default:
+            if ((dest_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
+                return translate_CHANINFO_pre410_to_current(src_payload, reinterpret_cast<cbPKT_CHANINFO *>(dest));
+            }
+            break;
         }
 
         // No explicit change. Do a memcpy and report the original dlen (already in dest header).
@@ -128,15 +109,15 @@ public:
         // For 410 to current, we do not use an intermediate buffer; src and dest are the same!
         const auto* src_payload = &src[HEADER_SIZE_410];
         auto& dest_header = *reinterpret_cast<cbPKT_HEADER*>(dest);
-        if (dest_header.type == cbPKTTYPE_CHANRESETREP) {
+        switch (dest_header.type) {
+        case cbPKTTYPE_CHANRESETREP:
             return translate_CHANRESET_pre420_to_current(src_payload, reinterpret_cast<cbPKT_CHANRESET*>(dest));
-        }
-        if (dest_header.type == 0x01) {
-            // In 4.2, cbPKTTYPE_PREVREPLNC changed from 0x01 to 0x04.
+        case 0x01:
             dest_header.type = 0x04;
             return dest_header.dlen;
+        default:
+            return dest_header.dlen;
         }
-        return dest_header.dlen;
     }
 
     static size_t translatePayload_current_to_311(const cbPKT_GENERIC& src, uint8_t* dest) {
@@ -144,40 +125,32 @@ public:
         auto& dest_header = *reinterpret_cast<cbPKT_HEADER_311*>(dest);
         auto* dest_payload = &dest[HEADER_SIZE_311];
 
-        // Handle packets with changed payload structures
-        if (src.cbpkt_header.type == cbPKTTYPE_NPLAYSET) {
+        switch (src.cbpkt_header.type) {
+        case cbPKTTYPE_NPLAYSET:
             return translate_NPLAY_current_to_pre400(
                 *reinterpret_cast<const cbPKT_NPLAY*>(&src), dest_payload);
-        }
-        if (src.cbpkt_header.type == cbPKTTYPE_COMMENTSET) {
+        case cbPKTTYPE_COMMENTSET:
             return translate_COMMENT_current_to_pre400(
                 *reinterpret_cast<const cbPKT_COMMENT*>(&src), dest_payload);
-        }
-        if (src.cbpkt_header.type == cbPKTTYPE_SYSPROTOCOLMONITOR) {
-            // Note: We should probably never hit this code.
-            // There is no good reason to send a SYSPROTOCOLMONITOR packet to a device.
+        case cbPKTTYPE_SYSPROTOCOLMONITOR:
             return translate_SYSPROTOCOLMONITOR_current_to_pre410(
                 *reinterpret_cast<const cbPKT_SYSPROTOCOLMONITOR*>(&src), dest_payload);
-        }
-        if ((src.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANSET) {
-            return translate_CHANINFO_current_to_pre410(
-                *reinterpret_cast<const cbPKT_CHANINFO*>(&src), dest_payload);
-        }
-        if (src.cbpkt_header.type == cbPKTTYPE_CHANRESET) {
+        case cbPKTTYPE_CHANRESET:
             return translate_CHANRESET_current_to_pre420(
                 *reinterpret_cast<const cbPKT_CHANRESET*>(&src), dest_payload);
-        }
-        if (src.cbpkt_header.type == cbPKTTYPE_PREVSETLNC) {
-            // In 4.2, cbPKTTYPE_PREVSETLNC changed from 0x81 to 0x84. We need to change it back.
+        case cbPKTTYPE_PREVSETLNC:
             dest_header.type = 0x81;
             return dest_header.dlen;
-        }
-        if (src.cbpkt_header.chid > 0) {
-            // TODO: cbPKT_DINP -- on hold because we cannot retrieve chaninfo here.
+        default:
+            if ((src.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANSET) {
+                return translate_CHANINFO_current_to_pre410(
+                    *reinterpret_cast<const cbPKT_CHANINFO*>(&src), dest_payload);
+            }
+            // TODO: cbPKT_DINP — needs chaninfo, unavailable here
+            break;
         }
 
         // memcpy the payload bytes
-        // Cast src to byte pointer to access payload beyond header
         const auto* src_bytes = reinterpret_cast<const uint8_t*>(&src);
         if (src.cbpkt_header.dlen > 0) {
             std::memcpy(dest_payload,
@@ -191,22 +164,22 @@ public:
         auto& dest_header = *reinterpret_cast<cbPKT_HEADER_400*>(dest);
         auto* dest_payload = &dest[HEADER_SIZE_400];
 
-        if (src.cbpkt_header.type == cbPKTTYPE_SYSPROTOCOLMONITOR) {
+        switch (src.cbpkt_header.type) {
+        case cbPKTTYPE_SYSPROTOCOLMONITOR:
             return translate_SYSPROTOCOLMONITOR_current_to_pre410(
                 *reinterpret_cast<const cbPKT_SYSPROTOCOLMONITOR*>(&src), dest_payload);
-        }
-        if ((src.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANSET) {
-            return translate_CHANINFO_current_to_pre410(
-                *reinterpret_cast<const cbPKT_CHANINFO*>(&src), dest_payload);
-        }
-        if (src.cbpkt_header.type == cbPKTTYPE_CHANRESET) {
+        case cbPKTTYPE_CHANRESET:
             return translate_CHANRESET_current_to_pre420(
                 *reinterpret_cast<const cbPKT_CHANRESET*>(&src), dest_payload);
-        }
-        if (src.cbpkt_header.type == cbPKTTYPE_PREVSETLNC) {
-            // In 4.2, cbPKTTYPE_PREVSETLNC changed from 0x81 to 0x84. Change it back.
+        case cbPKTTYPE_PREVSETLNC:
             dest_header.type = 0x81;
             return dest_header.dlen;
+        default:
+            if ((src.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANSET) {
+                return translate_CHANINFO_current_to_pre410(
+                    *reinterpret_cast<const cbPKT_CHANINFO*>(&src), dest_payload);
+            }
+            break;
         }
 
         // memcpy the payload bytes and report the original dlen.
@@ -223,18 +196,16 @@ public:
         // We already copied the entire packet upstream. Here we need to adjust payload only.
         auto& dest_header = *reinterpret_cast<cbPKT_HEADER*>(dest);
         auto* dest_payload = &dest[HEADER_SIZE_410];
-        if (src.cbpkt_header.type == cbPKTTYPE_CHANRESET) {
-            // In 4.2, cbPKTTYPE_CHANRESET grew by 1 byte. However, the code to process these packets
-            // is unreachable in the device embedded software. I will fix the values as best as I can,
-            // but I will not accommodate the extra byte as that would require an extra copy.
+        switch (src.cbpkt_header.type) {
+        case cbPKTTYPE_CHANRESET:
             return translate_CHANRESET_current_to_pre420(
                 *reinterpret_cast<const cbPKT_CHANRESET*>(&src), dest_payload);
-        }
-        if (src.cbpkt_header.type == cbPKTTYPE_PREVSETLNC) {
+        case cbPKTTYPE_PREVSETLNC:
             dest_header.type = 0x81;
             return dest_header.dlen;
+        default:
+            return src.cbpkt_header.dlen;
         }
-        return src.cbpkt_header.dlen;
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
