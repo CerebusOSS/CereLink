@@ -1190,41 +1190,55 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
 
     uint32_t head = xmt->headindex;
     uint32_t tail = xmt->tailindex;
-    uint32_t buflen = xmt->bufferlen;
+    uint32_t last_valid = xmt->last_valid_index;
 
-    uint32_t used = (head >= tail) ? (head - tail) : (buflen - tail + head);
-    uint32_t available = buflen - used - 1;
+    // Linear buffer with wrap-to-zero (matches Central's cbSendPacket):
+    // Packets are always written CONTIGUOUSLY. If the next packet doesn't fit
+    // before last_valid_index, headindex jumps to 0 (not per-word modulo).
+    uint32_t new_head = head + pkt_size_words;
 
-    if (available < pkt_size_words) {
-        return Result<void>::error("Transmit buffer full");
+    if (new_head > last_valid) {
+        // Wrap to start of buffer
+        new_head = pkt_size_words;
+        head = 0;
+        // Check room between 0 and tail
+        if (new_head >= tail) {
+            return Result<void>::error("Transmit buffer full (wrap)");
+        }
+    } else if (tail > head) {
+        // Tail is ahead, check room
+        if (new_head >= tail) {
+            return Result<void>::error("Transmit buffer full");
+        }
     }
+    // else: tail <= head, no wrap issues, plenty of room
 
     // Two-pass write protocol (matches Central's cbSendPacket):
     // Central's consumer skips entries where the first uint32_t (time field) is 0.
-    // 1. Write everything EXCEPT the first uint32_t (time field stays 0 = "not ready")
+    // 1. Write everything EXCEPT the first uint32_t (time=0 means "not ready")
     // 2. Atomically write the first uint32_t (time field) to signal "packet ready"
+    //
+    // The time field (first uint32_t) MUST be non-zero. If the caller didn't set it,
+    // stamp it from the receive buffer (like old cbSendPacket did).
     const uint32_t* pkt_words = reinterpret_cast<const uint32_t*>(write_data);
-
-    // Save the position where time will go
-    uint32_t time_position = head;
-
-    // Pass 1: skip first word (leave it 0), write the rest
-    buf[head] = 0;  // Ensure time field is 0 while writing payload
-    head = (head + 1) % buflen;
-    for (uint32_t i = 1; i < pkt_size_words; ++i) {
-        buf[head] = pkt_words[i];
-        head = (head + 1) % buflen;
+    uint32_t time_word = pkt_words[0];
+    if (time_word == 0) {
+        PROCTIME t = m_impl->recLasttime();
+        time_word = (t != 0) ? static_cast<uint32_t>(t) : 1;
     }
 
-    // Advance head index so the consumer knows data is present
-    xmt->headindex = head;
+    // Pass 1: write payload contiguously, skip first word (leave time=0)
+    std::memcpy(&buf[head + 1], &pkt_words[1], (pkt_size_words - 1) * sizeof(uint32_t));
+
+    // Advance head index
+    xmt->headindex = new_head;
 
     // Pass 2: atomically write the time field to mark packet as ready
 #ifdef _WIN32
-    InterlockedExchange(reinterpret_cast<volatile LONG*>(&buf[time_position]),
-                        static_cast<LONG>(pkt_words[0]));
+    InterlockedExchange(reinterpret_cast<volatile LONG*>(&buf[head]),
+                        static_cast<LONG>(time_word));
 #else
-    __atomic_store_n(&buf[time_position], pkt_words[0], __ATOMIC_SEQ_CST);
+    __atomic_store_n(&buf[head], time_word, __ATOMIC_SEQ_CST);
 #endif
     return Result<void>::ok();
 }
@@ -1247,32 +1261,34 @@ Result<bool> ShmemSession::dequeuePacket(cbPKT_GENERIC& pkt) {
         return Result<bool>::ok(false);  // Queue is empty
     }
 
-    uint32_t buflen = xmt->bufferlen;
+    // Linear contiguous read (packets never straddle buffer boundary)
+    // If tail > head, it means the writer wrapped — skip to 0
+    if (tail > head) {
+        tail = 0;
+    }
 
-    // Read packet header (4 uint32_t words)
+    // Wait for the time field to become non-zero (two-pass write protocol)
+    if (buf[tail] == 0) {
+        return Result<bool>::ok(false);  // Packet not yet ready
+    }
+
     uint32_t* pkt_data = reinterpret_cast<uint32_t*>(&pkt);
 
-    if (tail + 4 <= buflen) {
-        pkt_data[0] = buf[tail];
-        pkt_data[1] = buf[tail + 1];
-        pkt_data[2] = buf[tail + 2];
-        pkt_data[3] = buf[tail + 3];
-    } else {
-        pkt_data[0] = buf[tail];
-        pkt_data[1] = buf[(tail + 1) % buflen];
-        pkt_data[2] = buf[(tail + 2) % buflen];
-        pkt_data[3] = buf[(tail + 3) % buflen];
-    }
+    // Read header contiguously
+    pkt_data[0] = buf[tail];
+    pkt_data[1] = buf[tail + 1];
+    pkt_data[2] = buf[tail + 2];
+    pkt_data[3] = buf[tail + 3];
 
     uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
 
-    tail = (tail + 4) % buflen;
-    for (uint32_t i = 4; i < pkt_size_words; ++i) {
-        pkt_data[i] = buf[tail];
-        tail = (tail + 1) % buflen;
-    }
+    // Read remaining payload contiguously
+    std::memcpy(&pkt_data[4], &buf[tail + 4], (pkt_size_words - 4) * sizeof(uint32_t));
 
-    xmt->tailindex = tail;
+    // Clear the time field to 0 so it's clean for next use
+    buf[tail] = 0;
+
+    xmt->tailindex = tail + pkt_size_words;
     xmt->transmitted++;
 
     return Result<bool>::ok(true);
@@ -1305,22 +1321,40 @@ Result<void> ShmemSession::enqueueLocalPacket(const cbPKT_GENERIC& pkt) {
 
     uint32_t head = xmt_local->headindex;
     uint32_t tail = xmt_local->tailindex;
-    uint32_t buflen = xmt_local->bufferlen;
+    uint32_t last_valid = xmt_local->last_valid_index;
 
-    uint32_t used = (head >= tail) ? (head - tail) : (buflen - tail + head);
-    uint32_t available = buflen - used - 1;
+    // Linear buffer with wrap-to-zero (matches Central's cbSendLoopbackPacket)
+    uint32_t new_head = head + pkt_size_words;
 
-    if (available < pkt_size_words) {
-        return Result<void>::error("Local transmit buffer full");
+    if (new_head > last_valid) {
+        new_head = pkt_size_words;
+        head = 0;
+        if (new_head >= tail) {
+            return Result<void>::error("Local transmit buffer full (wrap)");
+        }
+    } else if (tail > head) {
+        if (new_head >= tail) {
+            return Result<void>::error("Local transmit buffer full");
+        }
     }
 
+    // Two-pass write: payload first, then atomically write time field
     const uint32_t* pkt_data = reinterpret_cast<const uint32_t*>(&pkt);
-    for (uint32_t i = 0; i < pkt_size_words; ++i) {
-        buf[head] = pkt_data[i];
-        head = (head + 1) % buflen;
+    uint32_t time_word = pkt_data[0];
+    if (time_word == 0) {
+        PROCTIME t = m_impl->recLasttime();
+        time_word = (t != 0) ? static_cast<uint32_t>(t) : 1;
     }
 
-    xmt_local->headindex = head;
+    std::memcpy(&buf[head + 1], &pkt_data[1], (pkt_size_words - 1) * sizeof(uint32_t));
+    xmt_local->headindex = new_head;
+
+#ifdef _WIN32
+    InterlockedExchange(reinterpret_cast<volatile LONG*>(&buf[head]),
+                        static_cast<LONG>(time_word));
+#else
+    __atomic_store_n(&buf[head], time_word, __ATOMIC_SEQ_CST);
+#endif
     return Result<void>::ok();
 }
 
