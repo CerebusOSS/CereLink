@@ -1,0 +1,98 @@
+name: Build pycbsdk Wheels
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master, cboulay/modularize]
+    paths:
+      - 'src/**'
+      - 'pycbsdk/**'
+      - '.github/workflows/build_pycbsdk.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'pycbsdk/**'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-wheel:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - name: windows-x64
+            os: windows-latest
+            cmake_extra: ""
+            lib_pattern: "cbsdk.dll"
+          - name: linux-x64
+            os: ubuntu-latest
+            cmake_extra: ""
+            lib_pattern: "libcbsdk.so"
+          - name: macos-universal
+            os: macos-latest
+            cmake_extra: "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+            lib_pattern: "libcbsdk.dylib"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Python build tools
+        run: pip install build setuptools wheel
+
+      - name: Build cbsdk shared library
+        run: |
+          cmake -B build -S . \
+            -DCBSDK_BUILD_SHARED=ON \
+            -DCBSDK_BUILD_TEST=OFF \
+            -DCBSDK_BUILD_SAMPLE=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            ${{ matrix.config.cmake_extra }}
+          cmake --build build --target cbsdk_shared --config Release
+
+      - name: Copy shared library to package
+        run: |
+          find build -name "${{ matrix.config.lib_pattern }}" -type f | head -1 | while read f; do
+            echo "Found: $f"
+            cp "$f" pycbsdk/src/pycbsdk/
+          done
+          ls -la pycbsdk/src/pycbsdk/
+
+      - name: Build wheel
+        run: |
+          cd pycbsdk
+          python -m build --wheel
+
+      - name: Repair wheel (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          pip install auditwheel patchelf
+          auditwheel repair pycbsdk/dist/*.whl -w pycbsdk/wheelhouse/ --plat manylinux_2_17_x86_64
+          rm pycbsdk/dist/*.whl
+          mv pycbsdk/wheelhouse/*.whl pycbsdk/dist/
+
+      - name: Repair wheel (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          pip install delocate
+          delocate-wheel -v pycbsdk/dist/*.whl
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: pycbsdk-${{ matrix.config.name }}
+          path: pycbsdk/dist/*.whl
