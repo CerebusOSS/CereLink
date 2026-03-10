@@ -105,8 +105,23 @@ int main(int argc, char* argv[]) {
     std::cerr << "Packets received in 2s: " << total_packets.load() << "\n";
     std::cerr << "FILECFG responses so far: " << filecfg_count.load() << "\n\n";
 
+    // Diagnostic: dump xmt buffer state via sendPacket return and raw shmem inspection
+    // Build a tiny probe packet to check if sendPacket works
+    {
+        cbPKT_GENERIC probe = {};
+        probe.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        probe.cbpkt_header.type = cbPKTTYPE_SETFILECFG;
+        probe.cbpkt_header.dlen = cbPKTDLEN_FILECFG;
+        auto pr = session.sendPacket(probe);
+        if (pr.isError()) {
+            std::cerr << "Probe sendPacket FAILED: " << pr.error() << "\n";
+        } else {
+            std::cerr << "Probe sendPacket succeeded (packet enqueued to xmt buffer)\n";
+        }
+    }
+
     // Step 1: Open file dialog (required by Central before starting recording)
-    std::cerr << "Step 1: Opening Central File Storage dialog...\n";
+    std::cerr << "\nStep 1: Opening Central File Storage dialog...\n";
     auto r0 = session.openCentralFileDialog();
     if (r0.isError()) {
         std::cerr << "openCentralFileDialog FAILED: " << r0.error() << "\n";
@@ -127,10 +142,15 @@ int main(int argc, char* argv[]) {
     std::cerr << "  Waiting 500ms for dialog...\n";
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-    // Step 3: Start recording
-    std::cerr << "\nStep 2: Starting Central recording (filename='cerelink_test')...\n";
+    // Step 3: Start recording (use user's home directory to avoid write permission issues)
+    std::string rec_filename = "cerelink_test";
+    const char* userprofile = getenv("USERPROFILE");
+    if (userprofile) {
+        rec_filename = std::string(userprofile) + "\\Documents\\cerelink_test";
+    }
+    std::cerr << "\nStep 2: Starting Central recording (filename='" << rec_filename << "')...\n";
     initial_count = filecfg_count.load();
-    auto r1 = session.startCentralRecording("cerelink_test", "CereLink C++ test");
+    auto r1 = session.startCentralRecording(rec_filename, "CereLink C++ test");
     if (r1.isError()) {
         std::cerr << "startCentralRecording FAILED: " << r1.error() << "\n";
         session.stop();
@@ -165,6 +185,22 @@ int main(int argc, char* argv[]) {
         std::cerr << "  -> Central responded: " << last_filecfg_info << "\n\n";
     } else {
         std::cerr << "  -> No REPFILECFG response after 5s.\n\n";
+    }
+
+    // Step 4: Try to close the File Storage dialog
+    std::cerr << "Step 4: Closing Central File Storage dialog...\n";
+    initial_count = filecfg_count.load();
+    auto r3 = session.closeCentralFileDialog();
+    if (r3.isError()) {
+        std::cerr << "closeCentralFileDialog FAILED: " << r3.error() << "\n";
+    } else {
+        got_response = waitForFileCfgResponse(filecfg_count, initial_count, 5000);
+        if (got_response) {
+            std::lock_guard<std::mutex> lock(filecfg_mutex);
+            std::cerr << "  -> Central responded: " << last_filecfg_info << "\n\n";
+        } else {
+            std::cerr << "  -> No REPFILECFG response after 5s.\n\n";
+        }
     }
 
     std::cerr << "Total packets received: " << total_packets.load() << "\n";
