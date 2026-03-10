@@ -15,6 +15,11 @@ pip install pycbsdk
 pip install pycbsdk[numpy]
 ```
 
+**Windows prerequisite:** The bundled shared library requires the Microsoft Visual C++
+Redistributable. Most Windows systems already have it installed. If you get a DLL load
+error, download it from
+[Microsoft](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
+
 ## Quick Start
 
 ```python
