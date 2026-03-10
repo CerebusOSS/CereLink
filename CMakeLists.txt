@@ -98,54 +98,7 @@ add_subdirectory(tools/validate_clock_sync)
 ##########################################################################################
 # Sample Applications for New Architecture
 if(CBSDK_BUILD_SAMPLE)
-    # New architecture examples
-    set(CBSDK_EXAMPLES
-        "gemini_example:GeminiExample/gemini_example.cpp"
-        "simple_device:SimpleDevice/simple_device.cpp"
-    )
-
-    set(CBDEV_EXAMPLES
-        "check_protocol_version:CheckProtocolVersion/check_protocol_version.cpp"
-        "configure_channels:ConfigureChannels/configure_channels.cpp"
-    )
-
-    set(SAMPLE_TARGET_LIST)
-
-    # cbsdk examples
-    foreach(example ${CBSDK_EXAMPLES})
-        string(REPLACE ":" ";" example_parts ${example})
-        list(GET example_parts 0 target_name)
-        list(GET example_parts 1 source_file)
-
-        add_executable(${target_name} ${CMAKE_CURRENT_SOURCE_DIR}/examples/${source_file})
-        target_link_libraries(${target_name} cbsdk)
-        list(APPEND SAMPLE_TARGET_LIST ${target_name})
-    endforeach()
-
-    # cbdev examples (link against cbdev only)
-    foreach(example ${CBDEV_EXAMPLES})
-        string(REPLACE ":" ";" example_parts ${example})
-        list(GET example_parts 0 target_name)
-        list(GET example_parts 1 source_file)
-
-        add_executable(${target_name} ${CMAKE_CURRENT_SOURCE_DIR}/examples/${source_file})
-        target_link_libraries(${target_name} cbdev)
-        list(APPEND SAMPLE_TARGET_LIST ${target_name})
-    endforeach()
-
-    # Set RPATH for examples
-    if(NOT CMAKE_INSTALL_RPATH)
-        set(LIBDIR "../lib")
-        foreach(sample_app ${SAMPLE_TARGET_LIST})
-            if(APPLE)
-                set_property(TARGET ${sample_app} APPEND
-                    PROPERTY INSTALL_RPATH "@executable_path/;@executable_path/${LIBDIR};@executable_path/../Frameworks")
-            elseif(UNIX)
-                set_property(TARGET ${sample_app}
-                    PROPERTY INSTALL_RPATH "\$ORIGIN:\$ORIGIN/${LIBDIR}")
-            endif(APPLE)
-        endforeach()
-    endif(NOT CMAKE_INSTALL_RPATH)
+    add_subdirectory(examples)
 endif(CBSDK_BUILD_SAMPLE)
 
 ##########################################################################################
