@@ -18,9 +18,9 @@
 ///
 /// Example Usage:
 /// @code{.c}
-///   cbsdk_session_t* session = NULL;
+///   cbsdk_session_t session = NULL;
 ///   cbsdk_config_t config = cbsdk_config_default();
-///   config.device_address = "192.168.137.128";
+///   config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
 ///
 ///   int result = cbsdk_session_create(&session, &config);
 ///   if (result != CBSDK_RESULT_SUCCESS) {
@@ -29,11 +29,7 @@
 ///   }
 ///
 ///   cbsdk_session_set_packet_callback(session, my_packet_callback, user_data);
-///   cbsdk_session_start(session);
-///
 ///   // ... do work ...
-///
-///   cbsdk_session_stop(session);
 ///   cbsdk_session_destroy(session);
 /// @endcode
 ///
@@ -45,6 +41,26 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// DLL Export/Import
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if defined(CBSDK_SHARED)
+  #if defined(_WIN32) || defined(__CYGWIN__)
+    #if defined(CBSDK_EXPORTS)
+      #define CBSDK_API __declspec(dllexport)
+    #else
+      #define CBSDK_API __declspec(dllimport)
+    #endif
+  #elif defined(__GNUC__) && __GNUC__ >= 4
+    #define CBSDK_API __attribute__((visibility("default")))
+  #else
+    #define CBSDK_API
+  #endif
+#else
+  #define CBSDK_API
+#endif
 
 // Protocol types (need for callbacks)
 #ifdef __cplusplus
@@ -167,7 +183,7 @@ typedef struct cbsdk_session_impl* cbsdk_session_t;
 
 /// Get default SDK configuration
 /// @return Default configuration structure
-cbsdk_config_t cbsdk_config_default(void);
+CBSDK_API cbsdk_config_t cbsdk_config_default(void);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Session Management
@@ -177,11 +193,11 @@ cbsdk_config_t cbsdk_config_default(void);
 /// @param[out] session Pointer to receive session handle (must not be NULL)
 /// @param[in] config Configuration (must not be NULL)
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
-cbsdk_result_t cbsdk_session_create(cbsdk_session_t* session, const cbsdk_config_t* config);
+CBSDK_API cbsdk_result_t cbsdk_session_create(cbsdk_session_t* session, const cbsdk_config_t* config);
 
 /// Destroy an SDK session and free resources
 /// @param session Session handle (can be NULL)
-void cbsdk_session_destroy(cbsdk_session_t session);
+CBSDK_API void cbsdk_session_destroy(cbsdk_session_t session);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Session Control
@@ -190,36 +206,36 @@ void cbsdk_session_destroy(cbsdk_session_t session);
 /// Start receiving packets from device
 /// @param session Session handle (must not be NULL)
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
-cbsdk_result_t cbsdk_session_start(cbsdk_session_t session);
+CBSDK_API cbsdk_result_t cbsdk_session_start(cbsdk_session_t session);
 
 /// Stop receiving packets
 /// @param session Session handle (must not be NULL)
-void cbsdk_session_stop(cbsdk_session_t session);
+CBSDK_API void cbsdk_session_stop(cbsdk_session_t session);
 
 /// Check if session is running
 /// @param session Session handle (must not be NULL)
 /// @return true if running, false otherwise
-bool cbsdk_session_is_running(cbsdk_session_t session);
+CBSDK_API bool cbsdk_session_is_running(cbsdk_session_t session);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Callbacks
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Set callback for all received packets (legacy convenience — registers a PACKET callback)
+/// Set callback for all received packets (legacy convenience -- registers a PACKET callback)
 /// @param session Session handle (must not be NULL)
 /// @param callback Callback function (can be NULL to clear)
 /// @param user_data User data pointer passed to callback
-void cbsdk_session_set_packet_callback(cbsdk_session_t session,
-                                        cbsdk_packet_callback_fn callback,
-                                        void* user_data);
+CBSDK_API void cbsdk_session_set_packet_callback(cbsdk_session_t session,
+                                                  cbsdk_packet_callback_fn callback,
+                                                  void* user_data);
 
 /// Set callback for errors (queue overflow, etc.)
 /// @param session Session handle (must not be NULL)
 /// @param callback Callback function (can be NULL to clear)
 /// @param user_data User data pointer passed to callback
-void cbsdk_session_set_error_callback(cbsdk_session_t session,
-                                       cbsdk_error_callback_fn callback,
-                                       void* user_data);
+CBSDK_API void cbsdk_session_set_error_callback(cbsdk_session_t session,
+                                                 cbsdk_error_callback_fn callback,
+                                                 void* user_data);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Typed Callback Registration
@@ -230,7 +246,7 @@ void cbsdk_session_set_error_callback(cbsdk_session_t session,
 /// @param callback Callback function (must not be NULL)
 /// @param user_data User data pointer passed to callback
 /// @return Handle for unregistration, or 0 on failure
-cbsdk_callback_handle_t cbsdk_session_register_packet_callback(
+CBSDK_API cbsdk_callback_handle_t cbsdk_session_register_packet_callback(
     cbsdk_session_t session,
     cbsdk_packet_callback_fn callback,
     void* user_data);
@@ -242,7 +258,7 @@ cbsdk_callback_handle_t cbsdk_session_register_packet_callback(
 /// @param callback Callback function (must not be NULL)
 /// @param user_data User data pointer passed to callback
 /// @return Handle for unregistration, or 0 on failure
-cbsdk_callback_handle_t cbsdk_session_register_event_callback(
+CBSDK_API cbsdk_callback_handle_t cbsdk_session_register_event_callback(
     cbsdk_session_t session,
     cbproto_channel_type_t channel_type,
     cbsdk_event_callback_fn callback,
@@ -254,7 +270,7 @@ cbsdk_callback_handle_t cbsdk_session_register_event_callback(
 /// @param callback Callback function (must not be NULL)
 /// @param user_data User data pointer passed to callback
 /// @return Handle for unregistration, or 0 on failure
-cbsdk_callback_handle_t cbsdk_session_register_group_callback(
+CBSDK_API cbsdk_callback_handle_t cbsdk_session_register_group_callback(
     cbsdk_session_t session,
     uint8_t group_id,
     cbsdk_group_callback_fn callback,
@@ -266,7 +282,7 @@ cbsdk_callback_handle_t cbsdk_session_register_group_callback(
 /// @param callback Callback function (must not be NULL)
 /// @param user_data User data pointer passed to callback
 /// @return Handle for unregistration, or 0 on failure
-cbsdk_callback_handle_t cbsdk_session_register_config_callback(
+CBSDK_API cbsdk_callback_handle_t cbsdk_session_register_config_callback(
     cbsdk_session_t session,
     uint16_t packet_type,
     cbsdk_config_callback_fn callback,
@@ -275,8 +291,8 @@ cbsdk_callback_handle_t cbsdk_session_register_config_callback(
 /// Unregister a previously registered callback
 /// @param session Session handle (must not be NULL)
 /// @param handle Handle returned by a register_*_callback function
-void cbsdk_session_unregister_callback(cbsdk_session_t session,
-                                        cbsdk_callback_handle_t handle);
+CBSDK_API void cbsdk_session_unregister_callback(cbsdk_session_t session,
+                                                  cbsdk_callback_handle_t handle);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Statistics & Monitoring
@@ -285,47 +301,76 @@ void cbsdk_session_unregister_callback(cbsdk_session_t session,
 /// Get current statistics
 /// @param session Session handle (must not be NULL)
 /// @param[out] stats Pointer to receive statistics (must not be NULL)
-void cbsdk_session_get_stats(cbsdk_session_t session, cbsdk_stats_t* stats);
+CBSDK_API void cbsdk_session_get_stats(cbsdk_session_t session, cbsdk_stats_t* stats);
 
 /// Reset statistics counters to zero
 /// @param session Session handle (must not be NULL)
-void cbsdk_session_reset_stats(cbsdk_session_t session);
+CBSDK_API void cbsdk_session_reset_stats(cbsdk_session_t session);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// Configuration Access (read from shared memory — always up-to-date)
+// Configuration Access (read from shared memory -- always up-to-date)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-/// Get system information
-/// @param session Session handle (must not be NULL)
-/// @return Pointer to system info packet, or NULL if unavailable.
-///         Pointer is valid for the lifetime of the session.
-const cbPKT_SYSINFO* cbsdk_session_get_sysinfo(cbsdk_session_t session);
-
-/// Get channel information
-/// @param session Session handle (must not be NULL)
-/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
-/// @return Pointer to channel info, or NULL if invalid/unavailable.
-///         Pointer is valid for the lifetime of the session.
-const cbPKT_CHANINFO* cbsdk_session_get_chaninfo(cbsdk_session_t session, uint32_t chan_id);
-
-/// Get sample group information
-/// @param session Session handle (must not be NULL)
-/// @param group_id Group ID (1-6)
-/// @return Pointer to group info, or NULL if invalid/unavailable.
-///         Pointer is valid for the lifetime of the session.
-const cbPKT_GROUPINFO* cbsdk_session_get_groupinfo(cbsdk_session_t session, uint32_t group_id);
-
-/// Get filter information
-/// @param session Session handle (must not be NULL)
-/// @param filter_id Filter ID (0 to cbMAXFILTS-1)
-/// @return Pointer to filter info, or NULL if invalid/unavailable.
-///         Pointer is valid for the lifetime of the session.
-const cbPKT_FILTINFO* cbsdk_session_get_filtinfo(cbsdk_session_t session, uint32_t filter_id);
 
 /// Get current device run level
 /// @param session Session handle (must not be NULL)
 /// @return Current run level (cbRUNLEVEL_*), or 0 if unknown
-uint32_t cbsdk_session_get_runlevel(cbsdk_session_t session);
+CBSDK_API uint32_t cbsdk_session_get_runlevel(cbsdk_session_t session);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Channel Information Accessors
+//
+// These provide FFI-friendly access to channel/group configuration without
+// requiring the full struct layouts. Pointers are valid for the session lifetime.
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Get the number of channels
+/// @return cbMAXCHANS (compile-time constant)
+CBSDK_API uint32_t cbsdk_get_max_chans(void);
+
+/// Get the number of front-end channels
+/// @return cbNUM_FE_CHANS (compile-time constant)
+CBSDK_API uint32_t cbsdk_get_num_fe_chans(void);
+
+/// Get the number of analog channels
+/// @return cbNUM_ANALOG_CHANS (compile-time constant)
+CBSDK_API uint32_t cbsdk_get_num_analog_chans(void);
+
+/// Get a channel's label
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Pointer to null-terminated label string, or NULL if invalid.
+///         Pointer is valid for the lifetime of the session.
+CBSDK_API const char* cbsdk_session_get_channel_label(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get a channel's sample group assignment
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Sample group (0-6, where 0 = disabled), or 0 on error
+CBSDK_API uint32_t cbsdk_session_get_channel_smpgroup(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get a channel's capabilities flags
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Channel capabilities (cbCHAN_* flags), or 0 on error
+CBSDK_API uint32_t cbsdk_session_get_channel_chancaps(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get a sample group's label
+/// @param session Session handle (must not be NULL)
+/// @param group_id Group ID (1-6)
+/// @return Pointer to null-terminated label string, or NULL if invalid
+CBSDK_API const char* cbsdk_session_get_group_label(cbsdk_session_t session, uint32_t group_id);
+
+/// Get the list of channels in a sample group
+/// @param session Session handle (must not be NULL)
+/// @param group_id Group ID (1-6)
+/// @param[out] list Pointer to receive channel list (caller-allocated, max cbNUM_ANALOG_CHANS entries)
+/// @param[in,out] count On input: size of list array. On output: number of channels written.
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_get_group_list(
+    cbsdk_session_t session,
+    uint32_t group_id,
+    uint16_t* list,
+    uint32_t* count);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Channel Configuration
@@ -338,7 +383,7 @@ uint32_t cbsdk_session_get_runlevel(cbsdk_session_t session);
 /// @param group_id Sampling group (0-6, where 0 disables)
 /// @param disable_others If true, disable sampling on unselected channels of this type
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
-cbsdk_result_t cbsdk_session_set_channel_sample_group(
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_sample_group(
     cbsdk_session_t session,
     size_t n_chans,
     cbproto_channel_type_t chan_type,
@@ -349,7 +394,7 @@ cbsdk_result_t cbsdk_session_set_channel_sample_group(
 /// @param session Session handle (must not be NULL)
 /// @param chaninfo Complete channel info packet to send
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
-cbsdk_result_t cbsdk_session_set_channel_config(
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_config(
     cbsdk_session_t session,
     const cbPKT_CHANINFO* chaninfo);
 
@@ -363,7 +408,7 @@ cbsdk_result_t cbsdk_session_set_channel_config(
 /// @param rgba Color as RGBA uint32_t (0 = white)
 /// @param charset Character set (0 = ANSI)
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
-cbsdk_result_t cbsdk_session_send_comment(
+CBSDK_API cbsdk_result_t cbsdk_session_send_comment(
     cbsdk_session_t session,
     const char* comment,
     uint32_t rgba,
@@ -373,7 +418,7 @@ cbsdk_result_t cbsdk_session_send_comment(
 /// @param session Session handle (must not be NULL)
 /// @param pkt Packet to send (must not be NULL)
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
-cbsdk_result_t cbsdk_session_send_packet(
+CBSDK_API cbsdk_result_t cbsdk_session_send_packet(
     cbsdk_session_t session,
     const cbPKT_GENERIC* pkt);
 
@@ -382,7 +427,7 @@ cbsdk_result_t cbsdk_session_send_packet(
 /// @param chan_id Channel ID (1-based) of a digital output channel
 /// @param value Digital output value (bitmask)
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
-cbsdk_result_t cbsdk_session_set_digital_output(
+CBSDK_API cbsdk_result_t cbsdk_session_set_digital_output(
     cbsdk_session_t session,
     uint32_t chan_id,
     uint16_t value);
@@ -391,7 +436,7 @@ cbsdk_result_t cbsdk_session_set_digital_output(
 /// @param session Session handle (must not be NULL)
 /// @param runlevel Desired run level (cbRUNLEVEL_*)
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
-cbsdk_result_t cbsdk_session_set_runlevel(
+CBSDK_API cbsdk_result_t cbsdk_session_set_runlevel(
     cbsdk_session_t session,
     uint32_t runlevel);
 
@@ -402,7 +447,7 @@ cbsdk_result_t cbsdk_session_set_runlevel(
 /// Get human-readable error message for result code
 /// @param result Result code
 /// @return Error message string (never NULL, always valid)
-const char* cbsdk_get_error_message(cbsdk_result_t result);
+CBSDK_API const char* cbsdk_get_error_message(cbsdk_result_t result);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Version Information
@@ -410,7 +455,7 @@ const char* cbsdk_get_error_message(cbsdk_result_t result);
 
 /// Get SDK version string
 /// @return Version string (e.g., "2.0.0")
-const char* cbsdk_get_version(void);
+CBSDK_API const char* cbsdk_get_version(void);
 
 #ifdef __cplusplus
 }

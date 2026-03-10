@@ -334,24 +334,31 @@ TEST_F(CbsdkCApiTest, UnregisterCallback_ZeroHandle) {
 // Configuration Access Tests
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-TEST_F(CbsdkCApiTest, GetSysinfo_NullSession) {
-    EXPECT_EQ(cbsdk_session_get_sysinfo(nullptr), nullptr);
-}
-
-TEST_F(CbsdkCApiTest, GetChaninfo_NullSession) {
-    EXPECT_EQ(cbsdk_session_get_chaninfo(nullptr, 1), nullptr);
-}
-
-TEST_F(CbsdkCApiTest, GetGroupinfo_NullSession) {
-    EXPECT_EQ(cbsdk_session_get_groupinfo(nullptr, 1), nullptr);
-}
-
-TEST_F(CbsdkCApiTest, GetFiltinfo_NullSession) {
-    EXPECT_EQ(cbsdk_session_get_filtinfo(nullptr, 0), nullptr);
-}
-
 TEST_F(CbsdkCApiTest, GetRunlevel_NullSession) {
     EXPECT_EQ(cbsdk_session_get_runlevel(nullptr), 0);
+}
+
+TEST_F(CbsdkCApiTest, GetChannelLabel_NullSession) {
+    EXPECT_EQ(cbsdk_session_get_channel_label(nullptr, 1), nullptr);
+}
+
+TEST_F(CbsdkCApiTest, GetChannelSmpgroup_NullSession) {
+    EXPECT_EQ(cbsdk_session_get_channel_smpgroup(nullptr, 1), 0);
+}
+
+TEST_F(CbsdkCApiTest, GetChannelChancaps_NullSession) {
+    EXPECT_EQ(cbsdk_session_get_channel_chancaps(nullptr, 1), 0);
+}
+
+TEST_F(CbsdkCApiTest, GetGroupLabel_NullSession) {
+    EXPECT_EQ(cbsdk_session_get_group_label(nullptr, 1), nullptr);
+}
+
+TEST_F(CbsdkCApiTest, GetConstants) {
+    EXPECT_GT(cbsdk_get_max_chans(), 0);
+    EXPECT_GT(cbsdk_get_num_fe_chans(), 0);
+    EXPECT_GT(cbsdk_get_num_analog_chans(), 0);
+    EXPECT_GE(cbsdk_get_max_chans(), cbsdk_get_num_analog_chans());
 }
 
 TEST_F(CbsdkCApiTest, ConfigAccess_WithSession) {
@@ -360,14 +367,14 @@ TEST_F(CbsdkCApiTest, ConfigAccess_WithSession) {
     cbsdk_session_t session = nullptr;
     ASSERT_EQ(cbsdk_session_create(&session, &config), CBSDK_RESULT_SUCCESS);
 
-    // These may return NULL without a device, but must not crash
-    cbsdk_session_get_sysinfo(session);
-    cbsdk_session_get_chaninfo(session, 1);
-    cbsdk_session_get_chaninfo(session, 0);      // Invalid channel
-    cbsdk_session_get_chaninfo(session, 99999);   // Out of range
-    cbsdk_session_get_groupinfo(session, 1);
-    cbsdk_session_get_groupinfo(session, 0);      // Invalid group
-    cbsdk_session_get_filtinfo(session, 0);
+    // These may return NULL/0 without a device, but must not crash
+    cbsdk_session_get_channel_label(session, 1);
+    cbsdk_session_get_channel_label(session, 0);       // Invalid channel
+    cbsdk_session_get_channel_label(session, 99999);    // Out of range
+    cbsdk_session_get_channel_smpgroup(session, 1);
+    cbsdk_session_get_channel_chancaps(session, 1);
+    cbsdk_session_get_group_label(session, 1);
+    cbsdk_session_get_group_label(session, 0);          // Invalid group
     cbsdk_session_get_runlevel(session);
 
     cbsdk_session_destroy(session);

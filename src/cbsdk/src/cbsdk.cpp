@@ -448,50 +448,6 @@ void cbsdk_session_unregister_callback(cbsdk_session_t session,
 // Configuration Access
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-const cbPKT_SYSINFO* cbsdk_session_get_sysinfo(cbsdk_session_t session) {
-    if (!session || !session->cpp_session) {
-        return nullptr;
-    }
-    try {
-        return session->cpp_session->getSysInfo();
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-const cbPKT_CHANINFO* cbsdk_session_get_chaninfo(cbsdk_session_t session, uint32_t chan_id) {
-    if (!session || !session->cpp_session) {
-        return nullptr;
-    }
-    try {
-        return session->cpp_session->getChanInfo(chan_id);
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-const cbPKT_GROUPINFO* cbsdk_session_get_groupinfo(cbsdk_session_t session, uint32_t group_id) {
-    if (!session || !session->cpp_session) {
-        return nullptr;
-    }
-    try {
-        return session->cpp_session->getGroupInfo(group_id);
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-const cbPKT_FILTINFO* cbsdk_session_get_filtinfo(cbsdk_session_t session, uint32_t filter_id) {
-    if (!session || !session->cpp_session) {
-        return nullptr;
-    }
-    try {
-        return session->cpp_session->getFilterInfo(filter_id);
-    } catch (...) {
-        return nullptr;
-    }
-}
-
 uint32_t cbsdk_session_get_runlevel(cbsdk_session_t session) {
     if (!session || !session->cpp_session) {
         return 0;
@@ -500,6 +456,97 @@ uint32_t cbsdk_session_get_runlevel(cbsdk_session_t session) {
         return session->cpp_session->getRunLevel();
     } catch (...) {
         return 0;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Channel Information Accessors
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+uint32_t cbsdk_get_max_chans(void) {
+    return cbMAXCHANS;
+}
+
+uint32_t cbsdk_get_num_fe_chans(void) {
+    return cbNUM_FE_CHANS;
+}
+
+uint32_t cbsdk_get_num_analog_chans(void) {
+    return cbNUM_ANALOG_CHANS;
+}
+
+const char* cbsdk_session_get_channel_label(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) {
+        return nullptr;
+    }
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        return info ? info->label : nullptr;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+uint32_t cbsdk_session_get_channel_smpgroup(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) {
+        return 0;
+    }
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        return info ? info->smpgroup : 0;
+    } catch (...) {
+        return 0;
+    }
+}
+
+uint32_t cbsdk_session_get_channel_chancaps(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) {
+        return 0;
+    }
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        return info ? info->chancaps : 0;
+    } catch (...) {
+        return 0;
+    }
+}
+
+const char* cbsdk_session_get_group_label(cbsdk_session_t session, uint32_t group_id) {
+    if (!session || !session->cpp_session) {
+        return nullptr;
+    }
+    try {
+        const cbPKT_GROUPINFO* info = session->cpp_session->getGroupInfo(group_id);
+        return info ? info->label : nullptr;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+cbsdk_result_t cbsdk_session_get_group_list(
+    cbsdk_session_t session,
+    uint32_t group_id,
+    uint16_t* list,
+    uint32_t* count) {
+    if (!session || !session->cpp_session || !list || !count) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        const cbPKT_GROUPINFO* info = session->cpp_session->getGroupInfo(group_id);
+        if (!info) {
+            *count = 0;
+            return CBSDK_RESULT_INVALID_PARAMETER;
+        }
+        uint32_t n = info->length;
+        if (n > *count) n = *count;
+        for (uint32_t i = 0; i < n; i++) {
+            list[i] = info->list[i];
+        }
+        *count = n;
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) {
+        *count = 0;
+        return CBSDK_RESULT_INTERNAL_ERROR;
     }
 }
 
