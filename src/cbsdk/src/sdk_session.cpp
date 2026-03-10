@@ -594,36 +594,33 @@ Result<void> SdkSession::start() {
                     impl->handshake_cv.notify_all();
                 }
 
-                // Update stats
+                // Store to shared memory
+                auto store_result = impl->shmem_session->storePacket(pkt);
+
+                // Queue for callback
+                bool queued = impl->packet_queue.push(pkt);
+
+                // Update all stats in a single critical section
                 {
                     std::lock_guard<std::mutex> lock(impl->stats_mutex);
                     impl->stats.packets_received_from_device++;
-                }
-
-                // Store to shared memory
-                auto store_result = impl->shmem_session->storePacket(pkt);
-                if (store_result.isOk()) {
-                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                    impl->stats.packets_stored_to_shmem++;
-                } else {
-                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                    impl->stats.shmem_store_errors++;
-                }
-
-                // Queue for callback
-                if (impl->packet_queue.push(pkt)) {
-                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                    impl->stats.packets_queued_for_callback++;
-                    size_t current_depth = impl->packet_queue.size();
-                    if (current_depth > impl->stats.queue_max_depth) {
-                        impl->stats.queue_max_depth = current_depth;
+                    if (store_result.isOk()) {
+                        impl->stats.packets_stored_to_shmem++;
+                    } else {
+                        impl->stats.shmem_store_errors++;
                     }
-                } else {
-                    // Queue overflow
-                    {
-                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
+                    if (queued) {
+                        impl->stats.packets_queued_for_callback++;
+                        size_t current_depth = impl->packet_queue.size();
+                        if (current_depth > impl->stats.queue_max_depth) {
+                            impl->stats.queue_max_depth = current_depth;
+                        }
+                    } else {
                         impl->stats.packets_dropped++;
                     }
+                }
+
+                if (!queued) {
                     std::lock_guard<std::mutex> lock(impl->user_callback_mutex);
                     if (impl->error_callback) {
                         impl->error_callback("Packet queue overflow - dropping packets");

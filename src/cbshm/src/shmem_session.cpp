@@ -318,9 +318,7 @@ struct ShmemSession::Impl {
 
         uint32_t* buf = recBuffer();
         const uint32_t* pkt_data = reinterpret_cast<const uint32_t*>(&pkt);
-        for (uint32_t i = 0; i < pkt_size_words; ++i) {
-            buf[head + i] = pkt_data[i];
-        }
+        std::memcpy(&buf[head], pkt_data, pkt_size_words * sizeof(uint32_t));
 
         recHeadindex() = head + pkt_size_words;
         recReceived()++;
@@ -1238,7 +1236,7 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
     InterlockedExchange(reinterpret_cast<volatile LONG*>(&buf[head]),
                         static_cast<LONG>(time_word));
 #else
-    __atomic_store_n(&buf[head], time_word, __ATOMIC_SEQ_CST);
+    __atomic_store_n(&buf[head], time_word, __ATOMIC_RELEASE);
 #endif
     return Result<void>::ok();
 }
@@ -1353,7 +1351,7 @@ Result<void> ShmemSession::enqueueLocalPacket(const cbPKT_GENERIC& pkt) {
     InterlockedExchange(reinterpret_cast<volatile LONG*>(&buf[head]),
                         static_cast<LONG>(time_word));
 #else
-    __atomic_store_n(&buf[head], time_word, __ATOMIC_SEQ_CST);
+    __atomic_store_n(&buf[head], time_word, __ATOMIC_RELEASE);
 #endif
     return Result<void>::ok();
 }
@@ -1376,31 +1374,34 @@ Result<bool> ShmemSession::dequeueLocalPacket(cbPKT_GENERIC& pkt) {
         return Result<bool>::ok(false);  // Queue is empty
     }
 
-    uint32_t buflen = xmt_local->bufferlen;
+    // Linear contiguous read (packets never straddle buffer boundary)
+    // If tail > head, it means the writer wrapped — skip to 0
+    if (tail > head) {
+        tail = 0;
+    }
+
+    // Wait for the time field to become non-zero (two-pass write protocol)
+    if (buf[tail] == 0) {
+        return Result<bool>::ok(false);  // Packet not yet ready
+    }
 
     uint32_t* pkt_data = reinterpret_cast<uint32_t*>(&pkt);
 
-    if (tail + 4 <= buflen) {
-        pkt_data[0] = buf[tail];
-        pkt_data[1] = buf[tail + 1];
-        pkt_data[2] = buf[tail + 2];
-        pkt_data[3] = buf[tail + 3];
-    } else {
-        pkt_data[0] = buf[tail];
-        pkt_data[1] = buf[(tail + 1) % buflen];
-        pkt_data[2] = buf[(tail + 2) % buflen];
-        pkt_data[3] = buf[(tail + 3) % buflen];
-    }
+    // Read header contiguously
+    pkt_data[0] = buf[tail];
+    pkt_data[1] = buf[tail + 1];
+    pkt_data[2] = buf[tail + 2];
+    pkt_data[3] = buf[tail + 3];
 
     uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
 
-    tail = (tail + 4) % buflen;
-    for (uint32_t i = 4; i < pkt_size_words; ++i) {
-        pkt_data[i] = buf[tail];
-        tail = (tail + 1) % buflen;
-    }
+    // Read remaining payload contiguously
+    std::memcpy(&pkt_data[4], &buf[tail + 4], (pkt_size_words - 4) * sizeof(uint32_t));
 
-    xmt_local->tailindex = tail;
+    // Clear the time field to 0 so it's clean for next use
+    buf[tail] = 0;
+
+    xmt_local->tailindex = tail + pkt_size_words;
     xmt_local->transmitted++;
 
     return Result<bool>::ok(true);
@@ -1751,6 +1752,8 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
     const bool needs_translation = (m_impl->layout == ShmemLayout::CENTRAL_COMPAT &&
                                      m_impl->compat_protocol != CBPROTO_PROTOCOL_CURRENT);
 
+    uint8_t raw_buf[cbPKT_MAX_SIZE];
+
     while (packets_read < max_packets) {
         if (m_impl->rec_tailwrap == head_wrap && m_impl->rec_tailindex == head_index) {
             break;
@@ -1798,7 +1801,6 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             // Copy raw bytes from ring buffer into a temp buffer for translation.
             // Packets never straddle the buffer boundary (Central wraps before that),
             // but we handle it defensively.
-            uint8_t raw_buf[cbPKT_MAX_SIZE];
             uint32_t raw_bytes = pkt_size_dwords * sizeof(uint32_t);
             uint32_t end_index = m_impl->rec_tailindex + pkt_size_dwords;
 
