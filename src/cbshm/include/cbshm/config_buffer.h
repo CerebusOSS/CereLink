@@ -88,6 +88,12 @@ extern "C" {
                            cbCONFIG_NUM_DIGIN_BANKS + cbCONFIG_NUM_SERIAL_BANKS + \
                            cbCONFIG_NUM_DIGOUT_BANKS)
 
+/// Maximum n-trodes (stereotrode minimum) for multi-instrument config buffer
+#define cbCONFIG_MAXNTRODES (cbCONFIG_NUM_FE_CHANS / 2)
+
+/// Analog output gain channels for multi-instrument config buffer
+#define cbCONFIG_AOUT_NUM_GAIN_CHANS (cbCONFIG_NUM_ANAOUT_CHANS + cbCONFIG_NUM_AUDOUT_CHANS)
+
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -172,10 +178,10 @@ typedef struct {
     cbSPIKE_SORTING isSortingOptions;                           ///< Spike sorting parameters
 
     // N-Trode configuration (stereotrode, tetrode, etc.)
-    cbPKT_NTRODEINFO isNTrodeInfo[cbMAXNTRODES];                ///< N-Trode information
+    cbPKT_NTRODEINFO isNTrodeInfo[cbCONFIG_MAXNTRODES];         ///< N-Trode information
 
     // Analog output waveform configuration
-    cbPKT_AOUT_WAVEFORM isWaveform[AOUT_NUM_GAIN_CHANS][cbMAX_AOUT_TRIGGER]; ///< Waveform params
+    cbPKT_AOUT_WAVEFORM isWaveform[cbCONFIG_AOUT_NUM_GAIN_CHANS][cbMAX_AOUT_TRIGGER]; ///< Waveform params
 
     // nPlay file playback configuration
     cbPKT_NPLAY isNPlay;                                        ///< nPlay information
