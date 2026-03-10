@@ -375,25 +375,28 @@ struct ShmemSession::Impl {
 
 #ifdef _WIN32
         // Windows implementation
-        DWORD access = (mode == Mode::STANDALONE) ? PAGE_READWRITE : PAGE_READONLY;
-        DWORD map_access = (mode == Mode::STANDALONE) ? FILE_MAP_ALL_ACCESS : FILE_MAP_READ;
-
         // Helper lambda to create/map a segment
-        auto createSegment = [&](const std::string& name, size_t size, HANDLE& mapping, void*& buffer) -> Result<void> {
+        // writable: when true, segment is opened read-write even in CLIENT mode
+        //           (needed for transmit buffers so clients can enqueue packets)
+        auto createSegment = [&](const std::string& name, size_t size, HANDLE& mapping, void*& buffer, bool writable = false) -> Result<void> {
             DWORD size_high = static_cast<DWORD>((static_cast<uint64_t>(size)) >> 32);
             DWORD size_low = static_cast<DWORD>(size & 0xFFFFFFFF);
 
+            bool need_write = (mode == Mode::STANDALONE) || writable;
+            DWORD seg_access = need_write ? PAGE_READWRITE : PAGE_READONLY;
+            DWORD seg_map = need_write ? FILE_MAP_ALL_ACCESS : FILE_MAP_READ;
+
             if (mode == Mode::STANDALONE) {
-                mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, nullptr, access, size_high, size_low, name.c_str());
+                mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, nullptr, seg_access, size_high, size_low, name.c_str());
             } else {
-                mapping = OpenFileMappingA(map_access, FALSE, name.c_str());
+                mapping = OpenFileMappingA(seg_map, FALSE, name.c_str());
             }
             if (!mapping) {
                 DWORD err = GetLastError();
                 return Result<void>::error("Failed to create/open file mapping '" + name +
                     "' (size=" + std::to_string(size) + ", err=" + std::to_string(err) + ")");
             }
-            buffer = MapViewOfFile(mapping, map_access, 0, 0, (mode == Mode::STANDALONE) ? size : 0);
+            buffer = MapViewOfFile(mapping, seg_map, 0, 0, (mode == Mode::STANDALONE) ? size : 0);
             if (!buffer) {
                 DWORD err = GetLastError();
                 CloseHandle(mapping);
@@ -410,10 +413,11 @@ struct ShmemSession::Impl {
         r = createSegment(rec_name, rec_buffer_size, rec_file_mapping, rec_buffer_raw);
         if (r.isError()) { close(); return r; }
 
-        r = createSegment(xmt_name, xmt_buffer_size, xmt_file_mapping, xmt_buffer_raw);
+        // Transmit buffers need write access in CLIENT mode too (clients enqueue packets)
+        r = createSegment(xmt_name, xmt_buffer_size, xmt_file_mapping, xmt_buffer_raw, true);
         if (r.isError()) { close(); return r; }
 
-        r = createSegment(xmt_local_name, xmt_local_buffer_size, xmt_local_file_mapping, xmt_local_buffer_raw);
+        r = createSegment(xmt_local_name, xmt_local_buffer_size, xmt_local_file_mapping, xmt_local_buffer_raw, true);
         if (r.isError()) { close(); return r; }
 
         r = createSegment(status_name, status_buffer_size, status_file_mapping, status_buffer_raw);
@@ -439,6 +443,10 @@ struct ShmemSession::Impl {
         mode_t perms = (mode == Mode::STANDALONE) ? 0644 : 0;
         int prot = (mode == Mode::STANDALONE) ? (PROT_READ | PROT_WRITE) : PROT_READ;
 
+        // Transmit buffers need write access in CLIENT mode too (clients enqueue packets)
+        int xmt_flags = (mode == Mode::STANDALONE) ? (O_CREAT | O_RDWR) : O_RDWR;
+        int xmt_prot = PROT_READ | PROT_WRITE;
+
         auto r1 = openPosixSegment(cfg_name, cfg_buffer_size, cfg_shm_fd, flags, perms, prot);
         if (r1.isError()) { close(); return Result<void>::error(r1.error()); }
         cfg_buffer_raw = r1.value();
@@ -447,11 +455,11 @@ struct ShmemSession::Impl {
         if (r2.isError()) { close(); return Result<void>::error(r2.error()); }
         rec_buffer_raw = r2.value();
 
-        auto r3 = openPosixSegment(xmt_name, xmt_buffer_size, xmt_shm_fd, flags, perms, prot);
+        auto r3 = openPosixSegment(xmt_name, xmt_buffer_size, xmt_shm_fd, xmt_flags, perms, xmt_prot);
         if (r3.isError()) { close(); return Result<void>::error(r3.error()); }
         xmt_buffer_raw = r3.value();
 
-        auto r4 = openPosixSegment(xmt_local_name, xmt_local_buffer_size, xmt_local_shm_fd, flags, perms, prot);
+        auto r4 = openPosixSegment(xmt_local_name, xmt_local_buffer_size, xmt_local_shm_fd, xmt_flags, perms, xmt_prot);
         if (r4.isError()) { close(); return Result<void>::error(r4.error()); }
         xmt_local_buffer_raw = r4.value();
 
