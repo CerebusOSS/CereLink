@@ -69,6 +69,16 @@ if(CBSDK_BUILD_SHARED)
     else()
         target_link_libraries(cbsdk_shared PRIVATE pthread)
     endif()
+
+    # Static-link MinGW runtime to eliminate DLL dependencies (libstdc++, libgcc, libwinpthread)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(cbsdk_shared PRIVATE -static-libstdc++ -static-libgcc)
+    endif()
+
+    install(TARGETS cbsdk_shared
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    )
 endif()
 
 # Installation
