@@ -110,8 +110,24 @@ static void to_c_stats(const cbsdk::SdkStats& cpp_stats, cbsdk_stats_t* c_stats)
     c_stats->packets_dropped = cpp_stats.packets_dropped;
     c_stats->queue_current_depth = cpp_stats.queue_current_depth;
     c_stats->queue_max_depth = cpp_stats.queue_max_depth;
+    c_stats->packets_sent_to_device = cpp_stats.packets_sent_to_device;
     c_stats->shmem_store_errors = cpp_stats.shmem_store_errors;
     c_stats->receive_errors = cpp_stats.receive_errors;
+    c_stats->send_errors = cpp_stats.send_errors;
+}
+
+/// Convert C channel type enum to C++ ChannelType enum
+static cbsdk::ChannelType to_cpp_channel_type(cbproto_channel_type_t c_type) {
+    switch (c_type) {
+        case CBPROTO_CHANNEL_TYPE_FRONTEND:    return cbsdk::ChannelType::FRONTEND;
+        case CBPROTO_CHANNEL_TYPE_ANALOG_IN:   return cbsdk::ChannelType::ANALOG_IN;
+        case CBPROTO_CHANNEL_TYPE_ANALOG_OUT:  return cbsdk::ChannelType::ANALOG_OUT;
+        case CBPROTO_CHANNEL_TYPE_AUDIO:       return cbsdk::ChannelType::AUDIO;
+        case CBPROTO_CHANNEL_TYPE_DIGITAL_IN:  return cbsdk::ChannelType::DIGITAL_IN;
+        case CBPROTO_CHANNEL_TYPE_SERIAL:      return cbsdk::ChannelType::SERIAL;
+        case CBPROTO_CHANNEL_TYPE_DIGITAL_OUT: return cbsdk::ChannelType::DIGITAL_OUT;
+        default:                               return cbsdk::ChannelType::ANY;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -331,6 +347,259 @@ const char* cbsdk_get_error_message(cbsdk_result_t result) {
 
 const char* cbsdk_get_version(void) {
     return "2.0.0";
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Typed Callback Registration
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+cbsdk_callback_handle_t cbsdk_session_register_packet_callback(
+    cbsdk_session_t session,
+    cbsdk_packet_callback_fn callback,
+    void* user_data) {
+    if (!session || !session->cpp_session || !callback) {
+        return 0;
+    }
+    try {
+        return session->cpp_session->registerPacketCallback(
+            [callback, user_data](const cbPKT_GENERIC& pkt) {
+                callback(&pkt, 1, user_data);
+            }
+        );
+    } catch (...) {
+        return 0;
+    }
+}
+
+cbsdk_callback_handle_t cbsdk_session_register_event_callback(
+    cbsdk_session_t session,
+    cbproto_channel_type_t channel_type,
+    cbsdk_event_callback_fn callback,
+    void* user_data) {
+    if (!session || !session->cpp_session || !callback) {
+        return 0;
+    }
+    try {
+        // Use (int)channel_type == -1 as sentinel for ChannelType::ANY
+        cbsdk::ChannelType cpp_type = (static_cast<int>(channel_type) == -1)
+            ? cbsdk::ChannelType::ANY
+            : to_cpp_channel_type(channel_type);
+        return session->cpp_session->registerEventCallback(cpp_type,
+            [callback, user_data](const cbPKT_GENERIC& pkt) {
+                callback(&pkt, user_data);
+            }
+        );
+    } catch (...) {
+        return 0;
+    }
+}
+
+cbsdk_callback_handle_t cbsdk_session_register_group_callback(
+    cbsdk_session_t session,
+    uint8_t group_id,
+    cbsdk_group_callback_fn callback,
+    void* user_data) {
+    if (!session || !session->cpp_session || !callback) {
+        return 0;
+    }
+    try {
+        return session->cpp_session->registerGroupCallback(group_id,
+            [callback, user_data](const cbPKT_GROUP& pkt) {
+                callback(&pkt, user_data);
+            }
+        );
+    } catch (...) {
+        return 0;
+    }
+}
+
+cbsdk_callback_handle_t cbsdk_session_register_config_callback(
+    cbsdk_session_t session,
+    uint16_t packet_type,
+    cbsdk_config_callback_fn callback,
+    void* user_data) {
+    if (!session || !session->cpp_session || !callback) {
+        return 0;
+    }
+    try {
+        return session->cpp_session->registerConfigCallback(packet_type,
+            [callback, user_data](const cbPKT_GENERIC& pkt) {
+                callback(&pkt, user_data);
+            }
+        );
+    } catch (...) {
+        return 0;
+    }
+}
+
+void cbsdk_session_unregister_callback(cbsdk_session_t session,
+                                        cbsdk_callback_handle_t handle) {
+    if (!session || !session->cpp_session || handle == 0) {
+        return;
+    }
+    try {
+        session->cpp_session->unregisterCallback(handle);
+    } catch (...) {
+        // Swallow exceptions
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Configuration Access
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+const cbPKT_SYSINFO* cbsdk_session_get_sysinfo(cbsdk_session_t session) {
+    if (!session || !session->cpp_session) {
+        return nullptr;
+    }
+    try {
+        return session->cpp_session->getSysInfo();
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+const cbPKT_CHANINFO* cbsdk_session_get_chaninfo(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) {
+        return nullptr;
+    }
+    try {
+        return session->cpp_session->getChanInfo(chan_id);
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+const cbPKT_GROUPINFO* cbsdk_session_get_groupinfo(cbsdk_session_t session, uint32_t group_id) {
+    if (!session || !session->cpp_session) {
+        return nullptr;
+    }
+    try {
+        return session->cpp_session->getGroupInfo(group_id);
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+const cbPKT_FILTINFO* cbsdk_session_get_filtinfo(cbsdk_session_t session, uint32_t filter_id) {
+    if (!session || !session->cpp_session) {
+        return nullptr;
+    }
+    try {
+        return session->cpp_session->getFilterInfo(filter_id);
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+uint32_t cbsdk_session_get_runlevel(cbsdk_session_t session) {
+    if (!session || !session->cpp_session) {
+        return 0;
+    }
+    try {
+        return session->cpp_session->getRunLevel();
+    } catch (...) {
+        return 0;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Channel Configuration
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+cbsdk_result_t cbsdk_session_set_channel_sample_group(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    uint32_t group_id,
+    bool disable_others) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->setChannelSampleGroup(
+            n_chans, to_cpp_channel_type(chan_type), group_id, disable_others);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_set_channel_config(
+    cbsdk_session_t session,
+    const cbPKT_CHANINFO* chaninfo) {
+    if (!session || !session->cpp_session || !chaninfo) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->setChannelConfig(*chaninfo);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Commands
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+cbsdk_result_t cbsdk_session_send_comment(
+    cbsdk_session_t session,
+    const char* comment,
+    uint32_t rgba,
+    uint8_t charset) {
+    if (!session || !session->cpp_session || !comment) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->sendComment(comment, rgba, charset);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_send_packet(
+    cbsdk_session_t session,
+    const cbPKT_GENERIC* pkt) {
+    if (!session || !session->cpp_session || !pkt) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->sendPacket(*pkt);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_set_digital_output(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    uint16_t value) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->setDigitalOutput(chan_id, value);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_set_runlevel(
+    cbsdk_session_t session,
+    uint32_t runlevel) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->setSystemRunLevel(runlevel);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
 }
 
 } // extern "C"

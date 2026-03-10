@@ -224,6 +224,224 @@ TEST_F(CbsdkCApiTest, Statistics_ResetStats) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Typed Callback Registration Tests
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+static void event_callback(const cbPKT_GENERIC* pkt, void* user_data) {
+    int* counter = static_cast<int*>(user_data);
+    if (counter) (*counter)++;
+}
+
+static void group_callback(const cbPKT_GROUP* pkt, void* user_data) {
+    int* counter = static_cast<int*>(user_data);
+    if (counter) (*counter)++;
+}
+
+static void config_callback(const cbPKT_GENERIC* pkt, void* user_data) {
+    int* counter = static_cast<int*>(user_data);
+    if (counter) (*counter)++;
+}
+
+TEST_F(CbsdkCApiTest, RegisterPacketCallback_NullSession) {
+    int counter = 0;
+    EXPECT_EQ(cbsdk_session_register_packet_callback(nullptr, packet_callback, &counter), 0);
+}
+
+TEST_F(CbsdkCApiTest, RegisterPacketCallback_NullCallback) {
+    cbsdk_config_t config = cbsdk_config_default();
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
+    cbsdk_session_t session = nullptr;
+    ASSERT_EQ(cbsdk_session_create(&session, &config), CBSDK_RESULT_SUCCESS);
+
+    EXPECT_EQ(cbsdk_session_register_packet_callback(session, nullptr, nullptr), 0);
+
+    cbsdk_session_destroy(session);
+}
+
+TEST_F(CbsdkCApiTest, RegisterTypedCallbacks) {
+    cbsdk_config_t config = cbsdk_config_default();
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
+    cbsdk_session_t session = nullptr;
+    ASSERT_EQ(cbsdk_session_create(&session, &config), CBSDK_RESULT_SUCCESS);
+
+    int counter = 0;
+
+    // Register each typed callback and verify we get a valid handle
+    cbsdk_callback_handle_t h1 = cbsdk_session_register_packet_callback(
+        session, packet_callback, &counter);
+    EXPECT_NE(h1, 0);
+
+    cbsdk_callback_handle_t h2 = cbsdk_session_register_event_callback(
+        session, CBPROTO_CHANNEL_TYPE_FRONTEND, event_callback, &counter);
+    EXPECT_NE(h2, 0);
+
+    cbsdk_callback_handle_t h3 = cbsdk_session_register_group_callback(
+        session, 5, group_callback, &counter);
+    EXPECT_NE(h3, 0);
+
+    cbsdk_callback_handle_t h4 = cbsdk_session_register_config_callback(
+        session, 0x01, config_callback, &counter);
+    EXPECT_NE(h4, 0);
+
+    // All handles should be unique
+    EXPECT_NE(h1, h2);
+    EXPECT_NE(h2, h3);
+    EXPECT_NE(h3, h4);
+
+    // Unregister all (should not crash)
+    cbsdk_session_unregister_callback(session, h1);
+    cbsdk_session_unregister_callback(session, h2);
+    cbsdk_session_unregister_callback(session, h3);
+    cbsdk_session_unregister_callback(session, h4);
+
+    cbsdk_session_destroy(session);
+}
+
+TEST_F(CbsdkCApiTest, RegisterEventCallback_AnyChannel) {
+    cbsdk_config_t config = cbsdk_config_default();
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
+    cbsdk_session_t session = nullptr;
+    ASSERT_EQ(cbsdk_session_create(&session, &config), CBSDK_RESULT_SUCCESS);
+
+    int counter = 0;
+    // -1 cast to cbproto_channel_type_t = ANY
+    cbsdk_callback_handle_t h = cbsdk_session_register_event_callback(
+        session, (cbproto_channel_type_t)(-1), event_callback, &counter);
+    EXPECT_NE(h, 0);
+
+    cbsdk_session_unregister_callback(session, h);
+    cbsdk_session_destroy(session);
+}
+
+TEST_F(CbsdkCApiTest, UnregisterCallback_NullSession) {
+    // Should not crash
+    cbsdk_session_unregister_callback(nullptr, 1);
+}
+
+TEST_F(CbsdkCApiTest, UnregisterCallback_ZeroHandle) {
+    cbsdk_config_t config = cbsdk_config_default();
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
+    cbsdk_session_t session = nullptr;
+    ASSERT_EQ(cbsdk_session_create(&session, &config), CBSDK_RESULT_SUCCESS);
+
+    // Should not crash
+    cbsdk_session_unregister_callback(session, 0);
+
+    cbsdk_session_destroy(session);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Configuration Access Tests
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+TEST_F(CbsdkCApiTest, GetSysinfo_NullSession) {
+    EXPECT_EQ(cbsdk_session_get_sysinfo(nullptr), nullptr);
+}
+
+TEST_F(CbsdkCApiTest, GetChaninfo_NullSession) {
+    EXPECT_EQ(cbsdk_session_get_chaninfo(nullptr, 1), nullptr);
+}
+
+TEST_F(CbsdkCApiTest, GetGroupinfo_NullSession) {
+    EXPECT_EQ(cbsdk_session_get_groupinfo(nullptr, 1), nullptr);
+}
+
+TEST_F(CbsdkCApiTest, GetFiltinfo_NullSession) {
+    EXPECT_EQ(cbsdk_session_get_filtinfo(nullptr, 0), nullptr);
+}
+
+TEST_F(CbsdkCApiTest, GetRunlevel_NullSession) {
+    EXPECT_EQ(cbsdk_session_get_runlevel(nullptr), 0);
+}
+
+TEST_F(CbsdkCApiTest, ConfigAccess_WithSession) {
+    cbsdk_config_t config = cbsdk_config_default();
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
+    cbsdk_session_t session = nullptr;
+    ASSERT_EQ(cbsdk_session_create(&session, &config), CBSDK_RESULT_SUCCESS);
+
+    // These may return NULL without a device, but must not crash
+    cbsdk_session_get_sysinfo(session);
+    cbsdk_session_get_chaninfo(session, 1);
+    cbsdk_session_get_chaninfo(session, 0);      // Invalid channel
+    cbsdk_session_get_chaninfo(session, 99999);   // Out of range
+    cbsdk_session_get_groupinfo(session, 1);
+    cbsdk_session_get_groupinfo(session, 0);      // Invalid group
+    cbsdk_session_get_filtinfo(session, 0);
+    cbsdk_session_get_runlevel(session);
+
+    cbsdk_session_destroy(session);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Channel Configuration Tests (NULL safety)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+TEST_F(CbsdkCApiTest, SetChannelSampleGroup_NullSession) {
+    EXPECT_EQ(cbsdk_session_set_channel_sample_group(nullptr, 256,
+        CBPROTO_CHANNEL_TYPE_FRONTEND, 5, false), CBSDK_RESULT_INVALID_PARAMETER);
+}
+
+TEST_F(CbsdkCApiTest, SetChannelConfig_NullSession) {
+    cbPKT_CHANINFO info = {};
+    EXPECT_EQ(cbsdk_session_set_channel_config(nullptr, &info), CBSDK_RESULT_INVALID_PARAMETER);
+}
+
+TEST_F(CbsdkCApiTest, SetChannelConfig_NullChaninfo) {
+    cbsdk_config_t config = cbsdk_config_default();
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
+    cbsdk_session_t session = nullptr;
+    ASSERT_EQ(cbsdk_session_create(&session, &config), CBSDK_RESULT_SUCCESS);
+
+    EXPECT_EQ(cbsdk_session_set_channel_config(session, nullptr), CBSDK_RESULT_INVALID_PARAMETER);
+
+    cbsdk_session_destroy(session);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Command Tests (NULL safety)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+TEST_F(CbsdkCApiTest, SendComment_NullSession) {
+    EXPECT_EQ(cbsdk_session_send_comment(nullptr, "test", 0, 0), CBSDK_RESULT_INVALID_PARAMETER);
+}
+
+TEST_F(CbsdkCApiTest, SendComment_NullComment) {
+    cbsdk_config_t config = cbsdk_config_default();
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
+    cbsdk_session_t session = nullptr;
+    ASSERT_EQ(cbsdk_session_create(&session, &config), CBSDK_RESULT_SUCCESS);
+
+    EXPECT_EQ(cbsdk_session_send_comment(session, nullptr, 0, 0), CBSDK_RESULT_INVALID_PARAMETER);
+
+    cbsdk_session_destroy(session);
+}
+
+TEST_F(CbsdkCApiTest, SendPacket_NullSession) {
+    cbPKT_GENERIC pkt = {};
+    EXPECT_EQ(cbsdk_session_send_packet(nullptr, &pkt), CBSDK_RESULT_INVALID_PARAMETER);
+}
+
+TEST_F(CbsdkCApiTest, SendPacket_NullPacket) {
+    cbsdk_config_t config = cbsdk_config_default();
+    config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
+    cbsdk_session_t session = nullptr;
+    ASSERT_EQ(cbsdk_session_create(&session, &config), CBSDK_RESULT_SUCCESS);
+
+    EXPECT_EQ(cbsdk_session_send_packet(session, nullptr), CBSDK_RESULT_INVALID_PARAMETER);
+
+    cbsdk_session_destroy(session);
+}
+
+TEST_F(CbsdkCApiTest, SetDigitalOutput_NullSession) {
+    EXPECT_EQ(cbsdk_session_set_digital_output(nullptr, 1, 0), CBSDK_RESULT_INVALID_PARAMETER);
+}
+
+TEST_F(CbsdkCApiTest, SetRunlevel_NullSession) {
+    EXPECT_EQ(cbsdk_session_set_runlevel(nullptr, 0), CBSDK_RESULT_INVALID_PARAMETER);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Error Handling Tests
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 

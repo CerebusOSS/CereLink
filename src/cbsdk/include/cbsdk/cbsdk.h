@@ -112,24 +112,46 @@ typedef struct {
     uint64_t queue_current_depth;            ///< Current queue usage
     uint64_t queue_max_depth;                ///< Peak queue usage
 
+    // Transmit statistics (STANDALONE mode only)
+    uint64_t packets_sent_to_device;         ///< Packets sent to device
+
     // Error counters
     uint64_t shmem_store_errors;             ///< Failed to store to shmem
     uint64_t receive_errors;                 ///< Socket receive errors
+    uint64_t send_errors;                    ///< Socket send errors
 } cbsdk_stats_t;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Callback Types
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// User callback for received packets
+/// Callback handle for unregistering typed callbacks
+typedef uint32_t cbsdk_callback_handle_t;
+
+/// User callback for received packets (all packet types)
 /// @param pkts Pointer to array of packets
 /// @param count Number of packets in array
-/// @param user_data User data pointer passed to cbsdk_session_set_packet_callback()
+/// @param user_data User data pointer passed to registration function
 typedef void (*cbsdk_packet_callback_fn)(const cbPKT_GENERIC* pkts, size_t count, void* user_data);
+
+/// Event callback for spike/digital/serial event packets
+/// @param pkt Pointer to the event packet
+/// @param user_data User data pointer passed to registration function
+typedef void (*cbsdk_event_callback_fn)(const cbPKT_GENERIC* pkt, void* user_data);
+
+/// Group callback for continuous sample data packets (chid == 0)
+/// @param pkt Pointer to the group packet
+/// @param user_data User data pointer passed to registration function
+typedef void (*cbsdk_group_callback_fn)(const cbPKT_GROUP* pkt, void* user_data);
+
+/// Config callback for system/configuration packets (chid & 0x8000)
+/// @param pkt Pointer to the config packet
+/// @param user_data User data pointer passed to registration function
+typedef void (*cbsdk_config_callback_fn)(const cbPKT_GENERIC* pkt, void* user_data);
 
 /// Error callback for queue overflow and other errors
 /// @param error_message Description of the error (null-terminated string)
-/// @param user_data User data pointer passed to cbsdk_session_set_error_callback()
+/// @param user_data User data pointer passed to registration function
 typedef void (*cbsdk_error_callback_fn)(const char* error_message, void* user_data);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -183,7 +205,7 @@ bool cbsdk_session_is_running(cbsdk_session_t session);
 // Callbacks
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Set callback for received packets
+/// Set callback for all received packets (legacy convenience — registers a PACKET callback)
 /// @param session Session handle (must not be NULL)
 /// @param callback Callback function (can be NULL to clear)
 /// @param user_data User data pointer passed to callback
@@ -200,6 +222,63 @@ void cbsdk_session_set_error_callback(cbsdk_session_t session,
                                        void* user_data);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Typed Callback Registration
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Register callback for all packets (catch-all)
+/// @param session Session handle (must not be NULL)
+/// @param callback Callback function (must not be NULL)
+/// @param user_data User data pointer passed to callback
+/// @return Handle for unregistration, or 0 on failure
+cbsdk_callback_handle_t cbsdk_session_register_packet_callback(
+    cbsdk_session_t session,
+    cbsdk_packet_callback_fn callback,
+    void* user_data);
+
+/// Register callback for event packets (spikes, digital events, etc.)
+/// @param session Session handle (must not be NULL)
+/// @param channel_type Channel type filter (use CBPROTO_CHANNEL_TYPE_FRONTEND for spikes, etc.)
+///        Pass -1 (cast to cbproto_channel_type_t) for all event channels.
+/// @param callback Callback function (must not be NULL)
+/// @param user_data User data pointer passed to callback
+/// @return Handle for unregistration, or 0 on failure
+cbsdk_callback_handle_t cbsdk_session_register_event_callback(
+    cbsdk_session_t session,
+    cbproto_channel_type_t channel_type,
+    cbsdk_event_callback_fn callback,
+    void* user_data);
+
+/// Register callback for continuous sample group packets
+/// @param session Session handle (must not be NULL)
+/// @param group_id Group ID (1-6, where 6 is raw)
+/// @param callback Callback function (must not be NULL)
+/// @param user_data User data pointer passed to callback
+/// @return Handle for unregistration, or 0 on failure
+cbsdk_callback_handle_t cbsdk_session_register_group_callback(
+    cbsdk_session_t session,
+    uint8_t group_id,
+    cbsdk_group_callback_fn callback,
+    void* user_data);
+
+/// Register callback for config/system packets
+/// @param session Session handle (must not be NULL)
+/// @param packet_type Packet type to match (e.g., cbPKTTYPE_COMMENTREP, cbPKTTYPE_SYSREPRUNLEV)
+/// @param callback Callback function (must not be NULL)
+/// @param user_data User data pointer passed to callback
+/// @return Handle for unregistration, or 0 on failure
+cbsdk_callback_handle_t cbsdk_session_register_config_callback(
+    cbsdk_session_t session,
+    uint16_t packet_type,
+    cbsdk_config_callback_fn callback,
+    void* user_data);
+
+/// Unregister a previously registered callback
+/// @param session Session handle (must not be NULL)
+/// @param handle Handle returned by a register_*_callback function
+void cbsdk_session_unregister_callback(cbsdk_session_t session,
+                                        cbsdk_callback_handle_t handle);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Statistics & Monitoring
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -211,6 +290,110 @@ void cbsdk_session_get_stats(cbsdk_session_t session, cbsdk_stats_t* stats);
 /// Reset statistics counters to zero
 /// @param session Session handle (must not be NULL)
 void cbsdk_session_reset_stats(cbsdk_session_t session);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Configuration Access (read from shared memory — always up-to-date)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Get system information
+/// @param session Session handle (must not be NULL)
+/// @return Pointer to system info packet, or NULL if unavailable.
+///         Pointer is valid for the lifetime of the session.
+const cbPKT_SYSINFO* cbsdk_session_get_sysinfo(cbsdk_session_t session);
+
+/// Get channel information
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Pointer to channel info, or NULL if invalid/unavailable.
+///         Pointer is valid for the lifetime of the session.
+const cbPKT_CHANINFO* cbsdk_session_get_chaninfo(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get sample group information
+/// @param session Session handle (must not be NULL)
+/// @param group_id Group ID (1-6)
+/// @return Pointer to group info, or NULL if invalid/unavailable.
+///         Pointer is valid for the lifetime of the session.
+const cbPKT_GROUPINFO* cbsdk_session_get_groupinfo(cbsdk_session_t session, uint32_t group_id);
+
+/// Get filter information
+/// @param session Session handle (must not be NULL)
+/// @param filter_id Filter ID (0 to cbMAXFILTS-1)
+/// @return Pointer to filter info, or NULL if invalid/unavailable.
+///         Pointer is valid for the lifetime of the session.
+const cbPKT_FILTINFO* cbsdk_session_get_filtinfo(cbsdk_session_t session, uint32_t filter_id);
+
+/// Get current device run level
+/// @param session Session handle (must not be NULL)
+/// @return Current run level (cbRUNLEVEL_*), or 0 if unknown
+uint32_t cbsdk_session_get_runlevel(cbsdk_session_t session);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Channel Configuration
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Set sampling group for channels of a specific type
+/// @param session Session handle (must not be NULL)
+/// @param n_chans Number of channels to configure (use cbMAXCHANS for all)
+/// @param chan_type Channel type filter
+/// @param group_id Sampling group (0-6, where 0 disables)
+/// @param disable_others If true, disable sampling on unselected channels of this type
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+cbsdk_result_t cbsdk_session_set_channel_sample_group(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    uint32_t group_id,
+    bool disable_others);
+
+/// Set full channel configuration by sending a CHANINFO packet
+/// @param session Session handle (must not be NULL)
+/// @param chaninfo Complete channel info packet to send
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+cbsdk_result_t cbsdk_session_set_channel_config(
+    cbsdk_session_t session,
+    const cbPKT_CHANINFO* chaninfo);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Commands
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Send a comment string to the device (appears in recorded data)
+/// @param session Session handle (must not be NULL)
+/// @param comment Comment text (max 127 chars, null-terminated)
+/// @param rgba Color as RGBA uint32_t (0 = white)
+/// @param charset Character set (0 = ANSI)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+cbsdk_result_t cbsdk_session_send_comment(
+    cbsdk_session_t session,
+    const char* comment,
+    uint32_t rgba,
+    uint8_t charset);
+
+/// Send a raw packet to the device (STANDALONE mode only)
+/// @param session Session handle (must not be NULL)
+/// @param pkt Packet to send (must not be NULL)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+cbsdk_result_t cbsdk_session_send_packet(
+    cbsdk_session_t session,
+    const cbPKT_GENERIC* pkt);
+
+/// Set digital output value
+/// @param session Session handle (must not be NULL)
+/// @param chan_id Channel ID (1-based) of a digital output channel
+/// @param value Digital output value (bitmask)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+cbsdk_result_t cbsdk_session_set_digital_output(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    uint16_t value);
+
+/// Set system run level
+/// @param session Session handle (must not be NULL)
+/// @param runlevel Desired run level (cbRUNLEVEL_*)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+cbsdk_result_t cbsdk_session_set_runlevel(
+    cbsdk_session_t session,
+    uint32_t runlevel);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Error Handling
