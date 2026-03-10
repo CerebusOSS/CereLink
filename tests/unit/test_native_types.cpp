@@ -100,15 +100,17 @@ TEST(NativeTypesTest, NativeLocalTransmitBufferSmallerThanCentral) {
 /// @{
 
 TEST(NativeTypesTest, ConfigBufferHasExpectedFields) {
-    NativeConfigBuffer cfg = {};
+    // Heap-allocate: NativeConfigBuffer is multi-MB (too large for stack)
+    auto cfg = std::make_unique<NativeConfigBuffer>();
+    std::memset(cfg.get(), 0, sizeof(NativeConfigBuffer));
 
     // Verify key fields are accessible and zero-initialized
-    EXPECT_EQ(cfg.version, 0u);
-    EXPECT_EQ(cfg.sysflags, 0u);
-    EXPECT_EQ(cfg.instrument_status, 0u);
-    EXPECT_EQ(cfg.procinfo.proc, 0u);
-    EXPECT_EQ(cfg.adaptinfo.chan, 0u);
-    EXPECT_EQ(cfg.refelecinfo.chan, 0u);
+    EXPECT_EQ(cfg->version, 0u);
+    EXPECT_EQ(cfg->sysflags, 0u);
+    EXPECT_EQ(cfg->instrument_status, 0u);
+    EXPECT_EQ(cfg->procinfo.proc, 0u);
+    EXPECT_EQ(cfg->adaptinfo.chan, 0u);
+    EXPECT_EQ(cfg->refelecinfo.chan, 0u);
 }
 
 TEST(NativeTypesTest, TransmitBufferLayout) {
@@ -127,12 +129,14 @@ TEST(NativeTypesTest, TransmitBufferLayout) {
 }
 
 TEST(NativeTypesTest, LocalTransmitBufferLayout) {
-    NativeTransmitBufferLocal xmt = {};
+    // Heap-allocate: NativeTransmitBufferLocal is ~2MB (too large for stack on Windows)
+    auto xmt = std::make_unique<NativeTransmitBufferLocal>();
+    std::memset(xmt.get(), 0, sizeof(NativeTransmitBufferLocal));
 
-    EXPECT_EQ(xmt.transmitted, 0u);
-    EXPECT_EQ(xmt.headindex, 0u);
-    EXPECT_EQ(xmt.tailindex, 0u);
-    EXPECT_EQ(sizeof(xmt.buffer) / sizeof(uint32_t), NATIVE_cbXMT_LOCAL_BUFFLEN);
+    EXPECT_EQ(xmt->transmitted, 0u);
+    EXPECT_EQ(xmt->headindex, 0u);
+    EXPECT_EQ(xmt->tailindex, 0u);
+    EXPECT_EQ(sizeof(xmt->buffer) / sizeof(uint32_t), NATIVE_cbXMT_LOCAL_BUFFLEN);
 }
 
 TEST(NativeTypesTest, SpikeCacheLayout) {
