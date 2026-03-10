@@ -6,6 +6,7 @@ set(CBSDK_EXAMPLES
     "gemini_example:GeminiExample/gemini_example.cpp"
     "simple_device:SimpleDevice/simple_device.cpp"
     "central_client:CentralClient/central_client.cpp"
+    "ccf_test:CCFTest/ccf_test.cpp"
 )
 
 # cbdev examples (link against cbdev only - no cbshm, no cbsdk)

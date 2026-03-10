@@ -247,12 +247,11 @@ bool XmlFile::AddList(std::vector<std::any> & list, std::string nodeName)
         count++; // count all valid items
         std::string strSubKey;
         std::map<std::string, std::any> attribs;
-        if (subval.type() == typeid(const XmlItem *))
+        if (subval.type() == typeid(XmlItem))
         {
-            const auto * item = std::any_cast<const XmlItem *>(subval);
-            // const auto * item = std::get<XmlItem *>(subval);
-            strSubKey = item->XmlName();
-            attribs = item->XmlAttribs();
+            const auto & item = std::any_cast<const XmlItem &>(subval);
+            strSubKey = item.XmlName();
+            attribs = item.XmlAttribs();
         }
         if (strSubKey.empty())
             strSubKey = nodeName + "_item";
@@ -364,16 +363,16 @@ bool XmlFile::beginGroup(std::string nodeName, const std::map<std::string, std::
         else
         {
             std::string text;
-            if (value.type() == typeid(const XmlItem *))
+            if (value.type() == typeid(XmlItem))
             {
-                const auto * item = std::any_cast<const XmlItem *>(value);
-                std::any subval = item->XmlValue();
-                
-                if (subval.type() == typeid(const XmlItem *))
+                const auto & item = std::any_cast<const XmlItem &>(value);
+                std::any subval = item.XmlValue();
+
+                if (subval.type() == typeid(XmlItem))
                 {
-                    const auto * subitem = std::any_cast<const XmlItem *>(subval);
-                    std::string strSubKey = subitem->XmlName();
-                    std::map<std::string, std::any> _attribs = subitem->XmlAttribs();
+                    const auto & subitem = std::any_cast<const XmlItem &>(subval);
+                    std::string strSubKey = subitem.XmlName();
+                    std::map<std::string, std::any> _attribs = subitem.XmlAttribs();
                     // Recursively add this item
                     beginGroup(strSubKey, _attribs, subval);
                     endGroup();
@@ -403,14 +402,20 @@ bool XmlFile::beginGroup(std::string nodeName, const std::map<std::string, std::
                 while (set.first_child())
                     set.remove_child(set.last_child());
                 // See if this is Xml fragment string
-                XmlFile xml;
-                if (!xml.setContent(text))
+                bool setAsText = true;
+                if (!text.empty() && text[0] == '<')
                 {
+                    // Only attempt XML fragment parsing if it looks like XML
                     pugi::xml_document doc;
                     pugi::xml_parse_result result = doc.load_string(text.c_str());
-                    if (result)
+                    if (result && doc.document_element())
+                    {
                         set.append_copy(doc.document_element());
-                } else {
+                        setAsText = false;
+                    }
+                }
+                if (setAsText)
+                {
                     set.text().set(text.c_str());
                 }
             }
@@ -425,6 +430,8 @@ bool XmlFile::beginGroup(std::string nodeName, const std::map<std::string, std::
         const std::any& attrValue = iterator->second;
         if (attrValue.type() == typeid(std::string))
             find_or_create_attribute(set, attrName) = std::any_cast<std::string>(attrValue).c_str();
+        else if (attrValue.type() == typeid(const char*))
+            find_or_create_attribute(set, attrName) = std::any_cast<const char*>(attrValue);
         else if (attrValue.type() == typeid(int))
             find_or_create_attribute(set, attrName) = std::any_cast<int>(attrValue);
         else if (attrValue.type() == typeid(unsigned int))
@@ -433,8 +440,10 @@ bool XmlFile::beginGroup(std::string nodeName, const std::map<std::string, std::
             find_or_create_attribute(set, attrName) = std::any_cast<long long>(attrValue);
         else if (attrValue.type() == typeid(unsigned long long))
             find_or_create_attribute(set, attrName) = std::any_cast<unsigned long long>(attrValue);
-        else
+        else if (attrValue.type() == typeid(double))
             find_or_create_attribute(set, attrName) = std::any_cast<double>(attrValue);
+        else
+            find_or_create_attribute(set, attrName) = anyToString(attrValue).c_str();
     }
     return bRet;
 }

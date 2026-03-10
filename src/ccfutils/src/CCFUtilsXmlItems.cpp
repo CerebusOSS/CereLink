@@ -630,8 +630,11 @@ CCFXmlItem::CCFXmlItem(std::vector<std::any> lst, std::string strName)
 template <typename T>
 std::any ccf::GetCCFXmlItem(T & pkt, std::string strName)
 {
-    std::any var = CCFXmlItem(pkt, strName);
-    return var;
+    // Slice to XmlItem so std::any holds typeid(XmlItem),
+    // matching the type checks in XmlFile::AddList/beginGroup.
+    // CCFXmlItem adds no data members, so slicing is safe.
+    CCFXmlItem ccfItem(pkt, strName);
+    return std::any(static_cast<XmlItem>(ccfItem));
 }
 
 // Author & Date: Ehsan Azar       16 April 2012
@@ -650,8 +653,8 @@ std::any ccf::GetCCFXmlItem(T pkt[], int count, std::string strName)
         if (item.IsValid())
             lst.push_back(item.XmlValue());
     }
-    std::any var = CCFXmlItem(lst, strName);
-    return var;
+    CCFXmlItem ccfItem(lst, strName);
+    return std::any(static_cast<XmlItem>(ccfItem));
 }
 
 // Author & Date: Ehsan Azar       16 April 2012
@@ -668,8 +671,8 @@ std::any ccf::GetCCFXmlItem(T ppkt[], int count1, int count2, std::string strNam
     std::vector<std::any> sublst;
     for (int i = 0; i < count1; ++i)
         sublst.push_back(ccf::GetCCFXmlItem(ppkt[i], count2, strName2));
-    std::any var = CCFXmlItem(sublst, strName1);
-    return var;
+    CCFXmlItem ccfItem(sublst, strName1);
+    return std::any(static_cast<XmlItem>(ccfItem));
 }
 
 // Author & Date: Ehsan Azar       16 April 2012
@@ -677,8 +680,8 @@ std::any ccf::GetCCFXmlItem(T ppkt[], int count1, int count2, std::string strNam
 template <>
 std::any ccf::GetCCFXmlItem<char>(char pkt[], int count, std::string strName)
 {
-    std::any var = CCFXmlItem(pkt, count, strName);
-    return var;
+    CCFXmlItem ccfItem(pkt, count, strName);
+    return std::any(static_cast<XmlItem>(ccfItem));
 }
 
 //------------------------------------------------------------------------------------

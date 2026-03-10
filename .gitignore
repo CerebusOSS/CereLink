@@ -48,5 +48,6 @@ Release/
 **/cerelink/cbpyw.cpp
 **/cerelink/*.dll
 **/cerelink/__version__.py
+*.ccf
 
 upstream
