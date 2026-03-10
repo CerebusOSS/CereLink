@@ -159,7 +159,7 @@ TEST(NPLAY_Translation, RoundTrip_Exact_OnTickBoundaries) {
     auto pkt = make_current_NPLAY(original_time, 0, 0, 0, 0);
 
     // Current -> Pre400
-    uint8_t buffer_311[256] = {};
+    uint8_t buffer_311[sizeof(cbPKT_NPLAY)] = {};
     PacketTranslator::translate_NPLAY_current_to_pre400(pkt, buffer_311);
 
     // Pre400 -> Current
@@ -279,7 +279,7 @@ TEST(CHANINFO_Translation, Current_to_Pre410_FieldNarrowing) {
     auto pkt_current = make_current_CHANINFO(42, 0x1234, 0x5678);
 
     // When: Translate to pre-410
-    uint8_t dest_payload[512] = {};
+    uint8_t dest_payload[sizeof(cbPKT_CHANINFO)] = {};
     size_t result_dlen = PacketTranslator::translate_CHANINFO_current_to_pre410(
         pkt_current, dest_payload);
 
