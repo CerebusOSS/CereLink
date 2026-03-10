@@ -261,6 +261,7 @@ struct DeviceSession::Impl {
     std::vector<CallbackRegistration> receive_callbacks;
     std::vector<DatagramCallbackRegistration> datagram_callbacks;
     std::mutex callback_mutex;
+    std::atomic<bool> has_callbacks{false};  // Fast-path skip when no callbacks registered
     CallbackHandle next_callback_handle = 1;  // 0 is reserved for "invalid"
 
     // Receive thread state
@@ -1437,6 +1438,7 @@ CallbackHandle DeviceSession::registerReceiveCallback(ReceiveCallback callback) 
     std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
     CallbackHandle handle = m_impl->next_callback_handle++;
     m_impl->receive_callbacks.push_back({handle, std::move(callback)});
+    m_impl->has_callbacks.store(true, std::memory_order_release);
     return handle;
 }
 
@@ -1448,6 +1450,7 @@ CallbackHandle DeviceSession::registerDatagramCompleteCallback(DatagramCompleteC
     std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
     CallbackHandle handle = m_impl->next_callback_handle++;
     m_impl->datagram_callbacks.push_back({handle, std::move(callback)});
+    m_impl->has_callbacks.store(true, std::memory_order_release);
     return handle;
 }
 
@@ -1475,6 +1478,10 @@ void DeviceSession::unregisterCallback(CallbackHandle handle) {
                 return reg.handle == handle;
             }),
         dg_cbs.end());
+
+    // Update fast-path flag
+    m_impl->has_callbacks.store(
+        !recv_cbs.empty() || !dg_cbs.empty(), std::memory_order_release);
 }
 
 Result<void> DeviceSession::startReceiveThread() {
@@ -1524,8 +1531,8 @@ Result<void> DeviceSession::startReceiveThread() {
                     break;  // Incomplete packet
                 }
 
-                // Invoke receive callbacks
-                {
+                // Invoke receive callbacks (skip mutex if no callbacks registered)
+                if (m_impl->has_callbacks.load(std::memory_order_acquire)) {
                     std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
                     for (const auto& reg : m_impl->receive_callbacks) {
                         reg.callback(*pkt);
@@ -1535,8 +1542,8 @@ Result<void> DeviceSession::startReceiveThread() {
                 offset += packet_size;
             }
 
-            // Invoke datagram complete callbacks
-            {
+            // Invoke datagram complete callbacks (skip mutex if no callbacks registered)
+            if (m_impl->has_callbacks.load(std::memory_order_acquire)) {
                 std::lock_guard<std::mutex> lock(m_impl->callback_mutex);
                 for (const auto& reg : m_impl->datagram_callbacks) {
                     reg.callback();

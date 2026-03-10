@@ -112,21 +112,18 @@ struct SdkSession::Impl {
     std::mutex handshake_mutex;
     std::condition_variable handshake_cv;
 
-    // User callbacks — typed dispatch (all run on callback thread)
-    struct TypedCallback {
-        CallbackHandle handle;
-        enum class Kind { PACKET, EVENT, GROUP, CONFIG } kind;
-        // Discriminant fields (only relevant for their kind)
-        ChannelType channel_type;  // EVENT
-        uint8_t group_id;          // GROUP
-        uint16_t packet_type;      // CONFIG
-        // The actual callback (stored in a variant-like union via std::function)
-        PacketCallback packet_cb;
-        EventCallback event_cb;
-        GroupCallback group_cb;
-        ConfigCallback config_cb;
-    };
-    std::vector<TypedCallback> typed_callbacks;
+    // User callbacks — per-type vectors for O(1) dispatch (Phase 2, Fix 8)
+    // Registered rarely (user thread), dispatched at 30k/s (callback thread).
+    struct PacketCB { CallbackHandle handle; PacketCallback cb; };
+    struct EventCB  { CallbackHandle handle; ChannelType channel_type; EventCallback cb; };
+    struct GroupCB  { CallbackHandle handle; uint8_t group_id; GroupCallback cb; };
+    struct ConfigCB { CallbackHandle handle; uint16_t packet_type; ConfigCallback cb; };
+
+    std::vector<PacketCB> packet_callbacks;
+    std::vector<EventCB>  event_callbacks;
+    std::vector<GroupCB>  group_callbacks;
+    std::vector<ConfigCB> config_callbacks;
+
     CallbackHandle next_callback_handle = 1;
     ErrorCallback error_callback;
     std::mutex user_callback_mutex;
@@ -134,9 +131,51 @@ struct SdkSession::Impl {
     // Clock sync periodic probing (STANDALONE mode)
     std::chrono::steady_clock::time_point last_clock_probe_time{};
 
-    // Statistics
-    SdkStats stats;
-    std::mutex stats_mutex;
+    // Statistics — atomic counters, no mutex needed (Phase 2, Fix 9)
+    struct AtomicStats {
+        std::atomic<uint64_t> packets_received_from_device{0};
+        std::atomic<uint64_t> bytes_received_from_device{0};
+        std::atomic<uint64_t> packets_stored_to_shmem{0};
+        std::atomic<uint64_t> packets_queued_for_callback{0};
+        std::atomic<uint64_t> packets_delivered_to_callback{0};
+        std::atomic<uint64_t> packets_dropped{0};
+        std::atomic<uint64_t> queue_max_depth{0};
+        std::atomic<uint64_t> packets_sent_to_device{0};
+        std::atomic<uint64_t> shmem_store_errors{0};
+        std::atomic<uint64_t> receive_errors{0};
+        std::atomic<uint64_t> send_errors{0};
+
+        void reset() {
+            packets_received_from_device.store(0, std::memory_order_relaxed);
+            bytes_received_from_device.store(0, std::memory_order_relaxed);
+            packets_stored_to_shmem.store(0, std::memory_order_relaxed);
+            packets_queued_for_callback.store(0, std::memory_order_relaxed);
+            packets_delivered_to_callback.store(0, std::memory_order_relaxed);
+            packets_dropped.store(0, std::memory_order_relaxed);
+            queue_max_depth.store(0, std::memory_order_relaxed);
+            packets_sent_to_device.store(0, std::memory_order_relaxed);
+            shmem_store_errors.store(0, std::memory_order_relaxed);
+            receive_errors.store(0, std::memory_order_relaxed);
+            send_errors.store(0, std::memory_order_relaxed);
+        }
+
+        SdkStats snapshot() const {
+            SdkStats s;
+            s.packets_received_from_device = packets_received_from_device.load(std::memory_order_relaxed);
+            s.bytes_received_from_device = bytes_received_from_device.load(std::memory_order_relaxed);
+            s.packets_stored_to_shmem = packets_stored_to_shmem.load(std::memory_order_relaxed);
+            s.packets_queued_for_callback = packets_queued_for_callback.load(std::memory_order_relaxed);
+            s.packets_delivered_to_callback = packets_delivered_to_callback.load(std::memory_order_relaxed);
+            s.packets_dropped = packets_dropped.load(std::memory_order_relaxed);
+            s.queue_max_depth = queue_max_depth.load(std::memory_order_relaxed);
+            s.packets_sent_to_device = packets_sent_to_device.load(std::memory_order_relaxed);
+            s.shmem_store_errors = shmem_store_errors.load(std::memory_order_relaxed);
+            s.receive_errors = receive_errors.load(std::memory_order_relaxed);
+            s.send_errors = send_errors.load(std::memory_order_relaxed);
+            return s;
+        }
+    };
+    AtomicStats stats;
 
     // Running state
     std::atomic<bool> is_running{false};
@@ -148,55 +187,65 @@ struct SdkSession::Impl {
 
     /// Dispatch a single packet to all matching typed callbacks.
     /// Called on the callback thread (off the queue).
+    /// Snapshots each callback vector under lock, then dispatches without lock (Phase 2, Fix 6).
     void dispatchPacket(const cbPKT_GENERIC& pkt) {
-        std::lock_guard<std::mutex> lock(user_callback_mutex);
-
         const uint16_t chid = pkt.cbpkt_header.chid;
 
-        for (const auto& cb : typed_callbacks) {
-            switch (cb.kind) {
-            case TypedCallback::Kind::PACKET:
-                if (cb.packet_cb) cb.packet_cb(pkt);
-                break;
+        // Snapshot callback vectors under lock (fast: just copies a few pointers+sizes)
+        std::vector<PacketCB> snap_packet;
+        std::vector<EventCB>  snap_event;
+        std::vector<GroupCB>  snap_group;
+        std::vector<ConfigCB> snap_config;
+        {
+            std::lock_guard<std::mutex> lock(user_callback_mutex);
+            snap_packet = packet_callbacks;
+            // Only snapshot the vectors we'll actually need for this packet type
+            if (chid != 0 && !(chid & cbPKTCHAN_CONFIGURATION)) {
+                snap_event = event_callbacks;
+            } else if (chid == 0) {
+                snap_group = group_callbacks;
+            } else if (chid & cbPKTCHAN_CONFIGURATION) {
+                snap_config = config_callbacks;
+            }
+        }
 
-            case TypedCallback::Kind::EVENT:
-                // Event packets have chid in 1..cbMAXCHANS (not 0, not config)
-                if (chid != 0 && !(chid & cbPKTCHAN_CONFIGURATION)) {
-                    if (cb.channel_type == ChannelType::ANY) {
-                        if (cb.event_cb) cb.event_cb(pkt);
-                    } else {
-                        // Use capability-based classification from device config or shmem
-                        const cbPKT_CHANINFO* chaninfo = nullptr;
-                        cbPKT_CHANINFO chaninfo_copy{};
-                        if (device_session) {
-                            chaninfo = device_session->getChanInfo(chid);
-                        } else if (shmem_session) {
-                            auto r = shmem_session->getChanInfo(chid - 1);
-                            if (r.isOk()) {
-                                chaninfo_copy = r.value();
-                                chaninfo = &chaninfo_copy;
-                            }
-                        }
-                        if (chaninfo && cb.channel_type == classifyChannelByCaps(*chaninfo)) {
-                            if (cb.event_cb) cb.event_cb(pkt);
+        // Dispatch without holding the lock — user callbacks can take arbitrary time
+        for (const auto& cb : snap_packet) {
+            if (cb.cb) cb.cb(pkt);
+        }
+
+        if (chid != 0 && !(chid & cbPKTCHAN_CONFIGURATION)) {
+            for (const auto& cb : snap_event) {
+                if (cb.channel_type == ChannelType::ANY) {
+                    if (cb.cb) cb.cb(pkt);
+                } else {
+                    const cbPKT_CHANINFO* chaninfo = nullptr;
+                    cbPKT_CHANINFO chaninfo_copy{};
+                    if (device_session) {
+                        chaninfo = device_session->getChanInfo(chid);
+                    } else if (shmem_session) {
+                        auto r = shmem_session->getChanInfo(chid - 1);
+                        if (r.isOk()) {
+                            chaninfo_copy = r.value();
+                            chaninfo = &chaninfo_copy;
                         }
                     }
+                    if (chaninfo && cb.channel_type == classifyChannelByCaps(*chaninfo)) {
+                        if (cb.cb) cb.cb(pkt);
+                    }
                 }
-                break;
-
-            case TypedCallback::Kind::GROUP:
-                // Group packets have chid == 0; type field is the group ID
-                if (chid == 0 && pkt.cbpkt_header.type == cb.group_id) {
-                    if (cb.group_cb) cb.group_cb(reinterpret_cast<const cbPKT_GROUP&>(pkt));
+            }
+        } else if (chid == 0) {
+            for (const auto& cb : snap_group) {
+                if (pkt.cbpkt_header.type == cb.group_id) {
+                    if (cb.cb) cb.cb(reinterpret_cast<const cbPKT_GROUP&>(pkt));
                 }
-                break;
-
-            case TypedCallback::Kind::CONFIG:
-                // Config packets have chid & 0x8000
-                if ((chid & cbPKTCHAN_CONFIGURATION) && pkt.cbpkt_header.type == cb.packet_type) {
-                    if (cb.config_cb) cb.config_cb(pkt);
+            }
+        } else if (chid & cbPKTCHAN_CONFIGURATION) {
+            for (const auto& cb : snap_config) {
+                if (pkt.cbpkt_header.type == cb.packet_type) {
+                    if (cb.cb) cb.cb(pkt);
                 }
-                break;
             }
         }
     }
@@ -557,10 +606,7 @@ Result<void> SdkSession::start() {
                 if (count > 0) {
                     impl->callback_thread_waiting.store(false, std::memory_order_relaxed);
 
-                    {
-                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                        impl->stats.packets_delivered_to_callback += count;
-                    }
+                    impl->stats.packets_delivered_to_callback.fetch_add(count, std::memory_order_relaxed);
 
                     // Dispatch each packet to matching typed callbacks
                     for (size_t i = 0; i < count; i++) {
@@ -600,24 +646,22 @@ Result<void> SdkSession::start() {
                 // Queue for callback
                 bool queued = impl->packet_queue.push(pkt);
 
-                // Update all stats in a single critical section
-                {
-                    std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                    impl->stats.packets_received_from_device++;
-                    if (store_result.isOk()) {
-                        impl->stats.packets_stored_to_shmem++;
-                    } else {
-                        impl->stats.shmem_store_errors++;
-                    }
-                    if (queued) {
-                        impl->stats.packets_queued_for_callback++;
-                        size_t current_depth = impl->packet_queue.size();
-                        if (current_depth > impl->stats.queue_max_depth) {
-                            impl->stats.queue_max_depth = current_depth;
-                        }
-                    } else {
-                        impl->stats.packets_dropped++;
-                    }
+                // Update stats with atomic increments (no mutex needed)
+                impl->stats.packets_received_from_device.fetch_add(1, std::memory_order_relaxed);
+                if (store_result.isOk()) {
+                    impl->stats.packets_stored_to_shmem.fetch_add(1, std::memory_order_relaxed);
+                } else {
+                    impl->stats.shmem_store_errors.fetch_add(1, std::memory_order_relaxed);
+                }
+                if (queued) {
+                    impl->stats.packets_queued_for_callback.fetch_add(1, std::memory_order_relaxed);
+                    uint64_t current_depth = impl->packet_queue.size();
+                    uint64_t prev_max = impl->stats.queue_max_depth.load(std::memory_order_relaxed);
+                    while (current_depth > prev_max &&
+                           !impl->stats.queue_max_depth.compare_exchange_weak(
+                               prev_max, current_depth, std::memory_order_relaxed)) {}
+                } else {
+                    impl->stats.packets_dropped.fetch_add(1, std::memory_order_relaxed);
                 }
 
                 if (!queued) {
@@ -691,11 +735,9 @@ Result<void> SdkSession::start() {
                     // Send packet to device
                     auto send_result = impl->device_session->sendPacket(pkt);
                     if (send_result.isError()) {
-                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                        impl->stats.send_errors++;
+                        impl->stats.send_errors.fetch_add(1, std::memory_order_relaxed);
                     } else {
-                        std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                        impl->stats.packets_sent_to_device++;
+                        impl->stats.packets_sent_to_device.fetch_add(1, std::memory_order_relaxed);
                     }
                 }
 
@@ -776,10 +818,7 @@ Result<void> SdkSession::start() {
                     packets_read = 0;
                     auto read_result = impl->shmem_session->readReceiveBuffer(packets, MAX_BATCH, packets_read);
                     if (read_result.isError()) {
-                        {
-                            std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                            impl->stats.shmem_store_errors++;
-                        }
+                        impl->stats.shmem_store_errors.fetch_add(1, std::memory_order_relaxed);
                         std::lock_guard<std::mutex> lock(impl->user_callback_mutex);
                         if (impl->error_callback) {
                             impl->error_callback("Error reading from shared memory: " + read_result.error());
@@ -789,10 +828,7 @@ Result<void> SdkSession::start() {
                     }
 
                     if (packets_read > 0) {
-                        {
-                            std::lock_guard<std::mutex> lock(impl->stats_mutex);
-                            impl->stats.packets_delivered_to_callback += packets_read;
-                        }
+                        impl->stats.packets_delivered_to_callback.fetch_add(packets_read, std::memory_order_relaxed);
                         for (size_t i = 0; i < packets_read; i++) {
                             impl->dispatchPacket(packets[i]);
                         }
@@ -863,56 +899,42 @@ bool SdkSession::isRunning() const {
 CallbackHandle SdkSession::registerPacketCallback(PacketCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    Impl::TypedCallback tc{};
-    tc.handle = handle;
-    tc.kind = Impl::TypedCallback::Kind::PACKET;
-    tc.packet_cb = std::move(callback);
-    m_impl->typed_callbacks.push_back(std::move(tc));
+    m_impl->packet_callbacks.push_back({handle, std::move(callback)});
     return handle;
 }
 
 CallbackHandle SdkSession::registerEventCallback(const ChannelType channel_type, EventCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    Impl::TypedCallback tc{};
-    tc.handle = handle;
-    tc.kind = Impl::TypedCallback::Kind::EVENT;
-    tc.channel_type = channel_type;
-    tc.event_cb = std::move(callback);
-    m_impl->typed_callbacks.push_back(std::move(tc));
+    m_impl->event_callbacks.push_back({handle, channel_type, std::move(callback)});
     return handle;
 }
 
 CallbackHandle SdkSession::registerGroupCallback(const uint8_t group_id, GroupCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    Impl::TypedCallback tc{};
-    tc.handle = handle;
-    tc.kind = Impl::TypedCallback::Kind::GROUP;
-    tc.group_id = group_id;
-    tc.group_cb = std::move(callback);
-    m_impl->typed_callbacks.push_back(std::move(tc));
+    m_impl->group_callbacks.push_back({handle, group_id, std::move(callback)});
     return handle;
 }
 
 CallbackHandle SdkSession::registerConfigCallback(const uint16_t packet_type, ConfigCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    Impl::TypedCallback tc{};
-    tc.handle = handle;
-    tc.kind = Impl::TypedCallback::Kind::CONFIG;
-    tc.packet_type = packet_type;
-    tc.config_cb = std::move(callback);
-    m_impl->typed_callbacks.push_back(std::move(tc));
+    m_impl->config_callbacks.push_back({handle, packet_type, std::move(callback)});
     return handle;
 }
 
 void SdkSession::unregisterCallback(CallbackHandle handle) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
-    auto& cbs = m_impl->typed_callbacks;
-    cbs.erase(std::remove_if(cbs.begin(), cbs.end(),
-        [handle](const Impl::TypedCallback& tc) { return tc.handle == handle; }),
-        cbs.end());
+    auto erase_by_handle = [handle](auto& vec) {
+        vec.erase(std::remove_if(vec.begin(), vec.end(),
+            [handle](const auto& cb) { return cb.handle == handle; }),
+            vec.end());
+    };
+    erase_by_handle(m_impl->packet_callbacks);
+    erase_by_handle(m_impl->event_callbacks);
+    erase_by_handle(m_impl->group_callbacks);
+    erase_by_handle(m_impl->config_callbacks);
 }
 
 void SdkSession::setErrorCallback(ErrorCallback callback) {
@@ -921,17 +943,12 @@ void SdkSession::setErrorCallback(ErrorCallback callback) {
 }
 
 SdkStats SdkSession::getStats() const {
-    std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
-    SdkStats stats = m_impl->stats;
-
-    // Update queue depth (lock-free read)
+    SdkStats stats = m_impl->stats.snapshot();
     stats.queue_current_depth = m_impl->packet_queue.size();
-
     return stats;
 }
 
 void SdkSession::resetStats() {
-    std::lock_guard<std::mutex> lock(m_impl->stats_mutex);
     m_impl->stats.reset();
 }
 
