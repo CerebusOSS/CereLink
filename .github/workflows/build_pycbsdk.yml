@@ -9,10 +9,14 @@ on:
       - 'pycbsdk/**'
       - '.github/workflows/build_pycbsdk.yml'
   pull_request:
-    branches: [master]
+    branches:
+      - master
+      - dev
     paths:
       - 'src/**'
       - 'pycbsdk/**'
+  release:
+    types: [ published ]
 
 permissions:
   contents: read
@@ -103,3 +107,41 @@ jobs:
         with:
           name: pycbsdk-${{ matrix.config.name }}
           path: pycbsdk/dist/*.whl
+
+  build-sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install build
+      - run: cd pycbsdk && python -m build --sdist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pycbsdk-sdist
+          path: pycbsdk/dist/*.tar.gz
+
+  publish:
+    name: Publish to PyPI
+    needs: [build-wheel, build-sdist]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    permissions:
+      id-token: write   # Required for trusted publishing (OIDC)
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pycbsdk
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
