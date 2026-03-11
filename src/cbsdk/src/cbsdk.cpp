@@ -481,6 +481,42 @@ uint32_t cbsdk_session_get_runlevel(cbsdk_session_t session) {
     }
 }
 
+uint32_t cbsdk_session_get_protocol_version(cbsdk_session_t session) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        return session->cpp_session->getProtocolVersion();
+    } catch (...) { return 0; }
+}
+
+uint32_t cbsdk_session_get_spike_length(cbsdk_session_t session) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        return session->cpp_session->getSpikeLength();
+    } catch (...) { return 0; }
+}
+
+uint32_t cbsdk_session_get_spike_pretrigger(cbsdk_session_t session) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        return session->cpp_session->getSpikePretrigger();
+    } catch (...) { return 0; }
+}
+
+cbsdk_result_t cbsdk_session_set_spike_length(
+    cbsdk_session_t session,
+    uint32_t spike_length,
+    uint32_t spike_pretrigger) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->setSpikeLength(spike_length, spike_pretrigger);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Channel Information Accessors
 ///////////////////////////////////////////////////////////////////////////////////////////////////

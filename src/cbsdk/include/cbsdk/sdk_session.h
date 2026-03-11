@@ -409,6 +409,24 @@ public:
     /// @return Current run level (cbRUNLEVEL_*), or 0 if unknown
     uint32_t getRunLevel() const;
 
+    /// Get the protocol version used by this session
+    /// @return Protocol version, or UNKNOWN if not available (e.g. CLIENT mode)
+    uint32_t getProtocolVersion() const;
+
+    /// Get the global spike event length (samples per spike waveform)
+    /// @return Spike length in samples, or 0 if unavailable
+    uint32_t getSpikeLength() const;
+
+    /// Get the global spike pre-trigger length (samples before threshold crossing)
+    /// @return Pre-trigger length in samples, or 0 if unavailable
+    uint32_t getSpikePretrigger() const;
+
+    /// Set the global spike event length and pre-trigger
+    /// @param spikelen Total spike waveform length in samples
+    /// @param spikepre Pre-trigger samples (must be < spikelen)
+    /// @return Result indicating success or error
+    Result<void> setSpikeLength(uint32_t spikelen, uint32_t spikepre);
+
     /// Get most recent device timestamp from shared memory
     /// On Gemini (protocol 4.0+) this is PTP nanoseconds.
     /// On legacy NSP (protocol 3.x, CBPROTO_311) this is 30kHz ticks.

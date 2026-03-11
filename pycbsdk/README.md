@@ -1,5 +1,7 @@
 # pycbsdk
 
+[![PyPI version](https://badge.fury.io/py/pycbsdk.svg)](https://badge.fury.io/py/pycbsdk)
+
 Python bindings for the [CereLink](https://github.com/CerebusOSS/CereLink) SDK,
 providing real-time access to Blackrock Neurotech Cerebus neural signal processors.
 

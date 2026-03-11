@@ -1100,6 +1100,33 @@ uint32_t SdkSession::getRunLevel() const {
     return m_impl->device_runlevel.load(std::memory_order_acquire);
 }
 
+uint32_t SdkSession::getProtocolVersion() const {
+    if (m_impl->device_session)
+        return static_cast<uint32_t>(m_impl->device_session->getProtocolVersion());
+    return 0;  // CLIENT mode — no protocol version available
+}
+
+uint32_t SdkSession::getSpikeLength() const {
+    const auto* si = getSysInfo();
+    return si ? si->spikelen : 0;
+}
+
+uint32_t SdkSession::getSpikePretrigger() const {
+    const auto* si = getSysInfo();
+    return si ? si->spikepre : 0;
+}
+
+Result<void> SdkSession::setSpikeLength(uint32_t spikelen, uint32_t spikepre) {
+    const auto* si = getSysInfo();
+    if (!si)
+        return Result<void>::error("System info not available");
+    cbPKT_SYSINFO pkt = *si;
+    pkt.cbpkt_header.type = cbPKTTYPE_SYSSETSPKLEN;
+    pkt.spikelen = spikelen;
+    pkt.spikepre = spikepre;
+    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+}
+
 uint64_t SdkSession::getTime() const {
     if (!m_impl || !m_impl->shmem_session)
         return 0;

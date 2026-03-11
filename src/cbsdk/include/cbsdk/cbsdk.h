@@ -333,6 +333,31 @@ CBSDK_API void cbsdk_session_reset_stats(cbsdk_session_t session);
 /// @return Current run level (cbRUNLEVEL_*), or 0 if unknown
 CBSDK_API uint32_t cbsdk_session_get_runlevel(cbsdk_session_t session);
 
+/// Get the protocol version used by this session (STANDALONE mode only)
+/// @param session Session handle (must not be NULL)
+/// @return Protocol version (cbproto_protocol_version_t), or 0 (UNKNOWN) if unavailable
+CBSDK_API uint32_t cbsdk_session_get_protocol_version(cbsdk_session_t session);
+
+/// Get the global spike event length (samples per spike waveform)
+/// @param session Session handle (must not be NULL)
+/// @return Spike length in samples, or 0 if unavailable
+CBSDK_API uint32_t cbsdk_session_get_spike_length(cbsdk_session_t session);
+
+/// Get the global spike pre-trigger length (samples before threshold crossing)
+/// @param session Session handle (must not be NULL)
+/// @return Pre-trigger length in samples, or 0 if unavailable
+CBSDK_API uint32_t cbsdk_session_get_spike_pretrigger(cbsdk_session_t session);
+
+/// Set the global spike event length and pre-trigger
+/// @param session Session handle (must not be NULL)
+/// @param spike_length Total spike waveform length in samples
+/// @param spike_pretrigger Pre-trigger samples (must be < spike_length)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_spike_length(
+    cbsdk_session_t session,
+    uint32_t spike_length,
+    uint32_t spike_pretrigger);
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Channel Information Accessors
 //

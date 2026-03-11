@@ -67,6 +67,18 @@ class SampleRate(enum.IntEnum):
         return _RATE_HZ[self]
 
 
+class ProtocolVersion(enum.IntEnum):
+    """Protocol version detected during device handshake.
+
+    Values match ``cbproto_protocol_version_t``.
+    """
+    UNKNOWN  = 0
+    V3_11    = 1   # Legacy 32-bit timestamps
+    V4_0     = 2   # Legacy 64-bit timestamps
+    V4_1     = 3   # 64-bit timestamps, 16-bit packet types
+    CURRENT  = 4   # 4.2+ (current)
+
+
 class ChanInfoField(enum.IntEnum):
     """Channel info field selector for bulk extraction.
 
@@ -458,6 +470,42 @@ class Session:
     def runlevel(self) -> int:
         """Get the current device run level."""
         return _get_lib().cbsdk_session_get_runlevel(self._session)
+
+    @property
+    def protocol_version(self) -> ProtocolVersion:
+        """Protocol version detected during device handshake.
+
+        Returns ``ProtocolVersion.UNKNOWN`` in CLIENT mode (no device session).
+        """
+        v = _get_lib().cbsdk_session_get_protocol_version(self._session)
+        try:
+            return ProtocolVersion(v)
+        except ValueError:
+            return ProtocolVersion.UNKNOWN
+
+    @property
+    def spike_length(self) -> int:
+        """Global spike event length in samples."""
+        return _get_lib().cbsdk_session_get_spike_length(self._session)
+
+    @property
+    def spike_pretrigger(self) -> int:
+        """Global spike pre-trigger length in samples."""
+        return _get_lib().cbsdk_session_get_spike_pretrigger(self._session)
+
+    def set_spike_length(self, spike_length: int, spike_pretrigger: int):
+        """Set the global spike event length and pre-trigger.
+
+        Args:
+            spike_length: Total spike waveform length in samples.
+            spike_pretrigger: Pre-trigger samples (must be < spike_length).
+        """
+        _check(
+            _get_lib().cbsdk_session_set_spike_length(
+                self._session, spike_length, spike_pretrigger
+            ),
+            "Failed to set spike length",
+        )
 
     @staticmethod
     def max_chans() -> int:
