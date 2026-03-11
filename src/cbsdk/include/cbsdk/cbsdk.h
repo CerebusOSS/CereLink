@@ -450,6 +450,18 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_channel_sample_group(
     cbproto_group_rate_t rate,
     bool disable_others);
 
+/// Set AC input coupling (offset correction) for channels of a specific type
+/// @param session Session handle (must not be NULL)
+/// @param n_chans Number of channels to configure (use cbMAXCHANS for all)
+/// @param chan_type Channel type filter
+/// @param enabled true = AC coupling, false = DC coupling
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_ac_input_coupling(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    bool enabled);
+
 /// Set full channel configuration by sending a CHANINFO packet
 /// @param session Session handle (must not be NULL)
 /// @param chaninfo Complete channel info packet to send

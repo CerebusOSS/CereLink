@@ -1072,6 +1072,27 @@ cbsdk_result_t cbsdk_session_close_central_file_dialog(cbsdk_session_t session) 
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// AC Input Coupling
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+cbsdk_result_t cbsdk_session_set_ac_input_coupling(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    bool enabled) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->setACInputCoupling(
+            n_chans, to_cpp_channel_type(chan_type), enabled);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Spike Sorting
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -414,6 +414,13 @@ public:
     Result<void> setChannelSpikeSorting(size_t nChans, ChannelType chanType,
                                         uint32_t sortOptions);
 
+    /// Set AC input coupling (offset correction) for channels of a specific type
+    /// @param nChans Number of channels to configure (cbMAXCHANS for all)
+    /// @param chanType Channel type filter
+    /// @param enabled true = AC coupling (offset correction on), false = DC coupling
+    /// @return Result indicating success or error
+    Result<void> setACInputCoupling(size_t nChans, ChannelType chanType, bool enabled);
+
     /// Set full channel configuration by packet
     /// @param chaninfo Complete channel info packet to send
     /// @return Result indicating success or error

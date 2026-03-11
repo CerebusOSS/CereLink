@@ -186,6 +186,9 @@ cbsdk_result_t cbsdk_session_get_group_list(cbsdk_session_t session,
 cbsdk_result_t cbsdk_session_set_channel_sample_group(
     cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
     cbproto_group_rate_t rate, _Bool disable_others);
+cbsdk_result_t cbsdk_session_set_ac_input_coupling(
+    cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
+    _Bool enabled);
 
 // Per-channel getters
 cbproto_channel_type_t cbsdk_session_get_channel_type(cbsdk_session_t session, uint32_t chan_id);

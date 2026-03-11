@@ -568,6 +568,30 @@ class Session:
             "Failed to set channel sample group",
         )
 
+    def set_ac_input_coupling(
+        self,
+        n_chans: int,
+        channel_type: ChannelType,
+        enabled: bool,
+    ):
+        """Set AC/DC input coupling for channels of a specific type.
+
+        Args:
+            n_chans: Number of channels to configure.
+            channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
+            enabled: ``True`` for AC coupling (offset correction on),
+                ``False`` for DC coupling.
+        """
+        _lib = _get_lib()
+        _check(
+            _lib.cbsdk_session_set_ac_input_coupling(
+                self._session, n_chans,
+                int(_coerce_enum(ChannelType, channel_type)),
+                enabled
+            ),
+            "Failed to set AC input coupling",
+        )
+
     def set_channel_label(self, chan_id: int, label: str):
         """Set a channel's label."""
         _check(
