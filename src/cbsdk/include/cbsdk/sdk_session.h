@@ -477,6 +477,27 @@ public:
                                 uint32_t dob_month = 0, uint32_t dob_day = 0, uint32_t dob_year = 0);
 
     ///--------------------------------------------------------------------------------------------
+    /// Channel Mapping (CMP) Files
+    ///--------------------------------------------------------------------------------------------
+
+    /// Load a channel mapping file and apply electrode positions
+    ///
+    /// CMP files define physical electrode positions on arrays. Because the device does not
+    /// persist the position field in chaninfo, this method stores positions locally and
+    /// overlays them onto channel info whenever updated config data arrives from the device.
+    ///
+    /// Can be called multiple times for different ports on a Hub device (each port may
+    /// have a different array with its own CMP file). Subsequent calls merge positions
+    /// into the existing map.
+    ///
+    /// @param filepath Path to the .cmp file
+    /// @param bank_offset Offset added to CMP bank indices to produce absolute bank numbers.
+    ///        CMP bank letter A becomes absolute bank (1 + bank_offset).
+    ///        Port 1: offset 0 (A=bank 1). Port 2: offset 4 (A=bank 5), etc.
+    /// @return Result indicating success or error
+    Result<void> loadChannelMap(const std::string& filepath, uint32_t bank_offset = 0);
+
+    ///--------------------------------------------------------------------------------------------
     /// CCF Configuration Files
     ///--------------------------------------------------------------------------------------------
 

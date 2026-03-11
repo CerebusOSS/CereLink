@@ -627,6 +627,31 @@ class Session:
             else:
                 raise ValueError(f"Unknown channel attribute: {key!r}")
 
+    # --- Channel Mapping (CMP) Files ---
+
+    def load_channel_map(self, filepath: str, bank_offset: int = 0):
+        """Load a channel mapping file (.cmp) and apply electrode positions.
+
+        CMP files define physical electrode positions on arrays. Because the device
+        does not persist position data, positions are stored locally and overlaid
+        onto channel info whenever updated config data arrives from the device.
+
+        Can be called multiple times for different front-end ports on a Hub device,
+        each with a different array and CMP file.
+
+        Args:
+            filepath: Path to the .cmp file.
+            bank_offset: Offset added to CMP bank indices for multi-port Hubs.
+                CMP bank letter A becomes absolute bank (1 + bank_offset).
+                Port 1: offset 0 (A=bank 1). Port 2: offset 4 (A=bank 5), etc.
+        """
+        _check(
+            _get_lib().cbsdk_session_load_channel_map(
+                self._session, filepath.encode(), bank_offset
+            ),
+            "Failed to load channel map",
+        )
+
     # --- CCF Configuration Files ---
 
     def save_ccf(self, filename: str):

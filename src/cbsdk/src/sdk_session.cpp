@@ -14,6 +14,7 @@
 #include "platform_first.h"
 
 #include "cbsdk/sdk_session.h"
+#include "cmp_parser.h"
 #include "cbdev/device_factory.h"
 #include "cbdev/connection.h"
 #include "cbshm/shmem_session.h"
@@ -133,6 +134,11 @@ struct SdkSession::Impl {
     std::array<ChannelType, cbMAXCHANS> channel_type_cache;
     bool channel_cache_valid = false;
 
+    // CMP (channel mapping) position overlay
+    // Keyed by cmpKey(bank, term) → position[4] = {col, row, bank_letter, electrode}
+    CmpPositionMap cmp_positions;
+    std::mutex cmp_mutex;  // protects cmp_positions (loaded rarely, read on every CHANREP)
+
     void rebuildChannelTypeCache() {
         for (uint32_t ch = 0; ch < cbMAXCHANS; ++ch) {
             const cbPKT_CHANINFO* ci = nullptr;
@@ -203,6 +209,59 @@ struct SdkSession::Impl {
     // Separate from is_running because callbacks must work before is_running is set
     // (e.g., during the handshake phase in start()).
     std::atomic<bool> shutting_down{false};
+
+    /// Apply CMP position overlay to a CHANREP packet's channel in device_config.
+    /// Called from the receive path when a CHANREP is received.
+    void applyCmpOverlay(const cbPKT_CHANINFO& chaninfo) {
+        std::lock_guard<std::mutex> lock(cmp_mutex);
+        if (cmp_positions.empty()) return;
+
+        uint64_t key = cmpKey(chaninfo.bank, chaninfo.term);
+        auto it = cmp_positions.find(key);
+        if (it == cmp_positions.end()) return;
+
+        const auto& pos = it->second;
+
+        // Overlay in device_config (STANDALONE mode primary config source)
+        if (device_session) {
+            const uint32_t chan = chaninfo.chan;
+            if (chan >= 1 && chan <= cbMAXCHANS) {
+                // getChanInfo returns const, but we need to write — use getDeviceConfig
+                auto& config = const_cast<cbproto::DeviceConfig&>(device_session->getDeviceConfig());
+                std::memcpy(config.chaninfo[chan - 1].position, pos.data(), sizeof(int32_t) * 4);
+            }
+        }
+
+        // Also overlay in shmem (so CLIENTs see correct positions)
+        if (shmem_session) {
+            const uint32_t chan = chaninfo.chan;
+            if (chan >= 1 && chan <= cbMAXCHANS) {
+                auto ci_result = shmem_session->getChanInfo(chan - 1);
+                if (ci_result.isOk()) {
+                    auto ci = ci_result.value();
+                    std::memcpy(ci.position, pos.data(), sizeof(int32_t) * 4);
+                    shmem_session->setChanInfo(chan - 1, ci);
+                }
+            }
+        }
+    }
+
+    /// Apply CMP positions to all existing chaninfo entries.
+    /// Called after loading a CMP file to overlay positions immediately.
+    void applyCmpToAllChannels() {
+        for (uint32_t ch = 0; ch < cbMAXCHANS; ++ch) {
+            const cbPKT_CHANINFO* ci = nullptr;
+            if (device_session) {
+                ci = device_session->getChanInfo(ch + 1);
+            } else if (shmem_session) {
+                const auto* native = shmem_session->getNativeConfigBuffer();
+                if (native) ci = &native->chaninfo[ch];
+            }
+            if (ci && ci->chan > 0) {
+                applyCmpOverlay(*ci);
+            }
+        }
+    }
 
     /// Dispatch a single packet to all matching typed callbacks.
     /// Called on the callback thread (off the queue).
@@ -654,6 +713,15 @@ Result<void> SdkSession::start() {
                 // Store to shared memory
                 auto store_result = impl->shmem_session->storePacket(pkt);
 
+                // Apply CMP position overlay for CHANREP packets
+                // DeviceSession::updateConfigFromBuffer already ran (before this callback),
+                // so device_config has the new chaninfo. We overlay positions in both
+                // device_config and shmem so all readers see correct positions.
+                if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
+                    const auto* chaninfo = reinterpret_cast<const cbPKT_CHANINFO*>(&pkt);
+                    impl->applyCmpOverlay(*chaninfo);
+                }
+
                 // Queue for callback
                 bool queued = impl->packet_queue.push(pkt);
 
@@ -841,6 +909,11 @@ Result<void> SdkSession::start() {
                     if (packets_read > 0) {
                         impl->stats.packets_delivered_to_callback.fetch_add(packets_read, std::memory_order_relaxed);
                         for (size_t i = 0; i < packets_read; i++) {
+                            // CLIENT mode: apply CMP position overlay for CHANREP packets
+                            if ((packets[i].cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
+                                const auto* chaninfo = reinterpret_cast<const cbPKT_CHANINFO*>(&packets[i]);
+                                impl->applyCmpOverlay(*chaninfo);
+                            }
                             impl->dispatchPacket(packets[i]);
                         }
                     }
@@ -1365,6 +1438,34 @@ static void extractFromNativeConfig(const cbshm::NativeConfigBuffer& native, cbC
             ccf_data.isWaveform[i][j].active = 0;
         }
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Channel Mapping (CMP) Files
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+Result<void> SdkSession::loadChannelMap(const std::string& filepath, uint32_t bank_offset) {
+    auto parse_result = parseCmpFile(filepath, bank_offset);
+    if (parse_result.isError()) {
+        return Result<void>::error(parse_result.error());
+    }
+
+    // Merge parsed positions into our map (allows multiple loadChannelMap calls for multi-port)
+    {
+        std::lock_guard<std::mutex> lock(m_impl->cmp_mutex);
+        for (auto& [key, pos] : parse_result.value()) {
+            m_impl->cmp_positions[key] = pos;
+        }
+    }
+
+    // Apply positions to all existing chaninfo entries
+    m_impl->applyCmpToAllChannels();
+
+    return Result<void>::ok();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// CCF Configuration Files
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 Result<void> SdkSession::saveCCF(const std::string& filename) {
     cbCCF ccf_data{};

@@ -624,6 +624,28 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_runlevel(
     uint32_t runlevel);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Channel Mapping (CMP) Files
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Load a channel mapping file (.cmp) and apply electrode positions
+///
+/// CMP files define physical electrode positions on arrays. Because the device does not
+/// persist the position field in chaninfo, positions are stored locally and overlaid
+/// onto channel info whenever config data arrives from the device.
+///
+/// Can be called multiple times for different ports on a Hub device.
+///
+/// @param session Session handle (must not be NULL)
+/// @param filepath Path to the .cmp file (must not be NULL)
+/// @param bank_offset Offset added to CMP bank indices. A=1+offset, B=2+offset, etc.
+///        Use 0 for port 1, 4 for port 2, 8 for port 3, etc.
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_load_channel_map(
+    cbsdk_session_t session,
+    const char* filepath,
+    uint32_t bank_offset);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // CCF Configuration Files
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 

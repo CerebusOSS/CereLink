@@ -161,6 +161,33 @@ gtest_discover_tests(cbsdk_tests
 
 message(STATUS "Unit tests configured for cbsdk (prefixed with 'device.' for CI filtering)")
 
+# CMP parser tests (no device needed)
+add_executable(cmp_parser_tests
+    test_cmp_parser.cpp
+)
+
+target_link_libraries(cmp_parser_tests
+    PRIVATE
+        cbsdk
+        GTest::gtest_main
+)
+
+target_include_directories(cmp_parser_tests
+    BEFORE PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/cbsdk/src
+        ${PROJECT_SOURCE_DIR}/src/cbsdk/include
+        ${PROJECT_SOURCE_DIR}/src/cbproto/include
+)
+
+target_compile_definitions(cmp_parser_tests
+    PRIVATE
+        CMP_TEST_DATA_DIR="${PROJECT_SOURCE_DIR}/tests"
+)
+
+gtest_discover_tests(cmp_parser_tests)
+
+message(STATUS "Unit tests configured for CMP parser")
+
 # ccfutils tests (CCF <-> DeviceConfig conversion)
 add_executable(ccfutils_tests
     test_ccf_config.cpp

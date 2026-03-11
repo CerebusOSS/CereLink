@@ -53,3 +53,4 @@ Release/
 !tests/ccf_spk_1k.ccf
 
 upstream
+*/uv.lock

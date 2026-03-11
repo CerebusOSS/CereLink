@@ -10,6 +10,7 @@ project(cbsdk
 set(CBSDK_SOURCES
     src/sdk_session.cpp
     src/cbsdk.cpp
+    src/cmp_parser.cpp
 )
 
 # Build as STATIC library

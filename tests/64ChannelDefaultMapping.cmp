@@ -1,0 +1,77 @@
+// 64-Channel NSP mapping
+//							
+// Data is as follows 'c r b e l'							
+//   c - 0 based column from left to right							
+//   r - 0 based row from bottom to top							
+//   b - bank name - values can be A, B, C, or D							
+//   e - 1 based electrode number within the bank - values can be 1-32							
+//   l - label used to rename channels in Central							
+//							
+// Comments begin with //							
+// First non-comment line is the Mapfile description							
+//							
+64-Channel NSP mapping
+0  3 A 1 chan1
+1  3 A 2 chan2
+2  3 A 3 chan3
+3  3 A 4 chan4
+4  3 A 5 chan5
+5  3 A 6 chan6
+6  3 A 7 chan7
+7  3 A 8 chan8
+8  3 A 9 chan9
+9  3 A 10 chan10
+10 3 A 11 chan11
+11 3 A 12 chan12
+12 3 A 13 chan13
+13 3 A 14 chan14
+14 3 A 15 chan15
+15 3 A 16 chan16
+0  2 A 17 chan17
+1  2 A 18 chan18
+2  2 A 19 chan19
+3  2 A 20 chan20
+4  2 A 21 chan21
+5  2 A 22 chan22
+6  2 A 23 chan23
+7  2 A 24 chan24
+8  2 A 25 chan25
+9  2 A 26 chan26
+10 2 A 27 chan27
+11 2 A 28 chan28
+12 2 A 29 chan29
+13 2 A 30 chan30
+14 2 A 31 chan31
+15 2 A 32 chan32
+0  1 B 1 chan33
+1  1 B 2 chan34
+2  1 B 3 chan35
+3  1 B 4 chan36
+4  1 B 5 chan37
+5  1 B 6 chan38
+6  1 B 7 chan39
+7  1 B 8 chan40
+8  1 B 9 chan41
+9  1 B 10 chan42
+10 1 B 11 chan43
+11 1 B 12 chan44
+12 1 B 13 chan45
+13 1 B 14 chan46
+14 1 B 15 chan47
+15 1 B 16 chan48
+0  0 B 17 chan49
+1  0 B 18 chan50
+2  0 B 19 chan51
+3  0 B 20 chan52
+4  0 B 21 chan53
+5  0 B 22 chan54
+6  0 B 23 chan55
+7  0 B 24 chan56
+8  0 B 25 chan57
+9  0 B 26 chan58
+10 0 B 27 chan59
+11 0 B 28 chan60
+12 0 B 29 chan61
+13 0 B 30 chan62
+14 0 B 31 chan63
+15 0 B 32 chan64
