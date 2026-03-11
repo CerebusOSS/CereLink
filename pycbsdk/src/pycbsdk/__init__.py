@@ -21,7 +21,13 @@ from .session import (
     ProtocolVersion, Stats, ContinuousReader,
 )
 
+try:
+    from ._version import __version__
+except ImportError:
+    __version__ = "0.0.0"
+
 __all__ = [
     "Session", "DeviceType", "ChannelType", "SampleRate", "ChanInfoField",
     "ProtocolVersion", "Stats", "ContinuousReader",
+    "__version__",
 ]

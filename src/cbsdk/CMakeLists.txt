@@ -33,6 +33,11 @@ target_link_libraries(cbsdk
         $<BUILD_INTERFACE:ccfutils>
 )
 
+# Inject version from top-level project into cbsdk_get_version()
+target_compile_definitions(cbsdk PRIVATE
+    CBSDK_VERSION_STRING="${CBSDK_VERSION_MAJOR}.${CBSDK_VERSION_MINOR}.${CBSDK_VERSION_PATCH}"
+)
+
 # C++17 for implementation, C compatible API
 target_compile_features(cbsdk PUBLIC cxx_std_17)
 
@@ -62,7 +67,10 @@ if(CBSDK_BUILD_SHARED)
     )
 
     target_compile_features(cbsdk_shared PUBLIC cxx_std_17)
-    target_compile_definitions(cbsdk_shared PRIVATE CBSDK_SHARED CBSDK_EXPORTS)
+    target_compile_definitions(cbsdk_shared PRIVATE
+        CBSDK_SHARED CBSDK_EXPORTS
+        CBSDK_VERSION_STRING="${CBSDK_VERSION_MAJOR}.${CBSDK_VERSION_MINOR}.${CBSDK_VERSION_PATCH}"
+    )
     set_target_properties(cbsdk_shared PROPERTIES OUTPUT_NAME cbsdk)
 
     if(WIN32)

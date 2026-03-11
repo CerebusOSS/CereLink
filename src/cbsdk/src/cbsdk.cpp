@@ -367,7 +367,11 @@ const char* cbsdk_get_error_message(cbsdk_result_t result) {
 }
 
 const char* cbsdk_get_version(void) {
-    return "2.0.0";
+#ifdef CBSDK_VERSION_STRING
+    return CBSDK_VERSION_STRING;
+#else
+    return "0.0.0";
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

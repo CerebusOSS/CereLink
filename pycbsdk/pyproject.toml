@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=64", "wheel", "cffi>=1.15"]
+requires = ["setuptools>=64", "wheel", "cffi>=1.15", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pycbsdk"
-version = "2.0.0a1"
+dynamic = ["version"]
 description = "Python bindings for CereLink SDK (Blackrock Neurotech Cerebus devices)"
 requires-python = ">=3.9"
 license = "BSD-2-Clause"
@@ -41,3 +41,8 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 pycbsdk = ["*.dll", "*.so", "*.so.*", "*.dylib"]
+
+[tool.setuptools_scm]
+root = ".."
+version_file = "src/pycbsdk/_version.py"
+relative_to = "pyproject.toml"
