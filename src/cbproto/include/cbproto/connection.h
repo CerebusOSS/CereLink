@@ -43,8 +43,9 @@ typedef enum cbproto_device_type {
     CBPROTO_DEVICE_TYPE_HUB1       = 2,  ///< Gemini Hub 1 (192.168.137.200, port 51002)
     CBPROTO_DEVICE_TYPE_HUB2       = 3,  ///< Gemini Hub 2 (192.168.137.201, port 51003)
     CBPROTO_DEVICE_TYPE_HUB3       = 4,  ///< Gemini Hub 3 (192.168.137.202, port 51004)
-    CBPROTO_DEVICE_TYPE_NPLAY      = 5,  ///< nPlayServer (127.0.0.1, loopback)
-    CBPROTO_DEVICE_TYPE_CUSTOM     = 6   ///< Custom IP/port configuration
+    CBPROTO_DEVICE_TYPE_NPLAY      = 5,  ///< nPlayServer (127.0.0.1, ports 51001/51002)
+    CBPROTO_DEVICE_TYPE_CUSTOM     = 6,  ///< Custom IP/port configuration
+    CBPROTO_DEVICE_TYPE_GEMINI_NPLAY = 7 ///< Gemini nPlayServer (127.0.0.1, port 51002 bidirectional)
 } cbproto_device_type_t;
 
 /// @}

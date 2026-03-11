@@ -110,7 +110,8 @@ enum class DeviceType {
     HUB1,  ///< Gemini Hub 1 (192.168.137.200, port 51002 bidirectional)
     HUB2,  ///< Gemini Hub 2 (192.168.137.201, port 51003 bidirectional)
     HUB3,  ///< Gemini Hub 3 (192.168.137.202, port 51004 bidirectional)
-    NPLAY         ///< NPlay loopback (127.0.0.1, ports 51001/51002)
+    NPLAY,        ///< NPlay loopback (127.0.0.1, ports 51001/51002)
+    GEMINI_NPLAY  ///< Gemini NPlay loopback (127.0.0.1, port 51002 bidirectional)
 };
 
 /// SDK configuration

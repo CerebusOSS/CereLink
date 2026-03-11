@@ -71,6 +71,9 @@ static cbsdk::SdkConfig to_cpp_config(const cbsdk_config_t* c_config) {
         case CBPROTO_DEVICE_TYPE_NPLAY:
             cpp_config.device_type = cbsdk::DeviceType::NPLAY;
             break;
+        case CBPROTO_DEVICE_TYPE_GEMINI_NPLAY:
+            cpp_config.device_type = cbsdk::DeviceType::GEMINI_NPLAY;
+            break;
         case CBPROTO_DEVICE_TYPE_CUSTOM:
             // CUSTOM not supported in SDK config - use custom address/port fields instead
             cpp_config.device_type = cbsdk::DeviceType::LEGACY_NSP;

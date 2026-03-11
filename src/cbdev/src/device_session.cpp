@@ -194,6 +194,14 @@ ConnectionParams ConnectionParams::forDevice(DeviceType type) {
             conn_params.send_port = ConnectionDefaults::LEGACY_NSP_SEND_PORT;
             break;
 
+        case DeviceType::GEMINI_NPLAY:
+            // Gemini nPlayServer: loopback, same port for send & recv
+            conn_params.device_address = ConnectionDefaults::GEMINI_NPLAY_ADDRESS;
+            conn_params.client_address = "127.0.0.1";
+            conn_params.recv_port = ConnectionDefaults::HUB1_PORT;  // 51002
+            conn_params.send_port = ConnectionDefaults::HUB1_PORT;  // 51002
+            break;
+
         case DeviceType::CUSTOM:
             // User must set addresses manually
             break;
@@ -338,8 +346,9 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
 
     // Auto-detect client address if not specified
     if (session.m_impl->config.client_address.empty()) {
-        if (session.m_impl->config.type == DeviceType::NPLAY) {
-            // NPLAY: Always use loopback
+        if (session.m_impl->config.type == DeviceType::NPLAY ||
+            session.m_impl->config.type == DeviceType::GEMINI_NPLAY) {
+            // NPLAY/GEMINI_NPLAY: Always use loopback
             session.m_impl->config.client_address = "127.0.0.1";
         } else {
             // Other devices: Use platform-specific detection
@@ -1715,6 +1724,8 @@ const char* deviceTypeToString(DeviceType type) {
             return "Gemini Hub 3";
         case DeviceType::NPLAY:
             return "nPlayServer";
+        case DeviceType::GEMINI_NPLAY:
+            return "Gemini nPlayServer";
         case DeviceType::CUSTOM:
             return "Custom";
         default:
