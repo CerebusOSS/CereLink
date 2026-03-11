@@ -18,6 +18,7 @@
 #define CBSDK_V2_SDK_SESSION_H
 
 #include <string>
+#include <vector>
 #include <functional>
 #include <memory>
 #include <chrono>
@@ -216,6 +217,27 @@ enum class SampleRate : uint32_t {
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Channel Info Field (for bulk getters)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Selects a numeric field from cbPKT_CHANINFO for bulk extraction.
+enum class ChanInfoField : uint32_t {
+    SMPGROUP,       ///< uint32_t — sampling group (0=disabled, 1–6)
+    SMPFILTER,      ///< uint32_t — continuous-time filter ID
+    SPKFILTER,      ///< uint32_t — spike pathway filter ID
+    AINPOPTS,       ///< uint32_t — analog input option flags (cbAINP_*)
+    SPKOPTS,        ///< uint32_t — spike processing option flags
+    SPKTHRLEVEL,    ///< int32_t  — spike threshold level
+    LNCRATE,        ///< uint32_t — LNC adaptation rate
+    REFELECCHAN,    ///< uint32_t — reference electrode channel
+    AMPLREJPOS,     ///< int16_t  — positive amplitude rejection
+    AMPLREJNEG,     ///< int16_t  — negative amplitude rejection
+    CHANCAPS,       ///< uint32_t — channel capability flags
+    BANK,           ///< uint32_t — bank index
+    TERM,           ///< uint32_t — terminal index within bank
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Callback Types
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -392,6 +414,42 @@ public:
     /// On legacy NSP (protocol 3.x, CBPROTO_311) this is 30kHz ticks.
     /// @return Raw device timestamp, or 0 if not available
     uint64_t getTime() const;
+
+    ///--------------------------------------------------------------------------------------------
+    /// Bulk Channel Queries
+    ///--------------------------------------------------------------------------------------------
+
+    /// Get any numeric field from a single channel by field selector
+    /// @param chanId 1-based channel ID (1 to cbMAXCHANS)
+    /// @param field Which field to extract
+    /// @return Field value widened to int64_t, or error if channel invalid
+    Result<int64_t> getChannelField(uint32_t chanId, ChanInfoField field) const;
+
+    /// Get the 1-based IDs of channels matching a type
+    /// @param nChans Max channels to return (cbMAXCHANS for all)
+    /// @param chanType Channel type filter
+    /// @return Vector of 1-based channel IDs
+    Result<std::vector<uint32_t>> getMatchingChannelIds(size_t nChans, ChannelType chanType) const;
+
+    /// Get a numeric field from all channels matching a type
+    /// @param nChans Max channels to query (cbMAXCHANS for all)
+    /// @param chanType Channel type filter
+    /// @param field Which field to extract
+    /// @return Vector of field values (same order as getMatchingChannelIds)
+    Result<std::vector<int64_t>> getChannelField(size_t nChans, ChannelType chanType,
+                                                  ChanInfoField field) const;
+
+    /// Get labels from all channels matching a type
+    /// @param nChans Max channels to query (cbMAXCHANS for all)
+    /// @param chanType Channel type filter
+    /// @return Vector of label strings (same order as getMatchingChannelIds)
+    Result<std::vector<std::string>> getChannelLabels(size_t nChans, ChannelType chanType) const;
+
+    /// Get positions from all channels matching a type
+    /// @param nChans Max channels to query (cbMAXCHANS for all)
+    /// @param chanType Channel type filter
+    /// @return Flat vector of int32_t: [x0,y0,z0,w0, x1,y1,z1,w1, ...]  (4 per channel)
+    Result<std::vector<int32_t>> getChannelPositions(size_t nChans, ChannelType chanType) const;
 
     ///--------------------------------------------------------------------------------------------
     /// Channel Configuration

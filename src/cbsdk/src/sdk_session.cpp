@@ -153,6 +153,9 @@ struct SdkSession::Impl {
         channel_cache_valid = true;
     }
 
+    /// Get chaninfo pointer for a 0-based channel index (works for both STANDALONE and CLIENT)
+    const cbPKT_CHANINFO* getChanInfoPtr(uint32_t idx) const;
+
     // Clock sync periodic probing (STANDALONE mode)
     std::chrono::steady_clock::time_point last_clock_probe_time{};
 
@@ -1106,6 +1109,105 @@ uint64_t SdkSession::getTime() const {
 ///--------------------------------------------------------------------------------------------
 /// Channel Configuration
 ///--------------------------------------------------------------------------------------------
+
+/// Helper: extract a numeric field from a cbPKT_CHANINFO
+static int64_t extractChanInfoField(const cbPKT_CHANINFO& ci, ChanInfoField field) {
+    switch (field) {
+        case ChanInfoField::SMPGROUP:    return ci.smpgroup;
+        case ChanInfoField::SMPFILTER:   return ci.smpfilter;
+        case ChanInfoField::SPKFILTER:   return ci.spkfilter;
+        case ChanInfoField::AINPOPTS:    return ci.ainpopts;
+        case ChanInfoField::SPKOPTS:     return ci.spkopts;
+        case ChanInfoField::SPKTHRLEVEL: return ci.spkthrlevel;
+        case ChanInfoField::LNCRATE:     return ci.lncrate;
+        case ChanInfoField::REFELECCHAN: return ci.refelecchan;
+        case ChanInfoField::AMPLREJPOS:  return ci.amplrejpos;
+        case ChanInfoField::AMPLREJNEG:  return ci.amplrejneg;
+        case ChanInfoField::CHANCAPS:    return ci.chancaps;
+        case ChanInfoField::BANK:        return ci.bank;
+        case ChanInfoField::TERM:        return ci.term;
+        default: return 0;
+    }
+}
+
+/// Helper: get chaninfo pointer for a 0-based channel index
+const cbPKT_CHANINFO* SdkSession::Impl::getChanInfoPtr(uint32_t idx) const {
+    if (device_session) {
+        return device_session->getChanInfo(idx + 1);
+    } else if (shmem_session) {
+        const auto* native = shmem_session->getNativeConfigBuffer();
+        if (native) return &native->chaninfo[idx];
+    }
+    return nullptr;
+}
+
+Result<int64_t> SdkSession::getChannelField(uint32_t chanId, ChanInfoField field) const {
+    if (chanId == 0 || chanId > cbMAXCHANS)
+        return Result<int64_t>::error("Invalid channel ID");
+    const auto* ci = m_impl->getChanInfoPtr(chanId - 1);
+    if (!ci)
+        return Result<int64_t>::error("Channel info unavailable");
+    return Result<int64_t>::ok(extractChanInfoField(*ci, field));
+}
+
+Result<std::vector<uint32_t>> SdkSession::getMatchingChannelIds(
+        const size_t nChans, const ChannelType chanType) const {
+    std::vector<uint32_t> ids;
+    size_t count = 0;
+    for (uint32_t ch = 0; ch < cbMAXCHANS && count < nChans; ++ch) {
+        const auto* ci = m_impl->getChanInfoPtr(ch);
+        if (!ci) continue;
+        if (classifyChannelByCaps(*ci) != chanType) continue;
+        ids.push_back(ch + 1);
+        count++;
+    }
+    return Result<std::vector<uint32_t>>::ok(std::move(ids));
+}
+
+Result<std::vector<int64_t>> SdkSession::getChannelField(
+        const size_t nChans, const ChannelType chanType, const ChanInfoField field) const {
+    std::vector<int64_t> values;
+    size_t count = 0;
+    for (uint32_t ch = 0; ch < cbMAXCHANS && count < nChans; ++ch) {
+        const auto* ci = m_impl->getChanInfoPtr(ch);
+        if (!ci) continue;
+        if (classifyChannelByCaps(*ci) != chanType) continue;
+        values.push_back(extractChanInfoField(*ci, field));
+        count++;
+    }
+    return Result<std::vector<int64_t>>::ok(std::move(values));
+}
+
+Result<std::vector<std::string>> SdkSession::getChannelLabels(
+        const size_t nChans, const ChannelType chanType) const {
+    std::vector<std::string> labels;
+    size_t count = 0;
+    for (uint32_t ch = 0; ch < cbMAXCHANS && count < nChans; ++ch) {
+        const auto* ci = m_impl->getChanInfoPtr(ch);
+        if (!ci) continue;
+        if (classifyChannelByCaps(*ci) != chanType) continue;
+        labels.emplace_back(ci->label);
+        count++;
+    }
+    return Result<std::vector<std::string>>::ok(std::move(labels));
+}
+
+Result<std::vector<int32_t>> SdkSession::getChannelPositions(
+        const size_t nChans, const ChannelType chanType) const {
+    std::vector<int32_t> positions;
+    size_t count = 0;
+    for (uint32_t ch = 0; ch < cbMAXCHANS && count < nChans; ++ch) {
+        const auto* ci = m_impl->getChanInfoPtr(ch);
+        if (!ci) continue;
+        if (classifyChannelByCaps(*ci) != chanType) continue;
+        positions.push_back(ci->position[0]);
+        positions.push_back(ci->position[1]);
+        positions.push_back(ci->position[2]);
+        positions.push_back(ci->position[3]);
+        count++;
+    }
+    return Result<std::vector<int32_t>>::ok(std::move(positions));
+}
 
 /// Helper: map cbsdk::ChannelType to cbdev::ChannelType
 static cbdev::ChannelType toDevChannelType(const ChannelType chanType) {

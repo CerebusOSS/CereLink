@@ -67,6 +67,26 @@ class SampleRate(enum.IntEnum):
         return _RATE_HZ[self]
 
 
+class ChanInfoField(enum.IntEnum):
+    """Channel info field selector for bulk extraction.
+
+    Values match ``cbsdk_chaninfo_field_t``.
+    """
+    SMPGROUP    = 0
+    SMPFILTER   = 1
+    SPKFILTER   = 2
+    AINPOPTS    = 3
+    SPKOPTS     = 4
+    SPKTHRLEVEL = 5
+    LNCRATE     = 6
+    REFELECCHAN = 7
+    AMPLREJPOS  = 8
+    AMPLREJNEG  = 9
+    CHANCAPS    = 10
+    BANK        = 11
+    TERM        = 12
+
+
 _RATE_HZ = {
     SampleRate.NONE:     0,
     SampleRate.SR_500:   500,
@@ -520,6 +540,22 @@ class Session:
         """Get a channel's negative amplitude rejection threshold."""
         return _get_lib().cbsdk_session_get_channel_amplrejneg(self._session, chan_id)
 
+    def get_channel_field(self, chan_id: int, field: ChanInfoField) -> int:
+        """Get any numeric field from a single channel by field selector.
+
+        This is the generic counterpart to the dedicated per-channel getters.
+        Useful when the field is determined at runtime.
+
+        Args:
+            chan_id: 1-based channel ID.
+            field: Which field to extract (e.g., ``ChanInfoField.BANK``).
+
+        Returns:
+            Field value as int (widened from the native type).
+        """
+        return _get_lib().cbsdk_session_get_channel_field(
+            self._session, chan_id, int(field))
+
     def get_group_label(self, group_id: int) -> Optional[str]:
         """Get a sample group's label (group_id 1-6)."""
         _lib = _get_lib()
@@ -538,6 +574,144 @@ class Session:
         if result != 0:
             return []
         return [buf[i] for i in range(count[0])]
+
+    # --- Bulk Channel Queries ---
+
+    def get_matching_channel_ids(
+        self,
+        channel_type: ChannelType,
+        n_chans: int = 0,
+    ) -> list[int]:
+        """Get 1-based IDs of channels matching a type.
+
+        Args:
+            channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
+            n_chans: Max channels to return (0 or omit for all).
+
+        Returns:
+            List of 1-based channel IDs.
+        """
+        _lib = _get_lib()
+        max_chans = _lib.cbsdk_get_max_chans()
+        if n_chans <= 0:
+            n_chans = max_chans
+        buf = ffi.new(f"uint32_t[{max_chans}]")
+        count = ffi.new("uint32_t *", max_chans)
+        _check(
+            _lib.cbsdk_session_get_matching_channels(
+                self._session, n_chans,
+                int(_coerce_enum(ChannelType, channel_type)),
+                buf, count
+            ),
+            "Failed to get matching channel IDs",
+        )
+        return [buf[i] for i in range(count[0])]
+
+    def get_channels_field(
+        self,
+        channel_type: ChannelType,
+        field: ChanInfoField,
+        n_chans: int = 0,
+    ) -> list[int]:
+        """Get a numeric field from all channels matching a type.
+
+        Args:
+            channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
+            field: Which field to extract (e.g., ``ChanInfoField.SMPGROUP``).
+            n_chans: Max channels to query (0 or omit for all).
+
+        Returns:
+            List of field values (same order as :meth:`get_matching_channel_ids`).
+        """
+        _lib = _get_lib()
+        max_chans = _lib.cbsdk_get_max_chans()
+        if n_chans <= 0:
+            n_chans = max_chans
+        buf = ffi.new(f"int64_t[{max_chans}]")
+        count = ffi.new("uint32_t *", max_chans)
+        _check(
+            _lib.cbsdk_session_get_channels_field(
+                self._session, n_chans,
+                int(_coerce_enum(ChannelType, channel_type)),
+                int(_coerce_enum(ChanInfoField, field)),
+                buf, count
+            ),
+            "Failed to get channel field",
+        )
+        return [buf[i] for i in range(count[0])]
+
+    def get_channels_labels(
+        self,
+        channel_type: ChannelType,
+        n_chans: int = 0,
+    ) -> list[str]:
+        """Get labels from all channels matching a type.
+
+        Args:
+            channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
+            n_chans: Max channels to query (0 or omit for all).
+
+        Returns:
+            List of label strings (same order as :meth:`get_matching_channel_ids`).
+        """
+        _lib = _get_lib()
+        max_chans = _lib.cbsdk_get_max_chans()
+        if n_chans <= 0:
+            n_chans = max_chans
+        label_stride = 16  # cbLEN_STR_LABEL = 16 (including null)
+        buf = ffi.new(f"char[{max_chans * label_stride}]")
+        count = ffi.new("uint32_t *", max_chans)
+        _check(
+            _lib.cbsdk_session_get_channels_labels(
+                self._session, n_chans,
+                int(_coerce_enum(ChannelType, channel_type)),
+                buf, label_stride, count
+            ),
+            "Failed to get channel labels",
+        )
+        result = []
+        for i in range(count[0]):
+            s = ffi.string(buf + i * label_stride).decode()
+            result.append(s)
+        return result
+
+    def get_channels_positions(
+        self,
+        channel_type: ChannelType,
+        n_chans: int = 0,
+    ) -> list[tuple[int, int, int, int]]:
+        """Get positions from all channels matching a type.
+
+        Each position is a 4-tuple ``(x, y, z, w)`` of ``int32`` values,
+        corresponding to the ``cbPKT_CHANINFO.position[4]`` field.
+
+        Args:
+            channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
+            n_chans: Max channels to query (0 or omit for all).
+
+        Returns:
+            List of ``(x, y, z, w)`` tuples (same order as
+            :meth:`get_matching_channel_ids`).
+        """
+        _lib = _get_lib()
+        max_chans = _lib.cbsdk_get_max_chans()
+        if n_chans <= 0:
+            n_chans = max_chans
+        buf = ffi.new(f"int32_t[{max_chans * 4}]")
+        count = ffi.new("uint32_t *", max_chans)
+        _check(
+            _lib.cbsdk_session_get_channels_positions(
+                self._session, n_chans,
+                int(_coerce_enum(ChannelType, channel_type)),
+                buf, count
+            ),
+            "Failed to get channel positions",
+        )
+        result = []
+        for i in range(count[0]):
+            base = i * 4
+            result.append((buf[base], buf[base + 1], buf[base + 2], buf[base + 3]))
+        return result
 
     # --- Channel Configuration ---
 

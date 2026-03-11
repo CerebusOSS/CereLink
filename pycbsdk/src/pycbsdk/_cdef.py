@@ -220,6 +220,41 @@ cbsdk_result_t cbsdk_session_set_channel_spkthrlevel(cbsdk_session_t session,
 cbsdk_result_t cbsdk_session_set_channel_autothreshold(cbsdk_session_t session,
     uint32_t chan_id, _Bool enabled);
 
+// Generic single-channel field getter
+int64_t cbsdk_session_get_channel_field(cbsdk_session_t session,
+    uint32_t chan_id, cbsdk_chaninfo_field_t field);
+
+// Bulk channel queries
+typedef enum {
+    CBSDK_CHANINFO_FIELD_SMPGROUP    = 0,
+    CBSDK_CHANINFO_FIELD_SMPFILTER   = 1,
+    CBSDK_CHANINFO_FIELD_SPKFILTER   = 2,
+    CBSDK_CHANINFO_FIELD_AINPOPTS    = 3,
+    CBSDK_CHANINFO_FIELD_SPKOPTS     = 4,
+    CBSDK_CHANINFO_FIELD_SPKTHRLEVEL = 5,
+    CBSDK_CHANINFO_FIELD_LNCRATE     = 6,
+    CBSDK_CHANINFO_FIELD_REFELECCHAN = 7,
+    CBSDK_CHANINFO_FIELD_AMPLREJPOS  = 8,
+    CBSDK_CHANINFO_FIELD_AMPLREJNEG  = 9,
+    CBSDK_CHANINFO_FIELD_CHANCAPS    = 10,
+    CBSDK_CHANINFO_FIELD_BANK        = 11,
+    CBSDK_CHANINFO_FIELD_TERM        = 12,
+} cbsdk_chaninfo_field_t;
+
+cbsdk_result_t cbsdk_session_get_matching_channels(
+    cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
+    uint32_t* out_ids, uint32_t* out_count);
+cbsdk_result_t cbsdk_session_get_channels_field(
+    cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
+    cbsdk_chaninfo_field_t field, int64_t* out_values, uint32_t* out_count);
+cbsdk_result_t cbsdk_session_get_channels_labels(
+    cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
+    char* out_buf, size_t label_stride, uint32_t* out_count);
+
+cbsdk_result_t cbsdk_session_get_channels_positions(
+    cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
+    int32_t* out_positions, uint32_t* out_count);
+
 // Bulk configuration access
 uint32_t cbsdk_session_get_sysfreq(cbsdk_session_t session);
 uint32_t cbsdk_get_num_filters(void);

@@ -16,6 +16,6 @@ Usage::
         print(session.stats)
 """
 
-from .session import Session, DeviceType, ChannelType, SampleRate, Stats, ContinuousReader
+from .session import Session, DeviceType, ChannelType, SampleRate, ChanInfoField, Stats, ContinuousReader
 
-__all__ = ["Session", "DeviceType", "ChannelType", "SampleRate", "Stats", "ContinuousReader"]
+__all__ = ["Session", "DeviceType", "ChannelType", "SampleRate", "ChanInfoField", "Stats", "ContinuousReader"]

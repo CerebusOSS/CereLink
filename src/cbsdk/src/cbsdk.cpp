@@ -117,6 +117,26 @@ static void to_c_stats(const cbsdk::SdkStats& cpp_stats, cbsdk_stats_t* c_stats)
     c_stats->send_errors = cpp_stats.send_errors;
 }
 
+/// Convert C chaninfo field enum to C++ ChanInfoField enum
+static cbsdk::ChanInfoField to_cpp_chaninfo_field(cbsdk_chaninfo_field_t c_field) {
+    switch (c_field) {
+        case CBSDK_CHANINFO_FIELD_SMPGROUP:    return cbsdk::ChanInfoField::SMPGROUP;
+        case CBSDK_CHANINFO_FIELD_SMPFILTER:   return cbsdk::ChanInfoField::SMPFILTER;
+        case CBSDK_CHANINFO_FIELD_SPKFILTER:   return cbsdk::ChanInfoField::SPKFILTER;
+        case CBSDK_CHANINFO_FIELD_AINPOPTS:    return cbsdk::ChanInfoField::AINPOPTS;
+        case CBSDK_CHANINFO_FIELD_SPKOPTS:     return cbsdk::ChanInfoField::SPKOPTS;
+        case CBSDK_CHANINFO_FIELD_SPKTHRLEVEL: return cbsdk::ChanInfoField::SPKTHRLEVEL;
+        case CBSDK_CHANINFO_FIELD_LNCRATE:     return cbsdk::ChanInfoField::LNCRATE;
+        case CBSDK_CHANINFO_FIELD_REFELECCHAN: return cbsdk::ChanInfoField::REFELECCHAN;
+        case CBSDK_CHANINFO_FIELD_AMPLREJPOS:  return cbsdk::ChanInfoField::AMPLREJPOS;
+        case CBSDK_CHANINFO_FIELD_AMPLREJNEG:  return cbsdk::ChanInfoField::AMPLREJNEG;
+        case CBSDK_CHANINFO_FIELD_CHANCAPS:    return cbsdk::ChanInfoField::CHANCAPS;
+        case CBSDK_CHANINFO_FIELD_BANK:        return cbsdk::ChanInfoField::BANK;
+        case CBSDK_CHANINFO_FIELD_TERM:        return cbsdk::ChanInfoField::TERM;
+        default:                               return cbsdk::ChanInfoField::SMPGROUP;
+    }
+}
+
 /// Convert C channel type enum to C++ ChannelType enum
 static cbsdk::ChannelType to_cpp_channel_type(cbproto_channel_type_t c_type) {
     switch (c_type) {
@@ -620,6 +640,18 @@ int16_t cbsdk_session_get_channel_amplrejneg(cbsdk_session_t session, uint32_t c
     } catch (...) { return 0; }
 }
 
+int64_t cbsdk_session_get_channel_field(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    cbsdk_chaninfo_field_t field) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        auto result = session->cpp_session->getChannelField(
+            chan_id, to_cpp_chaninfo_field(field));
+        return result.isOk() ? result.value() : 0;
+    } catch (...) { return 0; }
+}
+
 const char* cbsdk_session_get_group_label(cbsdk_session_t session, uint32_t group_id) {
     if (!session || !session->cpp_session) {
         return nullptr;
@@ -785,6 +817,120 @@ cbsdk_result_t cbsdk_session_set_channel_autothreshold(
             else
                 ci.spkopts &= ~cbAINPSPK_THRAUTO;
         });
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Bulk Channel Queries
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+cbsdk_result_t cbsdk_session_get_matching_channels(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    uint32_t* out_ids,
+    uint32_t* out_count) {
+    if (!session || !session->cpp_session || !out_ids || !out_count) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->getMatchingChannelIds(
+            n_chans, to_cpp_channel_type(chan_type));
+        if (result.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
+        const auto& ids = result.value();
+        uint32_t n = static_cast<uint32_t>(ids.size());
+        if (n > *out_count) n = *out_count;
+        for (uint32_t i = 0; i < n; i++) {
+            out_ids[i] = ids[i];
+        }
+        *out_count = n;
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) {
+        *out_count = 0;
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_get_channels_field(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    cbsdk_chaninfo_field_t field,
+    int64_t* out_values,
+    uint32_t* out_count) {
+    if (!session || !session->cpp_session || !out_values || !out_count) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->getChannelField(
+            n_chans, to_cpp_channel_type(chan_type), to_cpp_chaninfo_field(field));
+        if (result.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
+        const auto& vals = result.value();
+        uint32_t n = static_cast<uint32_t>(vals.size());
+        if (n > *out_count) n = *out_count;
+        for (uint32_t i = 0; i < n; i++) {
+            out_values[i] = vals[i];
+        }
+        *out_count = n;
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) {
+        *out_count = 0;
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_get_channels_labels(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    char* out_buf,
+    size_t label_stride,
+    uint32_t* out_count) {
+    if (!session || !session->cpp_session || !out_buf || !out_count || label_stride == 0) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->getChannelLabels(
+            n_chans, to_cpp_channel_type(chan_type));
+        if (result.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
+        const auto& labels = result.value();
+        uint32_t n = static_cast<uint32_t>(labels.size());
+        if (n > *out_count) n = *out_count;
+        for (uint32_t i = 0; i < n; i++) {
+            char* dst = out_buf + i * label_stride;
+            std::strncpy(dst, labels[i].c_str(), label_stride - 1);
+            dst[label_stride - 1] = '\0';
+        }
+        *out_count = n;
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) {
+        *out_count = 0;
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_get_channels_positions(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    int32_t* out_positions,
+    uint32_t* out_count) {
+    if (!session || !session->cpp_session || !out_positions || !out_count) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->getChannelPositions(
+            n_chans, to_cpp_channel_type(chan_type));
+        if (result.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
+        const auto& flat = result.value();
+        uint32_t n_channels = static_cast<uint32_t>(flat.size() / 4);
+        if (n_channels > *out_count) n_channels = *out_count;
+        std::memcpy(out_positions, flat.data(), n_channels * 4 * sizeof(int32_t));
+        *out_count = n_channels;
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) {
+        *out_count = 0;
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

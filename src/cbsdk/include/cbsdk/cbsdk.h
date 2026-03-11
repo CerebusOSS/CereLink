@@ -85,6 +85,23 @@ typedef enum {
     CBSDK_RESULT_INTERNAL_ERROR      = -6,   ///< Internal error
 } cbsdk_result_t;
 
+/// Channel info field selector for bulk extraction
+typedef enum {
+    CBSDK_CHANINFO_FIELD_SMPGROUP    = 0,
+    CBSDK_CHANINFO_FIELD_SMPFILTER   = 1,
+    CBSDK_CHANINFO_FIELD_SPKFILTER   = 2,
+    CBSDK_CHANINFO_FIELD_AINPOPTS    = 3,
+    CBSDK_CHANINFO_FIELD_SPKOPTS     = 4,
+    CBSDK_CHANINFO_FIELD_SPKTHRLEVEL = 5,
+    CBSDK_CHANINFO_FIELD_LNCRATE     = 6,
+    CBSDK_CHANINFO_FIELD_REFELECCHAN = 7,
+    CBSDK_CHANINFO_FIELD_AMPLREJPOS  = 8,
+    CBSDK_CHANINFO_FIELD_AMPLREJNEG  = 9,
+    CBSDK_CHANINFO_FIELD_CHANCAPS    = 10,
+    CBSDK_CHANINFO_FIELD_BANK        = 11,
+    CBSDK_CHANINFO_FIELD_TERM        = 12,
+} cbsdk_chaninfo_field_t;
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Configuration Structures
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -414,6 +431,16 @@ CBSDK_API int16_t cbsdk_session_get_channel_amplrejpos(cbsdk_session_t session, 
 /// @return Negative amplitude rejection value, or 0 on error
 CBSDK_API int16_t cbsdk_session_get_channel_amplrejneg(cbsdk_session_t session, uint32_t chan_id);
 
+/// Get any numeric field from a single channel by field selector
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param field Field to extract
+/// @return Field value widened to int64_t, or 0 on error
+CBSDK_API int64_t cbsdk_session_get_channel_field(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    cbsdk_chaninfo_field_t field);
+
 /// Get a sample group's label
 /// @param session Session handle (must not be NULL)
 /// @param group_id Group ID (1-6)
@@ -549,6 +576,72 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_channel_autothreshold(
     cbsdk_session_t session,
     uint32_t chan_id,
     bool enabled);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Bulk Channel Queries
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Get the 1-based IDs of channels matching a type
+/// @param session Session handle (must not be NULL)
+/// @param n_chans Max channels to return (use cbMAXCHANS for all)
+/// @param chan_type Channel type filter
+/// @param[out] out_ids Caller-allocated array to receive channel IDs
+/// @param[in,out] out_count On input: size of out_ids array. On output: channels written.
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_get_matching_channels(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    uint32_t* out_ids,
+    uint32_t* out_count);
+
+/// Get a numeric field from all channels matching a type
+/// @param session Session handle (must not be NULL)
+/// @param n_chans Max channels to query (use cbMAXCHANS for all)
+/// @param chan_type Channel type filter
+/// @param field Which field to extract
+/// @param[out] out_values Caller-allocated array to receive field values
+/// @param[in,out] out_count On input: size of out_values array. On output: values written.
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_get_channels_field(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    cbsdk_chaninfo_field_t field,
+    int64_t* out_values,
+    uint32_t* out_count);
+
+/// Get labels from all channels matching a type
+/// @param session Session handle (must not be NULL)
+/// @param n_chans Max channels to query (use cbMAXCHANS for all)
+/// @param chan_type Channel type filter
+/// @param[out] out_labels Caller-allocated array of char pointers (size out_count)
+/// @param[out] out_buf Caller-allocated buffer for label strings (each up to 16 bytes)
+/// @param out_buf_size Size of out_buf in bytes
+/// @param[in,out] out_count On input: size of out_labels array. On output: labels written.
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_get_channels_labels(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    char* out_buf,
+    size_t label_stride,
+    uint32_t* out_count);
+
+/// Get positions from all channels matching a type
+/// @param session Session handle (must not be NULL)
+/// @param n_chans Max channels to query (use cbMAXCHANS for all)
+/// @param chan_type Channel type filter
+/// @param[out] out_positions Caller-allocated int32_t array (4 values per channel: x,y,z,w)
+/// @param[in,out] out_count On input: max channels (out_positions must hold 4 * out_count int32_ts).
+///                          On output: number of channels written.
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_get_channels_positions(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    int32_t* out_positions,
+    uint32_t* out_count);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Bulk Configuration Access
