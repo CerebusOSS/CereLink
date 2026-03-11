@@ -40,6 +40,7 @@
 #include "clock_sync.h"
 #include <cbproto/cbproto.h>
 #include <cbproto/config.h>
+#include <cstdio>
 #include <cstring>
 #include <mutex>
 #include <condition_variable>
@@ -263,6 +264,13 @@ struct DeviceSession::Impl {
     std::mutex callback_mutex;
     std::atomic<bool> has_callbacks{false};  // Fast-path skip when no callbacks registered
     CallbackHandle next_callback_handle = 1;  // 0 is reserved for "invalid"
+
+    // Protocol monitor — dropped packet detection
+    uint32_t pkts_since_monitor = 0;       // Packets counted since last SYSPROTOCOLMONITOR
+    bool first_monitor_seen = false;        // Skip comparison until first baseline is established
+    uint32_t dropped_accum = 0;             // Drops accumulated since last log
+    uint32_t sent_accum = 0;                // Sent accumulated since last log
+    std::chrono::steady_clock::time_point last_drop_log_time{};
 
     // Receive thread state
     std::thread receive_thread;
@@ -1250,6 +1258,9 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
             break;  // Incomplete packet
         }
 
+        // Count every packet for protocol monitor drop detection
+        m_impl->pkts_since_monitor++;
+
         if ((header->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
             // Configuration packet - process based on type
             if (header->type == cbPKTTYPE_SYSHEARTBEAT) {
@@ -1308,6 +1319,24 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
             else if (header->type == cbPKTTYPE_SYSPROTOCOLMONITOR) {
                 // Not used for clock sync — sent from firmware's 3rd thread after 2 queues,
                 // giving it an undefined timestamp delay.
+                const auto* mon = reinterpret_cast<const cbPKT_SYSPROTOCOLMONITOR*>(buff_bytes + offset);
+                if (m_impl->first_monitor_seen && mon->sentpkts > 0) {
+                    const uint32_t received = m_impl->pkts_since_monitor;
+                    if (received < mon->sentpkts) {
+                        m_impl->dropped_accum += mon->sentpkts - received;
+                        m_impl->sent_accum += mon->sentpkts;
+                        auto now = std::chrono::steady_clock::now();
+                        if (now - m_impl->last_drop_log_time >= std::chrono::seconds(1)) {
+                            fprintf(stderr, "[cbdev] dropped %u of %u packets\n",
+                                    m_impl->dropped_accum, m_impl->sent_accum);
+                            m_impl->dropped_accum = 0;
+                            m_impl->sent_accum = 0;
+                            m_impl->last_drop_log_time = now;
+                        }
+                    }
+                }
+                m_impl->first_monitor_seen = true;
+                m_impl->pkts_since_monitor = 0;
             }
             else if (header->type == cbPKTTYPE_ADAPTFILTREP) {
                 m_impl->device_config.adaptinfo = *reinterpret_cast<const cbPKT_ADAPTFILTINFO*>(buff_bytes + offset);
