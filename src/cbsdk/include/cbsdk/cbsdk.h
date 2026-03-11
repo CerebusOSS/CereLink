@@ -266,13 +266,13 @@ CBSDK_API cbsdk_callback_handle_t cbsdk_session_register_event_callback(
 
 /// Register callback for continuous sample group packets
 /// @param session Session handle (must not be NULL)
-/// @param group_id Group ID (1-6, where 6 is raw)
+/// @param rate Sample rate to match (CBPROTO_GROUP_RATE_500Hz through CBPROTO_GROUP_RATE_RAW)
 /// @param callback Callback function (must not be NULL)
 /// @param user_data User data pointer passed to callback
 /// @return Handle for unregistration, or 0 on failure
 CBSDK_API cbsdk_callback_handle_t cbsdk_session_register_group_callback(
     cbsdk_session_t session,
-    uint8_t group_id,
+    cbproto_group_rate_t rate,
     cbsdk_group_callback_fn callback,
     void* user_data);
 
@@ -436,18 +436,18 @@ CBSDK_API cbsdk_result_t cbsdk_session_get_group_list(
 // Channel Configuration
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Set sampling group for channels of a specific type
+/// Set sampling rate for channels of a specific type
 /// @param session Session handle (must not be NULL)
 /// @param n_chans Number of channels to configure (use cbMAXCHANS for all)
 /// @param chan_type Channel type filter
-/// @param group_id Sampling group (0-6, where 0 disables)
+/// @param rate Sample rate (CBPROTO_GROUP_RATE_NONE to disable, _500Hz through _RAW)
 /// @param disable_others If true, disable sampling on unselected channels of this type
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_channel_sample_group(
     cbsdk_session_t session,
     size_t n_chans,
     cbproto_channel_type_t chan_type,
-    uint32_t group_id,
+    cbproto_group_rate_t rate,
     bool disable_others);
 
 /// Set full channel configuration by sending a CHANINFO packet

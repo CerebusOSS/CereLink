@@ -3,10 +3,10 @@ pycbsdk - Python bindings for CereLink SDK (Blackrock Neurotech Cerebus devices)
 
 Usage::
 
-    from pycbsdk import Session
+    from pycbsdk import Session, DeviceType, ChannelType
 
-    with Session("HUB1") as session:
-        @session.on_event("FRONTEND")
+    with Session(DeviceType.HUB1) as session:
+        @session.on_event(ChannelType.FRONTEND)
         def on_spike(header, data):
             print(f"Spike on ch {header.chid}, t={header.time}")
 
@@ -16,6 +16,6 @@ Usage::
         print(session.stats)
 """
 
-from .session import Session, Stats, ContinuousReader
+from .session import Session, DeviceType, ChannelType, SampleRate, Stats, ContinuousReader
 
-__all__ = ["Session", "Stats", "ContinuousReader"]
+__all__ = ["Session", "DeviceType", "ChannelType", "SampleRate", "Stats", "ContinuousReader"]

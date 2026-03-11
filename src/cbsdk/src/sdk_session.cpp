@@ -994,7 +994,8 @@ CallbackHandle SdkSession::registerEventCallback(const ChannelType channel_type,
     return handle;
 }
 
-CallbackHandle SdkSession::registerGroupCallback(const uint8_t group_id, GroupCallback callback) const {
+CallbackHandle SdkSession::registerGroupCallback(const SampleRate rate, GroupCallback callback) const {
+    const uint8_t group_id = static_cast<uint8_t>(rate);
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
     m_impl->group_callbacks.push_back({handle, group_id, std::move(callback)});
@@ -1122,7 +1123,8 @@ static cbdev::ChannelType toDevChannelType(const ChannelType chanType) {
 
 
 Result<void> SdkSession::setChannelSampleGroup(const size_t nChans, const ChannelType chanType,
-                                                uint32_t group_id, const bool disableOthers) {
+                                                const SampleRate rate, const bool disableOthers) {
+    const uint32_t group_id = static_cast<uint32_t>(rate);
     // STANDALONE mode: delegate to device session (has full config + direct send)
     if (m_impl->device_session) {
         const auto r = m_impl->device_session->setChannelsGroupByType(

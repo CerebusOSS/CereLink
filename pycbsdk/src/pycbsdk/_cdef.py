@@ -41,6 +41,16 @@ typedef enum {
     CBPROTO_CHANNEL_TYPE_DIGITAL_OUT = 6,
 } cbproto_channel_type_t;
 
+typedef enum {
+    CBPROTO_GROUP_RATE_NONE     = 0,
+    CBPROTO_GROUP_RATE_500Hz    = 1,
+    CBPROTO_GROUP_RATE_1000Hz   = 2,
+    CBPROTO_GROUP_RATE_2000Hz   = 3,
+    CBPROTO_GROUP_RATE_10000Hz  = 4,
+    CBPROTO_GROUP_RATE_30000Hz  = 5,
+    CBPROTO_GROUP_RATE_RAW      = 6
+} cbproto_group_rate_t;
+
 ///////////////////////////////////////////////////////////////////////////
 // Packet Structures (protocol-defined, stable layout)
 ///////////////////////////////////////////////////////////////////////////
@@ -148,7 +158,7 @@ cbsdk_callback_handle_t cbsdk_session_register_event_callback(
     cbsdk_session_t session, cbproto_channel_type_t channel_type,
     cbsdk_event_callback_fn callback, void* user_data);
 cbsdk_callback_handle_t cbsdk_session_register_group_callback(
-    cbsdk_session_t session, uint8_t group_id,
+    cbsdk_session_t session, cbproto_group_rate_t rate,
     cbsdk_group_callback_fn callback, void* user_data);
 cbsdk_callback_handle_t cbsdk_session_register_config_callback(
     cbsdk_session_t session, uint16_t packet_type,
@@ -175,7 +185,7 @@ cbsdk_result_t cbsdk_session_get_group_list(cbsdk_session_t session,
 // Channel configuration
 cbsdk_result_t cbsdk_session_set_channel_sample_group(
     cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
-    uint32_t group_id, _Bool disable_others);
+    cbproto_group_rate_t rate, _Bool disable_others);
 
 // Per-channel getters
 cbproto_channel_type_t cbsdk_session_get_channel_type(cbsdk_session_t session, uint32_t chan_id);

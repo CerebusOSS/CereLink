@@ -397,14 +397,15 @@ cbsdk_callback_handle_t cbsdk_session_register_event_callback(
 
 cbsdk_callback_handle_t cbsdk_session_register_group_callback(
     cbsdk_session_t session,
-    uint8_t group_id,
+    cbproto_group_rate_t rate,
     cbsdk_group_callback_fn callback,
     void* user_data) {
     if (!session || !session->cpp_session || !callback) {
         return 0;
     }
     try {
-        return session->cpp_session->registerGroupCallback(group_id,
+        return session->cpp_session->registerGroupCallback(
+            static_cast<cbsdk::SampleRate>(rate),
             [callback, user_data](const cbPKT_GROUP& pkt) {
                 callback(&pkt, user_data);
             }
@@ -666,14 +667,14 @@ cbsdk_result_t cbsdk_session_set_channel_sample_group(
     cbsdk_session_t session,
     size_t n_chans,
     cbproto_channel_type_t chan_type,
-    uint32_t group_id,
+    cbproto_group_rate_t rate,
     bool disable_others) {
     if (!session || !session->cpp_session) {
         return CBSDK_RESULT_INVALID_PARAMETER;
     }
     try {
         auto result = session->cpp_session->setChannelSampleGroup(
-            n_chans, to_cpp_channel_type(chan_type), group_id, disable_others);
+            n_chans, to_cpp_channel_type(chan_type), static_cast<cbsdk::SampleRate>(rate), disable_others);
         return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
     } catch (...) {
         return CBSDK_RESULT_INTERNAL_ERROR;

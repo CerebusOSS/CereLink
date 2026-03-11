@@ -197,6 +197,25 @@ enum class ChannelType {
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Sample Rate (maps to Cerebus sampling groups)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Sampling rate enumeration — wraps Cerebus group IDs with human-readable names.
+///
+/// Each value corresponds to a hardware sampling group:
+///   NONE=0 (disabled), SR_500=1, SR_1kHz=2, SR_2kHz=3,
+///   SR_10kHz=4, SR_30kHz=5, SR_RAW=6.
+enum class SampleRate : uint32_t {
+    NONE    = 0,  ///< Sampling disabled
+    SR_500  = 1,  ///< 500 Hz
+    SR_1kHz = 2,  ///< 1 kHz
+    SR_2kHz = 3,  ///< 2 kHz
+    SR_10kHz = 4, ///< 10 kHz
+    SR_30kHz = 5, ///< 30 kHz
+    SR_RAW  = 6   ///< 30 kHz raw (unfiltered)
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Callback Types
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -307,10 +326,10 @@ public:
     CallbackHandle registerEventCallback(ChannelType channel_type, EventCallback callback) const;
 
     /// Register callback for continuous sample group packets
-    /// @param group_id Group ID (1-6, where 6 is raw)
+    /// @param rate Sample rate to match (SR_500 through SR_RAW)
     /// @param callback Function to call for matching group packets
     /// @return Handle for unregistration
-    CallbackHandle registerGroupCallback(uint8_t group_id, GroupCallback callback) const;
+    CallbackHandle registerGroupCallback(SampleRate rate, GroupCallback callback) const;
 
     /// Register callback for config/system packets
     /// @param packet_type Packet type to match (e.g. cbPKTTYPE_COMMENTREP, cbPKTTYPE_SYSREPRUNLEV)
@@ -378,14 +397,14 @@ public:
     /// Channel Configuration
     ///--------------------------------------------------------------------------------------------
 
-    /// Set sampling group for channels of a specific type
+    /// Set sampling rate for channels of a specific type
     /// @param nChans Number of channels to configure (cbMAXCHANS for all)
     /// @param chanType Channel type filter
-    /// @param group_id Sampling group (0-6)
+    /// @param rate Desired sample rate (NONE to disable, SR_500 through SR_RAW)
     /// @param disableOthers Disable sampling on channels not in the first nChans of type
     /// @return Result indicating success or error
     Result<void> setChannelSampleGroup(size_t nChans, ChannelType chanType,
-                                       uint32_t group_id, bool disableOthers = false);
+                                       SampleRate rate, bool disableOthers = false);
 
     /// Set spike sorting options for channels of a specific type
     /// @param nChans Number of channels to configure

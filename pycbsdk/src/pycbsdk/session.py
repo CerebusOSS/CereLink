@@ -4,6 +4,7 @@ Pythonic session wrapper for the CereLink SDK.
 
 from __future__ import annotations
 
+import enum
 import time as _time
 import threading
 from dataclasses import dataclass, field
@@ -21,26 +22,106 @@ def _get_lib():
     return lib
 
 
-# Device type mapping
-DEVICE_TYPES = {
-    "LEGACY_NSP": "CBPROTO_DEVICE_TYPE_LEGACY_NSP",
-    "NSP": "CBPROTO_DEVICE_TYPE_NSP",
-    "HUB1": "CBPROTO_DEVICE_TYPE_HUB1",
-    "HUB2": "CBPROTO_DEVICE_TYPE_HUB2",
-    "HUB3": "CBPROTO_DEVICE_TYPE_HUB3",
-    "NPLAY": "CBPROTO_DEVICE_TYPE_NPLAY",
+class DeviceType(enum.IntEnum):
+    """Device type selection.
+
+    Values match ``cbproto_device_type_t``.
+    """
+    LEGACY_NSP = 0
+    NSP        = 1
+    HUB1       = 2
+    HUB2       = 3
+    HUB3       = 4
+    NPLAY      = 5
+    CUSTOM     = 6
+
+class ChannelType(enum.IntEnum):
+    """Channel type classification.
+
+    Values match ``cbproto_channel_type_t``.
+    """
+    FRONTEND    = 0
+    ANALOG_IN   = 1
+    ANALOG_OUT  = 2
+    AUDIO       = 3
+    DIGITAL_IN  = 4
+    SERIAL      = 5
+    DIGITAL_OUT = 6
+
+class SampleRate(enum.IntEnum):
+    """Continuous sampling rate selection.
+
+    Values match ``cbproto_group_rate_t`` so they can be passed directly to cffi.
+    """
+    NONE  = 0
+    SR_500  = 1   # 500 Hz
+    SR_1kHz = 2   # 1 000 Hz
+    SR_2kHz = 3   # 2 000 Hz
+    SR_10kHz = 4  # 10 000 Hz
+    SR_30kHz = 5  # 30 000 Hz
+    SR_RAW  = 6   # Raw (30 000 Hz)
+
+    @property
+    def hz(self) -> int:
+        """Sample rate in Hz."""
+        return _RATE_HZ[self]
+
+
+_RATE_HZ = {
+    SampleRate.NONE:     0,
+    SampleRate.SR_500:   500,
+    SampleRate.SR_1kHz:  1000,
+    SampleRate.SR_2kHz:  2000,
+    SampleRate.SR_10kHz: 10000,
+    SampleRate.SR_30kHz: 30000,
+    SampleRate.SR_RAW:   30000,
 }
 
-# Channel type mapping
-CHANNEL_TYPES = {
-    "FRONTEND": "CBPROTO_CHANNEL_TYPE_FRONTEND",
-    "ANALOG_IN": "CBPROTO_CHANNEL_TYPE_ANALOG_IN",
-    "ANALOG_OUT": "CBPROTO_CHANNEL_TYPE_ANALOG_OUT",
-    "AUDIO": "CBPROTO_CHANNEL_TYPE_AUDIO",
-    "DIGITAL_IN": "CBPROTO_CHANNEL_TYPE_DIGITAL_IN",
-    "SERIAL": "CBPROTO_CHANNEL_TYPE_SERIAL",
-    "DIGITAL_OUT": "CBPROTO_CHANNEL_TYPE_DIGITAL_OUT",
+# Aliases for lenient string → SampleRate coercion (user might type "30kHz"
+# instead of "SR_30kHz").
+_RATE_ALIASES = {
+    "500HZ": SampleRate.SR_500,
+    "1KHZ":  SampleRate.SR_1kHz,
+    "2KHZ":  SampleRate.SR_2kHz,
+    "10KHZ": SampleRate.SR_10kHz,
+    "30KHZ": SampleRate.SR_30kHz,
+    "RAW":   SampleRate.SR_RAW,
 }
+
+
+def _coerce_enum(enum_cls, value, aliases=None):
+    """Coerce *value* to *enum_cls*, accepting enum members, ints, or strings.
+
+    String lookup is case-insensitive: tries the canonical member name first,
+    then *aliases* (if provided).
+    """
+    if isinstance(value, enum_cls):
+        return value
+    if isinstance(value, int):
+        return enum_cls(value)
+    if isinstance(value, str):
+        key = value.upper()
+        # Exact member name match (e.g., "FRONTEND", "SR_30kHz")
+        try:
+            return enum_cls[key]
+        except KeyError:
+            pass
+        # Alias match (e.g., "30kHz" → SR_30kHz)
+        if aliases and key in aliases:
+            return aliases[key]
+        members = ", ".join(enum_cls.__members__)
+        extra = ""
+        if aliases:
+            extra = " (or: " + ", ".join(
+                k for k in aliases if k not in enum_cls.__members__
+            ) + ")"
+        raise ValueError(
+            f"Unknown {enum_cls.__name__}: {value!r}. "
+            f"Must be one of: {members}{extra}"
+        )
+    raise TypeError(
+        f"Expected {enum_cls.__name__}, int, or str, got {type(value).__name__}"
+    )
 
 
 def _check(result: int, msg: str = ""):
@@ -75,15 +156,14 @@ class Session:
     existing session's shared memory) and delivers packets via callbacks.
 
     Args:
-        device_type: Device type string. One of: "LEGACY_NSP", "NSP",
-            "HUB1", "HUB2", "HUB3", "NPLAY".
+        device_type: Device type (e.g., ``DeviceType.HUB1``).
         callback_queue_depth: Number of packets to buffer (default: 16384).
 
     Example::
 
-        session = Session("HUB1")
+        session = Session(DeviceType.HUB1)
 
-        @session.on_event("FRONTEND")
+        @session.on_event(ChannelType.FRONTEND)
         def on_spike(header, data):
             print(f"Spike on ch {header.chid}")
 
@@ -93,26 +173,20 @@ class Session:
 
     Can also be used as a context manager::
 
-        with Session("HUB1") as session:
+        with Session(DeviceType.HUB1) as session:
             # session is connected and running
             ...
     """
 
     def __init__(
         self,
-        device_type: str = "LEGACY_NSP",
+        device_type: DeviceType = DeviceType.LEGACY_NSP,
         callback_queue_depth: int = 16384,
     ):
         _lib = _get_lib()
 
         config = _lib.cbsdk_config_default()
-        device_type_upper = device_type.upper()
-        if device_type_upper not in DEVICE_TYPES:
-            raise ValueError(
-                f"Unknown device_type: {device_type!r}. "
-                f"Must be one of: {', '.join(DEVICE_TYPES)}"
-            )
-        config.device_type = getattr(_lib, DEVICE_TYPES[device_type_upper])
+        config.device_type = int(_coerce_enum(DeviceType, device_type))
         config.callback_queue_depth = callback_queue_depth
 
         session_p = ffi.new("cbsdk_session_t *")
@@ -154,7 +228,7 @@ class Session:
     # --- Callbacks ---
 
     def on_event(
-        self, channel_type: str = "FRONTEND"
+        self, channel_type: ChannelType | None = ChannelType.FRONTEND
     ) -> Callable:
         """Decorator to register a callback for event packets (spikes, etc.).
 
@@ -163,15 +237,16 @@ class Session:
         is a cffi buffer of the raw payload bytes.
 
         Args:
-            channel_type: Channel type filter. One of the CHANNEL_TYPES keys,
-                or "ANY" for all event channels.
+            channel_type: Channel type filter, or ``None`` for all event
+                channels.
         """
+        ct = None if channel_type is None else _coerce_enum(ChannelType, channel_type)
         def decorator(fn):
-            self._register_event_callback(channel_type, fn)
+            self._register_event_callback(ct, fn)
             return fn
         return decorator
 
-    def on_group(self, group_id: int = 5, *, as_array: bool = False) -> Callable:
+    def on_group(self, rate: SampleRate = SampleRate.SR_30kHz, *, as_array: bool = False) -> Callable:
         """Decorator to register a callback for continuous sample group packets.
 
         The callback receives ``(header, data)`` where ``data`` is either a
@@ -179,15 +254,16 @@ class Session:
         ``int16`` array of shape ``(n_channels,)``.
 
         Args:
-            group_id: Group ID (1-6, where 5=30kHz, 6=raw).
+            rate: Sample rate to subscribe to.
             as_array: If True, deliver data as a numpy int16 array (zero-copy).
                 Requires numpy.
         """
+        rate = _coerce_enum(SampleRate, rate, _RATE_ALIASES)
         def decorator(fn):
             if as_array:
-                self._register_group_callback_numpy(group_id, fn)
+                self._register_group_callback_numpy(int(rate), fn)
             else:
-                self._register_group_callback(group_id, fn)
+                self._register_group_callback(int(rate), fn)
             return fn
         return decorator
 
@@ -227,18 +303,12 @@ class Session:
         _lib.cbsdk_session_set_error_callback(self._session, c_error_cb, ffi.NULL)
         self._callback_refs.append(c_error_cb)
 
-    def _register_event_callback(self, channel_type: str, fn):
+    def _register_event_callback(self, channel_type: ChannelType | None, fn):
         _lib = _get_lib()
-        ct_upper = channel_type.upper()
-        if ct_upper == "ANY":
+        if channel_type is None:
             c_channel_type = ffi.cast("cbproto_channel_type_t", -1)
-        elif ct_upper in CHANNEL_TYPES:
-            c_channel_type = getattr(_lib, CHANNEL_TYPES[ct_upper])
         else:
-            raise ValueError(
-                f"Unknown channel_type: {channel_type!r}. "
-                f"Must be one of: ANY, {', '.join(CHANNEL_TYPES)}"
-            )
+            c_channel_type = int(channel_type)
 
         @ffi.callback("void(const cbPKT_GENERIC*, void*)")
         def c_event_cb(pkt, user_data):
@@ -255,7 +325,7 @@ class Session:
         self._handles.append(handle)
         self._callback_refs.append(c_event_cb)
 
-    def _register_group_callback(self, group_id: int, fn):
+    def _register_group_callback(self, rate: int, fn):
         _lib = _get_lib()
 
         @ffi.callback("void(const cbPKT_GROUP*, void*)")
@@ -266,18 +336,18 @@ class Session:
                 pass
 
         handle = _lib.cbsdk_session_register_group_callback(
-            self._session, group_id, c_group_cb, ffi.NULL
+            self._session, int(rate), c_group_cb, ffi.NULL
         )
         if handle == 0:
             raise RuntimeError("Failed to register group callback")
         self._handles.append(handle)
         self._callback_refs.append(c_group_cb)
 
-    def _register_group_callback_numpy(self, group_id: int, fn):
+    def _register_group_callback_numpy(self, rate: int, fn):
         from ._numpy import group_data_as_array
 
         _lib = _get_lib()
-        channels = self.get_group_channels(group_id)
+        channels = self.get_group_channels(rate)
         n_ch = len(channels)
 
         @ffi.callback("void(const cbPKT_GROUP*, void*)")
@@ -290,7 +360,7 @@ class Session:
                 pass
 
         handle = _lib.cbsdk_session_register_group_callback(
-            self._session, group_id, c_group_cb, ffi.NULL
+            self._session, int(rate), c_group_cb, ffi.NULL
         )
         if handle == 0:
             raise RuntimeError("Failed to register group callback")
@@ -400,20 +470,19 @@ class Session:
         """Get a channel's capability flags."""
         return _get_lib().cbsdk_session_get_channel_chancaps(self._session, chan_id)
 
-    def get_channel_type(self, chan_id: int) -> Optional[str]:
+    def get_channel_type(self, chan_id: int) -> Optional[ChannelType]:
         """Get a channel's type classification.
 
-        Returns one of the CHANNEL_TYPES keys ("FRONTEND", "ANALOG_IN", etc.)
-        or None if the channel is invalid or not connected.
+        Returns a :class:`ChannelType` member, or ``None`` if the channel is
+        invalid or not connected.
         """
         _lib = _get_lib()
         result = _lib.cbsdk_session_get_channel_type(self._session, chan_id)
         ct = int(ffi.cast("int", result))
-        _REVERSE_CHANNEL_TYPES = {
-            0: "FRONTEND", 1: "ANALOG_IN", 2: "ANALOG_OUT",
-            3: "AUDIO", 4: "DIGITAL_IN", 5: "SERIAL", 6: "DIGITAL_OUT",
-        }
-        return _REVERSE_CHANNEL_TYPES.get(ct)
+        try:
+            return ChannelType(ct)
+        except ValueError:
+            return None
 
     def get_channel_smpfilter(self, chan_id: int) -> int:
         """Get a channel's continuous-time pathway filter ID."""
@@ -475,26 +544,26 @@ class Session:
     def set_channel_sample_group(
         self,
         n_chans: int,
-        channel_type: str,
-        group_id: int,
+        channel_type: ChannelType,
+        rate: SampleRate,
         disable_others: bool = False,
     ):
-        """Set sampling group for channels of a specific type.
+        """Set sampling rate for channels of a specific type.
 
         Args:
             n_chans: Number of channels to configure.
-            channel_type: Channel type filter (e.g., "FRONTEND").
-            group_id: Sampling group (0-6, 0 disables).
+            channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
+            rate: Sample rate (e.g., ``SampleRate.SR_30kHz``, ``SampleRate.NONE``
+                to disable).
             disable_others: Disable sampling on unselected channels.
         """
         _lib = _get_lib()
-        ct_upper = channel_type.upper()
-        if ct_upper not in CHANNEL_TYPES:
-            raise ValueError(f"Unknown channel_type: {channel_type!r}")
-        c_type = getattr(_lib, CHANNEL_TYPES[ct_upper])
         _check(
             _lib.cbsdk_session_set_channel_sample_group(
-                self._session, n_chans, c_type, group_id, disable_others
+                self._session, n_chans,
+                int(_coerce_enum(ChannelType, channel_type)),
+                int(_coerce_enum(SampleRate, rate, _RATE_ALIASES)),
+                disable_others
             ),
             "Failed to set channel sample group",
         )
@@ -582,7 +651,7 @@ class Session:
 
         Keyword Args:
             label (str): Channel label (max 15 chars).
-            smpgroup (int): Sample group (0-6, 0 disables).
+            smpgroup (SampleRate): Sample rate (e.g., ``SampleRate.SR_30kHz``).
             smpfilter (int): Continuous-time filter ID.
             spkfilter (int): Spike pathway filter ID.
             ainpopts (int): Analog input option flags.
@@ -594,7 +663,7 @@ class Session:
         Example::
 
             session.configure_channel(1,
-                smpgroup=5,
+                smpgroup=SampleRate.SR_30kHz,
                 smpfilter=6,
                 autothreshold=True,
             )
@@ -613,12 +682,13 @@ class Session:
             if key == "smpgroup":
                 # Special case: smpgroup goes through the batch setter for one channel
                 chan_type = self.get_channel_type(chan_id)
-                if chan_type and chan_type in CHANNEL_TYPES:
+                if chan_type is not None:
                     _lib = _get_lib()
-                    c_type = getattr(_lib, CHANNEL_TYPES[chan_type])
                     _check(
                         _lib.cbsdk_session_set_channel_sample_group(
-                            self._session, 1, c_type, value, False
+                            self._session, 1, int(chan_type),
+                            int(_coerce_enum(SampleRate, value, _RATE_ALIASES)),
+                            False
                         ),
                         "Failed to set smpgroup",
                     )
@@ -805,24 +875,22 @@ class Session:
     def set_channel_spike_sorting(
         self,
         n_chans: int,
-        channel_type: str,
+        channel_type: ChannelType,
         sort_options: int,
     ):
         """Set spike sorting options for channels of a specific type.
 
         Args:
             n_chans: Number of channels to configure.
-            channel_type: Channel type filter (e.g., "FRONTEND").
+            channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
             sort_options: Spike sorting option flags (cbAINPSPK_*).
         """
         _lib = _get_lib()
-        ct_upper = channel_type.upper()
-        if ct_upper not in CHANNEL_TYPES:
-            raise ValueError(f"Unknown channel_type: {channel_type!r}")
-        c_type = getattr(_lib, CHANNEL_TYPES[ct_upper])
         _check(
             _lib.cbsdk_session_set_channel_spike_sorting(
-                self._session, n_chans, c_type, sort_options
+                self._session, n_chans,
+                int(_coerce_enum(ChannelType, channel_type)),
+                sort_options
             ),
             "Failed to set spike sorting",
         )
@@ -945,7 +1013,7 @@ class Session:
     # --- numpy Data Collection ---
 
     def continuous_reader(
-        self, group_id: int = 5, buffer_seconds: float = 10.0
+        self, rate: SampleRate = SampleRate.SR_30kHz, buffer_seconds: float = 10.0
     ) -> ContinuousReader:
         """Create a ring buffer that accumulates continuous group data.
 
@@ -953,29 +1021,27 @@ class Session:
         to retrieve the most recent samples as a numpy array.
 
         Args:
-            group_id: Group ID (1-6).
+            rate: Sample rate to subscribe to.
             buffer_seconds: Ring buffer duration in seconds.
 
         Returns:
             A :class:`ContinuousReader` instance.
         """
-        from ._numpy import GROUP_RATES
-
-        n_channels = len(self.get_group_channels(group_id))
+        rate = _coerce_enum(SampleRate, rate, _RATE_ALIASES)
+        n_channels = len(self.get_group_channels(int(rate)))
         if n_channels == 0:
-            raise ValueError(f"Group {group_id} has no channels configured")
-        rate = GROUP_RATES.get(group_id, 30000)
-        buffer_samples = int(buffer_seconds * rate)
-        return ContinuousReader(self, group_id, n_channels, buffer_samples)
+            raise ValueError(f"No channels configured for {rate.name}")
+        buffer_samples = int(buffer_seconds * rate.hz)
+        return ContinuousReader(self, rate, n_channels, buffer_samples)
 
-    def read_continuous(self, group_id: int = 5, duration: float = 1.0):
+    def read_continuous(self, rate: SampleRate = SampleRate.SR_30kHz, duration: float = 1.0):
         """Collect continuous data for a specified duration.
 
         Blocks for *duration* seconds while accumulating group samples,
         then returns the collected data.
 
         Args:
-            group_id: Group ID (1-6).
+            rate: Sample rate to subscribe to.
             duration: Collection duration in seconds.
 
         Returns:
@@ -983,14 +1049,13 @@ class Session:
         """
         import time
         import numpy as np
-        from ._numpy import GROUP_RATES
 
-        n_channels = len(self.get_group_channels(group_id))
+        rate = _coerce_enum(SampleRate, rate, _RATE_ALIASES)
+        n_channels = len(self.get_group_channels(int(rate)))
         if n_channels == 0:
-            raise ValueError(f"Group {group_id} has no channels configured")
+            raise ValueError(f"No channels configured for {rate.name}")
 
-        rate = GROUP_RATES.get(group_id, 30000)
-        max_samples = int(duration * rate * 1.2)  # 20% headroom
+        max_samples = int(duration * rate.hz * 1.2)  # 20% headroom
         buf = np.zeros((n_channels, max_samples), dtype=np.int16)
         count = [0]
 
@@ -1008,7 +1073,7 @@ class Session:
                 pass
 
         handle = _lib.cbsdk_session_register_group_callback(
-            self._session, group_id, c_group_cb, ffi.NULL
+            self._session, int(rate), c_group_cb, ffi.NULL
         )
         if handle == 0:
             raise RuntimeError("Failed to register group callback")
@@ -1155,7 +1220,7 @@ class ContinuousReader:
 
     Example::
 
-        reader = session.continuous_reader(group_id=5, buffer_seconds=10)
+        reader = session.continuous_reader(rate=SampleRate.SR_30kHz, buffer_seconds=10)
         import time
         time.sleep(2)
         data = reader.read()  # (n_channels, ~60000) int16 array
@@ -1166,15 +1231,14 @@ class ContinuousReader:
         sample_rate: Sample rate in Hz.
     """
 
-    def __init__(self, session: Session, group_id: int, n_channels: int,
+    def __init__(self, session: Session, rate: SampleRate, n_channels: int,
                  buffer_samples: int):
         import numpy as np
-        from ._numpy import GROUP_RATES
 
         self._session = session
-        self._group_id = group_id
+        self._rate = rate
         self.n_channels = n_channels
-        self.sample_rate = GROUP_RATES.get(group_id, 30000)
+        self.sample_rate = rate.hz
         self._buffer_samples = buffer_samples
         self._buffer = np.zeros((n_channels, buffer_samples), dtype=np.int16)
         self._write_pos = 0
@@ -1203,7 +1267,7 @@ class ContinuousReader:
 
         self._cb_ref = c_group_cb
         handle = _lib.cbsdk_session_register_group_callback(
-            self._session._session, self._group_id, c_group_cb, ffi.NULL
+            self._session._session, int(self._rate), c_group_cb, ffi.NULL
         )
         if handle == 0:
             raise RuntimeError("Failed to register group callback")
