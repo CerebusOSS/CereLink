@@ -71,7 +71,25 @@ static std::mutex g_sessions_mutex;
 static std::set<cbsdk_session_t> g_sessions;
 static bool g_handlers_installed = false;
 
-#ifndef _WIN32
+#ifdef _WIN32
+
+static BOOL WINAPI console_ctrl_handler(DWORD event) {
+    if (event == CTRL_C_EVENT || event == CTRL_CLOSE_EVENT || event == CTRL_BREAK_EVENT) {
+        std::set<cbsdk_session_t> sessions_copy;
+        {
+            std::lock_guard<std::mutex> lock(g_sessions_mutex);
+            sessions_copy.swap(g_sessions);
+        }
+        for (auto* s : sessions_copy) {
+            delete s;
+        }
+        return FALSE;  // Let the default handler run (process exit)
+    }
+    return FALSE;
+}
+
+#else
+
 static struct sigaction g_prev_sigint;
 static struct sigaction g_prev_sigterm;
 
@@ -91,13 +109,16 @@ static void cleanup_sessions_and_reraise(int sig) {
     sigaction(sig, prev, nullptr);
     raise(sig);
 }
+
 #endif
 
 static void install_signal_handlers() {
     if (g_handlers_installed) return;
     g_handlers_installed = true;
 
-#ifndef _WIN32
+#ifdef _WIN32
+    SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
+#else
     struct sigaction sa{};
     sa.sa_handler = cleanup_sessions_and_reraise;
     sigemptyset(&sa.sa_mask);
