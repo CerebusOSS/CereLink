@@ -30,7 +30,6 @@ enum class DeviceType : uint32_t {
     HUB3       = CBPROTO_DEVICE_TYPE_HUB3,        ///< Hub 3 (legacy addressing)
     NPLAY      = CBPROTO_DEVICE_TYPE_NPLAY,       ///< nPlayServer (legacy, ports 51001/51002)
     CUSTOM     = CBPROTO_DEVICE_TYPE_CUSTOM,      ///< Custom IP/port configuration
-    GEMINI_NPLAY = CBPROTO_DEVICE_TYPE_GEMINI_NPLAY ///< Gemini nPlayServer (loopback, port 51002 bidirectional)
 };
 
 /// Protocol version enumeration (C++ wrapper around C enum for type safety)
@@ -131,7 +130,6 @@ namespace ConnectionDefaults {
     constexpr const char* HUB2_ADDRESS = cbNET_UDP_ADDR_GEMINI_HUB2; // Gemini Hub2
     constexpr const char* HUB3_ADDRESS = cbNET_UDP_ADDR_GEMINI_HUB3; // Gemini Hub3
     constexpr const char* NPLAY_ADDRESS      = "127.0.0.1";        // nPlayServer (loopback)
-    constexpr const char* GEMINI_NPLAY_ADDRESS = "127.0.0.1";     // Gemini nPlayServer (loopback)
 
     // Client/Host addresses (empty = auto-detect based on device type and platform)
     constexpr const char* DEFAULT_CLIENT_ADDRESS = "";  // Auto-detect (was 192.168.137.199)

@@ -34,7 +34,6 @@ class DeviceType(enum.IntEnum):
     HUB3       = 4
     NPLAY      = 5
     CUSTOM     = 6
-    GEMINI_NPLAY = 7
 
 class ChannelType(enum.IntEnum):
     """Channel type classification.

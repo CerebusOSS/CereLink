@@ -483,7 +483,6 @@ static const char* getNativeDeviceName(DeviceType type) {
         case DeviceType::HUB2:       return "hub2";
         case DeviceType::HUB3:       return "hub3";
         case DeviceType::NPLAY:      return "nplay";
-        case DeviceType::GEMINI_NPLAY: return "gemini_nplay";
         default:                     return "unknown";
     }
 }
@@ -596,9 +595,6 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
                 break;
             case DeviceType::NPLAY:
                 dev_type = cbdev::DeviceType::NPLAY;
-                break;
-            case DeviceType::GEMINI_NPLAY:
-                dev_type = cbdev::DeviceType::GEMINI_NPLAY;
                 break;
             default:
                 return Result<SdkSession>::error("Invalid device type");

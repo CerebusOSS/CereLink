@@ -29,7 +29,6 @@ typedef enum {
     CBPROTO_DEVICE_TYPE_HUB3       = 4,
     CBPROTO_DEVICE_TYPE_NPLAY      = 5,
     CBPROTO_DEVICE_TYPE_CUSTOM     = 6,
-    CBPROTO_DEVICE_TYPE_GEMINI_NPLAY = 7,
 } cbproto_device_type_t;
 
 typedef enum {
