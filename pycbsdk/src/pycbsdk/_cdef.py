@@ -226,11 +226,7 @@ cbsdk_result_t cbsdk_session_set_channel_spkthrlevel(cbsdk_session_t session,
 cbsdk_result_t cbsdk_session_set_channel_autothreshold(cbsdk_session_t session,
     uint32_t chan_id, _Bool enabled);
 
-// Generic single-channel field getter
-int64_t cbsdk_session_get_channel_field(cbsdk_session_t session,
-    uint32_t chan_id, cbsdk_chaninfo_field_t field);
-
-// Bulk channel queries
+// Channel info field selector
 typedef enum {
     CBSDK_CHANINFO_FIELD_SMPGROUP    = 0,
     CBSDK_CHANINFO_FIELD_SMPFILTER   = 1,
@@ -246,6 +242,12 @@ typedef enum {
     CBSDK_CHANINFO_FIELD_BANK        = 11,
     CBSDK_CHANINFO_FIELD_TERM        = 12,
 } cbsdk_chaninfo_field_t;
+
+// Generic single-channel field getter
+int64_t cbsdk_session_get_channel_field(cbsdk_session_t session,
+    uint32_t chan_id, cbsdk_chaninfo_field_t field);
+
+// Bulk channel queries
 
 cbsdk_result_t cbsdk_session_get_matching_channels(
     cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
