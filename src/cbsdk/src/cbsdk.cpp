@@ -15,8 +15,19 @@
 #include "cbsdk/cbsdk.h"
 #include "cbsdk/sdk_session.h"
 #include <chrono>
+#include <csignal>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <mutex>
+#include <set>
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Session Tracking & Cleanup (forward declarations; bodies after cbsdk_session_impl)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+static void track_session(cbsdk_session_t session);
+static void untrack_session(cbsdk_session_t session);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal Structures
@@ -42,6 +53,71 @@ struct cbsdk_session_impl {
         , error_callback_user_data(nullptr)
     {}
 };
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Session Tracking & Cleanup
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Track all live sessions so we can clean up shared memory on abnormal exit.
+/// POSIX shared memory segments persist in the kernel namespace until shm_unlink().
+/// If the process is killed (SIGINT, SIGTERM) without running destructors, the
+/// segments become orphaned and cause the next session to attach as CLIENT
+/// (finding stale shmem) instead of creating a new STANDALONE session.
+///
+/// Strategy: install a one-shot signal handler that destroys all tracked sessions
+/// (triggering shm_unlink via the normal destructor chain), then re-raises.
+
+static std::mutex g_sessions_mutex;
+static std::set<cbsdk_session_t> g_sessions;
+static bool g_handlers_installed = false;
+
+#ifndef _WIN32
+static struct sigaction g_prev_sigint;
+static struct sigaction g_prev_sigterm;
+
+static void cleanup_sessions_and_reraise(int sig) {
+    // Destroy all tracked sessions (runs destructors → shm_unlink)
+    std::set<cbsdk_session_t> sessions_copy;
+    {
+        std::lock_guard<std::mutex> lock(g_sessions_mutex);
+        sessions_copy.swap(g_sessions);
+    }
+    for (auto* s : sessions_copy) {
+        delete s;
+    }
+
+    // Restore the previous handler and re-raise so the process exits normally
+    const struct sigaction* prev = (sig == SIGINT) ? &g_prev_sigint : &g_prev_sigterm;
+    sigaction(sig, prev, nullptr);
+    raise(sig);
+}
+#endif
+
+static void install_signal_handlers() {
+    if (g_handlers_installed) return;
+    g_handlers_installed = true;
+
+#ifndef _WIN32
+    struct sigaction sa{};
+    sa.sa_handler = cleanup_sessions_and_reraise;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    sigaction(SIGINT, &sa, &g_prev_sigint);
+    sigaction(SIGTERM, &sa, &g_prev_sigterm);
+#endif
+}
+
+static void track_session(cbsdk_session_t session) {
+    std::lock_guard<std::mutex> lock(g_sessions_mutex);
+    g_sessions.insert(session);
+    install_signal_handlers();
+}
+
+static void untrack_session(cbsdk_session_t session) {
+    std::lock_guard<std::mutex> lock(g_sessions_mutex);
+    g_sessions.erase(session);
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper Functions
@@ -200,6 +276,7 @@ cbsdk_result_t cbsdk_session_create(cbsdk_session_t* session, const cbsdk_config
         impl->cpp_session = std::make_unique<cbsdk::SdkSession>(std::move(result.value()));
 
         *session = impl.release();
+        track_session(*session);
         return CBSDK_RESULT_SUCCESS;
 
     } catch (...) {
@@ -209,6 +286,7 @@ cbsdk_result_t cbsdk_session_create(cbsdk_session_t* session, const cbsdk_config
 
 void cbsdk_session_destroy(cbsdk_session_t session) {
     if (session) {
+        untrack_session(session);
         delete session;
     }
 }
