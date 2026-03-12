@@ -189,7 +189,7 @@ ConnectionParams ConnectionParams::forDevice(DeviceType type) {
         case DeviceType::NPLAY:
             // nPlayServer: loopback, different ports for send/recv
             conn_params.device_address = ConnectionDefaults::NPLAY_ADDRESS;
-            conn_params.client_address = "127.0.0.1";  // Always use loopback for NPLAY
+            conn_params.client_address = "";  // Auto-detect
             conn_params.recv_port = ConnectionDefaults::LEGACY_NSP_RECV_PORT;
             conn_params.send_port = ConnectionDefaults::LEGACY_NSP_SEND_PORT;
             break;
@@ -346,14 +346,7 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
 
     // Auto-detect client address if not specified
     if (session.m_impl->config.client_address.empty()) {
-        if (session.m_impl->config.type == DeviceType::NPLAY ||
-            session.m_impl->config.type == DeviceType::GEMINI_NPLAY) {
-            // NPLAY/GEMINI_NPLAY: Always use loopback
-            session.m_impl->config.client_address = "127.0.0.1";
-        } else {
-            // Other devices: Use platform-specific detection
-            session.m_impl->config.client_address = detectLocalIP();
-        }
+        session.m_impl->config.client_address = detectClientAddress(session.m_impl->config.type);
     }
 
 #ifdef _WIN32
@@ -663,7 +656,15 @@ void DeviceSession::close() {
 // Utility Functions
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-std::string detectLocalIP() {
+std::string detectClientAddress(DeviceType type) {
+    // Loopback devices: INADDR_ANY on all platforms.
+    // nPlayServer may broadcast to various addresses (127.0.0.255, 255.255.255.0, etc.)
+    // and binding to a specific loopback address misses broadcast traffic on macOS.
+    // INADDR_ANY reliably receives both unicast and broadcast on loopback.
+    if (type == DeviceType::NPLAY) {
+        return "0.0.0.0";
+    }
+
 #ifdef __APPLE__
     // On macOS with multiple interfaces, use 0.0.0.0 (bind to all interfaces)
     // macOS routing will handle interface selection via IP_BOUND_IF

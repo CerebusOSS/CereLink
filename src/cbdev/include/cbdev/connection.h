@@ -150,10 +150,17 @@ namespace ConnectionDefaults {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Detect local IP address for binding receive socket
-/// On macOS with multiple interfaces, returns "0.0.0.0" (bind to all)
-/// On other platforms, attempts to find the adapter on the Cerebus subnet
+/// Platform-specific logic:
+///   - NPLAY: "0.0.0.0" on all platforms (loopback, receive broadcast)
+///   - macOS: "0.0.0.0" (bind all interfaces, route via IP_BOUND_IF)
+///   - Linux: broadcast address "192.168.137.255" (required to receive subnet broadcasts)
+///   - Windows: unicast address on 192.168.137.x adapter, or "0.0.0.0"
+/// @param type Device type (determines loopback vs subnet binding)
 /// @return IP address string, or "0.0.0.0" if detection fails
-std::string detectLocalIP();
+std::string detectClientAddress(DeviceType type);
+
+/// @deprecated Use detectClientAddress(DeviceType) instead
+inline std::string detectLocalIP() { return detectClientAddress(DeviceType::LEGACY_NSP); }
 
 } // namespace cbdev
 
