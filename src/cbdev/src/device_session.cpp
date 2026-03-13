@@ -46,7 +46,9 @@
 #include <condition_variable>
 #include <chrono>
 #include <algorithm>  // for std::remove
+#include <cctype>     // for std::tolower
 #include <functional> // for std::function
+#include <numeric>    // for std::gcd
 #include <thread>
 #include <atomic>
 #include <vector>
@@ -228,6 +230,13 @@ struct DeviceSession::Impl {
 
     // Device configuration (from REQCONFIGALL)
     cbproto::DeviceConfig device_config{};
+
+    // Timestamp conversion for non-Gemini devices
+    // Gemini devices send timestamps in nanoseconds; non-Gemini (e.g. NPlay) send sample counts.
+    // Determined from PROCREP ident field: if ident contains "gemini", timestamps are nanoseconds.
+    bool timestamps_are_nanoseconds = true;  // Default true until PROCREP says otherwise
+    uint64_t ts_convert_num = 1;  // Numerator of reduced (1e9/sysfreq) fraction
+    uint64_t ts_convert_den = 1;  // Denominator of reduced (1e9/sysfreq) fraction
 
     // Clock synchronization
     ClockSync clock_sync;
@@ -534,6 +543,23 @@ Result<int> DeviceSession::receivePackets(void* buffer, const size_t buffer_size
 
         // Update configuration from received packets (if any)
         updateConfigFromBuffer(buffer, result.value());
+
+        // Convert timestamps from sample counts to nanoseconds for non-Gemini devices.
+        // The flag is set when PROCREP is processed in updateConfigFromBuffer above.
+        if (!m_impl->timestamps_are_nanoseconds && m_impl->ts_convert_den > 0) {
+            auto* bytes_ptr = static_cast<uint8_t*>(buffer);
+            const size_t total_bytes = result.value();
+            size_t offset = 0;
+            while (offset + cbPKT_HEADER_SIZE <= total_bytes) {
+                auto* header = reinterpret_cast<cbPKT_HEADER*>(bytes_ptr + offset);
+                const size_t packet_size = cbPKT_HEADER_SIZE + (header->dlen * 4);
+                if (offset + packet_size > total_bytes) break;
+
+                header->time = header->time * m_impl->ts_convert_num / m_impl->ts_convert_den;
+
+                offset += packet_size;
+            }
+        }
     }
 
     return result;
@@ -1295,6 +1321,14 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(buff_bytes + offset);
                 m_impl->device_config.sysinfo = *sysinfo;
 
+                // If SYSREP arrives after PROCREP established non-Gemini identity,
+                // update conversion factors now that sysfreq is available.
+                if (!m_impl->timestamps_are_nanoseconds && sysinfo->sysfreq > 0) {
+                    uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysinfo->sysfreq));
+                    m_impl->ts_convert_num = 1000000000 / g;
+                    m_impl->ts_convert_den = sysinfo->sysfreq / g;
+                }
+
                 // Note: Clock sync probes now use nPlay packets (NPLAYREP), not SYSREPRUNLEV.
                 // SYSREPRUNLEV is still processed here for config tracking (sysinfo update above).
             }
@@ -1311,6 +1345,29 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
             }
             else if (header->type == cbPKTTYPE_PROCREP) {
                 m_impl->device_config.procinfo = *reinterpret_cast<const cbPKT_PROCINFO*>(buff_bytes + offset);
+
+                // Determine timestamp units from processor identity.
+                // Gemini devices report ident containing "gemini" and send nanosecond timestamps.
+                // Non-Gemini devices (e.g. NPlay: "256-Channel player...") send sample counts.
+                const auto& ident = m_impl->device_config.procinfo.ident;
+                size_t ident_len = strnlen(ident, sizeof(m_impl->device_config.procinfo.ident));
+                static constexpr char needle[] = "gemini";
+                bool is_gemini = std::search(
+                    ident, ident + ident_len,
+                    std::begin(needle), std::end(needle) - 1,  // exclude null terminator
+                    [](char a, char b) { return std::tolower(static_cast<unsigned char>(a)) == b; }
+                ) != ident + ident_len;
+
+                m_impl->timestamps_are_nanoseconds = is_gemini;
+
+                if (!is_gemini) {
+                    uint32_t sysfreq = m_impl->device_config.sysinfo.sysfreq;
+                    if (sysfreq > 0) {
+                        uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
+                        m_impl->ts_convert_num = 1000000000 / g;
+                        m_impl->ts_convert_den = sysfreq / g;
+                    }
+                }
             }
             else if (header->type == cbPKTTYPE_BANKREP) {
                 auto const *bankinfo = reinterpret_cast<const cbPKT_BANKINFO*>(buff_bytes + offset);
