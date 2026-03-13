@@ -338,6 +338,13 @@ CBSDK_API uint32_t cbsdk_session_get_runlevel(cbsdk_session_t session);
 /// @return Protocol version (cbproto_protocol_version_t), or 0 (UNKNOWN) if unavailable
 CBSDK_API uint32_t cbsdk_session_get_protocol_version(cbsdk_session_t session);
 
+/// Get the processor identification string (e.g. "Gemini Hub 1")
+/// @param session Session handle (must not be NULL)
+/// @param buf Output buffer for the ident string
+/// @param buf_size Size of the output buffer in bytes
+/// @return Number of bytes written (excluding null terminator), or 0 if unavailable
+CBSDK_API uint32_t cbsdk_session_get_proc_ident(cbsdk_session_t session, char* buf, uint32_t buf_size);
+
 /// Get the global spike event length (samples per spike waveform)
 /// @param session Session handle (must not be NULL)
 /// @return Spike length in samples, or 0 if unavailable

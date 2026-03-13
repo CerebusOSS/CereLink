@@ -591,6 +591,18 @@ uint32_t cbsdk_session_get_protocol_version(cbsdk_session_t session) {
     } catch (...) { return 0; }
 }
 
+uint32_t cbsdk_session_get_proc_ident(cbsdk_session_t session, char* buf, uint32_t buf_size) {
+    if (!session || !session->cpp_session || !buf || buf_size == 0) return 0;
+    try {
+        std::string ident = session->cpp_session->getProcIdent();
+        if (ident.empty()) { buf[0] = '\0'; return 0; }
+        uint32_t len = static_cast<uint32_t>(std::min<size_t>(ident.size(), buf_size - 1));
+        std::memcpy(buf, ident.data(), len);
+        buf[len] = '\0';
+        return len;
+    } catch (...) { buf[0] = '\0'; return 0; }
+}
+
 uint32_t cbsdk_session_get_spike_length(cbsdk_session_t session) {
     if (!session || !session->cpp_session) return 0;
     try {

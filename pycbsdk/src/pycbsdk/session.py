@@ -484,6 +484,16 @@ class Session:
             return ProtocolVersion.UNKNOWN
 
     @property
+    def proc_ident(self) -> str:
+        """Processor identification string from PROCREP (e.g. 'Gemini Hub 1').
+
+        Returns empty string if unavailable (e.g. CLIENT mode or no PROCREP received).
+        """
+        buf = ffi.new("char[64]")
+        _get_lib().cbsdk_session_get_proc_ident(self._session, buf, 64)
+        return ffi.string(buf).decode("utf-8", errors="replace")
+
+    @property
     def spike_length(self) -> int:
         """Global spike event length in samples."""
         return _get_lib().cbsdk_session_get_spike_length(self._session)

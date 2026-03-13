@@ -1106,6 +1106,16 @@ uint32_t SdkSession::getProtocolVersion() const {
     return 0;  // CLIENT mode — no protocol version available
 }
 
+std::string SdkSession::getProcIdent() const {
+    if (m_impl->device_session) {
+        const auto& config = m_impl->device_session->getDeviceConfig();
+        // ident is a fixed-size char array, may not be null-terminated
+        return std::string(config.procinfo.ident,
+            strnlen(config.procinfo.ident, sizeof(config.procinfo.ident)));
+    }
+    return {};
+}
+
 uint32_t SdkSession::getSpikeLength() const {
     const auto* si = getSysInfo();
     return si ? si->spikelen : 0;

@@ -413,6 +413,10 @@ public:
     /// @return Protocol version, or UNKNOWN if not available (e.g. CLIENT mode)
     uint32_t getProtocolVersion() const;
 
+    /// Get the processor identification string (from PROCREP packet)
+    /// @return ident string (e.g. "Gemini Hub 1"), or empty if unavailable
+    std::string getProcIdent() const;
+
     /// Get the global spike event length (samples per spike waveform)
     /// @return Spike length in samples, or 0 if unavailable
     uint32_t getSpikeLength() const;

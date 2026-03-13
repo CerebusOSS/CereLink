@@ -173,6 +173,7 @@ void cbsdk_session_reset_stats(cbsdk_session_t session);
 // Configuration access
 uint32_t cbsdk_session_get_runlevel(cbsdk_session_t session);
 uint32_t cbsdk_session_get_protocol_version(cbsdk_session_t session);
+uint32_t cbsdk_session_get_proc_ident(cbsdk_session_t session, char* buf, uint32_t buf_size);
 uint32_t cbsdk_session_get_spike_length(cbsdk_session_t session);
 uint32_t cbsdk_session_get_spike_pretrigger(cbsdk_session_t session);
 cbsdk_result_t cbsdk_session_set_spike_length(cbsdk_session_t session,
