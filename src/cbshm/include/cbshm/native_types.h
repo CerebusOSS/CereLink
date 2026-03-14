@@ -123,6 +123,9 @@ typedef struct {
     int64_t clock_uncertainty_ns;   ///< Half-RTT uncertainty in nanoseconds (0 if unknown)
     uint32_t clock_sync_valid;      ///< Non-zero if clock_offset_ns is valid
     uint32_t clock_sync_reserved;   ///< Reserved for alignment
+
+    // Ownership tracking (written by STANDALONE at creation, read by CLIENT for liveness check)
+    uint32_t owner_pid;             ///< PID of STANDALONE process that created this segment (0 = unknown)
 } NativeConfigBuffer;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

@@ -556,6 +556,14 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
             native_status, native_spk, native_signal,
             cbshm::Mode::CLIENT, cbshm::ShmemLayout::NATIVE);
 
+        // Liveness check: reject stale segments from a dead STANDALONE process.
+        // The ShmemSession destructor (triggered by reassignment) unmaps the segments;
+        // the subsequent STANDALONE creation path will shm_unlink + recreate them.
+        if (shmem_result.isOk() && !shmem_result.value().isOwnerAlive()) {
+            shmem_result = cbshm::Result<cbshm::ShmemSession>::error(
+                "Stale shared memory detected (owner process dead)");
+        }
+
         if (shmem_result.isError()) {
             // --- Attempt 3: Native STANDALONE mode ---
             // No existing shared memory found, create new native-mode segments

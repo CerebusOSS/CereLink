@@ -20,6 +20,7 @@
     #include <fcntl.h>
     #include <unistd.h>
     #include <semaphore.h>
+    #include <signal.h>
     #include <time.h>
     #include <errno.h>
 #endif
@@ -629,6 +630,11 @@ struct ShmemSession::Impl {
         std::memset(cfg, 0, cfg_buffer_size);
         cfg->version = cbVERSION_MAJOR * 100 + cbVERSION_MINOR;
         cfg->instrument_status = static_cast<uint32_t>(InstrumentStatus::INACTIVE);
+#ifdef _WIN32
+        cfg->owner_pid = GetCurrentProcessId();
+#else
+        cfg->owner_pid = static_cast<uint32_t>(getpid());
+#endif
 
         // Initialize receive buffer
         std::memset(rec_buffer_raw, 0, rec_buffer_size);
@@ -1955,6 +1961,30 @@ std::optional<int64_t> ShmemSession::getClockUncertaintyNs() const {
             return cfg->clock_uncertainty_ns;
     }
     return std::nullopt;
+}
+
+bool ShmemSession::isOwnerAlive() const {
+    if (!isOpen() || m_impl->mode != Mode::CLIENT)
+        return true;
+    if (m_impl->layout != ShmemLayout::NATIVE)
+        return true;
+
+    uint32_t pid = m_impl->nativeCfg()->owner_pid;
+    if (pid == 0)
+        return true;  // Pre-liveness segments or unknown — assume alive
+
+#ifdef _WIN32
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (h) {
+        CloseHandle(h);
+        return true;
+    }
+    return false;
+#else
+    // kill(pid, 0) checks existence without sending a signal.
+    // EPERM means the process exists but we lack permission to signal it.
+    return kill(static_cast<pid_t>(pid), 0) == 0 || errno == EPERM;
+#endif
 }
 
 } // namespace cbshm

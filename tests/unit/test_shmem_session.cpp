@@ -16,6 +16,9 @@
 #include <cbproto/connection.h>    // For cbproto_protocol_version_t
 #include <cbproto/packet_translator.h>
 #include <cstring>
+#ifndef _WIN32
+#include <unistd.h>  // getpid()
+#endif
 
 using namespace cbshm;
 using namespace cbproto;
@@ -1779,6 +1782,135 @@ TEST_F(CentralCompatProtocolTest, CentralLayout_AlwaysCurrent) {
         name + "_signal", Mode::STANDALONE, ShmemLayout::CENTRAL);
     ASSERT_TRUE(result.isOk()) << result.error();
     EXPECT_EQ(result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
+}
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Owner Liveness Tests
+/// @{
+
+class OwnerLivenessTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        test_name = "test_liveness_" + std::to_string(test_counter++);
+    }
+
+    std::string test_name;
+    static int test_counter;
+};
+
+int OwnerLivenessTest::test_counter = 0;
+
+TEST_F(OwnerLivenessTest, StandaloneWritesOwnerPid) {
+    auto result = ShmemSession::create(
+        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
+        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
+        test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    ASSERT_TRUE(result.isOk()) << result.error();
+
+    auto* cfg = result.value().getNativeConfigBuffer();
+    ASSERT_NE(cfg, nullptr);
+#ifdef _WIN32
+    EXPECT_EQ(cfg->owner_pid, GetCurrentProcessId());
+#else
+    EXPECT_EQ(cfg->owner_pid, static_cast<uint32_t>(getpid()));
+#endif
+}
+
+TEST_F(OwnerLivenessTest, StandaloneAlwaysReturnsTrue) {
+    auto result = ShmemSession::create(
+        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
+        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
+        test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    ASSERT_TRUE(result.isOk()) << result.error();
+
+    // isOwnerAlive() is only meaningful for CLIENT — STANDALONE always returns true
+    EXPECT_TRUE(result.value().isOwnerAlive());
+}
+
+TEST_F(OwnerLivenessTest, ClientDetectsLiveOwner) {
+    // Create STANDALONE (sets owner_pid to current process)
+    auto standalone = ShmemSession::create(
+        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
+        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
+        test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    ASSERT_TRUE(standalone.isOk()) << standalone.error();
+
+    // Create CLIENT on same segments
+    auto client = ShmemSession::create(
+        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
+        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
+        test_name + "_signal", Mode::CLIENT, ShmemLayout::NATIVE);
+    ASSERT_TRUE(client.isOk()) << client.error();
+
+    // Owner (this process) is alive
+    EXPECT_TRUE(client.value().isOwnerAlive());
+}
+
+TEST_F(OwnerLivenessTest, ClientDetectsDeadOwner) {
+    // Create STANDALONE, then set a fake dead PID
+    auto standalone = ShmemSession::create(
+        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
+        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
+        test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    ASSERT_TRUE(standalone.isOk()) << standalone.error();
+
+    // Overwrite owner_pid with a PID that (almost certainly) doesn't exist
+    auto* cfg = standalone.value().getNativeConfigBuffer();
+    ASSERT_NE(cfg, nullptr);
+    cfg->owner_pid = 4000000000u;  // Well above any real PID
+
+    // Create CLIENT on same segments
+    auto client = ShmemSession::create(
+        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
+        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
+        test_name + "_signal", Mode::CLIENT, ShmemLayout::NATIVE);
+    ASSERT_TRUE(client.isOk()) << client.error();
+
+    // Owner PID doesn't exist — should detect as dead
+    EXPECT_FALSE(client.value().isOwnerAlive());
+}
+
+TEST_F(OwnerLivenessTest, ClientTreatsZeroPidAsAlive) {
+    // Create STANDALONE, then clear owner_pid to simulate pre-liveness segments
+    auto standalone = ShmemSession::create(
+        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
+        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
+        test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    ASSERT_TRUE(standalone.isOk()) << standalone.error();
+
+    auto* cfg = standalone.value().getNativeConfigBuffer();
+    ASSERT_NE(cfg, nullptr);
+    cfg->owner_pid = 0;
+
+    // Create CLIENT on same segments
+    auto client = ShmemSession::create(
+        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
+        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
+        test_name + "_signal", Mode::CLIENT, ShmemLayout::NATIVE);
+    ASSERT_TRUE(client.isOk()) << client.error();
+
+    // PID 0 = unknown — assume alive (backward compat)
+    EXPECT_TRUE(client.value().isOwnerAlive());
+}
+
+TEST_F(OwnerLivenessTest, CentralCompatAlwaysReturnsTrue) {
+    // Liveness check only applies to NATIVE layout
+    auto standalone = ShmemSession::create(
+        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
+        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
+        test_name + "_signal", Mode::STANDALONE, ShmemLayout::CENTRAL);
+    ASSERT_TRUE(standalone.isOk()) << standalone.error();
+
+    auto client = ShmemSession::create(
+        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
+        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
+        test_name + "_signal", Mode::CLIENT, ShmemLayout::CENTRAL);
+    ASSERT_TRUE(client.isOk()) << client.error();
+
+    // Non-NATIVE layout always returns true (no PID field)
+    EXPECT_TRUE(client.value().isOwnerAlive());
 }
 
 /// @}

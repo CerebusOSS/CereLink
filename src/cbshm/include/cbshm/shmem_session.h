@@ -246,6 +246,15 @@ public:
     /// @return uncertainty in nanoseconds, or nullopt if no sync data
     std::optional<int64_t> getClockUncertaintyNs() const;
 
+    /// @brief Check if the STANDALONE owner of these segments is still alive
+    ///
+    /// For NATIVE CLIENT mode, reads owner_pid from the config buffer and checks
+    /// if that process still exists. Returns true in all other cases (STANDALONE mode,
+    /// non-NATIVE layout, or unknown PID).
+    ///
+    /// @return false if the owner process is confirmed dead (stale segments), true otherwise
+    bool isOwnerAlive() const;
+
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
