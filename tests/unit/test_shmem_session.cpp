@@ -16,8 +16,10 @@
 #include <cbproto/connection.h>    // For cbproto_protocol_version_t
 #include <cbproto/packet_translator.h>
 #include <cstring>
-#ifndef _WIN32
-#include <unistd.h>  // getpid()
+#ifdef _WIN32
+#include <windows.h>  // GetCurrentProcessId()
+#else
+#include <unistd.h>   // getpid()
 #endif
 
 using namespace cbshm;
