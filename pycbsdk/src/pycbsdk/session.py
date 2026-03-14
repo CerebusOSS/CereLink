@@ -598,6 +598,30 @@ class Session:
         """Get a channel's negative amplitude rejection threshold."""
         return _get_lib().cbsdk_session_get_channel_amplrejneg(self._session, chan_id)
 
+    def get_channel_scaling(self, chan_id: int) -> Optional[dict]:
+        """Get a channel's input scaling information.
+
+        Args:
+            chan_id: 1-based channel ID.
+
+        Returns:
+            Dict with keys ``digmin``, ``digmax``, ``anamin``, ``anamax``,
+            ``anagain``, ``anaunit``, or ``None`` if the channel is invalid.
+        """
+        _lib = _get_lib()
+        scaling = ffi.new("cbsdk_channel_scaling_t *")
+        result = _lib.cbsdk_session_get_channel_scaling(self._session, chan_id, scaling)
+        if result != 0:
+            return None
+        return {
+            "digmin": scaling.digmin,
+            "digmax": scaling.digmax,
+            "anamin": scaling.anamin,
+            "anamax": scaling.anamax,
+            "anagain": scaling.anagain,
+            "anaunit": ffi.string(scaling.anaunit).decode(),
+        }
+
     def get_channel_field(self, chan_id: int, field: ChanInfoField) -> int:
         """Get any numeric field from a single channel by field selector.
 

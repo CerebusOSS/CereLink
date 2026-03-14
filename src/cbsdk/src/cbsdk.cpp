@@ -791,6 +791,27 @@ int16_t cbsdk_session_get_channel_amplrejneg(cbsdk_session_t session, uint32_t c
     } catch (...) { return 0; }
 }
 
+cbsdk_result_t cbsdk_session_get_channel_scaling(
+    cbsdk_session_t session, uint32_t chan_id, cbsdk_channel_scaling_t* scaling) {
+    if (!session || !session->cpp_session || !scaling) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        if (!info) return CBSDK_RESULT_INVALID_PARAMETER;
+        scaling->digmin  = info->scalin.digmin;
+        scaling->digmax  = info->scalin.digmax;
+        scaling->anamin  = info->scalin.anamin;
+        scaling->anamax  = info->scalin.anamax;
+        scaling->anagain = info->scalin.anagain;
+        std::memcpy(scaling->anaunit, info->scalin.anaunit, sizeof(scaling->anaunit));
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) {
+        std::memset(scaling, 0, sizeof(cbsdk_channel_scaling_t));
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
 int64_t cbsdk_session_get_channel_field(
     cbsdk_session_t session,
     uint32_t chan_id,

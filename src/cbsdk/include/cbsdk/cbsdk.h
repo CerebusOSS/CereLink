@@ -154,6 +154,16 @@ typedef struct {
     uint64_t send_errors;                    ///< Socket send errors
 } cbsdk_stats_t;
 
+/// Channel scaling information (mirrors cbSCALING from cbproto)
+typedef struct {
+    int16_t  digmin;     ///< Digital value corresponding to anamin
+    int16_t  digmax;     ///< Digital value corresponding to anamax
+    int32_t  anamin;     ///< Minimum analog value
+    int32_t  anamax;     ///< Maximum analog value
+    int32_t  anagain;    ///< Gain applied to analog values
+    char     anaunit[8]; ///< Unit string (e.g., "uV", "mV", "MPa")
+} cbsdk_channel_scaling_t;
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Callback Types
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -462,6 +472,14 @@ CBSDK_API int16_t cbsdk_session_get_channel_amplrejpos(cbsdk_session_t session, 
 /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
 /// @return Negative amplitude rejection value, or 0 on error
 CBSDK_API int16_t cbsdk_session_get_channel_amplrejneg(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get a channel's input scaling information (user-defined scalin)
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param[out] scaling Pointer to struct to fill with scaling data
+/// @return CBSDK_RESULT_SUCCESS on success, error code otherwise
+CBSDK_API cbsdk_result_t cbsdk_session_get_channel_scaling(
+    cbsdk_session_t session, uint32_t chan_id, cbsdk_channel_scaling_t* scaling);
 
 /// Get any numeric field from a single channel by field selector
 /// @param session Session handle (must not be NULL)

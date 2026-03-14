@@ -113,6 +113,15 @@ typedef struct {
     uint64_t send_errors;
 } cbsdk_stats_t;
 
+typedef struct {
+    int16_t  digmin;
+    int16_t  digmax;
+    int32_t  anamin;
+    int32_t  anamax;
+    int32_t  anagain;
+    char     anaunit[8];
+} cbsdk_channel_scaling_t;
+
 ///////////////////////////////////////////////////////////////////////////
 // Callback Types
 ///////////////////////////////////////////////////////////////////////////
@@ -207,6 +216,8 @@ uint32_t cbsdk_session_get_channel_lncrate(cbsdk_session_t session, uint32_t cha
 uint32_t cbsdk_session_get_channel_refelecchan(cbsdk_session_t session, uint32_t chan_id);
 int16_t  cbsdk_session_get_channel_amplrejpos(cbsdk_session_t session, uint32_t chan_id);
 int16_t  cbsdk_session_get_channel_amplrejneg(cbsdk_session_t session, uint32_t chan_id);
+cbsdk_result_t cbsdk_session_get_channel_scaling(
+    cbsdk_session_t session, uint32_t chan_id, cbsdk_channel_scaling_t* scaling);
 
 // Per-channel setters
 cbsdk_result_t cbsdk_session_set_channel_label(cbsdk_session_t session,
