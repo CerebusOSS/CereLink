@@ -585,18 +585,31 @@ Result<void> DeviceSession::sendPackets(const std::vector<cbPKT_GENERIC>& pkts) 
         return Result<void>::error("Device not connected");
     }
 
-    // Send each packet as its own datagram with a small delay between packets.
-    // Note: Coalescing multiple packets into one datagram was tried but the device
-    // expects one packet per UDP datagram.
+    // Coalesce packets into minimal UDP datagrams (up to MTU size)
+    constexpr size_t MTU = 1472;  // Typical Ethernet MTU minus IP (20) and UDP (8) headers
+
+    std::vector<uint8_t> buffer;
+    buffer.reserve(MTU);
+
     for (const auto& pkt : pkts) {
-        if (auto result = sendPacket(pkt); result.isError()) {
-            return result;
+        const size_t pkt_size = cbPKT_HEADER_SIZE + (pkt.cbpkt_header.dlen * 4);
+
+        // Flush buffer if adding this packet would exceed MTU
+        if (!buffer.empty() && buffer.size() + pkt_size > MTU) {
+            if (auto result = sendRaw(buffer.data(), buffer.size()); result.isError()) {
+                return result;
+            }
+            buffer.clear();
         }
-#ifdef _WIN32
-        hr_sleep_us(50);
-#else
-        std::this_thread::sleep_for(std::chrono::microseconds(50));
-#endif
+
+        // Append packet to buffer
+        const auto* pkt_bytes = reinterpret_cast<const uint8_t*>(&pkt);
+        buffer.insert(buffer.end(), pkt_bytes, pkt_bytes + pkt_size);
+    }
+
+    // Send remaining packets in buffer
+    if (!buffer.empty()) {
+        return sendRaw(buffer.data(), buffer.size());
     }
 
     return Result<void>::ok();
