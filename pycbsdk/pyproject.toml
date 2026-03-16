@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=64", "wheel", "cffi>=1.15", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pycbsdk"
+dynamic = ["version"]
+description = "Python bindings for CereLink SDK (Blackrock Neurotech Cerebus devices)"
+requires-python = ">=3.9"
+license = "BSD-2-Clause"
+authors = [
+    { name = "Chadwick Boulay", email = "chadwick.boulay@gmail.com" },
+]
+keywords = ["neuroscience", "electrophysiology", "blackrock", "cerebus", "neural", "bci"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: System :: Hardware :: Hardware Drivers",
+]
+readme = "README.md"
+dependencies = [
+    "cffi>=1.15",
+]
+
+[project.urls]
+Homepage = "https://github.com/CerebusOSS/CereLink"
+Repository = "https://github.com/CerebusOSS/CereLink"
+Issues = "https://github.com/CerebusOSS/CereLink/issues"
+
+[project.optional-dependencies]
+numpy = ["numpy"]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pycbsdk = ["*.dll", "*.so", "*.so.*", "*.dylib"]
+
+[tool.setuptools_scm]
+root = ".."
+version_file = "src/pycbsdk/_version.py"
+relative_to = "pyproject.toml"

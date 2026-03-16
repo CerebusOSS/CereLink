@@ -48,5 +48,9 @@ Release/
 **/cerelink/cbpyw.cpp
 **/cerelink/*.dll
 **/cerelink/__version__.py
+*.ccf
+!tests/ccf_raw.ccf
+!tests/ccf_spk_1k.ccf
 
 upstream
+*/uv.lock

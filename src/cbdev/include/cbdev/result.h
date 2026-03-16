@@ -1,0 +1,20 @@
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @file   result.h
+///
+/// @brief  Result type for cbdev (alias for cbutil::Result)
+///
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+#ifndef CBDEV_RESULT_H
+#define CBDEV_RESULT_H
+
+#include <cbutil/result.h>
+
+namespace cbdev {
+
+template<typename T>
+using Result = cbutil::Result<T>;
+
+} // namespace cbdev
+
+#endif // CBDEV_RESULT_H

@@ -1,0 +1,45 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<CCF Version="12">
+ <ChanInfo Type="Array">
+  <ChanInfo_item Type="cbPKT_CHANINFO" label="chan1">
+   <chid Type="UINT16">32768</chid>
+   <type Type="UINT16">64</type>
+   <dlen Type="UINT16">166</dlen>
+   <chan Type="UINT32">1</chan>
+   <proc Type="UINT32">1</proc>
+   <bank Type="UINT32">1</bank>
+   <term Type="UINT32">1</term>
+   <options>
+    <ainpopts Type="UINT32">258</ainpopts>
+    <spkopts Type="UINT32">65793</spkopts>
+   </options>
+   <lnc>
+    <rate Type="UINT32">10000</rate>
+   </lnc>
+   <sample>
+    <filter Type="UINT32">6</filter>
+    <group Type="UINT32">2</group>
+   </sample>
+  </ChanInfo_item>
+  <ChanInfo_item Type="cbPKT_CHANINFO" label="chan2">
+   <chid Type="UINT16">32768</chid>
+   <type Type="UINT16">64</type>
+   <dlen Type="UINT16">166</dlen>
+   <chan Type="UINT32">2</chan>
+   <proc Type="UINT32">1</proc>
+   <bank Type="UINT32">1</bank>
+   <term Type="UINT32">2</term>
+   <options>
+    <ainpopts Type="UINT32">258</ainpopts>
+    <spkopts Type="UINT32">65793</spkopts>
+   </options>
+   <lnc>
+    <rate Type="UINT32">10000</rate>
+   </lnc>
+   <sample>
+    <filter Type="UINT32">6</filter>
+    <group Type="UINT32">2</group>
+   </sample>
+  </ChanInfo_item>
+ </ChanInfo>
+</CCF>

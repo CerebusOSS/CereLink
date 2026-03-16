@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
       - name: Configure CBSDK
         run: |
@@ -46,4 +46,6 @@ jobs:
         run: cmake --build build --config Release -j
 
       - name: Run Tests
-        run: ctest --test-dir build --build-config Release --output-on-failure
+        run: >
+          ctest --test-dir build --build-config Release --output-on-failure
+          -E "^device\."

@@ -1,0 +1,21 @@
+// 8-Channel NSP mapping
+//							
+// Data is as follows 'c r b e l'							
+//   c - 0 based column from left to right							
+//   r - 0 based row from bottom to top							
+//   b - bank name - values can be A, B, C, or D							
+//   e - 1 based electrode number within the bank - values can be 1-32							
+//   l - label used to rename channels in Central							
+//							
+// Comments begin with //							
+// First non-comment line is the Mapfile description							
+//							
+8-Channel NSP mapping
+0	1	A	1 chan1 
+1	1	A	2 chan2 
+2	1	A	3 chan3 
+3	1	A	4 chan4 
+0	0	A	5 chan5 
+1	0	A	6 chan6 
+2	0	A	7 chan7 
+3	0	A	8 chan8 

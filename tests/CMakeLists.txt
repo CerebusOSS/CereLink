@@ -73,7 +73,7 @@ target_include_directories(continuous_data_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/CCFUtils
     ${PROJECT_SOURCE_DIR}/cbproto
     ${PROJECT_SOURCE_DIR}/cbsdk
-    ${PROJECT_SOURCE_DIR}/src/cbsdk
+        ${PROJECT_SOURCE_DIR}/src/cbsdk_old
     ${PROJECT_SOURCE_DIR}/src/cbhwlib
     ${PROJECT_SOURCE_DIR}/cbhwlib
     ${PROJECT_SOURCE_DIR}/Central
@@ -94,7 +94,7 @@ target_include_directories(event_data_tests PRIVATE
     ${PROJECT_SOURCE_DIR}/CCFUtils
     ${PROJECT_SOURCE_DIR}/cbproto
     ${PROJECT_SOURCE_DIR}/cbsdk
-    ${PROJECT_SOURCE_DIR}/src/cbsdk
+        ${PROJECT_SOURCE_DIR}/src/cbsdk_old
     ${PROJECT_SOURCE_DIR}/src/cbhwlib
     ${PROJECT_SOURCE_DIR}/cbhwlib
     ${PROJECT_SOURCE_DIR}/Central
@@ -109,3 +109,4 @@ target_link_libraries(event_data_tests
 )
 
 add_test(NAME event_data_tests COMMAND event_data_tests)
+

@@ -1,0 +1,151 @@
+name: Build pycbsdk Wheels
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'pycbsdk/**'
+      - '.github/workflows/build_pycbsdk.yml'
+  pull_request:
+    branches:
+      - master
+      - dev
+    paths:
+      - 'src/**'
+      - 'pycbsdk/**'
+  release:
+    types: [ published ]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-wheel:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - name: windows-x64
+            os: windows-latest
+            cmake_extra: ""
+            lib_pattern: "cbsdk.dll"
+          - name: linux-x64
+            os: ubuntu-latest
+            cmake_extra: ""
+            lib_pattern: "libcbsdk.so"
+          - name: macos-universal
+            os: macos-latest
+            cmake_extra: ""
+            lib_pattern: "libcbsdk.dylib"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Full history needed for git describe and setuptools-scm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Python build tools
+        run: pip install build setuptools wheel setuptools-scm
+
+      - name: Build cbsdk shared library
+        run: |
+          cmake -B build -S . \
+            -DCBSDK_BUILD_SHARED=ON \
+            -DCBSDK_BUILD_TEST=OFF \
+            -DCBSDK_BUILD_SAMPLE=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            ${{ matrix.config.cmake_extra }}
+          cmake --build build --target cbsdk_shared --config Release
+
+      - name: Copy shared library to package
+        run: |
+          find build -name "${{ matrix.config.lib_pattern }}" -type f | head -1 | while read f; do
+            echo "Found: $f"
+            cp "$f" pycbsdk/src/pycbsdk/
+          done
+          ls -la pycbsdk/src/pycbsdk/
+
+      - name: Build wheel
+        run: |
+          cd pycbsdk
+          python -m build --wheel
+
+      - name: Repair wheel (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          pip install auditwheel patchelf
+          # Detect the compatible manylinux tag for this toolchain
+          PLAT=$(auditwheel show pycbsdk/dist/*.whl 2>&1 | grep -oP 'manylinux_\d+_\d+_x86_64' | head -1)
+          if [ -z "$PLAT" ]; then
+            echo "auditwheel could not determine a manylinux tag, tagging as linux_x86_64"
+            PLAT="linux_x86_64"
+          fi
+          echo "Repairing wheel for platform: $PLAT"
+          auditwheel repair pycbsdk/dist/*.whl -w pycbsdk/wheelhouse/ --plat "$PLAT"
+          rm pycbsdk/dist/*.whl
+          mv pycbsdk/wheelhouse/*.whl pycbsdk/dist/
+
+      - name: Repair wheel (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          pip install delocate
+          delocate-wheel -v pycbsdk/dist/*.whl
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: pycbsdk-${{ matrix.config.name }}
+          path: pycbsdk/dist/*.whl
+
+  build-sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install build setuptools-scm
+      - run: cd pycbsdk && python -m build --sdist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pycbsdk-sdist
+          path: pycbsdk/dist/*.tar.gz
+
+  publish:
+    name: Publish to PyPI
+    needs: [build-wheel, build-sdist]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    permissions:
+      id-token: write   # Required for trusted publishing (OIDC)
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pycbsdk
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
