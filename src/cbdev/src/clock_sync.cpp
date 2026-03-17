@@ -59,6 +59,13 @@ void ClockSync::addProbeSample(time_point t1_local, uint64_t t3_device_ns, time_
     recomputeEstimate();
 }
 
+void ClockSync::reset() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_probe_samples.clear();
+    m_current_offset_ns = std::nullopt;
+    m_current_uncertainty_ns = std::nullopt;
+}
+
 std::optional<ClockSync::time_point> ClockSync::toLocalTime(uint64_t device_time_ns) const {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (!m_current_offset_ns)

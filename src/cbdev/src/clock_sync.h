@@ -53,6 +53,9 @@ public:
     /// Convert host steady_clock time_point to device timestamp (nanoseconds).
     [[nodiscard]] std::optional<uint64_t> toDeviceTime(time_point local_time) const;
 
+    /// Discard all probe samples and reset the offset estimate.
+    void reset();
+
     /// Returns true if at least one probe sample has been ingested.
     [[nodiscard]] bool hasSyncData() const;
 

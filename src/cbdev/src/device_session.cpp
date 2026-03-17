@@ -1363,6 +1363,7 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 m_impl->timestamps_are_nanoseconds = is_gemini;
 
                 if (!is_gemini) {
+                    m_impl->clock_sync.reset();
                     uint32_t sysfreq = m_impl->device_config.sysinfo.sysfreq;
                     if (sysfreq > 0) {
                         uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
