@@ -80,8 +80,8 @@ void printPacket(const cbPKT_GENERIC& pkt) {
 
 /// Map device type string to DeviceType enum
 DeviceType parseDeviceType(const std::string& type_str) {
-    if (type_str == "NSP")        return DeviceType::LEGACY_NSP;
-    if (type_str == "GEMINI_NSP") return DeviceType::NSP;
+    if (type_str == "LEGACY_NSP") return DeviceType::LEGACY_NSP;
+    if (type_str == "NSP")        return DeviceType::NSP;
     if (type_str == "HUB1")       return DeviceType::HUB1;
     if (type_str == "HUB2")       return DeviceType::HUB2;
     if (type_str == "HUB3")       return DeviceType::HUB3;
