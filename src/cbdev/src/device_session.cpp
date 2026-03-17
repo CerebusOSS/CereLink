@@ -548,7 +548,7 @@ Result<int> DeviceSession::receivePackets(void* buffer, const size_t buffer_size
 
         // Convert timestamps from sample counts to nanoseconds for non-Gemini devices.
         // The flag is set when PROCREP is processed in updateConfigFromBuffer above.
-        if (!m_impl->timestamps_are_nanoseconds && m_impl->ts_convert_den > 0) {
+        if (!m_impl->timestamps_are_nanoseconds && m_impl->ts_convert_den > 1) {
             auto* bytes_ptr = static_cast<uint8_t*>(buffer);
             const size_t total_bytes = result.value();
             size_t offset = 0;
@@ -1488,9 +1488,16 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                     // (we zero-initialize it). Fall back to header->time which is
                     // the stale ptptime from the previous main loop iteration.
                     constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
-                    const uint64_t device_time_ns = (nplay->etime != 0)
-                        ? nplay->etime
-                        : header->time + STALENESS_CORRECTION_NS;
+                    uint64_t device_time_ns;
+                    if (nplay->etime != 0) {
+                        device_time_ns = nplay->etime;
+                    } else {
+                        device_time_ns = header->time;
+                        if (!m_impl->timestamps_are_nanoseconds && m_impl->ts_convert_den > 1) {
+                            device_time_ns = device_time_ns * m_impl->ts_convert_num / m_impl->ts_convert_den;
+                        }
+                        device_time_ns += STALENESS_CORRECTION_NS;
+                    }
 
                     m_impl->clock_sync.addProbeSample(
                         m_impl->pending_clock_probe.t1_local,
