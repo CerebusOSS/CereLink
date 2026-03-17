@@ -232,9 +232,11 @@ struct DeviceSession::Impl {
     cbproto::DeviceConfig device_config{};
 
     // Timestamp conversion for non-Gemini devices
-    // Gemini devices send timestamps in nanoseconds; non-Gemini (e.g. NPlay) send sample counts.
+    // Gemini devices, our primary use case, send timestamps in nanoseconds; default to true.
+    // Non-Gemini (i.e. NPlay and Legacy NSP) send sample counts.
     // Determined from PROCREP ident field: if ident contains "gemini", timestamps are nanoseconds.
-    bool timestamps_are_nanoseconds = true;  // Default true until PROCREP says otherwise
+    // PROCREP may be received several seconds after device start.
+    bool timestamps_are_nanoseconds = true;
     uint64_t ts_convert_num = 1;  // Numerator of reduced (1e9/sysfreq) fraction
     uint64_t ts_convert_den = 1;  // Denominator of reduced (1e9/sysfreq) fraction
 
@@ -344,6 +346,12 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
     DeviceSession session;
     session.m_impl = std::make_unique<Impl>();
     session.m_impl->config = config;
+
+    // LEGACY_NSP is known to use sample-count timestamps (never Gemini).
+    // For other types, we default to true and let PROCREP confirm.
+    if (config.type == DeviceType::LEGACY_NSP) {
+        session.m_impl->timestamps_are_nanoseconds = false;
+    }
 
     // Auto-detect client address if not specified
     if (session.m_impl->config.client_address.empty()) {
@@ -546,7 +554,7 @@ Result<int> DeviceSession::receivePackets(void* buffer, const size_t buffer_size
 
         // Convert timestamps from sample counts to nanoseconds for non-Gemini devices.
         // The flag is set when PROCREP is processed in updateConfigFromBuffer above.
-        if (!m_impl->timestamps_are_nanoseconds && m_impl->ts_convert_den > 0) {
+        if (!m_impl->timestamps_are_nanoseconds && m_impl->ts_convert_den > 1) {
             auto* bytes_ptr = static_cast<uint8_t*>(buffer);
             const size_t total_bytes = result.value();
             size_t offset = 0;
@@ -1361,6 +1369,7 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 m_impl->timestamps_are_nanoseconds = is_gemini;
 
                 if (!is_gemini) {
+                    m_impl->clock_sync.reset();
                     uint32_t sysfreq = m_impl->device_config.sysinfo.sysfreq;
                     if (sysfreq > 0) {
                         uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
@@ -1479,15 +1488,22 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 const auto* nplay = reinterpret_cast<const cbPKT_NPLAY*>(buff_bytes + offset);
                 std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
                 if (m_impl->pending_clock_probe.active) {
-                    // New firmware (>=7.8 with clock sync mod) writes fresh
+                    // New firmware (>=7.9? with clock sync mod) writes fresh
                     // clock_gettime(ptp_clkid) into .etime — zero staleness.
                     // Old firmware echoes the packet unchanged, so .etime stays 0
                     // (we zero-initialize it). Fall back to header->time which is
                     // the stale ptptime from the previous main loop iteration.
                     constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
-                    const uint64_t device_time_ns = (nplay->etime != 0)
-                        ? nplay->etime
-                        : header->time + STALENESS_CORRECTION_NS;
+                    uint64_t device_time_ns;
+                    if (nplay->etime != 0) {
+                        device_time_ns = nplay->etime;
+                    } else {
+                        device_time_ns = header->time;
+                        if (!m_impl->timestamps_are_nanoseconds && m_impl->ts_convert_den > 1) {
+                            device_time_ns = device_time_ns * m_impl->ts_convert_num / m_impl->ts_convert_den;
+                        }
+                        device_time_ns += STALENESS_CORRECTION_NS;
+                    }
 
                     m_impl->clock_sync.addProbeSample(
                         m_impl->pending_clock_probe.t1_local,

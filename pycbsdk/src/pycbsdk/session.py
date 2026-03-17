@@ -1181,30 +1181,30 @@ class Session:
     def _calibrate_monotonic_offset() -> int:
         """Compute offset between time.monotonic() and C++ steady_clock.
 
-        On Linux, macOS, and Windows with Python 3.12+, both clocks use the
-        same underlying source (CLOCK_MONOTONIC / mach_absolute_time /
-        QueryPerformanceCounter) so the offset is exactly 0.
+        On modern macOS, libc++ steady_clock uses mach_continuous_time()
+        (includes sleep) while Python time.monotonic() uses
+        mach_absolute_time() (excludes sleep), so the clocks can diverge
+        by the total accumulated sleep time.
 
         On older Windows Python (<3.12), time.monotonic() may use
-        GetTickCount64 while steady_clock uses QueryPerformanceCounter,
-        so we measure the offset empirically.
+        GetTickCount64 while libc++ steady_clock uses QueryPerformanceCounter.
+
+        Always measure empirically.
 
         Returns:
             steady_clock_ns - monotonic_ns (int).
         """
-        import sys
-        import platform
-
-        if platform.system() != "Windows" or sys.version_info >= (3, 12):
-            return 0
-
-        # Windows < 3.12: clocks may differ, measure empirically
         _lib = _get_lib()
         t1 = _time.monotonic()
         steady_ns = _lib.cbsdk_get_steady_clock_ns()
         t2 = _time.monotonic()
         mono_ns = int((t1 + t2) / 2 * 1_000_000_000)
-        return steady_ns - mono_ns
+        offset = steady_ns - mono_ns
+        # If the offset is small enough to be measurement noise, treat
+        # the clocks as identical (common case on Linux and Windows 3.12+).
+        if abs(offset) < 1_000_000:  # < 1 ms
+            return 0
+        return offset
 
     @property
     def clock_offset_ns(self) -> Optional[int]:
