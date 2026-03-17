@@ -347,6 +347,12 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
     session.m_impl = std::make_unique<Impl>();
     session.m_impl->config = config;
 
+    // LEGACY_NSP is known to use sample-count timestamps (never Gemini).
+    // For other types, we default to true and let PROCREP confirm.
+    if (config.type == DeviceType::LEGACY_NSP) {
+        session.m_impl->timestamps_are_nanoseconds = false;
+    }
+
     // Auto-detect client address if not specified
     if (session.m_impl->config.client_address.empty()) {
         session.m_impl->config.client_address = detectClientAddress(session.m_impl->config.type);
