@@ -131,6 +131,9 @@ typedef uint32_t cbsdk_callback_handle_t;
 typedef void (*cbsdk_packet_callback_fn)(const cbPKT_GENERIC* pkts, size_t count, void* user_data);
 typedef void (*cbsdk_event_callback_fn)(const cbPKT_GENERIC* pkt, void* user_data);
 typedef void (*cbsdk_group_callback_fn)(const cbPKT_GROUP* pkt, void* user_data);
+typedef void (*cbsdk_group_batch_callback_fn)(const int16_t* samples, size_t n_samples,
+                                               size_t n_channels, const uint64_t* timestamps,
+                                               void* user_data);
 typedef void (*cbsdk_config_callback_fn)(const cbPKT_GENERIC* pkt, void* user_data);
 typedef void (*cbsdk_error_callback_fn)(const char* error_message, void* user_data);
 
@@ -169,6 +172,9 @@ cbsdk_callback_handle_t cbsdk_session_register_event_callback(
 cbsdk_callback_handle_t cbsdk_session_register_group_callback(
     cbsdk_session_t session, cbproto_group_rate_t rate,
     cbsdk_group_callback_fn callback, void* user_data);
+cbsdk_callback_handle_t cbsdk_session_register_group_batch_callback(
+    cbsdk_session_t session, cbproto_group_rate_t rate,
+    cbsdk_group_batch_callback_fn callback, void* user_data);
 cbsdk_callback_handle_t cbsdk_session_register_config_callback(
     cbsdk_session_t session, uint16_t packet_type,
     cbsdk_config_callback_fn callback, void* user_data);

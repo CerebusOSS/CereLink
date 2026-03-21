@@ -256,6 +256,15 @@ using EventCallback = std::function<void(const cbPKT_GENERIC& pkt)>;
 /// @param pkt The received group packet (pkt.cbpkt_header.type is the group ID 1-6)
 using GroupCallback = std::function<void(const cbPKT_GROUP& pkt)>;
 
+/// Batch group callback — receives multiple contiguous samples at once.
+/// Invoked once per queue drain batch (~30 samples at 30kHz) instead of once per sample.
+/// @param samples Contiguous int16 sample data [n_samples × n_channels], row-major
+/// @param n_samples Number of samples (packets) in this batch
+/// @param n_channels Number of channels per sample
+/// @param timestamps Device timestamp for each sample (array of n_samples)
+using GroupBatchCallback = std::function<void(const int16_t* samples, size_t n_samples,
+                                              size_t n_channels, const uint64_t* timestamps)>;
+
 /// Config callback for system/configuration packets (chid & 0x8000)
 /// @param pkt The received config packet
 using ConfigCallback = std::function<void(const cbPKT_GENERIC& pkt)>;
@@ -352,6 +361,15 @@ public:
     /// @param callback Function to call for matching group packets
     /// @return Handle for unregistration
     CallbackHandle registerGroupCallback(SampleRate rate, GroupCallback callback) const;
+
+    /// Register batch callback for continuous sample group packets.
+    /// Instead of invoking the callback once per packet (~30,000/s at 30kHz), this
+    /// batches all group packets from a single queue drain (~30 packets from one UDP
+    /// datagram) and invokes the callback once with contiguous sample data.
+    /// @param rate Sample rate to match (SR_500 through SR_RAW)
+    /// @param callback Function receiving (samples, n_samples, n_channels, timestamps)
+    /// @return Handle for unregistration
+    CallbackHandle registerGroupBatchCallback(SampleRate rate, GroupBatchCallback callback) const;
 
     /// Register callback for config/system packets
     /// @param packet_type Packet type to match (e.g. cbPKTTYPE_COMMENTREP, cbPKTTYPE_SYSREPRUNLEV)

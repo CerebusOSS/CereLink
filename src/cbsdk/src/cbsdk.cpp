@@ -538,6 +538,27 @@ cbsdk_callback_handle_t cbsdk_session_register_group_callback(
     }
 }
 
+cbsdk_callback_handle_t cbsdk_session_register_group_batch_callback(
+    cbsdk_session_t session,
+    cbproto_group_rate_t rate,
+    cbsdk_group_batch_callback_fn callback,
+    void* user_data) {
+    if (!session || !session->cpp_session || !callback) {
+        return 0;
+    }
+    try {
+        return session->cpp_session->registerGroupBatchCallback(
+            static_cast<cbsdk::SampleRate>(rate),
+            [callback, user_data](const int16_t* samples, size_t n_samples,
+                                   size_t n_channels, const uint64_t* timestamps) {
+                callback(samples, n_samples, n_channels, timestamps, user_data);
+            }
+        );
+    } catch (...) {
+        return 0;
+    }
+}
+
 cbsdk_callback_handle_t cbsdk_session_register_config_callback(
     cbsdk_session_t session,
     uint16_t packet_type,

@@ -1,131 +1,59 @@
-# cbsdk_v2 - New SDK Public API
+# cbsdk - SDK Public API
 
-**Status:** Phase 4 - Not Started
+Public C API (with internal C++ implementation) that orchestrates cbdev + cbshm into a
+single session interface.
 
-## Purpose
+## Responsibilities
 
-Public C API that orchestrates cbdev + cbshm to provide a clean, stable interface for users.
+- **Session lifecycle:** Create, start, stop, destroy
+- **Mode auto-detection:** CENTRAL_COMPAT CLIENT → Native CLIENT → Native STANDALONE
+  (three-way fallback)
+- **Device handshake:** Protocol detection, configuration request, run-level control
+- **Callback system:** Per-type callbacks (event, group, group batch, config, packet)
+  dispatched on a dedicated thread via lock-free SPSC queue
+- **Configuration access:** Channel info, group info, filters, labels, positions, scaling
+- **Commands:** Comments, digital output, analog output monitor, recording control, CCF
+  load/save, clock synchronization
 
-**Key Goal:** Hide all multi-instrument and indexing complexity from users!
+## Architecture
 
-## Core Functionality
+```
+User code
+  ↓ C API (cbsdk.h)
+SdkSession (C++)
+  ├── cbdev::IDeviceSession  (UDP transport, STANDALONE only)
+  └── cbshm::ShmemSession    (shared memory, all modes)
+```
 
-1. **Session Management**
-   - `cbSdkOpen_v2()` / `cbSdkClose_v2()`
-   - Automatic mode detection (standalone vs. client)
-   - Device name resolution ("Hub1" → IP address)
+### Thread Model
 
-2. **Orchestration**
-   - Manages lifecycle of cbshm + cbdev
-   - Routes packets: device → shmem → user callbacks
-   - Handles mode-specific logic internally
+**STANDALONE** (3 threads):
+1. UDP receive (cbdev) → shmem store + SPSC queue push
+2. Callback dispatcher → drain queue, invoke user callbacks
+3. UDP send (cbdev) → drain transmit buffer
 
-3. **Configuration API**
-   - `cbSdkGetProcInfo_v2()` - uses first active instrument
-   - `cbSdkGetChanInfo_v2()` / `cbSdkSetChanInfo_v2()`
-   - All config operations abstracted from multi-instrument complexity
+**CLIENT** (1 thread):
+1. Shmem receive → read ring buffer, invoke user callbacks directly
 
-4. **Callback System**
-   - Register user callbacks for packets
-   - Thread-safe callback invocation
-   - Flexible callback management
-
-## Key Design Decisions
-
-- **C API:** Public interface is pure C for ABI stability
-- **C++ Implementation:** Internal SdkSession class in C++
-- **Hide Complexity:** Users never see InstrumentId, indexing, or mode details
-- **Stable API:** Can evolve cbshm/cbdev without breaking users
-
-## Current Status
-
-- [x] Directory structure created
-- [x] CMake integration added (placeholder)
-- [ ] SdkSession class (C++) designed
-- [ ] C API wrappers implemented
-- [ ] Mode detection logic implemented
-- [ ] Packet routing implemented
-- [ ] Callback system implemented
-- [ ] Device name resolution implemented
-- [ ] Integration tests written
-
-## API Preview
-
-### C API (Public)
+## Usage (C)
 
 ```c
-// cbsdk_v2.h
-typedef uint32_t cbSdkHandle;
+#include <cbsdk/cbsdk.h>
 
-typedef struct {
-    cbSdkConnectionType conType;  // DEFAULT, CENTRAL, STANDALONE
-    const char* deviceAddress;    // Optional: override default
-    uint16_t deviceRecvPort;      // Optional: override default
-    uint16_t deviceSendPort;      // Optional: override default
-} cbSdkConnectionInfo;
+cbsdk_config_t cfg = cbsdk_config_default();
+cfg.device_type = CBPROTO_DEVICE_TYPE_HUB1;
 
-// Open session
-cbSdkResult cbSdkOpen_v2(
-    uint32_t instance,
-    const cbSdkConnectionInfo* pConnection,
-    cbSdkHandle* pHandle
-);
+cbsdk_session_t session;
+cbsdk_session_create(&session, &cfg);
+cbsdk_session_start(session);
 
-// Close session
-cbSdkResult cbSdkClose_v2(cbSdkHandle handle);
+// Register callbacks, query config, send commands ...
 
-// Get config (simplified - no instrument IDs!)
-cbSdkResult cbSdkGetProcInfo_v2(
-    cbSdkHandle handle,
-    cbPROCINFO* pInfo
-);
-
-cbSdkResult cbSdkGetChanInfo_v2(
-    cbSdkHandle handle,
-    uint16_t channel,
-    cbCHANINFO* pInfo
-);
+cbsdk_session_stop(session);
+cbsdk_session_destroy(session);
 ```
-
-### C++ Implementation (Internal)
-
-```cpp
-// sdk_session.cpp
-class SdkSession {
-public:
-    cbSdkResult open(const cbSdkConnectionInfo* pConn) {
-        // 1. Determine mode (standalone vs. client)
-        // 2. Open cbshm
-        // 3. If standalone: open cbdev and start receive thread
-        // 4. Register packet callback: cbdev → cbshm → user
-    }
-
-    cbSdkResult getProcInfo(cbPROCINFO* pInfo) {
-        // Uses cbshm::getFirstProcInfo()
-        // User never knows about multi-instrument complexity!
-    }
-
-private:
-    cbshm::ShmemSession m_shmem;
-    cbdev::DeviceSession m_device;
-};
-```
-
-## Migration from Old API
-
-Users will transition from:
-```c
-cbSdkOpen(INST, conType, con);  // Old API
-```
-
-To:
-```c
-cbSdkOpen_v2(instance, &conInfo, &handle);  // New API
-```
-
-During Phase 5, we'll provide migration guide and compatibility shims.
 
 ## References
 
-- Design document: `docs/refactor_plan.md` (Phase 4)
-- Current SDK: `src/cbsdk/cbsdk.cpp`, `include/cerelink/cbsdk.h`
+- [Shared memory architecture](../../docs/shared_memory_architecture.md)
+- Python wrapper: [pycbsdk](../../pycbsdk/)
