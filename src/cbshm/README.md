@@ -1,103 +1,40 @@
 # cbshm - Shared Memory Management
 
-**Status:** Phase 2 - ✅ **COMPLETE** (2025-11-11)
+Internal C++ library that manages shared memory segments for inter-process communication
+between STANDALONE and CLIENT sessions.
 
-## Purpose
+## Responsibilities
 
-Internal C++ library that manages shared memory with **Central-compatible layout**.
+- **Three layout modes:** `NATIVE` (CereLink-to-CereLink), `CENTRAL_COMPAT` (attach to
+  Central's shared memory), `CENTRAL` (Central-compatible layout created by CereLink)
+- **Consistent packet indexing:** Always uses `packet.instrument` as the array index,
+  regardless of mode
+- **Ring buffer I/O:** Write packets to the receive buffer (STANDALONE), read packets
+  from it (CLIENT), with protocol-aware parsing and translation in compat mode
+- **Instrument filtering:** In `CENTRAL_COMPAT` mode, filters packets from Central's
+  shared receive buffer by instrument index
+- **Platform-specific implementations:** Windows (`CreateFileMapping`) and POSIX
+  (`shm_open`) shared memory, plus platform-specific signaling
 
-**Key Responsibility:** Provide consistent shared memory layout regardless of mode!
+## Key Types
 
-## Core Functionality
+| Type | Purpose |
+|------|---------|
+| `ShmemSession` | Main API — create/attach segments, read/write buffers, access config |
+| `ShmemLayout` | Enum: `CENTRAL`, `CENTRAL_COMPAT`, `NATIVE` |
+| `NativeConfigBuffer` | Single-instrument config (284 channels, scalar arrays) |
+| `CentralLegacyCFGBUFF` | Matches Central's exact binary layout for compat mode |
+| `cbConfigBuffer` | CereLink's own multi-instrument config layout |
 
-1. **Mode Detection**
-   - Detect if Central is running (client mode)
-   - Or operate standalone (direct device connection)
+## Key Design Notes
 
-2. **Correct Indexing** (THE KEY FIX!)
-   ```cpp
-   // ALWAYS use packet.instrument as index (mode-independent!)
-   Result<void> storePacket(const cbPKT_GENERIC& pkt) {
-       InstrumentId id = InstrumentId::fromPacketField(pkt.cbpkt_header.instrument);
-       uint8_t idx = id.toIndex();  // 0-based index for array access
-
-       // Store at procinfo[idx], bankinfo[idx], etc.
-       // Works in BOTH standalone and client mode!
-       memcpy(&m_cfg_ptr->procinfo[idx], &pkt, sizeof(cbPKT_PROCINFO));
-   }
-   ```
-
-3. **Packet Routing**
-   - `storePacket()`: Route incoming packet to correct shmem location
-   - Uses packet.instrument field consistently (no mode switching!)
-
-4. **Config Management**
-   - Read/write PROCINFO, CHANINFO, etc.
-   - Uses Central-compatible layout (cbMAXPROCS=4, cbNUM_FE_CHANS=768)
-
-## Key Design Decisions
-
-- **C++ only, internal use:** Not exposed to public API
-- **Encapsulates indexing logic:** Central fix for the bug
-- **Platform-specific:** Different implementations for Windows/macOS/Linux
-- **No user-facing discovery:** cbsdk handles "which instrument to use" logic
-
-## Current Status
-
-- [x] Directory structure created
-- [x] CMake integration added
-- [x] ShmemSession class API designed (2025-11-11)
-- [x] Upstream shared memory structures examined
-- [x] Platform-specific shared memory code implemented (Windows/POSIX)
-- [x] Instrument status management implemented
-- [x] Configuration read/write implemented
-- [x] Packet routing implemented (THE KEY FIX!)
-- [x] Build system working (475KB library)
-- [x] Unit tests written and passing (18 tests)
-
-**Phase 2 Status:** ✅ **COMPLETE**
-**Build:** ✅ Compiles successfully (475KB library)
-**Test Coverage:** ✅ 18 tests, 100% passing
-
-## Key Insights from Upstream Analysis
-
-**Critical Discovery:** Central uses different constants than NSP!
-
-- **NSP (upstream/cbproto/cbproto.h):**
-  - `cbMAXPROCS = 1` (single processor)
-  - `cbNUM_FE_CHANS = 256` (channels for one NSP)
-
-- **Central (upstream/cbhwlib/cbhwlib.h):**
-  - `cbMAXPROCS = 4` (up to 4 processors)
-  - `cbNUM_FE_CHANS = 768` (channels for up to 4 NSPs)
-
-**Design Decision:** cbshm MUST use Central constants to ensure compatibility!
-
-## API (implemented in include/cbshm/shmem_session.h)
-
-```cpp
-namespace cbshm {
-    class ShmemSession {
-    public:
-        static Result<ShmemSession> create(const std::string& name, Mode mode);
-
-        // Instrument management
-        Result<bool> isInstrumentActive(InstrumentId id) const;
-        Result<void> setInstrumentActive(InstrumentId id, bool active);
-        Result<InstrumentId> getFirstActiveInstrument() const;
-
-        // Config access
-        Result<cbPKT_PROCINFO> getProcInfo(InstrumentId id) const;
-        Result<cbPKT_CHANINFO> getChanInfo(uint32_t channel) const;
-
-        // Packet routing (THE KEY FIX!)
-        Result<void> storePacket(const cbPKT_GENERIC& pkt);
-        Result<void> storePackets(const cbPKT_GENERIC* pkts, size_t count);
-    };
-}
-```
+- **Central vs CereLink constants:** Central uses `cbMAXPROCS=4`, `cbNUM_FE_CHANS=768`.
+  CereLink uses `cbMAXPROCS=1`, `cbNUM_FE_CHANS=256`. The compat types use Central's
+  constants; native types use CereLink's.
+- **Not exposed to public API:** cbsdk orchestrates cbshm; users don't interact with it
+  directly.
 
 ## References
 
-- Design document: `docs/refactor_plan.md` (Phase 2)
-- Current shared memory: `src/cbhwlib/cbhwlib.cpp`
+- [Shared memory architecture](../../docs/shared_memory_architecture.md)
+- [Central's shared memory layout](../../docs/central_shared_memory_layout.md)

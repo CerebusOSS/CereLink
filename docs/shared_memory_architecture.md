@@ -516,66 +516,11 @@ Same structure layouts and mechanisms.
 | cbSPKbuffer    | Yes          | Same layout                                      |
 | cbSIGNALevent  | Yes          | Same mechanism                                   |
 
-## Implementation Status
+## Known Limitations
 
-### Core Infrastructure (Complete)
-
-- All 7 shared memory segments implemented for both Central-compat and native layouts
-- `ShmemLayout` enum (`CENTRAL` / `CENTRAL_COMPAT` / `NATIVE`) controls buffer sizes and struct interpretation
-- cbSIGNALevent synchronization working
-- Ring buffer reading logic complete
-- CLIENT mode shared memory receive thread implemented
-- STANDALONE mode signaling to CLIENT processes
-- Thread lifecycle management (start/stop)
-- Optimized CLIENT mode (1 thread, 1 data copy)
-
-### Native Mode (Complete)
-
-- [x] Define `NativeConfigBuffer` struct (single-instrument, 284 channels)
-- [x] Define native spike sorting structs (284-channel arrays)
-- [x] Define `NativeTransmitBuffer` / `NativeTransmitBufferLocal` (1024-byte slots)
-- [x] Define `NativeSpikeCache` / `NativeSpikeBuffer` (272 analog channels)
-- [x] Define `NativePCStatus` (single instrument)
-- [x] Implement `ShmemLayout` parameter in `ShmemSession::create()`
-- [x] Implement dual-layout buffer sizing (`computeBufferSizes()`)
-- [x] Implement `initNativeBuffers()` for STANDALONE initialization
-- [x] All accessor methods branch on layout (procinfo, bankinfo, filtinfo, chaninfo, etc.)
-- [x] Runtime `rec_buffer_len` replaces hardcoded receive buffer length
-- [x] `getConfigBuffer()` returns nullptr if NATIVE; `getNativeConfigBuffer()` returns nullptr if CENTRAL
-- [x] Implement `cbshm_{device}_{segment}` naming in SdkSession
-- [x] Implement three-way mode auto-detection: Central CLIENT → Native CLIENT → Native STANDALONE
-- [x] 34 new unit tests (20 NativeShmemSession + 14 NativeTypes), all passing
-- [x] All existing Central-mode tests unaffected (no regressions)
-
-### Central Compat Mode (Complete - Phase 2)
-
-- [x] Define `CentralLegacyCFGBUFF` struct matching Central's exact binary layout
-- [x] Add `ShmemLayout::CENTRAL_COMPAT` layout mode using `CentralLegacyCFGBUFF`
-- [x] All accessor methods dispatch on `CENTRAL_COMPAT` (use `legacyCfg()` instead of `centralCfg()`)
-- [x] Instrument status: `isInstrumentActive()` returns true, `setInstrumentActive()` returns error
-- [x] `getLegacyConfigBuffer()` accessor for direct access to `CentralLegacyCFGBUFF*`
-- [x] Implement receive buffer instrument filtering (`setInstrumentFilter()`)
-- [x] `SdkSession::create()` uses `CENTRAL_COMPAT` for Central CLIENT with instrument filter auto-set
-- [x] `getCentralInstrumentIndex()` maps DeviceType → instrument index (GEMSTART==2)
-- [x] 16 new unit tests (14 CentralCompat + 2 CentralLegacyTypes), all passing
-- [x] All existing tests unaffected (no regressions)
-
-### Protocol Translation (Complete - Phase 3)
-
-- [x] Move `PacketTranslator` from `cbdev` to `cbproto` (shared protocol library)
-- [x] Convert `cbproto` from header-only (INTERFACE) to static library (STATIC)
-- [x] Detect Central's protocol version from `procinfo[0].version`
-- [x] Fix `readReceiveBuffer` to parse packet size from header (`header_32size + dlen`)
-  instead of reading the first dword (which is the `time` field, not packet size)
-- [x] Protocol-aware receive path: parse protocol-specific headers, translate to current format
-- [x] Protocol-aware transmit path: translate current format to legacy before writing
-- [x] 10 new protocol translation unit tests (version detection, read/transmit round-trip,
-  instrument filtering with current protocol), all passing
-- [x] All existing tests updated and passing (no regressions)
-
-### TODO
-
-- [ ] Runtime GEMSTART detection (currently hardcoded GEMSTART==2)
+- GEMSTART mapping is hardcoded to `GEMSTART==2`. If a Central build uses a different
+  GEMSTART, the instrument index mapping must be updated. Runtime detection is not yet
+  implemented.
 
 ## Code Locations
 
