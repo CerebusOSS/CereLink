@@ -143,13 +143,7 @@ struct SdkSession::Impl {
 
     void rebuildChannelTypeCache() {
         for (uint32_t ch = 0; ch < cbMAXCHANS; ++ch) {
-            const cbPKT_CHANINFO* ci = nullptr;
-            if (device_session) {
-                ci = device_session->getChanInfo(ch + 1);
-            } else if (shmem_session) {
-                const auto* native = shmem_session->getNativeConfigBuffer();
-                if (native) ci = &native->chaninfo[ch];
-            }
+            const auto* ci = getChanInfoPtr(ch);
             channel_type_cache[ch] = ci ? classifyChannelByCaps(*ci) : ChannelType::ANY;
         }
         channel_cache_valid = true;
@@ -1115,6 +1109,9 @@ const cbPKT_SYSINFO* SdkSession::getSysInfo() const {
         const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
         if (native)
             return &native->sysinfo;
+        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
+        if (legacy)
+            return &legacy->sysinfo;
     }
     return nullptr;
 }
@@ -1126,6 +1123,9 @@ const cbPKT_CHANINFO* SdkSession::getChanInfo(const uint32_t chan_id) const {
         const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
         if (native)
             return &native->chaninfo[chan_id - 1];
+        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
+        if (legacy)
+            return &legacy->chaninfo[chan_id - 1];
     }
     return nullptr;
 }
@@ -1141,6 +1141,12 @@ const cbPKT_GROUPINFO* SdkSession::getGroupInfo(uint32_t group_id) const {
         const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
         if (native)
             return &native->groupinfo[group_id - 1];
+        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
+        if (legacy) {
+            int32_t inst = getCentralInstrumentIndex(m_impl->config.device_type);
+            if (inst >= 0)
+                return &legacy->groupinfo[inst][group_id - 1];
+        }
     }
     return nullptr;
 }
@@ -1156,6 +1162,12 @@ const cbPKT_FILTINFO* SdkSession::getFilterInfo(const uint32_t filter_id) const 
         const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
         if (native)
             return &native->filtinfo[filter_id];
+        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
+        if (legacy) {
+            int32_t inst = getCentralInstrumentIndex(m_impl->config.device_type);
+            if (inst >= 0)
+                return &legacy->filtinfo[inst][filter_id];
+        }
     }
     return nullptr;
 }
@@ -1167,15 +1179,38 @@ uint32_t SdkSession::getRunLevel() const {
 uint32_t SdkSession::getProtocolVersion() const {
     if (m_impl->device_session)
         return static_cast<uint32_t>(m_impl->device_session->getProtocolVersion());
-    return 0;  // CLIENT mode — no protocol version available
+    if (m_impl->shmem_session) {
+        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
+        if (native)
+            return native->version;
+        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
+        if (legacy) {
+            int32_t inst = getCentralInstrumentIndex(m_impl->config.device_type);
+            if (inst >= 0)
+                return legacy->procinfo[inst].version;
+        }
+    }
+    return 0;
 }
 
 std::string SdkSession::getProcIdent() const {
     if (m_impl->device_session) {
         const auto& config = m_impl->device_session->getDeviceConfig();
-        // ident is a fixed-size char array, may not be null-terminated
         return std::string(config.procinfo.ident,
             strnlen(config.procinfo.ident, sizeof(config.procinfo.ident)));
+    }
+    if (m_impl->shmem_session) {
+        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
+        if (native)
+            return std::string(native->procinfo.ident,
+                strnlen(native->procinfo.ident, sizeof(native->procinfo.ident)));
+        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
+        if (legacy) {
+            int32_t inst = getCentralInstrumentIndex(m_impl->config.device_type);
+            if (inst >= 0)
+                return std::string(legacy->procinfo[inst].ident,
+                    strnlen(legacy->procinfo[inst].ident, sizeof(legacy->procinfo[inst].ident)));
+        }
     }
     return {};
 }
@@ -1238,6 +1273,8 @@ const cbPKT_CHANINFO* SdkSession::Impl::getChanInfoPtr(uint32_t idx) const {
     } else if (shmem_session) {
         const auto* native = shmem_session->getNativeConfigBuffer();
         if (native) return &native->chaninfo[idx];
+        const auto* legacy = shmem_session->getLegacyConfigBuffer();
+        if (legacy) return &legacy->chaninfo[idx];
     }
     return nullptr;
 }
