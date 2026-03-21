@@ -116,15 +116,17 @@ struct SdkSession::Impl {
 
     // User callbacks — per-type vectors for O(1) dispatch (Phase 2, Fix 8)
     // Registered rarely (user thread), dispatched at 30k/s (callback thread).
-    struct PacketCB { CallbackHandle handle; PacketCallback cb; };
-    struct EventCB  { CallbackHandle handle; ChannelType channel_type; EventCallback cb; };
-    struct GroupCB  { CallbackHandle handle; uint8_t group_id; GroupCallback cb; };
-    struct ConfigCB { CallbackHandle handle; uint16_t packet_type; ConfigCallback cb; };
+    struct PacketCB     { CallbackHandle handle; PacketCallback cb; };
+    struct EventCB      { CallbackHandle handle; ChannelType channel_type; EventCallback cb; };
+    struct GroupCB       { CallbackHandle handle; uint8_t group_id; GroupCallback cb; };
+    struct GroupBatchCB  { CallbackHandle handle; uint8_t group_id; GroupBatchCallback cb; };
+    struct ConfigCB     { CallbackHandle handle; uint16_t packet_type; ConfigCallback cb; };
 
-    std::vector<PacketCB> packet_callbacks;
-    std::vector<EventCB>  event_callbacks;
-    std::vector<GroupCB>  group_callbacks;
-    std::vector<ConfigCB> config_callbacks;
+    std::vector<PacketCB>     packet_callbacks;
+    std::vector<EventCB>      event_callbacks;
+    std::vector<GroupCB>       group_callbacks;
+    std::vector<GroupBatchCB>  group_batch_callbacks;
+    std::vector<ConfigCB>     config_callbacks;
 
     CallbackHandle next_callback_handle = 1;
     ErrorCallback error_callback;
@@ -263,6 +265,52 @@ struct SdkSession::Impl {
             if (ci && ci->chan > 0) {
                 applyCmpOverlay(*ci);
             }
+        }
+    }
+
+    /// Dispatch a batch of packets: first fire batch group callbacks, then per-packet callbacks.
+    /// Called from both STANDALONE callback thread and CLIENT shmem receive thread.
+    void dispatchBatch(cbPKT_GENERIC* packets, size_t count) {
+        // Phase 1: batch group callbacks (one invocation per group_id per batch)
+        std::vector<GroupBatchCB> snap_batch;
+        {
+            std::lock_guard<std::mutex> lock(user_callback_mutex);
+            snap_batch = group_batch_callbacks;
+        }
+
+        if (!snap_batch.empty()) {
+            // Temp buffers — sized for max batch (128 packets × 272 channels)
+            // ~70KB on stack, well within typical thread stack limits.
+            int16_t sample_buf[128 * cbNUM_ANALOG_CHANS];
+            uint64_t ts_buf[128];
+
+            for (const auto& bcb : snap_batch) {
+                size_t n = 0;
+                size_t n_channels = 0;
+
+                for (size_t i = 0; i < count; i++) {
+                    if (packets[i].cbpkt_header.chid == 0 &&
+                        packets[i].cbpkt_header.type == bcb.group_id) {
+                        const auto& grp = reinterpret_cast<const cbPKT_GROUP&>(packets[i]);
+                        size_t nc = static_cast<size_t>(grp.cbpkt_header.dlen) * 2;
+                        if (nc == 0) continue;
+                        if (n == 0) n_channels = nc;
+                        else if (nc != n_channels) continue;  // skip mismatched (shouldn't happen)
+                        std::memcpy(&sample_buf[n * n_channels], grp.data, n_channels * sizeof(int16_t));
+                        ts_buf[n] = grp.cbpkt_header.time;
+                        n++;
+                    }
+                }
+
+                if (n > 0 && bcb.cb) {
+                    bcb.cb(sample_buf, n, n_channels, ts_buf);
+                }
+            }
+        }
+
+        // Phase 2: per-packet dispatch (existing behavior, unchanged)
+        for (size_t i = 0; i < count; i++) {
+            dispatchPacket(packets[i]);
         }
     }
 
@@ -689,10 +737,8 @@ Result<void> SdkSession::start() {
 
                     impl->stats.packets_delivered_to_callback.fetch_add(count, std::memory_order_relaxed);
 
-                    // Dispatch each packet to matching typed callbacks
-                    for (size_t i = 0; i < count; i++) {
-                        impl->dispatchPacket(packets[i]);
-                    }
+                    // Dispatch batch (fires batch group callbacks, then per-packet callbacks)
+                    impl->dispatchBatch(packets, count);
                 } else {
                     // No packets available - wait for notification
                     impl->callback_thread_waiting.store(true, std::memory_order_release);
@@ -919,14 +965,15 @@ Result<void> SdkSession::start() {
 
                     if (packets_read > 0) {
                         impl->stats.packets_delivered_to_callback.fetch_add(packets_read, std::memory_order_relaxed);
+                        // CLIENT mode: apply CMP position overlay for CHANREP packets
                         for (size_t i = 0; i < packets_read; i++) {
-                            // CLIENT mode: apply CMP position overlay for CHANREP packets
                             if ((packets[i].cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
                                 const auto* chaninfo = reinterpret_cast<const cbPKT_CHANINFO*>(&packets[i]);
                                 impl->applyCmpOverlay(*chaninfo);
                             }
-                            impl->dispatchPacket(packets[i]);
                         }
+                        // Dispatch batch (fires batch group callbacks, then per-packet callbacks)
+                        impl->dispatchBatch(packets, packets_read);
                     }
                 } while (packets_read == MAX_BATCH && impl->shmem_receive_thread_running.load());
                 if (had_error) continue;
@@ -1013,6 +1060,14 @@ CallbackHandle SdkSession::registerGroupCallback(const SampleRate rate, GroupCal
     return handle;
 }
 
+CallbackHandle SdkSession::registerGroupBatchCallback(const SampleRate rate, GroupBatchCallback callback) const {
+    const uint8_t group_id = static_cast<uint8_t>(rate);
+    std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
+    const auto handle = m_impl->next_callback_handle++;
+    m_impl->group_batch_callbacks.push_back({handle, group_id, std::move(callback)});
+    return handle;
+}
+
 CallbackHandle SdkSession::registerConfigCallback(const uint16_t packet_type, ConfigCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
@@ -1030,6 +1085,7 @@ void SdkSession::unregisterCallback(CallbackHandle handle) const {
     erase_by_handle(m_impl->packet_callbacks);
     erase_by_handle(m_impl->event_callbacks);
     erase_by_handle(m_impl->group_callbacks);
+    erase_by_handle(m_impl->group_batch_callbacks);
     erase_by_handle(m_impl->config_callbacks);
 }
 

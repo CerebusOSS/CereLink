@@ -244,7 +244,9 @@ class Session:
             return
         self._closed = True
         _lib = _get_lib()
-        # Unregister all callbacks first to avoid calling into dead Python objects
+        # Stop first to join all threads — no more callbacks will fire after this
+        _lib.cbsdk_session_stop(self._session)
+        # Now safe to unregister and release Python callback references
         for handle in self._handles:
             _lib.cbsdk_session_unregister_callback(self._session, handle)
         self._handles.clear()
@@ -296,6 +298,35 @@ class Session:
                 self._register_group_callback_numpy(int(rate), fn)
             else:
                 self._register_group_callback(int(rate), fn)
+            return fn
+        return decorator
+
+    def on_group_batch(self, rate: SampleRate = SampleRate.SR_30kHz) -> Callable:
+        """Decorator to register a *batch* callback for continuous sample group packets.
+
+        Instead of calling the function once per sample (~30,000/s at 30 kHz), the
+        SDK collects all group packets from a single queue drain (~30 from one UDP
+        datagram) and calls the function once with a contiguous numpy array.
+
+        The callback receives ``(samples, timestamps)`` where:
+
+        - ``samples`` is an ``int16`` array of shape ``(n_samples, n_channels)``.
+          The array is a copy and is owned by the callee.
+        - ``timestamps`` is a ``uint64`` array of shape ``(n_samples,)`` containing
+          the device timestamp for each sample.
+
+        Args:
+            rate: Sample rate to subscribe to.
+
+        Example::
+
+            @session.on_group_batch(SampleRate.SR_RAW)
+            def on_batch(samples, timestamps):
+                ring_buf[:, pos:pos+len(timestamps)] = samples.T
+        """
+        rate = _coerce_enum(SampleRate, rate, _RATE_ALIASES)
+        def decorator(fn):
+            self._register_group_batch_callback(int(rate), fn)
             return fn
         return decorator
 
@@ -398,6 +429,30 @@ class Session:
             raise RuntimeError("Failed to register group callback")
         self._handles.append(handle)
         self._callback_refs.append(c_group_cb)
+
+    def _register_group_batch_callback(self, rate: int, fn):
+        import numpy as np
+
+        _lib = _get_lib()
+
+        @ffi.callback("void(const int16_t*, size_t, size_t, const uint64_t*, void*)")
+        def c_batch_cb(samples_ptr, n_samples, n_channels, ts_ptr, user_data):
+            try:
+                sbuf = ffi.buffer(samples_ptr, n_samples * n_channels * 2)
+                arr = np.frombuffer(sbuf, dtype=np.int16).reshape(n_samples, n_channels).copy()
+                tbuf = ffi.buffer(ts_ptr, n_samples * 8)
+                ts = np.frombuffer(tbuf, dtype=np.uint64).copy()
+                fn(arr, ts)
+            except Exception:
+                pass  # Never let exceptions propagate into C
+
+        handle = _lib.cbsdk_session_register_group_batch_callback(
+            self._session, rate, c_batch_cb, ffi.NULL
+        )
+        if handle == 0:
+            raise RuntimeError("Failed to register group batch callback")
+        self._handles.append(handle)
+        self._callback_refs.append(c_batch_cb)
 
     def _register_config_callback(self, packet_type: int, fn):
         _lib = _get_lib()

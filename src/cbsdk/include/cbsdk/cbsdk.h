@@ -187,6 +187,17 @@ typedef void (*cbsdk_event_callback_fn)(const cbPKT_GENERIC* pkt, void* user_dat
 /// @param user_data User data pointer passed to registration function
 typedef void (*cbsdk_group_callback_fn)(const cbPKT_GROUP* pkt, void* user_data);
 
+/// Batch group callback — receives multiple contiguous samples from a single queue drain.
+/// Called once per batch (~30 samples at 30kHz) instead of once per sample.
+/// @param samples Contiguous int16 sample data [n_samples × n_channels], row-major
+/// @param n_samples Number of samples (packets) in this batch
+/// @param n_channels Number of channels per sample
+/// @param timestamps Device timestamp for each sample (array of n_samples)
+/// @param user_data User data pointer passed to registration function
+typedef void (*cbsdk_group_batch_callback_fn)(const int16_t* samples, size_t n_samples,
+                                               size_t n_channels, const uint64_t* timestamps,
+                                               void* user_data);
+
 /// Config callback for system/configuration packets (chid & 0x8000)
 /// @param pkt Pointer to the config packet
 /// @param user_data User data pointer passed to registration function
@@ -301,6 +312,20 @@ CBSDK_API cbsdk_callback_handle_t cbsdk_session_register_group_callback(
     cbsdk_session_t session,
     cbproto_group_rate_t rate,
     cbsdk_group_callback_fn callback,
+    void* user_data);
+
+/// Register batch callback for continuous sample group packets.
+/// Instead of invoking the callback once per packet, this batches all matching group
+/// packets from a single queue drain and invokes the callback once with contiguous data.
+/// @param session Session handle (must not be NULL)
+/// @param rate Sample rate to match
+/// @param callback Callback function (must not be NULL)
+/// @param user_data User data pointer passed to callback
+/// @return Handle for unregistration, or 0 on failure
+CBSDK_API cbsdk_callback_handle_t cbsdk_session_register_group_batch_callback(
+    cbsdk_session_t session,
+    cbproto_group_rate_t rate,
+    cbsdk_group_batch_callback_fn callback,
     void* user_data);
 
 /// Register callback for config/system packets
