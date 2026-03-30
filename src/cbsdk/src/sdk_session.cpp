@@ -869,6 +869,9 @@ Result<void> SdkSession::start() {
                     } else {
                         impl->stats.packets_sent_to_device.fetch_add(1, std::memory_order_relaxed);
                     }
+
+                    // Rate-limit: older firmware processes one packet per 50µs
+                    std::this_thread::sleep_for(std::chrono::microseconds(50));
                 }
 
                 if (has_packets) {
