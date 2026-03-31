@@ -262,6 +262,17 @@ def run_scenario(
             ident = session.proc_ident
             print(f"  protocol: {proto.name}  ident: {ident!r}")
 
+            # Activate a channel before clock sync so the device is already
+            # streaming on our port.  This avoids inflated clock-sync latency
+            # when another device floods the same UDP port (see #165).
+            if mode == "STANDALONE":
+                session.set_channel_sample_group(
+                    n_chans=1,
+                    channel_type=0,  # ChannelType.FRONTEND
+                    rate=SampleRate.SR_RAW,
+                )
+                time.sleep(1)  # Let the receive thread settle
+
             # Wait for clock sync (best-effort — not available in CENTRAL_COMPAT).
             has_clock_sync = False
             try:
@@ -281,7 +292,7 @@ def run_scenario(
             print(f"  Collecting {_cfg['packet_count']} packets ...")
             samples = _collect_packets(
                 session, _cfg["packet_count"], TIMEOUT_S,
-                configure=(mode == "STANDALONE"),
+                configure=False,  # Already activated above (or by background process)
             )
             print(f"  Collected {len(samples)} packets.")
 
