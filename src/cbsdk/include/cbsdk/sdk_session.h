@@ -449,10 +449,9 @@ public:
     /// @return Result indicating success or error
     Result<void> setSpikeLength(uint32_t spikelen, uint32_t spikepre);
 
-    /// Get most recent device timestamp from shared memory
-    /// On Gemini (protocol 4.0+) this is PTP nanoseconds.
-    /// On legacy NSP (protocol 3.x, CBPROTO_311) this is 30kHz ticks.
-    /// @return Raw device timestamp, or 0 if not available
+    /// Get most recent device timestamp from shared memory (always nanoseconds).
+    /// Non-Gemini clock ticks are converted using sysfreq automatically.
+    /// @return Device timestamp in nanoseconds, or 0 if not available
     uint64_t getTime() const;
 
     ///--------------------------------------------------------------------------------------------

@@ -30,6 +30,7 @@
 #include <cbshm/native_types.h>
 #include <cbproto/packet_translator.h>
 #include <cstring>
+#include <numeric>  // std::gcd
 
 namespace cbshm {
 
@@ -1712,7 +1713,20 @@ PROCTIME ShmemSession::getLastTime() const {
     if (!m_impl || !m_impl->is_open || !m_impl->rec_buffer_raw) {
         return 0;
     }
-    return m_impl->recLasttime();
+    PROCTIME t = m_impl->recLasttime();
+    // In CENTRAL_COMPAT mode, Central writes lasttime using the device's native
+    // timestamp unit.  Non-Gemini devices use clock ticks; convert to nanoseconds
+    // for consistency with readReceiveBuffer() which translates packet timestamps.
+    if (t != 0 && m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        auto gemini = isGeminiSystem();
+        if (gemini.isOk() && !gemini.value()) {
+            uint32_t sysfreq = m_impl->legacyCfg()->sysinfo.sysfreq;
+            if (sysfreq == 0) sysfreq = 30000;
+            uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
+            t = t * (1000000000 / g) / (sysfreq / g);
+        }
+    }
+    return t;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1757,6 +1771,24 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
 
     const bool needs_translation = (m_impl->layout == ShmemLayout::CENTRAL_COMPAT &&
                                      m_impl->compat_protocol != CBPROTO_PROTOCOL_CURRENT);
+
+    // For non-Gemini systems with protocol >= 4.0, header timestamps are in clock
+    // ticks and need conversion to nanoseconds.  (Protocol 3.11 already handles
+    // this inline with its hardcoded 30 kHz factor.)
+    uint64_t ts_num = 1, ts_den = 1;
+    bool needs_ts_conversion = false;
+    if (needs_translation && m_impl->compat_protocol != CBPROTO_PROTOCOL_311 &&
+        m_impl->status_buffer_raw) {
+        auto gemini = isGeminiSystem();
+        if (gemini.isOk() && !gemini.value()) {
+            uint32_t sysfreq = m_impl->legacyCfg()->sysinfo.sysfreq;
+            if (sysfreq == 0) sysfreq = 30000;
+            uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
+            ts_num = 1000000000 / g;
+            ts_den = sysfreq / g;
+            needs_ts_conversion = (ts_den > 1);
+        }
+    }
 
     uint8_t raw_buf[cbPKT_MAX_SIZE];
 
@@ -1849,6 +1881,10 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
                 // 4.1 (CBPROTO_PROTOCOL_410): header is identical, only some payloads differ
                 std::memcpy(dest, raw_buf, raw_bytes);
                 cbproto::PacketTranslator::translatePayload_410_to_current(dest, dest);
+            }
+            // Non-Gemini 4.0+: convert header timestamp from clock ticks to nanoseconds
+            if (needs_ts_conversion) {
+                dest_hdr.time = dest_hdr.time * ts_num / ts_den;
             }
         } else {
             // No translation needed (4.2+, NATIVE, or CENTRAL layout).
