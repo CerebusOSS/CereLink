@@ -1651,37 +1651,32 @@ Result<bool> ShmemSession::waitForData(uint32_t timeout_ms) const {
         return Result<bool>::error("Signal event not initialized");
     }
 
-    timespec ts;
 #ifdef __APPLE__
-    struct timeval tv;
-    gettimeofday(&tv, nullptr);
-    ts.tv_sec = tv.tv_sec;
-    ts.tv_nsec = tv.tv_usec * 1000;
+    // macOS lacks sem_timedwait.  Poll with short sleeps (500 µs) to keep
+    // latency under 1 ms while using negligible CPU.  Use mach_absolute_time
+    // for an accurate deadline instead of accumulating sleep-interval error.
+    const uint64_t deadline_us = clock_gettime_nsec_np(CLOCK_MONOTONIC) / 1000
+                                 + static_cast<uint64_t>(timeout_ms) * 1000;
+    for (;;) {
+        if (sem_trywait(m_impl->signal_event) == 0) {
+            return Result<bool>::ok(true);
+        }
+        if (clock_gettime_nsec_np(CLOCK_MONOTONIC) / 1000 >= deadline_us) {
+            return Result<bool>::ok(false);
+        }
+        usleep(500);
+    }
 #else
+    // Linux: sem_timedwait with an absolute CLOCK_REALTIME deadline.
+    timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
-#endif
-
     long ns = timeout_ms * 1000000L;
-    const long NANOSECONDS_PER_SEC = 1000000000L;
+    constexpr long NANOSECONDS_PER_SEC = 1000000000L;
     ts.tv_nsec += ns;
     if (ts.tv_nsec >= NANOSECONDS_PER_SEC) {
         ts.tv_sec += ts.tv_nsec / NANOSECONDS_PER_SEC;
         ts.tv_nsec = ts.tv_nsec % NANOSECONDS_PER_SEC;
     }
-
-#ifdef __APPLE__
-    int retries = timeout_ms / 10;
-    for (int i = 0; i < retries; ++i) {
-        if (sem_trywait(m_impl->signal_event) == 0) {
-            return Result<bool>::ok(true);
-        }
-        usleep(10000);
-    }
-    if (sem_trywait(m_impl->signal_event) == 0) {
-        return Result<bool>::ok(true);
-    }
-    return Result<bool>::ok(false);
-#else
     int result = sem_timedwait(m_impl->signal_event, &ts);
     if (result == 0) {
         return Result<bool>::ok(true);
