@@ -1164,6 +1164,15 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
             // Translate header: current (16 bytes) → 4.0 (16 bytes, different field layout)
             auto& dest_hdr = *reinterpret_cast<cbproto::cbPKT_HEADER_400*>(translated_buf);
             dest_hdr.time = pkt.cbpkt_header.time;
+            // Non-Gemini: convert nanosecond timestamp back to device clock ticks.
+            // Central's xmt consumer expects device-native format.
+            auto gemini = isGeminiSystem();
+            if (gemini.isOk() && !gemini.value() && dest_hdr.time != 0) {
+                uint32_t sysfreq = m_impl->legacyCfg()->sysinfo.sysfreq;
+                if (sysfreq == 0) sysfreq = 30000;
+                uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
+                dest_hdr.time = dest_hdr.time * (sysfreq / g) / (1000000000 / g);
+            }
             dest_hdr.chid = pkt.cbpkt_header.chid;
             dest_hdr.type = static_cast<uint8_t>(pkt.cbpkt_header.type);
             dest_hdr.dlen = pkt.cbpkt_header.dlen;
@@ -1179,6 +1188,14 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
             size_t dest_dlen = cbproto::PacketTranslator::translatePayload_current_to_410(pkt, translated_buf);
             auto& dest_hdr = *reinterpret_cast<cbPKT_HEADER*>(translated_buf);
             dest_hdr.dlen = static_cast<uint16_t>(dest_dlen);
+            // Non-Gemini: convert nanosecond timestamp back to device clock ticks.
+            auto gemini = isGeminiSystem();
+            if (gemini.isOk() && !gemini.value() && dest_hdr.time != 0) {
+                uint32_t sysfreq = m_impl->legacyCfg()->sysinfo.sysfreq;
+                if (sysfreq == 0) sysfreq = 30000;
+                uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
+                dest_hdr.time = dest_hdr.time * (sysfreq / g) / (1000000000 / g);
+            }
             write_size_bytes = cbPKT_HEADER_SIZE + dest_dlen * 4;
         }
         write_data = translated_buf;

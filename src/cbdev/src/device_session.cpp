@@ -578,6 +578,17 @@ Result<void> DeviceSession::sendPacket(const cbPKT_GENERIC& pkt) {
         return Result<void>::error("Device not connected");
     }
 
+    // Non-Gemini: convert nanosecond timestamp back to device clock ticks.
+    // This is the inverse of the ticks→ns conversion in receivePackets().
+    if (!m_impl->timestamps_are_nanoseconds && m_impl->ts_convert_den > 1 &&
+        pkt.cbpkt_header.time != 0) {
+        cbPKT_GENERIC converted = pkt;
+        converted.cbpkt_header.time =
+            pkt.cbpkt_header.time * m_impl->ts_convert_den / m_impl->ts_convert_num;
+        const size_t packet_size = cbPKT_HEADER_SIZE + (converted.cbpkt_header.dlen * 4);
+        return sendRaw(&converted, packet_size);
+    }
+
     // Calculate actual packet size from header
     // dlen is in quadlets (4-byte units), so packet size = header + (dlen * 4)
     const size_t packet_size = cbPKT_HEADER_SIZE + (pkt.cbpkt_header.dlen * 4);

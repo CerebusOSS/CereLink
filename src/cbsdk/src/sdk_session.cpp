@@ -1878,7 +1878,9 @@ Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {
         return Result<void>::error("sendPacket: shmem_session is null");
     }
 
-    // Stamp packet time from receive buffer (Central's xmt consumer skips packets with time=0)
+    // Stamp packet with a nanosecond timestamp (Central's xmt consumer skips packets with time=0).
+    // Use getLastTime() (always nanoseconds) so that enqueuePacket's per-protocol translation
+    // can convert to the format each consumer expects (e.g. 30kHz ticks for 3.11 CENTRAL_COMPAT).
     cbPKT_GENERIC stamped = pkt;
     PROCTIME t = m_impl->shmem_session->getLastTime();
     stamped.cbpkt_header.time = (t != 0) ? t : 1;
