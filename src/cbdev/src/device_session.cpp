@@ -516,13 +516,13 @@ Result<int> DeviceSession::receivePacketsRaw(void* buffer, const size_t buffer_s
         return Result<int>::error("Device not connected");
     }
 
-    // Receive UDP datagram into provided buffer (non-blocking)
-    int bytes_recv = recv(m_impl->socket, (char*)buffer, buffer_size, 0);
-
-    // Capture host timestamp as early as possible after recv() returns data
-    if (bytes_recv > 0) {
-        m_impl->last_recv_timestamp = std::chrono::steady_clock::now();
-    }
+    // Receive UDP datagram into provided buffer (non-blocking).
+    // Use recvfrom to capture the sender address so we can discard datagrams
+    // from other devices sharing the same port (e.g. NPLAY and HUB1 both use 51002).
+    SOCKADDR_IN sender_addr{};
+    socklen_t addr_len = sizeof(sender_addr);
+    const int bytes_recv = recvfrom(m_impl->socket, (char*)buffer, buffer_size, 0,
+                              reinterpret_cast<SOCKADDR*>(&sender_addr), &addr_len);
 
     if (bytes_recv == SOCKET_ERROR_VALUE) {
         #ifdef _WIN32
@@ -537,6 +537,17 @@ Result<int> DeviceSession::receivePacketsRaw(void* buffer, const size_t buffer_s
         }
         return Result<int>::error("recv failed: " + std::string(strerror(errno)));
         #endif
+    }
+
+    // Discard datagrams from unexpected sources.
+    if (bytes_recv > 0 &&
+        sender_addr.sin_addr.s_addr != m_impl->send_addr.sin_addr.s_addr) {
+        return Result<int>::ok(0);
+    }
+
+    // Capture host timestamp as early as possible after accepting a datagram.
+    if (bytes_recv > 0) {
+        m_impl->last_recv_timestamp = std::chrono::steady_clock::now();
     }
 
     return Result<int>::ok(bytes_recv);
@@ -694,12 +705,11 @@ void DeviceSession::close() {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 std::string detectClientAddress(DeviceType type) {
-    // Loopback devices: INADDR_ANY on all platforms.
-    // nPlayServer may broadcast to various addresses (127.0.0.255, 255.255.255.0, etc.)
-    // and binding to a specific loopback address misses broadcast traffic on macOS.
-    // INADDR_ANY reliably receives both unicast and broadcast on loopback.
+    // nPlayServer sends unicast to 127.0.0.1.  Bind to loopback so the socket
+    // only receives loopback traffic, avoiding cross-talk with Gemini devices
+    // that share the same port (51002) on the network interface.
     if (type == DeviceType::NPLAY) {
-        return "0.0.0.0";
+        return "127.0.0.1";
     }
 
 #ifdef __APPLE__
