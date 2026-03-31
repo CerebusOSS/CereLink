@@ -8,7 +8,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include <gtest/gtest.h>
-#include "clock_sync.h"
+#include "cbdev/clock_sync.h"
 #include <chrono>
 #include <cmath>
 #include <cstdint>

@@ -37,7 +37,7 @@
 #endif
 
 #include "device_session_impl.h"
-#include "clock_sync.h"
+#include "cbdev/clock_sync.h"
 #include <cbproto/cbproto.h>
 #include <cbproto/config.h>
 #include <cstdio>

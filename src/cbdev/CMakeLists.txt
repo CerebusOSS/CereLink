@@ -59,5 +59,6 @@ install(FILES
     include/cbdev/connection.h
     include/cbdev/device_session.h
     include/cbdev/device_factory.h
+    include/cbdev/clock_sync.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/cbdev
 )
