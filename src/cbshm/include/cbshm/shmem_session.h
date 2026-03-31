@@ -486,13 +486,14 @@ public:
     /// @return Result indicating success or failure
     Result<void> resetSignal();
 
-    /// @brief Get last timestamp from receive buffer
+    /// @brief Get last timestamp from receive buffer (always nanoseconds)
     ///
     /// Returns the most recent packet timestamp written to the receive buffer.
-    /// Used by sendPacket to stamp outgoing packets with a non-zero time
-    /// (Central's xmt consumer skips packets with time=0).
+    /// In CENTRAL_COMPAT mode with a non-Gemini device the raw value (clock
+    /// ticks) is converted to nanoseconds using sysfreq, so callers always
+    /// receive a uniform nanosecond timestamp.
     ///
-    /// @return Last timestamp, or 0 if receive buffer not initialized
+    /// @return Last timestamp in nanoseconds, or 0 if receive buffer not initialized
     PROCTIME getLastTime() const;
 
     /// @}

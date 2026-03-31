@@ -845,11 +845,10 @@ CBSDK_API cbsdk_result_t cbsdk_session_load_ccf(cbsdk_session_t session, const c
 // Instrument Time
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Get most recent device timestamp from shared memory
-/// On Gemini (protocol 4.0+) this is PTP nanoseconds.
-/// On legacy NSP (protocol 3.x) this is 30kHz ticks.
+/// Get most recent device timestamp from shared memory (always nanoseconds).
+/// Non-Gemini clock ticks are converted using sysfreq automatically.
 /// @param session Session handle (must not be NULL)
-/// @param[out] time Pointer to receive raw device timestamp (must not be NULL)
+/// @param[out] time Pointer to receive device timestamp in nanoseconds (must not be NULL)
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_get_time(cbsdk_session_t session, uint64_t* time);
 

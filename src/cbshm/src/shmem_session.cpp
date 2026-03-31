@@ -30,6 +30,7 @@
 #include <cbshm/native_types.h>
 #include <cbproto/packet_translator.h>
 #include <cstring>
+#include <numeric>  // std::gcd
 
 namespace cbshm {
 
@@ -1163,6 +1164,15 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
             // Translate header: current (16 bytes) → 4.0 (16 bytes, different field layout)
             auto& dest_hdr = *reinterpret_cast<cbproto::cbPKT_HEADER_400*>(translated_buf);
             dest_hdr.time = pkt.cbpkt_header.time;
+            // Non-Gemini: convert nanosecond timestamp back to device clock ticks.
+            // Central's xmt consumer expects device-native format.
+            auto gemini = isGeminiSystem();
+            if (gemini.isOk() && !gemini.value() && dest_hdr.time != 0) {
+                uint32_t sysfreq = m_impl->legacyCfg()->sysinfo.sysfreq;
+                if (sysfreq == 0) sysfreq = 30000;
+                uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
+                dest_hdr.time = dest_hdr.time * (sysfreq / g) / (1000000000 / g);
+            }
             dest_hdr.chid = pkt.cbpkt_header.chid;
             dest_hdr.type = static_cast<uint8_t>(pkt.cbpkt_header.type);
             dest_hdr.dlen = pkt.cbpkt_header.dlen;
@@ -1178,9 +1188,33 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
             size_t dest_dlen = cbproto::PacketTranslator::translatePayload_current_to_410(pkt, translated_buf);
             auto& dest_hdr = *reinterpret_cast<cbPKT_HEADER*>(translated_buf);
             dest_hdr.dlen = static_cast<uint16_t>(dest_dlen);
+            // Non-Gemini: convert nanosecond timestamp back to device clock ticks.
+            auto gemini = isGeminiSystem();
+            if (gemini.isOk() && !gemini.value() && dest_hdr.time != 0) {
+                uint32_t sysfreq = m_impl->legacyCfg()->sysinfo.sysfreq;
+                if (sysfreq == 0) sysfreq = 30000;
+                uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
+                dest_hdr.time = dest_hdr.time * (sysfreq / g) / (1000000000 / g);
+            }
             write_size_bytes = cbPKT_HEADER_SIZE + dest_dlen * 4;
         }
         write_data = translated_buf;
+    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT && m_impl->status_buffer_raw) {
+        // Protocol is CURRENT but device may be non-Gemini — still need ns→ticks conversion.
+        auto gemini = isGeminiSystem();
+        if (gemini.isOk() && !gemini.value() && pkt.cbpkt_header.time != 0) {
+            std::memcpy(translated_buf, &pkt,
+                        (cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen) * sizeof(uint32_t));
+            auto& dest_hdr = *reinterpret_cast<cbPKT_HEADER*>(translated_buf);
+            uint32_t sysfreq = m_impl->legacyCfg()->sysinfo.sysfreq;
+            if (sysfreq == 0) sysfreq = 30000;
+            uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
+            dest_hdr.time = dest_hdr.time * (sysfreq / g) / (1000000000 / g);
+            write_data = translated_buf;
+        } else {
+            write_data = reinterpret_cast<const uint8_t*>(&pkt);
+        }
+        write_size_bytes = (cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen) * sizeof(uint32_t);
     } else {
         write_data = reinterpret_cast<const uint8_t*>(&pkt);
         write_size_bytes = (cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen) * sizeof(uint32_t);
@@ -1712,7 +1746,20 @@ PROCTIME ShmemSession::getLastTime() const {
     if (!m_impl || !m_impl->is_open || !m_impl->rec_buffer_raw) {
         return 0;
     }
-    return m_impl->recLasttime();
+    PROCTIME t = m_impl->recLasttime();
+    // In CENTRAL_COMPAT mode, Central writes lasttime using the device's native
+    // timestamp unit.  Non-Gemini devices use clock ticks; convert to nanoseconds
+    // for consistency with readReceiveBuffer() which translates packet timestamps.
+    if (t != 0 && m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        auto gemini = isGeminiSystem();
+        if (gemini.isOk() && !gemini.value()) {
+            uint32_t sysfreq = m_impl->legacyCfg()->sysinfo.sysfreq;
+            if (sysfreq == 0) sysfreq = 30000;
+            uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
+            t = t * (1000000000 / g) / (sysfreq / g);
+        }
+    }
+    return t;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1757,6 +1804,26 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
 
     const bool needs_translation = (m_impl->layout == ShmemLayout::CENTRAL_COMPAT &&
                                      m_impl->compat_protocol != CBPROTO_PROTOCOL_CURRENT);
+
+    // For non-Gemini systems, header timestamps are in clock ticks and need
+    // conversion to nanoseconds.  This applies regardless of protocol version —
+    // a non-Gemini device with protocol 4.2+ still uses tick-based timestamps.
+    // (Protocol 3.11 handles conversion inline with its hardcoded 30 kHz factor.)
+    uint64_t ts_num = 1, ts_den = 1;
+    bool needs_ts_conversion = false;
+    if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT &&
+        m_impl->compat_protocol != CBPROTO_PROTOCOL_311 &&
+        m_impl->status_buffer_raw) {
+        auto gemini = isGeminiSystem();
+        if (gemini.isOk() && !gemini.value()) {
+            uint32_t sysfreq = m_impl->legacyCfg()->sysinfo.sysfreq;
+            if (sysfreq == 0) sysfreq = 30000;
+            uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
+            ts_num = 1000000000 / g;
+            ts_den = sysfreq / g;
+            needs_ts_conversion = (ts_den > 1);
+        }
+    }
 
     uint8_t raw_buf[cbPKT_MAX_SIZE];
 
@@ -1871,6 +1938,13 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
                            &buf[0],
                            second_part_size * sizeof(uint32_t));
             }
+        }
+
+        // Non-Gemini CENTRAL_COMPAT: convert header timestamp from clock ticks to nanoseconds.
+        // Applied after both translation and non-translation paths.
+        if (needs_ts_conversion) {
+            packets[packets_read].cbpkt_header.time =
+                packets[packets_read].cbpkt_header.time * ts_num / ts_den;
         }
 
         // Advance tail past this packet (consumed from ring buffer regardless of filter)

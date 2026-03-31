@@ -1088,11 +1088,9 @@ class Session:
 
     @property
     def time(self) -> int:
-        """Most recent device timestamp from shared memory.
+        """Most recent device timestamp from shared memory, in nanoseconds.
 
-        On Gemini (protocol 4.0+) this is PTP nanoseconds.
-        On legacy NSP (protocol 3.x) this is 30kHz ticks.
-
+        Non-Gemini clock ticks are converted using sysfreq automatically.
         To convert to host ``time.monotonic()``, use :meth:`device_to_monotonic`.
         """
         _lib = _get_lib()

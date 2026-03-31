@@ -37,7 +37,7 @@
 #endif
 
 #include "device_session_impl.h"
-#include "clock_sync.h"
+#include "cbdev/clock_sync.h"
 #include <cbproto/cbproto.h>
 #include <cbproto/config.h>
 #include <cstdio>
@@ -576,6 +576,17 @@ Result<int> DeviceSession::receivePackets(void* buffer, const size_t buffer_size
 Result<void> DeviceSession::sendPacket(const cbPKT_GENERIC& pkt) {
     if (!m_impl || !m_impl->connected) {
         return Result<void>::error("Device not connected");
+    }
+
+    // Non-Gemini: convert nanosecond timestamp back to device clock ticks.
+    // This is the inverse of the ticks→ns conversion in receivePackets().
+    if (!m_impl->timestamps_are_nanoseconds && m_impl->ts_convert_den > 1 &&
+        pkt.cbpkt_header.time != 0) {
+        cbPKT_GENERIC converted = pkt;
+        converted.cbpkt_header.time =
+            pkt.cbpkt_header.time * m_impl->ts_convert_den / m_impl->ts_convert_num;
+        const size_t packet_size = cbPKT_HEADER_SIZE + (converted.cbpkt_header.dlen * 4);
+        return sendRaw(&converted, packet_size);
     }
 
     // Calculate actual packet size from header

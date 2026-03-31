@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <array>
 #include <vector>
+#include "cbdev/clock_sync.h"
 
 namespace cbsdk {
 
@@ -152,8 +153,17 @@ struct SdkSession::Impl {
     /// Get chaninfo pointer for a 0-based channel index (works for both STANDALONE and CLIENT)
     const cbPKT_CHANINFO* getChanInfoPtr(uint32_t idx) const;
 
-    // Clock sync periodic probing (STANDALONE mode)
+    // Clock sync periodic probing
     std::chrono::steady_clock::time_point last_clock_probe_time{};
+
+    // CLIENT-mode clock sync (used when no device_session is available)
+    cbdev::ClockSync client_clock_sync;
+    struct PendingClockProbe {
+        std::chrono::steady_clock::time_point t1_local;
+        bool active = false;
+    };
+    PendingClockProbe pending_clock_probe;
+    std::mutex clock_probe_mutex;
 
     // Statistics — atomic counters, no mutex needed (Phase 2, Fix 9)
     struct AtomicStats {
@@ -961,14 +971,58 @@ Result<void> SdkSession::start() {
                     }
 
                     if (packets_read > 0) {
+                        auto t4 = std::chrono::steady_clock::now();
                         impl->stats.packets_delivered_to_callback.fetch_add(packets_read, std::memory_order_relaxed);
-                        // CLIENT mode: apply CMP position overlay for CHANREP packets
+                        // CLIENT mode: scan packets for clock sync replies and CMP overlays
                         for (size_t i = 0; i < packets_read; i++) {
+                            if (packets[i].cbpkt_header.type == cbPKTTYPE_NPLAYREP) {
+                                // Complete pending clock sync probe
+                                constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
+                                std::lock_guard<std::mutex> lock(impl->clock_probe_mutex);
+                                if (impl->pending_clock_probe.active) {
+                                    // Use header.time as T3 — already converted to ns
+                                    // by readReceiveBuffer for all device types.
+                                    // Add staleness correction (header.time is from the
+                                    // device's previous main-loop iteration).
+                                    uint64_t device_time_ns = packets[i].cbpkt_header.time
+                                                              + STALENESS_CORRECTION_NS;
+                                    impl->client_clock_sync.addProbeSample(
+                                        impl->pending_clock_probe.t1_local,
+                                        device_time_ns, t4);
+                                    impl->pending_clock_probe.active = false;
+                                }
+                            }
                             if ((packets[i].cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
                                 const auto* chaninfo = reinterpret_cast<const cbPKT_CHANINFO*>(&packets[i]);
                                 impl->applyCmpOverlay(*chaninfo);
                             }
                         }
+
+                        // Periodic clock sync probing (~every 5 seconds)
+                        if (t4 - impl->last_clock_probe_time > std::chrono::seconds(5)) {
+                            // Build and enqueue probe via shmem xmt buffer.
+                            // Can't call sendClockProbe() (needs SdkSession*), so inline it.
+                            {
+                                std::lock_guard<std::mutex> lock(impl->clock_probe_mutex);
+                                impl->pending_clock_probe.t1_local = t4;
+                                impl->pending_clock_probe.active = true;
+                            }
+                            cbPKT_NPLAY probe{};
+                            probe.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+                            probe.cbpkt_header.type = cbPKTTYPE_NPLAYSET;
+                            probe.cbpkt_header.dlen = cbPKTDLEN_NPLAY;
+                            probe.mode = 0xFFFF;
+                            probe.stime = static_cast<uint64_t>(
+                                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                    t4.time_since_epoch()).count());
+                            // Stamp with current device time (enqueuePacket needs non-zero time)
+                            PROCTIME last_t = impl->shmem_session->getLastTime();
+                            probe.cbpkt_header.time = (last_t != 0) ? last_t : 1;
+                            impl->shmem_session->enqueuePacket(
+                                *reinterpret_cast<const cbPKT_GENERIC*>(&probe));
+                            impl->last_clock_probe_time = t4;
+                        }
+
                         // Dispatch batch (fires batch group callbacks, then per-packet callbacks)
                         impl->dispatchBatch(packets, packets_read);
                     }
@@ -1834,12 +1888,35 @@ SdkSession::toDeviceTime(std::chrono::steady_clock::time_point local_time) const
 }
 
 Result<void> SdkSession::sendClockProbe() {
-    if (!m_impl->device_session)
-        return Result<void>::error("sendClockProbe() only available in STANDALONE mode");
-    auto r = m_impl->device_session->sendClockProbe();
-    if (r.isError())
-        return Result<void>::error(r.error());
-    return Result<void>::ok();
+    if (m_impl->device_session) {
+        // STANDALONE: send via device session (direct UDP)
+        auto r = m_impl->device_session->sendClockProbe();
+        if (r.isError())
+            return Result<void>::error(r.error());
+        return Result<void>::ok();
+    }
+
+    // CLIENT: send via shmem xmt buffer (Central forwards to device)
+    if (!m_impl->shmem_session)
+        return Result<void>::error("sendClockProbe: no session available");
+
+    auto now = std::chrono::steady_clock::now();
+    {
+        std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
+        m_impl->pending_clock_probe.t1_local = now;
+        m_impl->pending_clock_probe.active = true;
+    }
+
+    cbPKT_NPLAY pkt{};
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_NPLAYSET;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_NPLAY;
+    pkt.mode = 0xFFFF;
+    pkt.stime = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            now.time_since_epoch()).count());
+
+    return sendPacket(*reinterpret_cast<const cbPKT_GENERIC*>(&pkt));
 }
 
 std::optional<int64_t> SdkSession::getClockOffsetNs() const {
@@ -1847,11 +1924,15 @@ std::optional<int64_t> SdkSession::getClockOffsetNs() const {
     if (m_impl->device_session)
         return m_impl->device_session->getOffsetNs();
 
-    // CLIENT: read from shmem
-    if (m_impl->shmem_session)
-        return m_impl->shmem_session->getClockOffsetNs();
+    // CLIENT: try shmem clock sync fields (NATIVE layout)
+    if (m_impl->shmem_session) {
+        auto offset = m_impl->shmem_session->getClockOffsetNs();
+        if (offset.has_value())
+            return offset;
+    }
 
-    return std::nullopt;
+    // CLIENT fallback: use local ClockSync (CENTRAL_COMPAT — no shmem clock fields)
+    return m_impl->client_clock_sync.getOffsetNs();
 }
 
 std::optional<int64_t> SdkSession::getClockUncertaintyNs() const {
@@ -1859,11 +1940,15 @@ std::optional<int64_t> SdkSession::getClockUncertaintyNs() const {
     if (m_impl->device_session)
         return m_impl->device_session->getUncertaintyNs();
 
-    // CLIENT: read from shmem
-    if (m_impl->shmem_session)
-        return m_impl->shmem_session->getClockUncertaintyNs();
+    // CLIENT: try shmem clock sync fields (NATIVE layout)
+    if (m_impl->shmem_session) {
+        auto uncert = m_impl->shmem_session->getClockUncertaintyNs();
+        if (uncert.has_value())
+            return uncert;
+    }
 
-    return std::nullopt;
+    // CLIENT fallback: use local ClockSync (CENTRAL_COMPAT)
+    return m_impl->client_clock_sync.getUncertaintyNs();
 }
 
 Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {
@@ -1878,7 +1963,9 @@ Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {
         return Result<void>::error("sendPacket: shmem_session is null");
     }
 
-    // Stamp packet time from receive buffer (Central's xmt consumer skips packets with time=0)
+    // Stamp packet with a nanosecond timestamp (Central's xmt consumer skips packets with time=0).
+    // Use getLastTime() (always nanoseconds) so that enqueuePacket's per-protocol translation
+    // can convert to the format each consumer expects (e.g. 30kHz ticks for 3.11 CENTRAL_COMPAT).
     cbPKT_GENERIC stamped = pkt;
     PROCTIME t = m_impl->shmem_session->getLastTime();
     stamped.cbpkt_header.time = (t != 0) ? t : 1;
