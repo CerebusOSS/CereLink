@@ -774,12 +774,16 @@ Result<void> SdkSession::start() {
                 // Store to shared memory
                 auto store_result = impl->shmem_session->storePacket(pkt);
 
-                // Apply CMP position overlay for CHANREP packets
-                // DeviceSession::updateConfigFromBuffer already ran (before this callback),
-                // so device_config has the new chaninfo. We overlay positions in both
-                // device_config and shmem so all readers see correct positions.
+                // Mirror CHANREP packets to the shmem config buffer so that
+                // CLIENT processes can read channel capabilities, sample groups,
+                // filters, etc.  Without this, CLIENTs see all-zero chaninfo and
+                // cannot classify channels or build config packets.
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
                     const auto* chaninfo = reinterpret_cast<const cbPKT_CHANINFO*>(&pkt);
+                    if (chaninfo->chan >= 1 && chaninfo->chan <= cbMAXCHANS) {
+                        impl->shmem_session->setChanInfo(chaninfo->chan - 1, *chaninfo);
+                    }
+                    // Apply CMP position overlay (overwrites position fields only)
                     impl->applyCmpOverlay(*chaninfo);
                 }
 

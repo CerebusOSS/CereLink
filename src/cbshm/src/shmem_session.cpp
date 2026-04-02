@@ -407,7 +407,9 @@ struct ShmemSession::Impl {
             return Result<void>::ok();
         };
 
-        auto r = createSegment(cfg_name, cfg_buffer_size, cfg_file_mapping, cfg_buffer_raw);
+        // Config buffer needs write access in CLIENT mode too (CHANREP mirroring,
+        // CMP position overlay, and clock sync fields are written by both modes)
+        auto r = createSegment(cfg_name, cfg_buffer_size, cfg_file_mapping, cfg_buffer_raw, true);
         if (r.isError()) { close(); return r; }
 
         r = createSegment(rec_name, rec_buffer_size, rec_file_mapping, rec_buffer_raw);
@@ -447,7 +449,12 @@ struct ShmemSession::Impl {
         int xmt_flags = (mode == Mode::STANDALONE) ? (O_CREAT | O_RDWR) : O_RDWR;
         int xmt_prot = PROT_READ | PROT_WRITE;
 
-        auto r1 = openPosixSegment(cfg_name, cfg_buffer_size, cfg_shm_fd, flags, perms, prot);
+        // Config buffer needs write access in CLIENT mode too (CHANREP mirroring,
+        // CMP position overlay, and clock sync fields are written by both modes)
+        int cfg_flags = (mode == Mode::STANDALONE) ? (O_CREAT | O_RDWR) : O_RDWR;
+        int cfg_prot = PROT_READ | PROT_WRITE;
+
+        auto r1 = openPosixSegment(cfg_name, cfg_buffer_size, cfg_shm_fd, cfg_flags, perms, cfg_prot);
         if (r1.isError()) { close(); return Result<void>::error(r1.error()); }
         cfg_buffer_raw = r1.value();
 
