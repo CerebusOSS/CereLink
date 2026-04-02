@@ -182,3 +182,16 @@ def nplayserver(nplayserver_binary: Path | None, ns6_path: Path):
         proc.kill()
         proc.wait()
     _sem_unlink(lock_name)
+
+
+@pytest.fixture(scope="session")
+def nplay_session(nplayserver):
+    """A single Session connected to nPlayServer, shared across the entire test run.
+
+    Most tests should use this fixture instead of creating their own Session to
+    avoid shmem/port exhaustion from repeated session creation.
+    """
+    from pycbsdk import DeviceType, Session
+
+    with Session(DeviceType.NPLAY) as session:
+        yield session
