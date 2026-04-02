@@ -34,13 +34,32 @@ Issues = "https://github.com/CerebusOSS/CereLink/issues"
 
 [project.optional-dependencies]
 numpy = ["numpy"]
-dev = ["pytest"]
+
+[dependency-groups]
+dev = [
+    "numpy",
+    "pre-commit>=4.0.0",
+    {include-group = "lint"},
+    {include-group = "test"},
+]
+lint = [
+    "ruff"
+]
+test = [
+    "pytest",
+    "pytest-timeout",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 pycbsdk = ["*.dll", "*.so", "*.so.*", "*.dylib"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests requiring a running nPlayServer instance",
+]
 
 [tool.setuptools_scm]
 root = ".."

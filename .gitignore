@@ -54,3 +54,4 @@ Release/
 
 upstream
 */uv.lock
+.test_cache/
