@@ -176,22 +176,30 @@ class TestOnGroupBatch:
 class TestOnEvent:
     """Tests for the on_event (spike/digital event) callback.
 
-    nPlayServer plays back recorded data which may or may not contain spike
-    events depending on the file. We test that the callback can be registered
-    and doesn't crash, and if events arrive, they have valid structure.
+    The test data file contains spikes, but spike extraction must be enabled
+    on the channels for the device to emit spike event packets.
     """
 
-    def test_register_event_callback(self, nplay_session):
+    # cbAINPSPK_EXTRACT | cbAINPSPK_THRLEVEL — enable spike extraction
+    # with analog level threshold detection
+    _SPKOPTS = 0x00000001 | 0x00000100
+
+    def test_receives_spike_events(self, nplay_session):
+        _ensure_30k(nplay_session)
+        nplay_session.set_channel_spike_sorting(
+            N_CHANS, ChannelType.FRONTEND, sort_options=self._SPKOPTS,
+        )
+        time.sleep(0.5)
+
         events = []
 
         @nplay_session.on_event(ChannelType.FRONTEND)
         def on_spike(header, data):
             events.append(header.chid)
 
-        time.sleep(1)
+        time.sleep(2)
 
-        # We don't assert events > 0 because the test file may not
-        # contain spikes, but the callback must not crash.
+        assert len(events) > 0, "No spike events received (spiking enabled)"
 
     def test_register_all_events(self, nplay_session):
         events = []
