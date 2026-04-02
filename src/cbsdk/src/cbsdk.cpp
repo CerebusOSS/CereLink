@@ -605,6 +605,13 @@ uint32_t cbsdk_session_get_runlevel(cbsdk_session_t session) {
     }
 }
 
+int cbsdk_session_is_standalone(cbsdk_session_t session) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        return session->cpp_session->isStandalone() ? 1 : 0;
+    } catch (...) { return 0; }
+}
+
 uint32_t cbsdk_session_get_protocol_version(cbsdk_session_t session) {
     if (!session || !session->cpp_session) return 0;
     try {

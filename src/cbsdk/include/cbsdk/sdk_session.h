@@ -427,8 +427,12 @@ public:
     /// @return Current run level (cbRUNLEVEL_*), or 0 if unknown
     uint32_t getRunLevel() const;
 
+    /// Whether this session owns the device connection (STANDALONE mode).
+    /// Returns false if attached to another process's shared memory (CLIENT mode).
+    bool isStandalone() const;
+
     /// Get the protocol version used by this session
-    /// @return Protocol version, or UNKNOWN if not available (e.g. CLIENT mode)
+    /// @return Protocol version (available in both STANDALONE and CLIENT modes)
     uint32_t getProtocolVersion() const;
 
     /// Get the processor identification string (from PROCREP packet)

@@ -527,10 +527,18 @@ class Session:
         return _get_lib().cbsdk_session_get_runlevel(self._session)
 
     @property
+    def is_standalone(self) -> bool:
+        """Whether this session owns the device connection (STANDALONE mode).
+
+        Returns ``False`` if attached to another process's shared memory (CLIENT mode).
+        """
+        return bool(_get_lib().cbsdk_session_is_standalone(self._session))
+
+    @property
     def protocol_version(self) -> ProtocolVersion:
         """Protocol version detected during device handshake.
 
-        Returns ``ProtocolVersion.UNKNOWN`` in CLIENT mode (no device session).
+        Available in both STANDALONE and CLIENT modes (CLIENT reads from shmem).
         """
         v = _get_lib().cbsdk_session_get_protocol_version(self._session)
         try:

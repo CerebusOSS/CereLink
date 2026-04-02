@@ -82,6 +82,9 @@ struct SdkSession::Impl {
     // Configuration
     SdkConfig config;
 
+    // Connection mode
+    bool standalone = false;
+
     // Sub-components
     std::unique_ptr<cbdev::IDeviceSession> device_session;
     std::optional<cbshm::ShmemSession> shmem_session;
@@ -632,6 +635,7 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     }
 
     session.m_impl->shmem_session = std::move(shmem_result.value());
+    session.m_impl->standalone = is_standalone;
 
     // Create device session only in STANDALONE mode
     if (is_standalone) {
@@ -774,10 +778,14 @@ Result<void> SdkSession::start() {
                 // Store to shared memory
                 auto store_result = impl->shmem_session->storePacket(pkt);
 
-                // Mirror CHANREP packets to the shmem config buffer so that
-                // CLIENT processes can read channel capabilities, sample groups,
-                // filters, etc.  Without this, CLIENTs see all-zero chaninfo and
-                // cannot classify channels or build config packets.
+                // Mirror config reply packets to shmem so CLIENT processes
+                // can read device configuration (chaninfo, procinfo, etc.).
+                if (pkt.cbpkt_header.type == cbPKTTYPE_PROCREP) {
+                    const auto* procinfo = reinterpret_cast<const cbPKT_PROCINFO*>(&pkt);
+                    impl->shmem_session->setProcInfo(
+                        cbproto::InstrumentId::fromPacketField(pkt.cbpkt_header.instrument),
+                        *procinfo);
+                }
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
                     const auto* chaninfo = reinterpret_cast<const cbPKT_CHANINFO*>(&pkt);
                     if (chaninfo->chan >= 1 && chaninfo->chan <= cbMAXCHANS) {
@@ -1237,13 +1245,17 @@ uint32_t SdkSession::getRunLevel() const {
     return m_impl->device_runlevel.load(std::memory_order_acquire);
 }
 
+bool SdkSession::isStandalone() const {
+    return m_impl && m_impl->standalone;
+}
+
 uint32_t SdkSession::getProtocolVersion() const {
     if (m_impl->device_session)
         return static_cast<uint32_t>(m_impl->device_session->getProtocolVersion());
     if (m_impl->shmem_session) {
         const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
         if (native)
-            return native->version;
+            return CBPROTO_PROTOCOL_CURRENT;  // NATIVE layout always uses current protocol
         const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
         if (legacy) {
             int32_t inst = getCentralInstrumentIndex(m_impl->config.device_type);

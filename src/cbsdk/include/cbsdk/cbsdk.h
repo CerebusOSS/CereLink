@@ -368,7 +368,12 @@ CBSDK_API void cbsdk_session_reset_stats(cbsdk_session_t session);
 /// @return Current run level (cbRUNLEVEL_*), or 0 if unknown
 CBSDK_API uint32_t cbsdk_session_get_runlevel(cbsdk_session_t session);
 
-/// Get the protocol version used by this session (STANDALONE mode only)
+/// Whether this session owns the device connection (STANDALONE mode)
+/// @param session Session handle (must not be NULL)
+/// @return 1 if STANDALONE, 0 if CLIENT
+CBSDK_API int cbsdk_session_is_standalone(cbsdk_session_t session);
+
+/// Get the protocol version used by this session
 /// @param session Session handle (must not be NULL)
 /// @return Protocol version (cbproto_protocol_version_t), or 0 (UNKNOWN) if unavailable
 CBSDK_API uint32_t cbsdk_session_get_protocol_version(cbsdk_session_t session);
