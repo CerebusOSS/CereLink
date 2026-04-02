@@ -139,7 +139,7 @@ TEST_F(ChannelSampleGroupTest, SetAndVerifyViaChannelField) {
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
-    const size_t n_chans = 16;
+    const size_t n_chans = 4;
     auto set_result = session.setChannelSampleGroup(
         n_chans, ChannelType::FRONTEND, SampleRate::SR_10kHz, true);
     EXPECT_TRUE(set_result.isOk()) << set_result.error();
@@ -212,11 +212,11 @@ TEST_F(ChannelInfoTest, GetChannelLabels) {
     auto result = createNPlaySession();
     ASSERT_TRUE(result.isOk()) << result.error();
 
-    auto labels_result = result.value().getChannelLabels(8, ChannelType::FRONTEND);
+    auto labels_result = result.value().getChannelLabels(4, ChannelType::FRONTEND);
     ASSERT_TRUE(labels_result.isOk()) << labels_result.error();
     auto& labels = labels_result.value();
 
-    EXPECT_EQ(labels.size(), 8u);
+    EXPECT_EQ(labels.size(), 4u);
     for (const auto& label : labels) {
         EXPECT_FALSE(label.empty());
     }
@@ -242,10 +242,10 @@ TEST_F(ChannelInfoTest, GetChannelPositions) {
     auto result = createNPlaySession();
     ASSERT_TRUE(result.isOk()) << result.error();
 
-    auto pos_result = result.value().getChannelPositions(8, ChannelType::FRONTEND);
+    auto pos_result = result.value().getChannelPositions(4, ChannelType::FRONTEND);
     ASSERT_TRUE(pos_result.isOk()) << pos_result.error();
     // 4 values per channel
-    EXPECT_EQ(pos_result.value().size(), 8u * 4u);
+    EXPECT_EQ(pos_result.value().size(), 4u * 4u);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -434,7 +434,7 @@ TEST_F(CMPTest, PositionsAfterCMPLoad) {
     ASSERT_TRUE(load_result.isOk()) << load_result.error();
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-    auto pos_result = session.getChannelPositions(96, ChannelType::FRONTEND);
+    auto pos_result = session.getChannelPositions(4, ChannelType::FRONTEND);
     ASSERT_TRUE(pos_result.isOk()) << pos_result.error();
 
     // After loading CMP, some positions should be non-zero

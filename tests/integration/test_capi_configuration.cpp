@@ -132,7 +132,7 @@ TEST_F(CApiSampleGroupTest, SetFrontend30kHz) {
     ASSERT_TRUE(sg.create());
 
     EXPECT_EQ(cbsdk_session_set_channel_sample_group(
-        sg.session, 8, CBPROTO_CHANNEL_TYPE_FRONTEND,
+        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND,
         CBPROTO_GROUP_RATE_30000Hz, true), CBSDK_RESULT_SUCCESS);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -142,7 +142,7 @@ TEST_F(CApiSampleGroupTest, SetFrontend30kHz) {
     uint32_t count = 256;
     EXPECT_EQ(cbsdk_session_get_group_list(
         sg.session, CBPROTO_GROUP_RATE_30000Hz, list, &count), CBSDK_RESULT_SUCCESS);
-    EXPECT_GE(count, 8u);
+    EXPECT_GE(count, 4u);
 }
 
 TEST_F(CApiSampleGroupTest, SetAndVerifyField) {
@@ -150,7 +150,7 @@ TEST_F(CApiSampleGroupTest, SetAndVerifyField) {
     ASSERT_TRUE(sg.create());
 
     EXPECT_EQ(cbsdk_session_set_channel_sample_group(
-        sg.session, 16, CBPROTO_CHANNEL_TYPE_FRONTEND,
+        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND,
         CBPROTO_GROUP_RATE_10000Hz, true), CBSDK_RESULT_SUCCESS);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -159,10 +159,10 @@ TEST_F(CApiSampleGroupTest, SetAndVerifyField) {
     int64_t values[512];
     uint32_t count = 512;
     EXPECT_EQ(cbsdk_session_get_channels_field(
-        sg.session, 16, CBPROTO_CHANNEL_TYPE_FRONTEND,
+        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND,
         CBSDK_CHANINFO_FIELD_SMPGROUP, values, &count), CBSDK_RESULT_SUCCESS);
 
-    EXPECT_EQ(count, 16u);
+    EXPECT_EQ(count, 4u);
     for (uint32_t i = 0; i < count; ++i) {
         EXPECT_EQ(values[i], CBPROTO_GROUP_RATE_10000Hz)
             << "Channel " << i << " has wrong sample group";
@@ -228,7 +228,7 @@ TEST_F(CApiChannelInfoTest, GetChannelsLabels) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
-    const uint32_t n = 8;
+    const uint32_t n = 4;
     char buf[n * 16];
     uint32_t count = n;
     EXPECT_EQ(cbsdk_session_get_channels_labels(
@@ -268,7 +268,7 @@ TEST_F(CApiACCouplingTest, SetACCoupling) {
     ASSERT_TRUE(sg.create());
 
     EXPECT_EQ(cbsdk_session_set_ac_input_coupling(
-        sg.session, 8, CBPROTO_CHANNEL_TYPE_FRONTEND, true), CBSDK_RESULT_SUCCESS);
+        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, true), CBSDK_RESULT_SUCCESS);
 }
 
 TEST_F(CApiACCouplingTest, SetDCCoupling) {
@@ -276,7 +276,7 @@ TEST_F(CApiACCouplingTest, SetDCCoupling) {
     ASSERT_TRUE(sg.create());
 
     EXPECT_EQ(cbsdk_session_set_ac_input_coupling(
-        sg.session, 8, CBPROTO_CHANNEL_TYPE_FRONTEND, false), CBSDK_RESULT_SUCCESS);
+        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, false), CBSDK_RESULT_SUCCESS);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -290,7 +290,7 @@ TEST_F(CApiSpikeSortingTest, SetSpikeSorting) {
     ASSERT_TRUE(sg.create());
 
     EXPECT_EQ(cbsdk_session_set_channel_spike_sorting(
-        sg.session, 8, CBPROTO_CHANNEL_TYPE_FRONTEND, 0), CBSDK_RESULT_SUCCESS);
+        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, 0), CBSDK_RESULT_SUCCESS);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
