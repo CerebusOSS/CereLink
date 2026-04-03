@@ -80,25 +80,27 @@ class TestOnGroup:
 class TestOnGroupDifferentRate:
     """Test group callback at 1kHz."""
 
-    def test_different_rate(self, nplayserver):
-        with Session(DeviceType.NPLAY) as session:
-            session.set_channel_sample_group(
-                N_CHANS, ChannelType.FRONTEND, SampleRate.SR_1kHz,
-                disable_others=True,
-            )
-            time.sleep(0.5)
+    def test_different_rate(self, nplay_session):
+        nplay_session.set_channel_sample_group(
+            N_CHANS, ChannelType.FRONTEND, SampleRate.SR_1kHz,
+            disable_others=True,
+        )
+        time.sleep(0.5)
 
-            count = [0]
+        count = [0]
 
-            @session.on_group(SampleRate.SR_1kHz)
-            def on_sample(header, data):
-                count[0] += 1
+        @nplay_session.on_group(SampleRate.SR_1kHz)
+        def on_sample(header, data):
+            count[0] += 1
 
-            time.sleep(1)
+        time.sleep(1)
 
-            # At 1kHz, expect ~1000 samples/s
-            assert count[0] > 500
-            assert count[0] < 2000  # Sanity upper bound
+        # At 1kHz, expect ~1000 samples/s
+        assert count[0] > 500
+        assert count[0] < 2000  # Sanity upper bound
+
+        # Restore 30kHz for subsequent tests
+        _ensure_30k(nplay_session)
 
 
 # ---------------------------------------------------------------------------
