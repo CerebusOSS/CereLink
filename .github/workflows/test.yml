@@ -78,20 +78,58 @@ jobs:
       # Diagnose nPlayServer startup (temporary)
       - name: Debug nPlayServer
         if: runner.os == 'Windows'
-        shell: bash
+        shell: pwsh
         run: |
-          set -x
-          NPLAY=$(find build/tests/integration/_nplay_cache -name 'nPlayServer.exe' | head -1)
-          NS6=$(find build/tests/integration/_nplay_cache -name '*.ns6' | head -1)
-          echo "Binary: $NPLAY"
-          echo "NS6: $NS6"
-          ls -la "$NS6"
-          # Try with the actual args the fixture uses
-          timeout 5 "$NPLAY" -V --lockfile test_lock -A "$NS6" 2>&1 || true
-          # Try without plugins in case nspext_default is missing
-          timeout 5 "$NPLAY" -V --plugins noplugins --lockfile test_lock -A "$NS6" 2>&1 || true
-          # Try without autostart to see if it stays alive
-          timeout 5 "$NPLAY" -V --plugins noplugins --lockfile test_lock2 -n 2>&1 || true
+          $nplay = (Get-ChildItem -Recurse build/tests/integration/_nplay_cache -Filter nPlayServer.exe).FullName | Select-Object -First 1
+          Write-Host "Binary: $nplay"
+
+          # Use procdump to capture a crash dump (-e = write dump on exception, -ma = full dump)
+          $procdump = "C:\Procdump\procdump.exe"
+          if (!(Test-Path $procdump)) {
+            $procdump = (Get-Command procdump -ErrorAction SilentlyContinue).Source
+          }
+          if (!$procdump) {
+            # Download procdump if not pre-installed
+            Invoke-WebRequest -Uri "https://download.sysinternals.com/files/Procdump.zip" -OutFile procdump.zip
+            Expand-Archive procdump.zip -DestinationPath procdump_dir
+            $procdump = "procdump_dir\procdump.exe"
+          }
+          Write-Host "Procdump: $procdump"
+
+          # Accept EULA
+          & $procdump -accepteula 2>&1 | Out-Null
+
+          # Launch nPlayServer under procdump: -e 1 = dump on first-chance exception, -ma = full dump
+          $dumpDir = "crashdumps"
+          New-Item -ItemType Directory -Force -Path $dumpDir | Out-Null
+          $proc = Start-Process -FilePath $procdump -ArgumentList "-e", "1", "-ma", "-x", $dumpDir, $nplay, "-V", "--plugins", "noplugins", "--lockfile", "test_lock", "-n" -NoNewWindow -PassThru -Wait -RedirectStandardOutput procdump_stdout.txt -RedirectStandardError procdump_stderr.txt
+          Write-Host "=== procdump stdout ==="
+          Get-Content procdump_stdout.txt
+          Write-Host "=== procdump stderr ==="
+          Get-Content procdump_stderr.txt
+
+          # List any dumps generated
+          Write-Host "=== crash dumps ==="
+          Get-ChildItem $dumpDir -Recurse
+
+          # Use cdb (WinDbg command-line) to print the stack trace from the dump
+          $dump = (Get-ChildItem $dumpDir -Filter *.dmp -Recurse).FullName | Select-Object -First 1
+          if ($dump) {
+            Write-Host "=== Stack trace from $dump ==="
+            # cdb is in the Windows SDK, typically on GHA runners
+            $cdb = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe" -ErrorAction SilentlyContinue).FullName
+            if (!$cdb) {
+              $cdb = (Get-Command cdb -ErrorAction SilentlyContinue).Source
+            }
+            if ($cdb) {
+              & $cdb -z $dump -c "!analyze -v; kP; q" 2>&1
+            } else {
+              Write-Host "cdb not found - listing dump file for manual analysis"
+              Write-Host "Dump size: $((Get-Item $dump).Length) bytes"
+            }
+          } else {
+            Write-Host "No crash dump generated"
+          }
 
       # C++ integration tests (nPlayServer downloaded at configure time)
       - name: Integration Tests
