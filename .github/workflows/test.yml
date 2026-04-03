@@ -53,6 +53,10 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v6
 
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+
       # Single build: tests + shared library
       - name: Configure
         run: |
@@ -74,6 +78,14 @@ jobs:
         run: >
           ctest --test-dir build --build-config Release --output-on-failure
           -E "^(device|integration)\."
+
+      - name: Allow nPlayServer through firewall (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $nplay = (Get-ChildItem -Recurse build/tests/integration/_nplay_cache -Filter nPlayServer.exe).FullName | Select-Object -First 1
+          New-NetFirewallRule -DisplayName "nPlayServer" -Direction Inbound -Program $nplay -Action Allow
+          New-NetFirewallRule -DisplayName "nPlayServer-out" -Direction Outbound -Program $nplay -Action Allow
 
       # C++ integration tests (nPlayServer downloaded at configure time)
       - name: Integration Tests
