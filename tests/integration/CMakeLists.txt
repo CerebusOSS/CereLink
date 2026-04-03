@@ -143,6 +143,7 @@ if(NPLAY_AVAILABLE AND NPLAY_DATA_AVAILABLE)
     add_executable(cbsdk_integration_tests
         test_sdk_configuration.cpp
         test_sdk_data_reception.cpp
+        test_sdk_clock_sync.cpp
     )
 
     target_link_libraries(cbsdk_integration_tests
