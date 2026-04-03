@@ -779,12 +779,24 @@ Result<void> SdkSession::start() {
                 auto store_result = impl->shmem_session->storePacket(pkt);
 
                 // Mirror config reply packets to shmem so CLIENT processes
-                // can read device configuration (chaninfo, procinfo, etc.).
+                // can read device configuration (chaninfo, procinfo, sysinfo, groupinfo).
                 if (pkt.cbpkt_header.type == cbPKTTYPE_PROCREP) {
                     const auto* procinfo = reinterpret_cast<const cbPKT_PROCINFO*>(&pkt);
                     impl->shmem_session->setProcInfo(
                         cbproto::InstrumentId::fromPacketField(pkt.cbpkt_header.instrument),
                         *procinfo);
+                }
+                if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
+                    const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
+                    impl->shmem_session->setSysInfo(*sysinfo);
+                }
+                if (pkt.cbpkt_header.type == cbPKTTYPE_GROUPREP) {
+                    const auto* groupinfo = reinterpret_cast<const cbPKT_GROUPINFO*>(&pkt);
+                    if (groupinfo->group >= 1 && groupinfo->group <= cbMAXGROUPS) {
+                        impl->shmem_session->setGroupInfo(
+                            cbproto::InstrumentId::fromPacketField(pkt.cbpkt_header.instrument),
+                            groupinfo->group - 1, *groupinfo);
+                    }
                 }
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
                     const auto* chaninfo = reinterpret_cast<const cbPKT_CHANINFO*>(&pkt);
@@ -834,7 +846,7 @@ Result<void> SdkSession::start() {
 
                 // Periodic clock sync probing
                 auto now = std::chrono::steady_clock::now();
-                if (now - impl->last_clock_probe_time > std::chrono::seconds(5)) {
+                if (now - impl->last_clock_probe_time > std::chrono::seconds(2)) {
                     impl->device_session->sendClockProbe();
                     impl->last_clock_probe_time = now;
                 }
@@ -914,6 +926,14 @@ Result<void> SdkSession::start() {
         } else {
             // Just request configuration without changing runlevel
             handshake_result = requestConfiguration(500);
+        }
+
+        // Send initial clock probe immediately after handshake so clock
+        // offset is available as soon as possible (don't wait for the
+        // periodic 2-second timer to fire).
+        if (handshake_result.isOk() && m_impl->device_session) {
+            m_impl->device_session->sendClockProbe();
+            m_impl->last_clock_probe_time = std::chrono::steady_clock::now();
         }
 
         if (handshake_result.isError()) {
@@ -1011,7 +1031,7 @@ Result<void> SdkSession::start() {
                         }
 
                         // Periodic clock sync probing (~every 5 seconds)
-                        if (t4 - impl->last_clock_probe_time > std::chrono::seconds(5)) {
+                        if (t4 - impl->last_clock_probe_time > std::chrono::seconds(2)) {
                             // Build and enqueue probe via shmem xmt buffer.
                             // Can't call sendClockProbe() (needs SdkSession*), so inline it.
                             {

@@ -64,10 +64,7 @@ class TestClientProperties:
         assert client_session.protocol_version != ProtocolVersion.UNKNOWN
 
     def test_sysfreq(self, client_session):
-        # sysfreq comes from SYSINFO in shmem; may be 0 if the STANDALONE
-        # hasn't mirrored SYSREP to the native config buffer yet.
-        sysfreq = client_session.sysfreq
-        assert sysfreq == 0 or sysfreq == 30000
+        assert client_session.sysfreq == 30000
 
     def test_proc_ident(self, client_session):
         ident = client_session.proc_ident
@@ -120,10 +117,8 @@ class TestClientConfigAccess:
         assert len(labels) == N_CHANS
 
     def test_get_group_channels(self, client_session):
-        # Group membership comes from GROUPINFO in shmem; may be empty if
-        # the STANDALONE hasn't mirrored GROUPREP to the config buffer.
         channels = client_session.get_group_channels(int(SampleRate.SR_30kHz))
-        assert len(channels) >= 0  # May be empty in CLIENT mode
+        assert len(channels) >= N_CHANS
 
     def test_get_filter_info(self, client_session):
         # CLIENT should see the same filter table
@@ -145,10 +140,7 @@ class TestClientConfigMatchesStandalone:
     """Verify CLIENT sees the same config as the STANDALONE session."""
 
     def test_sysfreq_matches(self, nplay_session, client_session):
-        # CLIENT may not have sysfreq if SYSINFO isn't mirrored to shmem
-        client_freq = client_session.sysfreq
-        if client_freq != 0:
-            assert client_freq == nplay_session.sysfreq
+        assert client_session.sysfreq == nplay_session.sysfreq
 
     def test_protocol_version_matches(self, nplay_session, client_session):
         assert client_session.protocol_version == nplay_session.protocol_version
@@ -165,9 +157,7 @@ class TestClientConfigMatchesStandalone:
     def test_group_channels_match(self, nplay_session, client_session):
         standalone_group = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
         client_group = client_session.get_group_channels(int(SampleRate.SR_30kHz))
-        # CLIENT may not see GROUPINFO if not mirrored; skip comparison if empty
-        if len(client_group) > 0:
-            assert client_group == standalone_group
+        assert client_group == standalone_group
 
     def test_smpgroup_field_matches(self, nplay_session, client_session):
         standalone = nplay_session.get_channels_field(
@@ -225,12 +215,6 @@ class TestClientDataReception:
         assert count[0] > 0, "CLIENT received no packets via catch-all"
 
     def test_continuous_reader(self, client_session):
-        # continuous_reader/read_continuous depend on get_group_channels which
-        # requires GROUPINFO in shmem.  Skip if not available in CLIENT mode.
-        channels = client_session.get_group_channels(int(SampleRate.SR_30kHz))
-        if len(channels) == 0:
-            pytest.skip("GROUPINFO not available in CLIENT mode shmem")
-
         reader = client_session.continuous_reader(
             rate=SampleRate.SR_30kHz, buffer_seconds=2.0,
         )
@@ -243,10 +227,6 @@ class TestClientDataReception:
             reader.close()
 
     def test_read_continuous(self, client_session):
-        channels = client_session.get_group_channels(int(SampleRate.SR_30kHz))
-        if len(channels) == 0:
-            pytest.skip("GROUPINFO not available in CLIENT mode shmem")
-
         data = client_session.read_continuous(
             rate=SampleRate.SR_30kHz, duration=0.5,
         )
