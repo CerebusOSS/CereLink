@@ -72,6 +72,14 @@ if(CBSDK_BUILD_SHARED)
         CBSDK_VERSION_STRING="${CBSDK_VERSION_MAJOR}.${CBSDK_VERSION_MINOR}.${CBSDK_VERSION_PATCH}"
     )
     set_target_properties(cbsdk_shared PROPERTIES OUTPUT_NAME cbsdk)
+    # On Windows, the shared lib produces an import lib (cbsdk.lib) that
+    # collides with the static lib.  Put them in separate directories.
+    if(WIN32)
+        set_target_properties(cbsdk_shared PROPERTIES
+            ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shared"
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shared"
+        )
+    endif()
 
     if(WIN32)
         target_link_libraries(cbsdk_shared PRIVATE wsock32 ws2_32)
