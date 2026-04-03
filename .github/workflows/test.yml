@@ -107,10 +107,13 @@ jobs:
       - name: Set library path
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            echo "CBSDK_LIB_DIR=${{ github.workspace }}/install/bin" >> "$GITHUB_ENV"
+            LIBDIR="${{ github.workspace }}/install/bin"
           else
-            echo "CBSDK_LIB_DIR=${{ github.workspace }}/install/lib" >> "$GITHUB_ENV"
+            LIBDIR="${{ github.workspace }}/install/lib"
           fi
+          echo "CBSDK_LIB_DIR=$LIBDIR" >> "$GITHUB_ENV"
+          echo "Library directory: $LIBDIR"
+          ls -la "$LIBDIR"/libcbsdk* "$LIBDIR"/cbsdk* 2>/dev/null || echo "WARNING: no cbsdk library found in $LIBDIR"
 
       - name: Install pycbsdk
         working-directory: pycbsdk
