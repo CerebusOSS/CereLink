@@ -5,14 +5,16 @@ import numpy as np
 from ._lib import ffi
 
 # Structured dtype matching cbPKT_HEADER (16 bytes, little-endian)
-HEADER_DTYPE = np.dtype([
-    ('time', '<u8'),
-    ('chid', '<u2'),
-    ('type', '<u2'),
-    ('dlen', '<u2'),
-    ('instrument', 'u1'),
-    ('reserved', 'u1'),
-])
+HEADER_DTYPE = np.dtype(
+    [
+        ("time", "<u8"),
+        ("chid", "<u2"),
+        ("type", "<u2"),
+        ("dlen", "<u2"),
+        ("instrument", "u1"),
+        ("reserved", "u1"),
+    ]
+)
 
 # Standard Cerebus group sample rates (Hz)
 GROUP_RATES = {1: 500, 2: 1000, 3: 2000, 4: 10000, 5: 30000, 6: 30000}

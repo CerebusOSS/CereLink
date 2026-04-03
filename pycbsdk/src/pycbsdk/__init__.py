@@ -17,8 +17,14 @@ Usage::
 """
 
 from .session import (
-    Session, DeviceType, ChannelType, SampleRate, ChanInfoField,
-    ProtocolVersion, Stats, ContinuousReader,
+    Session,
+    DeviceType,
+    ChannelType,
+    SampleRate,
+    ChanInfoField,
+    ProtocolVersion,
+    Stats,
+    ContinuousReader,
 )
 
 try:
@@ -27,7 +33,13 @@ except ImportError:
     __version__ = "0.0.0"
 
 __all__ = [
-    "Session", "DeviceType", "ChannelType", "SampleRate", "ChanInfoField",
-    "ProtocolVersion", "Stats", "ContinuousReader",
+    "Session",
+    "DeviceType",
+    "ChannelType",
+    "SampleRate",
+    "ChanInfoField",
+    "ProtocolVersion",
+    "Stats",
+    "ContinuousReader",
     "__version__",
 ]

@@ -15,8 +15,12 @@ import time
 from collections import Counter
 
 from pycbsdk import (
-    Session, DeviceType, ChannelType, SampleRate,
-    ChanInfoField, ProtocolVersion,
+    Session,
+    DeviceType,
+    ChannelType,
+    SampleRate,
+    ChanInfoField,
+    ProtocolVersion,
 )
 
 # Spike processing extract bit (cbAINPSPK_EXTRACT)
@@ -139,19 +143,22 @@ def print_report(info: dict) -> None:
     print(f"    Protocol:         {proto_str}")
     print(f"    Runlevel:         {info['runlevel']}")
     print(f"    System freq:      {info['sysfreq']} Hz")
-    print(f"    Spike length:     {info['spike_length']} samples "
-          f"(pretrigger: {info['spike_pretrigger']})")
+    print(
+        f"    Spike length:     {info['spike_length']} samples "
+        f"(pretrigger: {info['spike_pretrigger']})"
+    )
 
     offset = info["clock_offset_ns"]
     uncertainty = info["clock_uncertainty_ns"]
     if offset is not None:
-        print(f"    Clock offset:     {offset} ns "
-              f"(uncertainty: {uncertainty} ns)")
+        print(f"    Clock offset:     {offset} ns (uncertainty: {uncertainty} ns)")
     else:
         print(f"    Clock offset:     (not synced)")
 
-    print(f"    Packets:          {info['packets_received']} received, "
-          f"{info['packets_dropped']} dropped")
+    print(
+        f"    Packets:          {info['packets_received']} received, "
+        f"{info['packets_dropped']} dropped"
+    )
 
     channels = info.get("channels", {})
     if channels:
@@ -178,9 +185,11 @@ def print_report(info: dict) -> None:
         print(f"    Sample groups:")
         for gid, g in groups.items():
             label = g["label"]
-            print(f"      Group {gid} ({g['rate']:>5s}): "
-                  f"{g['n_channels']} channels"
-                  f"{f'  [{label}]' if label else ''}")
+            print(
+                f"      Group {gid} ({g['rate']:>5s}): "
+                f"{g['n_channels']} channels"
+                f"{f'  [{label}]' if label else ''}"
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -189,12 +198,16 @@ def main(argv: list[str] | None = None) -> int:
         description="Scan for Cerebus devices and report configuration.",
     )
     parser.add_argument(
-        "devices", nargs="*", metavar="DEVICE",
+        "devices",
+        nargs="*",
+        metavar="DEVICE",
         help=f"Device types to scan (default: all). "
-             f"Choices: {', '.join(_device_type_names())}",
+        f"Choices: {', '.join(_device_type_names())}",
     )
     parser.add_argument(
-        "--timeout", type=float, default=3.0,
+        "--timeout",
+        type=float,
+        default=3.0,
         help="Connection timeout per device in seconds (default: 3)",
     )
     args = parser.parse_args(argv)
@@ -203,8 +216,9 @@ def main(argv: list[str] | None = None) -> int:
         try:
             targets = [DeviceType[d.upper()] for d in args.devices]
         except KeyError as e:
-            parser.error(f"Unknown device type: {e}. "
-                         f"Choices: {', '.join(_device_type_names())}")
+            parser.error(
+                f"Unknown device type: {e}. Choices: {', '.join(_device_type_names())}"
+            )
             return 1  # unreachable
     else:
         targets = [dt for dt in DeviceType if dt != DeviceType.CUSTOM]

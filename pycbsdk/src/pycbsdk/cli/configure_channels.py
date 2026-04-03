@@ -61,12 +61,17 @@ def configure(
         if n_chans <= 0 or n_chans > available:
             n_chans = available
 
-        print(f"Configuring {n_chans}/{available} {channel_type.name} channels "
-              f"to {rate.name} ({rate.hz} Hz)" if rate != SampleRate.NONE
-              else f"Disabling sampling on {n_chans}/{available} {channel_type.name} channels")
+        print(
+            f"Configuring {n_chans}/{available} {channel_type.name} channels "
+            f"to {rate.name} ({rate.hz} Hz)"
+            if rate != SampleRate.NONE
+            else f"Disabling sampling on {n_chans}/{available} {channel_type.name} channels"
+        )
 
         # Set sample group (disable_others=True to turn off remaining channels)
-        session.set_channel_sample_group(n_chans, channel_type, rate, disable_others=True)
+        session.set_channel_sample_group(
+            n_chans, channel_type, rate, disable_others=True
+        )
 
         if dc_coupling and rate != SampleRate.NONE:
             session.set_ac_input_coupling(n_chans, channel_type, False)
@@ -79,7 +84,9 @@ def configure(
         time.sleep(0.5)
 
         # Verify
-        group_chans = session.get_group_channels(int(rate)) if rate != SampleRate.NONE else []
+        group_chans = (
+            session.get_group_channels(int(rate)) if rate != SampleRate.NONE else []
+        )
         print(f"Verification: group {rate.name} now has {len(group_chans)} channels")
 
 
@@ -89,34 +96,44 @@ def main(argv: list[str] | None = None) -> int:
         description="Configure channels on a Cerebus device.",
     )
     parser.add_argument(
-        "--device", default="NPLAY",
+        "--device",
+        default="NPLAY",
         help="Device type (default: NPLAY). "
-             f"Choices: {', '.join(dt.name for dt in DeviceType)}",
+        f"Choices: {', '.join(dt.name for dt in DeviceType)}",
     )
     parser.add_argument(
-        "--type", dest="channel_type", default="FRONTEND",
+        "--type",
+        dest="channel_type",
+        default="FRONTEND",
         help="Channel type to configure (default: FRONTEND). "
-             f"Choices: {', '.join(ct.name for ct in ChannelType)}",
+        f"Choices: {', '.join(ct.name for ct in ChannelType)}",
     )
     parser.add_argument(
-        "--rate", default="SR_RAW",
+        "--rate",
+        default="SR_RAW",
         help="Sample rate group (default: SR_RAW). "
-             f"Choices: {', '.join(r.name for r in SampleRate)}",
+        f"Choices: {', '.join(r.name for r in SampleRate)}",
     )
     parser.add_argument(
-        "--n-chans", type=int, default=0,
+        "--n-chans",
+        type=int,
+        default=0,
         help="Number of channels to configure (default: 0 = all available).",
     )
     parser.add_argument(
-        "--disable-spikes", action="store_true",
+        "--disable-spikes",
+        action="store_true",
         help="Disable spike sorting on configured channels.",
     )
     parser.add_argument(
-        "--dc-coupling", action="store_true",
+        "--dc-coupling",
+        action="store_true",
         help="Switch to DC input coupling on configured channels.",
     )
     parser.add_argument(
-        "--timeout", type=float, default=10.0,
+        "--timeout",
+        type=float,
+        default=10.0,
         help="Connection timeout in seconds (default: 10).",
     )
     args = parser.parse_args(argv)
@@ -141,7 +158,10 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         configure(
-            device_type, channel_type, rate, args.n_chans,
+            device_type,
+            channel_type,
+            rate,
+            args.n_chans,
             disable_spikes=args.disable_spikes,
             dc_coupling=args.dc_coupling,
             timeout=args.timeout,

@@ -27,39 +27,44 @@ class DeviceType(enum.IntEnum):
 
     Values match ``cbproto_device_type_t``.
     """
+
     LEGACY_NSP = 0
-    NSP        = 1
-    HUB1       = 2
-    HUB2       = 3
-    HUB3       = 4
-    NPLAY      = 5
-    CUSTOM     = 6
+    NSP = 1
+    HUB1 = 2
+    HUB2 = 3
+    HUB3 = 4
+    NPLAY = 5
+    CUSTOM = 6
+
 
 class ChannelType(enum.IntEnum):
     """Channel type classification.
 
     Values match ``cbproto_channel_type_t``.
     """
-    FRONTEND    = 0
-    ANALOG_IN   = 1
-    ANALOG_OUT  = 2
-    AUDIO       = 3
-    DIGITAL_IN  = 4
-    SERIAL      = 5
+
+    FRONTEND = 0
+    ANALOG_IN = 1
+    ANALOG_OUT = 2
+    AUDIO = 3
+    DIGITAL_IN = 4
+    SERIAL = 5
     DIGITAL_OUT = 6
+
 
 class SampleRate(enum.IntEnum):
     """Continuous sampling rate selection.
 
     Values match ``cbproto_group_rate_t`` so they can be passed directly to cffi.
     """
-    NONE  = 0
-    SR_500  = 1   # 500 Hz
-    SR_1kHz = 2   # 1 000 Hz
-    SR_2kHz = 3   # 2 000 Hz
+
+    NONE = 0
+    SR_500 = 1  # 500 Hz
+    SR_1kHz = 2  # 1 000 Hz
+    SR_2kHz = 3  # 2 000 Hz
     SR_10kHz = 4  # 10 000 Hz
     SR_30kHz = 5  # 30 000 Hz
-    SR_RAW  = 6   # Raw (30 000 Hz)
+    SR_RAW = 6  # Raw (30 000 Hz)
 
     @property
     def hz(self) -> int:
@@ -72,11 +77,12 @@ class ProtocolVersion(enum.IntEnum):
 
     Values match ``cbproto_protocol_version_t``.
     """
-    UNKNOWN  = 0
-    V3_11    = 1   # Legacy 32-bit timestamps
-    V4_0     = 2   # Legacy 64-bit timestamps
-    V4_1     = 3   # 64-bit timestamps, 16-bit packet types
-    CURRENT  = 4   # 4.2+ (current)
+
+    UNKNOWN = 0
+    V3_11 = 1  # Legacy 32-bit timestamps
+    V4_0 = 2  # Legacy 64-bit timestamps
+    V4_1 = 3  # 64-bit timestamps, 16-bit packet types
+    CURRENT = 4  # 4.2+ (current)
 
 
 class ChanInfoField(enum.IntEnum):
@@ -84,40 +90,41 @@ class ChanInfoField(enum.IntEnum):
 
     Values match ``cbsdk_chaninfo_field_t``.
     """
-    SMPGROUP    = 0
-    SMPFILTER   = 1
-    SPKFILTER   = 2
-    AINPOPTS    = 3
-    SPKOPTS     = 4
+
+    SMPGROUP = 0
+    SMPFILTER = 1
+    SPKFILTER = 2
+    AINPOPTS = 3
+    SPKOPTS = 4
     SPKTHRLEVEL = 5
-    LNCRATE     = 6
+    LNCRATE = 6
     REFELECCHAN = 7
-    AMPLREJPOS  = 8
-    AMPLREJNEG  = 9
-    CHANCAPS    = 10
-    BANK        = 11
-    TERM        = 12
+    AMPLREJPOS = 8
+    AMPLREJNEG = 9
+    CHANCAPS = 10
+    BANK = 11
+    TERM = 12
 
 
 _RATE_HZ = {
-    SampleRate.NONE:     0,
-    SampleRate.SR_500:   500,
-    SampleRate.SR_1kHz:  1000,
-    SampleRate.SR_2kHz:  2000,
+    SampleRate.NONE: 0,
+    SampleRate.SR_500: 500,
+    SampleRate.SR_1kHz: 1000,
+    SampleRate.SR_2kHz: 2000,
     SampleRate.SR_10kHz: 10000,
     SampleRate.SR_30kHz: 30000,
-    SampleRate.SR_RAW:   30000,
+    SampleRate.SR_RAW: 30000,
 }
 
 # Aliases for lenient string → SampleRate coercion (user might type "30kHz"
 # instead of "SR_30kHz").
 _RATE_ALIASES = {
     "500HZ": SampleRate.SR_500,
-    "1KHZ":  SampleRate.SR_1kHz,
-    "2KHZ":  SampleRate.SR_2kHz,
+    "1KHZ": SampleRate.SR_1kHz,
+    "2KHZ": SampleRate.SR_2kHz,
     "10KHZ": SampleRate.SR_10kHz,
     "30KHZ": SampleRate.SR_30kHz,
-    "RAW":   SampleRate.SR_RAW,
+    "RAW": SampleRate.SR_RAW,
 }
 
 
@@ -144,12 +151,13 @@ def _coerce_enum(enum_cls, value, aliases=None):
         members = ", ".join(enum_cls.__members__)
         extra = ""
         if aliases:
-            extra = " (or: " + ", ".join(
-                k for k in aliases if k not in enum_cls.__members__
-            ) + ")"
+            extra = (
+                " (or: "
+                + ", ".join(k for k in aliases if k not in enum_cls.__members__)
+                + ")"
+            )
         raise ValueError(
-            f"Unknown {enum_cls.__name__}: {value!r}. "
-            f"Must be one of: {members}{extra}"
+            f"Unknown {enum_cls.__name__}: {value!r}. Must be one of: {members}{extra}"
         )
     raise TypeError(
         f"Expected {enum_cls.__name__}, int, or str, got {type(value).__name__}"
@@ -167,6 +175,7 @@ def _check(result: int, msg: str = ""):
 @dataclass
 class Stats:
     """SDK session statistics."""
+
     packets_received: int = 0
     bytes_received: int = 0
     packets_to_shmem: int = 0
@@ -222,7 +231,10 @@ class Session:
         config.callback_queue_depth = callback_queue_depth
 
         session_p = ffi.new("cbsdk_session_t *")
-        _check(_lib.cbsdk_session_create(session_p, ffi.addressof(config)), "Failed to create session")
+        _check(
+            _lib.cbsdk_session_create(session_p, ffi.addressof(config)),
+            "Failed to create session",
+        )
         self._session = session_p[0]
         self._handles: list[int] = []
         # prevent Python callback pointers from being garbage collected
@@ -275,12 +287,16 @@ class Session:
                 channels.
         """
         ct = None if channel_type is None else _coerce_enum(ChannelType, channel_type)
+
         def decorator(fn):
             self._register_event_callback(ct, fn)
             return fn
+
         return decorator
 
-    def on_group(self, rate: SampleRate = SampleRate.SR_30kHz, *, as_array: bool = False) -> Callable:
+    def on_group(
+        self, rate: SampleRate = SampleRate.SR_30kHz, *, as_array: bool = False
+    ) -> Callable:
         """Decorator to register a callback for continuous sample group packets.
 
         The callback receives ``(header, data)`` where ``data`` is either a
@@ -293,12 +309,14 @@ class Session:
                 Requires numpy.
         """
         rate = _coerce_enum(SampleRate, rate, _RATE_ALIASES)
+
         def decorator(fn):
             if as_array:
                 self._register_group_callback_numpy(int(rate), fn)
             else:
                 self._register_group_callback(int(rate), fn)
             return fn
+
         return decorator
 
     def on_group_batch(self, rate: SampleRate = SampleRate.SR_30kHz) -> Callable:
@@ -325,9 +343,11 @@ class Session:
                 ring_buf[:, pos:pos+len(timestamps)] = samples.T
         """
         rate = _coerce_enum(SampleRate, rate, _RATE_ALIASES)
+
         def decorator(fn):
             self._register_group_batch_callback(int(rate), fn)
             return fn
+
         return decorator
 
     def on_config(self, packet_type: int) -> Callable:
@@ -336,16 +356,20 @@ class Session:
         Args:
             packet_type: Packet type to match.
         """
+
         def decorator(fn):
             self._register_config_callback(packet_type, fn)
             return fn
+
         return decorator
 
     def on_packet(self) -> Callable:
         """Decorator to register a callback for ALL packets (catch-all)."""
+
         def decorator(fn):
             self._register_packet_callback(fn)
             return fn
+
         return decorator
 
     def on_error(self, fn: Callable[[str], None]):
@@ -439,7 +463,11 @@ class Session:
         def c_batch_cb(samples_ptr, n_samples, n_channels, ts_ptr, user_data):
             try:
                 sbuf = ffi.buffer(samples_ptr, n_samples * n_channels * 2)
-                arr = np.frombuffer(sbuf, dtype=np.int16).reshape(n_samples, n_channels).copy()
+                arr = (
+                    np.frombuffer(sbuf, dtype=np.int16)
+                    .reshape(n_samples, n_channels)
+                    .copy()
+                )
                 tbuf = ffi.buffer(ts_ptr, n_samples * 8)
                 ts = np.frombuffer(tbuf, dtype=np.uint64).copy()
                 fn(arr, ts)
@@ -699,7 +727,8 @@ class Session:
             Field value as int (widened from the native type).
         """
         return _get_lib().cbsdk_session_get_channel_field(
-            self._session, chan_id, int(field))
+            self._session, chan_id, int(field)
+        )
 
     def get_group_label(self, group_id: int) -> Optional[str]:
         """Get a sample group's label (group_id 1-6)."""
@@ -744,9 +773,11 @@ class Session:
         count = ffi.new("uint32_t *", max_chans)
         _check(
             _lib.cbsdk_session_get_matching_channels(
-                self._session, n_chans,
+                self._session,
+                n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),
-                buf, count
+                buf,
+                count,
             ),
             "Failed to get matching channel IDs",
         )
@@ -776,10 +807,12 @@ class Session:
         count = ffi.new("uint32_t *", max_chans)
         _check(
             _lib.cbsdk_session_get_channels_field(
-                self._session, n_chans,
+                self._session,
+                n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),
                 int(_coerce_enum(ChanInfoField, field)),
-                buf, count
+                buf,
+                count,
             ),
             "Failed to get channel field",
         )
@@ -808,9 +841,12 @@ class Session:
         count = ffi.new("uint32_t *", max_chans)
         _check(
             _lib.cbsdk_session_get_channels_labels(
-                self._session, n_chans,
+                self._session,
+                n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),
-                buf, label_stride, count
+                buf,
+                label_stride,
+                count,
             ),
             "Failed to get channel labels",
         )
@@ -846,9 +882,11 @@ class Session:
         count = ffi.new("uint32_t *", max_chans)
         _check(
             _lib.cbsdk_session_get_channels_positions(
-                self._session, n_chans,
+                self._session,
+                n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),
-                buf, count
+                buf,
+                count,
             ),
             "Failed to get channel positions",
         )
@@ -879,10 +917,11 @@ class Session:
         _lib = _get_lib()
         _check(
             _lib.cbsdk_session_set_channel_sample_group(
-                self._session, n_chans,
+                self._session,
+                n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),
                 int(_coerce_enum(SampleRate, rate, _RATE_ALIASES)),
-                disable_others
+                disable_others,
             ),
             "Failed to set channel sample group",
         )
@@ -904,9 +943,10 @@ class Session:
         _lib = _get_lib()
         _check(
             _lib.cbsdk_session_set_ac_input_coupling(
-                self._session, n_chans,
+                self._session,
+                n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),
-                enabled
+                enabled,
             ),
             "Failed to set AC input coupling",
         )
@@ -950,9 +990,7 @@ class Session:
     def set_channel_lncrate(self, chan_id: int, rate: int):
         """Set a channel's line noise cancellation adaptation rate."""
         _check(
-            _get_lib().cbsdk_session_set_channel_lncrate(
-                self._session, chan_id, rate
-            ),
+            _get_lib().cbsdk_session_set_channel_lncrate(self._session, chan_id, rate),
             "Failed to set channel lncrate",
         )
 
@@ -1029,9 +1067,11 @@ class Session:
                     _lib = _get_lib()
                     _check(
                         _lib.cbsdk_session_set_channel_sample_group(
-                            self._session, 1, int(chan_type),
+                            self._session,
+                            1,
+                            int(chan_type),
                             int(_coerce_enum(SampleRate, value, _RATE_ALIASES)),
-                            False
+                            False,
                         ),
                         "Failed to set smpgroup",
                     )
@@ -1136,7 +1176,9 @@ class Session:
                 id.encode(),
                 firstname.encode() if firstname else ffi.NULL,
                 lastname.encode() if lastname else ffi.NULL,
-                dob_month, dob_day, dob_year,
+                dob_month,
+                dob_day,
+                dob_year,
             ),
             "Failed to set patient info",
         )
@@ -1160,8 +1202,11 @@ class Session:
         """
         _check(
             _get_lib().cbsdk_session_set_analog_output_monitor(
-                self._session, aout_channel, monitor_channel,
-                track_last, spike_only,
+                self._session,
+                aout_channel,
+                monitor_channel,
+                track_last,
+                spike_only,
             ),
             "Failed to set analog output monitor",
         )
@@ -1180,7 +1225,8 @@ class Session:
         _lib = _get_lib()
         _check(
             _lib.cbsdk_session_start_central_recording(
-                self._session, filename.encode(),
+                self._session,
+                filename.encode(),
                 comment.encode() if comment else ffi.NULL,
             ),
             "Failed to start Central recording",
@@ -1229,9 +1275,10 @@ class Session:
         _lib = _get_lib()
         _check(
             _lib.cbsdk_session_set_channel_spike_sorting(
-                self._session, n_chans,
+                self._session,
+                n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),
-                sort_options
+                sort_options,
             ),
             "Failed to set spike sorting",
         )
@@ -1255,9 +1302,10 @@ class Session:
         _lib = _get_lib()
         _check(
             _lib.cbsdk_session_set_spike_extraction(
-                self._session, n_chans,
+                self._session,
+                n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),
-                enabled
+                enabled,
             ),
             "Failed to set spike extraction",
         )
@@ -1408,7 +1456,9 @@ class Session:
         buffer_samples = int(buffer_seconds * rate.hz)
         return ContinuousReader(self, rate, n_channels, buffer_samples)
 
-    def read_continuous(self, rate: SampleRate = SampleRate.SR_30kHz, duration: float = 1.0):
+    def read_continuous(
+        self, rate: SampleRate = SampleRate.SR_30kHz, duration: float = 1.0
+    ):
         """Collect continuous data for a specified duration.
 
         Blocks for *duration* seconds while accumulating group samples,
@@ -1463,7 +1513,7 @@ class Session:
             except ValueError:
                 pass
 
-        return buf[:, :count[0]]
+        return buf[:, : count[0]]
 
     # --- Bulk Configuration ---
 
@@ -1605,8 +1655,9 @@ class ContinuousReader:
         sample_rate: Sample rate in Hz.
     """
 
-    def __init__(self, session: Session, rate: SampleRate, n_channels: int,
-                 buffer_samples: int):
+    def __init__(
+        self, session: Session, rate: SampleRate, n_channels: int, buffer_samples: int
+    ):
         import numpy as np
 
         self._session = session
@@ -1674,10 +1725,13 @@ class ContinuousReader:
         if start < end:
             return self._buffer[:, start:end].copy()
         else:
-            return np.concatenate([
-                self._buffer[:, start:],
-                self._buffer[:, :end],
-            ], axis=1)
+            return np.concatenate(
+                [
+                    self._buffer[:, start:],
+                    self._buffer[:, :end],
+                ],
+                axis=1,
+            )
 
     @property
     def available(self) -> int:

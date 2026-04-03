@@ -59,6 +59,7 @@ TIMEOUT_S = 15.0
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PacketSample:
     device_ns: int
@@ -126,6 +127,7 @@ def _collect_packets(
 # Individual checks
 # ---------------------------------------------------------------------------
 
+
 def check_timestamps_are_nanoseconds(
     session: Session, samples: list[PacketSample]
 ) -> TestResult:
@@ -143,8 +145,7 @@ def check_timestamps_are_nanoseconds(
         return TestResult(name, False, "need at least 2 samples")
 
     deltas = [
-        samples[i].device_ns - samples[i - 1].device_ns
-        for i in range(1, len(samples))
+        samples[i].device_ns - samples[i - 1].device_ns for i in range(1, len(samples))
     ]
     deltas.sort()
     median_delta = deltas[len(deltas) // 2]
@@ -153,20 +154,24 @@ def check_timestamps_are_nanoseconds(
     for i in range(1, len(samples)):
         if samples[i].device_ns < samples[i - 1].device_ns:
             return TestResult(
-                name, False,
+                name,
+                False,
                 f"non-monotonic: sample[{i}]={samples[i].device_ns} "
-                f"< sample[{i-1}]={samples[i-1].device_ns}",
+                f"< sample[{i - 1}]={samples[i - 1].device_ns}",
                 samples,
             )
 
     # Plausible range for nanosecond deltas between RAW group packets.
     if not (1_000 <= median_delta <= 10_000_000):
         # Dump first few samples for diagnosis.
-        diag_lines = [f"  [{i}] time={s.device_ns}  delta={s.device_ns - samples[i-1].device_ns if i else 0}"
-                      for i, s in enumerate(samples[:10])]
+        diag_lines = [
+            f"  [{i}] time={s.device_ns}  delta={s.device_ns - samples[i - 1].device_ns if i else 0}"
+            for i, s in enumerate(samples[:10])
+        ]
         diag = "\n".join(diag_lines)
         return TestResult(
-            name, False,
+            name,
+            False,
             f"median inter-packet delta {median_delta} ns outside plausible range "
             f"[1us, 10ms] — timestamps may be raw ticks\n"
             f"  First 10 samples:\n{diag}",
@@ -177,7 +182,8 @@ def check_timestamps_are_nanoseconds(
     last_ns = samples[-1].device_ns
     span_s = (last_ns - first_ns) / 1e9
     return TestResult(
-        name, True,
+        name,
+        True,
         f"median delta {median_delta} ns (~{median_delta / 1e6:.2f} ms), "
         f"span {span_s:.4f}s over {len(samples)} pkts",
         samples,
@@ -193,9 +199,7 @@ def check_device_to_monotonic(
     if not samples:
         return TestResult(name, False, "no samples")
 
-    latencies_ms = [
-        (s.arrival_mono - s.converted_mono) * 1000 for s in samples
-    ]
+    latencies_ms = [(s.arrival_mono - s.converted_mono) * 1000 for s in samples]
     mean_ms = sum(latencies_ms) / len(latencies_ms)
     min_ms = min(latencies_ms)
     max_ms = max(latencies_ms)
@@ -213,9 +217,8 @@ def check_device_to_monotonic(
 # Scenario runner
 # ---------------------------------------------------------------------------
 
-def run_scenario(
-    device_type: DeviceType, mode: str
-) -> list[TestResult]:
+
+def run_scenario(device_type: DeviceType, mode: str) -> list[TestResult]:
     """Run all checks for one (device_type, mode) combination.
 
     mode is "STANDALONE" or "CLIENT".
@@ -235,7 +238,8 @@ def run_scenario(
             # before the CLIENT connects.
             bg_proc = subprocess.Popen(
                 [
-                    sys.executable, "-c",
+                    sys.executable,
+                    "-c",
                     "import time; "
                     f"from pycbsdk import Session, DeviceType, SampleRate; "
                     f"s = Session(DeviceType.{device_type.name}); "
@@ -248,7 +252,9 @@ def run_scenario(
             )
             # Give the STANDALONE process time to connect, populate shmem,
             # and configure a channel on RAW.
-            print(f"  Waiting for background STANDALONE process (pid {bg_proc.pid}) ...")
+            print(
+                f"  Waiting for background STANDALONE process (pid {bg_proc.pid}) ..."
+            )
             time.sleep(6)
             if bg_proc.poll() is not None:
                 stderr = bg_proc.stderr.read().decode() if bg_proc.stderr else ""
@@ -286,12 +292,16 @@ def run_scenario(
                     f"uncertainty: {uncert_ns / 1e6 if uncert_ns else 0:.3f} ms"
                 )
             except (TimeoutError, RuntimeError) as e:
-                print(f"  Clock sync unavailable ({e}) — skipping device_to_monotonic check")
+                print(
+                    f"  Clock sync unavailable ({e}) — skipping device_to_monotonic check"
+                )
 
             # Collect packets.
             print(f"  Collecting {_cfg['packet_count']} packets ...")
             samples = _collect_packets(
-                session, _cfg["packet_count"], TIMEOUT_S,
+                session,
+                _cfg["packet_count"],
+                TIMEOUT_S,
                 configure=False,  # Already activated above (or by background process)
             )
             print(f"  Collected {len(samples)} packets.")
@@ -301,10 +311,13 @@ def run_scenario(
             if has_clock_sync:
                 results.append(check_device_to_monotonic(session, samples))
             else:
-                results.append(TestResult(
-                    "device_to_monotonic accuracy", True,
-                    "SKIPPED — no clock sync in CENTRAL_COMPAT CLIENT mode",
-                ))
+                results.append(
+                    TestResult(
+                        "device_to_monotonic accuracy",
+                        True,
+                        "SKIPPED — no clock sync in CENTRAL_COMPAT CLIENT mode",
+                    )
+                )
 
     except Exception as e:
         results.append(TestResult(f"scenario setup ({label})", False, str(e)))
@@ -326,30 +339,40 @@ def run_scenario(
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m pycbsdk.cli.test_timestamps",
         description="Test timestamp correctness across device types and modes.",
     )
     parser.add_argument(
-        "--device", "-d", nargs="*", default=None,
+        "--device",
+        "-d",
+        nargs="*",
+        default=None,
         help="Device type(s) to test (default: NPLAY HUB1). "
-             f"Choices: {', '.join(dt.name for dt in DeviceType if dt != DeviceType.CUSTOM)}",
+        f"Choices: {', '.join(dt.name for dt in DeviceType if dt != DeviceType.CUSTOM)}",
     )
     parser.add_argument(
-        "--standalone-only", action="store_true",
+        "--standalone-only",
+        action="store_true",
         help="Skip CLIENT mode tests.",
     )
     parser.add_argument(
-        "--client-only", action="store_true",
+        "--client-only",
+        action="store_true",
         help="Skip STANDALONE mode tests.",
     )
     parser.add_argument(
-        "--tolerance", type=float, default=_cfg["tolerance_ms"],
+        "--tolerance",
+        type=float,
+        default=_cfg["tolerance_ms"],
         help=f"Latency tolerance in ms (default: {_cfg['tolerance_ms']})",
     )
     parser.add_argument(
-        "--packets", type=int, default=_cfg["packet_count"],
+        "--packets",
+        type=int,
+        default=_cfg["packet_count"],
         help=f"Packets to collect per scenario (default: {_cfg['packet_count']})",
     )
     args = parser.parse_args(argv)

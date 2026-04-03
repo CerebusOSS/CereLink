@@ -23,10 +23,10 @@ from pycbsdk import Session, DeviceType, ChannelType, ChanInfoField
 
 
 # cbAINPSPK flags
-_SPKOPTS_EXTRACT  = 0x0000_0001
-_SPKOPTS_THRAUTO  = 0x0000_0400
+_SPKOPTS_EXTRACT = 0x0000_0001
+_SPKOPTS_THRAUTO = 0x0000_0400
 _SPKOPTS_HOOPSORT = 0x0001_0000
-_SPKOPTS_PCASORT  = 0x0006_0000  # all PCA manual + auto
+_SPKOPTS_PCASORT = 0x0006_0000  # all PCA manual + auto
 
 
 def _format_rate(hz: float) -> str:
@@ -41,8 +41,9 @@ def _format_rate(hz: float) -> str:
 class SpikeRateMonitor:
     """Accumulates spike events and computes windowed firing rates."""
 
-    def __init__(self, session: Session, channel_ids: list[int],
-                 window_sec: float = 1.0):
+    def __init__(
+        self, session: Session, channel_ids: list[int], window_sec: float = 1.0
+    ):
         self._session = session
         self._window_sec = window_sec
         self._channel_ids = channel_ids
@@ -92,8 +93,11 @@ class SpikeRateMonitor:
             total = list(self._total_spikes)
 
         rates = [c / self._window_sec for c in counts]
-        active = [(self._channel_ids[i], rates[i], total[i])
-                  for i in range(len(self._channel_ids)) if counts[i] > 0]
+        active = [
+            (self._channel_ids[i], rates[i], total[i])
+            for i in range(len(self._channel_ids))
+            if counts[i] > 0
+        ]
         active.sort(key=lambda x: x[1], reverse=True)
 
         n_active = len(active)
@@ -126,8 +130,10 @@ def print_stats(snap: dict, top_n: int = 0, show_channels: bool = True) -> None:
 
     # Header line
     print(f"\033[2J\033[H", end="")  # clear screen
-    print(f"Spike Rate Monitor  |  {n_active}/{n_ch} channels active  |  "
-          f"{snap['total_spikes']} total spikes")
+    print(
+        f"Spike Rate Monitor  |  {n_active}/{n_ch} channels active  |  "
+        f"{snap['total_spikes']} total spikes"
+    )
     print(f"{'─' * 72}")
 
     # Aggregate stats
@@ -135,8 +141,10 @@ def print_stats(snap: dict, top_n: int = 0, show_channels: bool = True) -> None:
         print(f"  Mean rate (all channels):  {_format_rate(mean)} Hz")
         print(f"  Mean rate (active only):   {_format_rate(total / n_active)} Hz")
         print(f"  Total spike rate:          {_format_rate(total)} Hz")
-        print(f"  Range (active):            {_format_rate(snap['min_active_rate'])} – "
-              f"{_format_rate(snap['max_rate'])} Hz")
+        print(
+            f"  Range (active):            {_format_rate(snap['min_active_rate'])} – "
+            f"{_format_rate(snap['max_rate'])} Hz"
+        )
     else:
         print(f"  No spikes detected in window.")
 
@@ -163,23 +171,35 @@ def main(argv: list[str] | None = None) -> int:
         description="Live spike rate monitor for Cerebus devices.",
     )
     parser.add_argument(
-        "device", nargs="?", default="NPLAY",
+        "device",
+        nargs="?",
+        default="NPLAY",
         help="Device type (default: NPLAY)",
     )
     parser.add_argument(
-        "--interval", "-i", type=float, default=1.0,
+        "--interval",
+        "-i",
+        type=float,
+        default=1.0,
         help="Update interval in seconds (default: 1.0)",
     )
     parser.add_argument(
-        "--window", "-w", type=float, default=None,
+        "--window",
+        "-w",
+        type=float,
+        default=None,
         help="Rate window in seconds (default: same as interval)",
     )
     parser.add_argument(
-        "--top", "-n", type=int, default=0,
+        "--top",
+        "-n",
+        type=int,
+        default=0,
         help="Show only top N channels by rate (default: all active)",
     )
     parser.add_argument(
-        "--no-channels", action="store_true",
+        "--no-channels",
+        action="store_true",
         help="Hide per-channel breakdown, show only aggregate stats",
     )
     args = parser.parse_args(argv)
@@ -198,22 +218,35 @@ def main(argv: list[str] | None = None) -> int:
         with Session(device_type=device_type) as session:
             # Find spike-enabled frontend channels
             fe_ids = session.get_matching_channel_ids(ChannelType.FRONTEND)
-            spkopts = session.get_channels_field(ChannelType.FRONTEND, ChanInfoField.SPKOPTS)
-            spike_ids = [ch for ch, opts in zip(fe_ids, spkopts)
-                         if opts & _SPKOPTS_EXTRACT]
+            spkopts = session.get_channels_field(
+                ChannelType.FRONTEND, ChanInfoField.SPKOPTS
+            )
+            spike_ids = [
+                ch for ch, opts in zip(fe_ids, spkopts) if opts & _SPKOPTS_EXTRACT
+            ]
 
             if not spike_ids:
                 print("No channels with spike processing enabled.")
                 return 1
 
             # Summarise threshold config
-            n_auto = sum(1 for opts in spkopts if opts & _SPKOPTS_EXTRACT and opts & _SPKOPTS_THRAUTO)
+            n_auto = sum(
+                1
+                for opts in spkopts
+                if opts & _SPKOPTS_EXTRACT and opts & _SPKOPTS_THRAUTO
+            )
             n_manual = len(spike_ids) - n_auto
-            n_sorting = sum(1 for opts in spkopts
-                            if opts & _SPKOPTS_EXTRACT and opts & (_SPKOPTS_HOOPSORT | _SPKOPTS_PCASORT))
-            print(f"Monitoring {len(spike_ids)} spike-enabled channels "
-                  f"({n_auto} auto-threshold, {n_manual} manual-threshold, "
-                  f"{n_sorting} with sorting)")
+            n_sorting = sum(
+                1
+                for opts in spkopts
+                if opts & _SPKOPTS_EXTRACT
+                and opts & (_SPKOPTS_HOOPSORT | _SPKOPTS_PCASORT)
+            )
+            print(
+                f"Monitoring {len(spike_ids)} spike-enabled channels "
+                f"({n_auto} auto-threshold, {n_manual} manual-threshold, "
+                f"{n_sorting} with sorting)"
+            )
 
             monitor = SpikeRateMonitor(session, spike_ids, window_sec=window)
 
@@ -225,8 +258,9 @@ def main(argv: list[str] | None = None) -> int:
                 while True:
                     time.sleep(args.interval)
                     snap = monitor.snapshot()
-                    print_stats(snap, top_n=args.top,
-                                show_channels=not args.no_channels)
+                    print_stats(
+                        snap, top_n=args.top, show_channels=not args.no_channels
+                    )
             except KeyboardInterrupt:
                 print("\nStopped.")
 

@@ -102,9 +102,7 @@ def load_library():
         # Common MinGW locations
         for mingw_hint in [
             os.environ.get("MINGW_BIN", ""),
-            os.path.expandvars(
-                r"%LOCALAPPDATA%\Programs\CLion\bin\mingw\bin"
-            ),
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\CLion\bin\mingw\bin"),
         ]:
             if mingw_hint and os.path.isdir(mingw_hint):
                 _dll_dirs.append(os.add_dll_directory(mingw_hint))
