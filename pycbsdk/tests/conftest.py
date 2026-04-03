@@ -77,10 +77,10 @@ def _extract_zip(zip_path: Path, dest_dir: Path) -> None:
 
 @pytest.fixture(scope="session")
 def test_data_dir() -> Path:
-    """Download and extract test data (.ns6, .nev, .ccf)."""
-    zip_path = CACHE_DIR / "dnss.zip"
-    extract_dir = CACHE_DIR / "dnss"
-    _download(f"{CERELINK_RELEASE_URL}/dnss.zip", zip_path)
+    """Download and extract test data (256-channel, .ns6 + .nev + .ccf)."""
+    zip_path = CACHE_DIR / "dnss256.zip"
+    extract_dir = CACHE_DIR / "dnss256"
+    _download(f"{CERELINK_RELEASE_URL}/dnss256.zip", zip_path)
     _extract_zip(zip_path, extract_dir)
     return extract_dir
 

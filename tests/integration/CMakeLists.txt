@@ -92,13 +92,13 @@ endif()
 set(NPLAY_DATA_AVAILABLE FALSE)
 
 if(NPLAY_AVAILABLE)
-    set(DNSS_ZIP "${NPLAY_CACHE_DIR}/dnss.zip")
-    set(DNSS_EXTRACT_DIR "${NPLAY_CACHE_DIR}/dnss")
+    set(DNSS_ZIP "${NPLAY_CACHE_DIR}/dnss256.zip")
+    set(DNSS_EXTRACT_DIR "${NPLAY_CACHE_DIR}/dnss256")
 
     if(NOT EXISTS "${DNSS_ZIP}")
-        message(STATUS "Downloading test data (dnss.zip)...")
+        message(STATUS "Downloading test data (dnss256.zip)...")
         file(DOWNLOAD
-            "${CERELINK_RELEASE_URL}/dnss.zip"
+            "${CERELINK_RELEASE_URL}/dnss256.zip"
             "${DNSS_ZIP}"
             STATUS DNSS_DL_STATUS
             SHOW_PROGRESS
