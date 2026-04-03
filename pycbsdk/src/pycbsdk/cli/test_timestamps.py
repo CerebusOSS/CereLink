@@ -35,7 +35,6 @@ import threading
 from dataclasses import dataclass, field
 
 from pycbsdk import DeviceType, SampleRate, Session
-from pycbsdk.session import ProtocolVersion
 
 
 # ---------------------------------------------------------------------------
@@ -204,7 +203,7 @@ def check_device_to_monotonic(
     min_ms = min(latencies_ms)
     max_ms = max(latencies_ms)
 
-    passed = all(abs(l) < _cfg["tolerance_ms"] for l in latencies_ms)
+    passed = all(abs(lat) < _cfg["tolerance_ms"] for lat in latencies_ms)
     detail = (
         f"latency (arrival - converted): "
         f"min={min_ms:+.3f} ms  mean={mean_ms:+.3f} ms  max={max_ms:+.3f} ms  "
@@ -325,7 +324,7 @@ def run_scenario(device_type: DeviceType, mode: str) -> list[TestResult]:
         if bg_proc is not None:
             bg_proc.terminate()
             bg_proc.wait(timeout=5)
-            print(f"  Background STANDALONE process terminated.")
+            print("  Background STANDALONE process terminated.")
 
     # Print results for this scenario.
     for r in results:

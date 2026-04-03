@@ -153,7 +153,7 @@ def print_report(info: dict) -> None:
     if offset is not None:
         print(f"    Clock offset:     {offset} ns (uncertainty: {uncertainty} ns)")
     else:
-        print(f"    Clock offset:     (not synced)")
+        print("    Clock offset:     (not synced)")
 
     print(
         f"    Packets:          {info['packets_received']} received, "
@@ -162,7 +162,7 @@ def print_report(info: dict) -> None:
 
     channels = info.get("channels", {})
     if channels:
-        print(f"    Channels:")
+        print("    Channels:")
         for ct_name, summary in channels.items():
             total = summary["total"]
             enabled = summary["sampling_enabled"]
@@ -182,7 +182,7 @@ def print_report(info: dict) -> None:
 
     groups = info.get("groups", {})
     if groups:
-        print(f"    Sample groups:")
+        print("    Sample groups:")
         for gid, g in groups.items():
             label = g["label"]
             print(

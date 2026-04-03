@@ -129,7 +129,7 @@ def print_stats(snap: dict, top_n: int = 0, show_channels: bool = True) -> None:
     active = snap["active"]
 
     # Header line
-    print(f"\033[2J\033[H", end="")  # clear screen
+    print("\033[2J\033[H", end="")  # clear screen
     print(
         f"Spike Rate Monitor  |  {n_active}/{n_ch} channels active  |  "
         f"{snap['total_spikes']} total spikes"
@@ -146,7 +146,7 @@ def print_stats(snap: dict, top_n: int = 0, show_channels: bool = True) -> None:
             f"{_format_rate(snap['max_rate'])} Hz"
         )
     else:
-        print(f"  No spikes detected in window.")
+        print("  No spikes detected in window.")
 
     if show_channels and active:
         print(f"\n  {'Chan':>6s}  {'Rate (Hz)':>9s}  {'Total':>8s}  {'Bar'}")

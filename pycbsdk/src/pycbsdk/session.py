@@ -7,7 +7,7 @@ from __future__ import annotations
 import enum
 import time as _time
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Optional
 
 from ._lib import ffi, load_library

@@ -174,10 +174,10 @@ def clock_check(
         )
         if abs(first_latency_ms) > 1000:
             print(
-                f"\n  WARNING: Latency magnitude > 1 s — data packet "
-                f"timestamps and clock probe\n  responses appear to use "
-                f"different time bases.  device_to_monotonic() results\n"
-                f"  will not be meaningful for this device.",
+                "\n  WARNING: Latency magnitude > 1 s — data packet "
+                "timestamps and clock probe\n  responses appear to use "
+                "different time bases.  device_to_monotonic() results\n"
+                "  will not be meaningful for this device.",
                 file=sys.stderr,
             )
 
