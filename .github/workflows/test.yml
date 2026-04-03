@@ -69,7 +69,7 @@ jobs:
           -DCBSDK_BUILD_SAMPLE=OFF \
           -DCBSDK_BUILD_SHARED=ON \
           -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install \
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install" \
           ${{ matrix.config.cmake_extra }}
 
       - name: Build
@@ -105,15 +105,23 @@ jobs:
         run: cmake --install build --config Release
 
       - name: Set library path
+        shell: python
         run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            LIBDIR="${{ github.workspace }}/install/bin"
-          else
-            LIBDIR="${{ github.workspace }}/install/lib"
-          fi
-          echo "CBSDK_LIB_DIR=$LIBDIR" >> "$GITHUB_ENV"
-          echo "Library directory: $LIBDIR"
-          ls -la "$LIBDIR"/libcbsdk* "$LIBDIR"/cbsdk* 2>/dev/null || echo "WARNING: no cbsdk library found in $LIBDIR"
+          import os, pathlib
+          workspace = pathlib.Path(os.environ["GITHUB_WORKSPACE"])
+          if os.name == "nt":
+              libdir = workspace / "install" / "bin"
+          else:
+              libdir = workspace / "install" / "lib"
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write(f"CBSDK_LIB_DIR={libdir}\n")
+          print(f"Library directory: {libdir}")
+          libs = list(libdir.glob("*cbsdk*"))
+          if libs:
+              for lib in libs:
+                  print(f"  {lib.name} ({lib.stat().st_size} bytes)")
+          else:
+              print("WARNING: no cbsdk library found")
 
       - name: Install pycbsdk
         working-directory: pycbsdk
