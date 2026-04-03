@@ -71,13 +71,13 @@ if(CBSDK_BUILD_SHARED)
         CBSDK_SHARED CBSDK_EXPORTS
         CBSDK_VERSION_STRING="${CBSDK_VERSION_MAJOR}.${CBSDK_VERSION_MINOR}.${CBSDK_VERSION_PATCH}"
     )
+    # The DLL is named cbsdk.dll on all Windows toolchains.
+    # On MSVC, the import lib would also be cbsdk.lib, colliding with the
+    # static lib.  Put the import lib in a subdirectory to avoid that.
     set_target_properties(cbsdk_shared PROPERTIES OUTPUT_NAME cbsdk)
-    # On Windows, the shared lib produces an import lib (cbsdk.lib) that
-    # collides with the static lib.  Put them in separate directories.
-    if(WIN32)
+    if(MSVC)
         set_target_properties(cbsdk_shared PROPERTIES
             ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shared"
-            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shared"
         )
     endif()
 
