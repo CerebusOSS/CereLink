@@ -62,7 +62,7 @@ protected:
         std::string ns6    = NPLAY_NS6_PATH;
 
 #ifdef _WIN32
-        std::string cmd = "\"" + binary + "\" --lockfile " + m_lockName + " -A \"" + ns6 + "\"";
+        std::string cmd = "\"" + binary + "\" --audio none --lockfile " + m_lockName + " -A \"" + ns6 + "\"";
         STARTUPINFOA si = {};
         si.cb = sizeof(si);
         si.dwFlags = STARTF_USESTDHANDLES;
@@ -78,6 +78,7 @@ protected:
         if (m_pid == 0) {
             // Child
             execl(binary.c_str(), binary.c_str(),
+                  "--audio", "none",
                   "--lockfile", m_lockName.c_str(),
                   "-A", ns6.c_str(),
                   nullptr);

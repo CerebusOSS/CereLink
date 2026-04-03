@@ -154,6 +154,7 @@ def nplayserver(nplayserver_binary: Path | None, ns6_path: Path):
     proc = subprocess.Popen(
         [
             str(nplayserver_binary),
+            "--audio", "none",
             "--lockfile", lock_name,
             "-A",  # autostart playback
             str(ns6_path),
