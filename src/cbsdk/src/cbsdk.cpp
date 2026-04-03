@@ -1459,6 +1459,23 @@ cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
     }
 }
 
+cbsdk_result_t cbsdk_session_set_spike_extraction(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    bool enabled) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->setSpikeExtraction(
+            n_chans, to_cpp_channel_type(chan_type), enabled);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Clock Synchronization
 ///////////////////////////////////////////////////////////////////////////////////////////////////

@@ -192,6 +192,18 @@ public:
     /// @return Result indicating success or failure
     Result<void> setChanInfo(uint32_t channel, const cbPKT_CHANINFO& info);
 
+    /// @brief Set system information (sysfreq, spike length, etc.)
+    /// @param info cbPKT_SYSINFO structure to write
+    /// @return Result indicating success or failure
+    Result<void> setSysInfo(const cbPKT_SYSINFO& info);
+
+    /// @brief Set sample group information
+    /// @param id Instrument ID (1-based)
+    /// @param group Group number (0-based, 0 to cbMAXGROUPS-1)
+    /// @param info cbPKT_GROUPINFO structure to write
+    /// @return Result indicating success or failure
+    Result<void> setGroupInfo(cbproto::InstrumentId id, uint32_t group, const cbPKT_GROUPINFO& info);
+
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////

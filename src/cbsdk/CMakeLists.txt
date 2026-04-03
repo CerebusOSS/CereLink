@@ -71,7 +71,15 @@ if(CBSDK_BUILD_SHARED)
         CBSDK_SHARED CBSDK_EXPORTS
         CBSDK_VERSION_STRING="${CBSDK_VERSION_MAJOR}.${CBSDK_VERSION_MINOR}.${CBSDK_VERSION_PATCH}"
     )
+    # The DLL is named cbsdk.dll on all Windows toolchains.
+    # On MSVC, the import lib would also be cbsdk.lib, colliding with the
+    # static lib.  Put the import lib in a subdirectory to avoid that.
     set_target_properties(cbsdk_shared PROPERTIES OUTPUT_NAME cbsdk)
+    if(MSVC)
+        set_target_properties(cbsdk_shared PROPERTIES
+            ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shared"
+        )
+    endif()
 
     if(WIN32)
         target_link_libraries(cbsdk_shared PRIVATE wsock32 ws2_32)
@@ -79,8 +87,10 @@ if(CBSDK_BUILD_SHARED)
         target_link_libraries(cbsdk_shared PRIVATE pthread)
     endif()
 
-    # Static-link MinGW runtime to eliminate DLL dependencies (libstdc++, libgcc, libwinpthread)
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # Static-link MinGW runtime to eliminate DLL dependencies (libstdc++, libgcc, libwinpthread).
+    # Only on MinGW — on Linux, static-linking libstdc++ into a shared library causes
+    # dual-runtime conflicts when loaded into a process that also uses libstdc++ dynamically.
+    if(MINGW)
         target_link_options(cbsdk_shared PRIVATE -static-libstdc++ -static-libgcc)
     endif()
 

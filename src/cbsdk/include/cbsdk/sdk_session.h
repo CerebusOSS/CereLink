@@ -515,6 +515,15 @@ public:
     Result<void> setChannelSpikeSorting(size_t nChans, ChannelType chanType,
                                         uint32_t sortOptions);
 
+    /// Enable or disable spike extraction (cbAINPSPK_EXTRACT) for channels of a type.
+    /// This controls whether the device emits spike event packets for these channels.
+    /// Uses cbPKTTYPE_CHANSETSPK (not the threshold command).
+    /// @param nChans Number of channels to configure
+    /// @param chanType Channel type filter
+    /// @param enabled true = enable spike extraction, false = disable
+    /// @return Result indicating success or error
+    Result<void> setSpikeExtraction(size_t nChans, ChannelType chanType, bool enabled);
+
     /// Set AC input coupling (offset correction) for channels of a specific type
     /// @param nChans Number of channels to configure (cbMAXCHANS for all)
     /// @param chanType Channel type filter

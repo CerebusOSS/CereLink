@@ -57,12 +57,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to the CCF file to load.",
     )
     parser.add_argument(
-        "--device", default="NPLAY",
+        "--device",
+        default="NPLAY",
         help="Device type (default: NPLAY). "
-             f"Choices: {', '.join(dt.name for dt in DeviceType)}",
+        f"Choices: {', '.join(dt.name for dt in DeviceType)}",
     )
     parser.add_argument(
-        "--timeout", type=float, default=10.0,
+        "--timeout",
+        type=float,
+        default=10.0,
         help="Connection timeout in seconds (default: 10).",
     )
     args = parser.parse_args(argv)

@@ -190,6 +190,10 @@ public:
         return m_device.setChannelsSpikeSortingSync(nChans, chanType, sortOptions, timeout);
     }
 
+    Result<void> setSpikeExtraction(const size_t nChans, const ChannelType chanType, const bool enabled) override {
+        return m_device.setSpikeExtraction(nChans, chanType, enabled);
+    }
+
     Result<void> setChannelConfig(const cbPKT_CHANINFO& chaninfo) override {
         return m_device.setChannelConfig(chaninfo);
     }

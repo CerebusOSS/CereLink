@@ -104,15 +104,21 @@ def clock_check(
             time.sleep(0.1)
 
         proto = session.protocol_version
-        ts_kind = ("30 kHz ticks (upconverted to ns)"
-                   if proto == ProtocolVersion.V3_11
-                   else "PTP nanoseconds")
-        print(f"Connected to {device_type.name}  protocol: {proto.name}  "
-              f"timestamps: {ts_kind}")
+        ts_kind = (
+            "30 kHz ticks (upconverted to ns)"
+            if proto == ProtocolVersion.V3_11
+            else "PTP nanoseconds"
+        )
+        print(
+            f"Connected to {device_type.name}  protocol: {proto.name}  "
+            f"timestamps: {ts_kind}"
+        )
 
         if proto == ProtocolVersion.UNKNOWN:
-            print("WARNING: Protocol version unknown — results may be unreliable.",
-                  file=sys.stderr)
+            print(
+                "WARNING: Protocol version unknown — results may be unreliable.",
+                file=sys.stderr,
+            )
 
         # Wait for at least one clock sync
         print("Waiting for clock sync ...")
@@ -168,17 +174,19 @@ def clock_check(
         )
         if abs(first_latency_ms) > 1000:
             print(
-                f"\n  WARNING: Latency magnitude > 1 s — data packet "
-                f"timestamps and clock probe\n  responses appear to use "
-                f"different time bases.  device_to_monotonic() results\n"
-                f"  will not be meaningful for this device.",
+                "\n  WARNING: Latency magnitude > 1 s — data packet "
+                "timestamps and clock probe\n  responses appear to use "
+                "different time bases.  device_to_monotonic() results\n"
+                "  will not be meaningful for this device.",
                 file=sys.stderr,
             )
 
         print(f"\nReporting every {interval}s ...\n")
 
-        hdr = (f"{'Pkts':>6s}  {'Offset (ms)':>14s}  {'Uncert (ms)':>11s}  "
-               f"{'Latency min':>11s}  {'mean':>8s}  {'max':>8s}  {'last':>8s}")
+        hdr = (
+            f"{'Pkts':>6s}  {'Offset (ms)':>14s}  {'Uncert (ms)':>11s}  "
+            f"{'Latency min':>11s}  {'mean':>8s}  {'max':>8s}  {'last':>8s}"
+        )
         print(hdr)
         print("─" * len(hdr))
 
@@ -194,8 +202,10 @@ def clock_check(
                 uncert_ms = uncert_ns / 1e6 if uncert_ns is not None else float("nan")
 
                 if snap is None:
-                    print(f"{'0':>6s}  {offset_ms:>14.3f}  {uncert_ms:>11.3f}"
-                          f"  (no packets)")
+                    print(
+                        f"{'0':>6s}  {offset_ms:>14.3f}  {uncert_ms:>11.3f}"
+                        f"  (no packets)"
+                    )
                     continue
 
                 all_means.append(snap["mean_ms"])
@@ -209,10 +219,12 @@ def clock_check(
             print()
 
         if all_means:
-            print(f"\nReports: {len(all_means)}  "
-                  f"Mean latency  min: {min(all_means):+.3f} ms  "
-                  f"max: {max(all_means):+.3f} ms  "
-                  f"overall: {sum(all_means) / len(all_means):+.3f} ms")
+            print(
+                f"\nReports: {len(all_means)}  "
+                f"Mean latency  min: {min(all_means):+.3f} ms  "
+                f"max: {max(all_means):+.3f} ms  "
+                f"overall: {sum(all_means) / len(all_means):+.3f} ms"
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -221,20 +233,30 @@ def main(argv: list[str] | None = None) -> int:
         description="Validate device-to-host clock conversion.",
     )
     parser.add_argument(
-        "device", nargs="?", default="NPLAY",
+        "device",
+        nargs="?",
+        default="NPLAY",
         help="Device type (default: NPLAY)",
     )
     parser.add_argument(
-        "--interval", "-i", type=float, default=1.0,
+        "--interval",
+        "-i",
+        type=float,
+        default=1.0,
         help="Seconds between reports (default: 1.0)",
     )
     parser.add_argument(
-        "--group", "-g", type=int, default=None,
+        "--group",
+        "-g",
+        type=int,
+        default=None,
         help="Listen on sample group N instead of events. "
-             f"Choices: {', '.join(f'{r.value}={r.name}' for r in SampleRate if r.value > 0)}",
+        f"Choices: {', '.join(f'{r.value}={r.name}' for r in SampleRate if r.value > 0)}",
     )
     parser.add_argument(
-        "--timeout", type=float, default=10.0,
+        "--timeout",
+        type=float,
+        default=10.0,
         help="Connection timeout in seconds (default: 10)",
     )
     args = parser.parse_args(argv)

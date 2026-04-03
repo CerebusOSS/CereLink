@@ -235,6 +235,14 @@ public:
 
     virtual Result<void> setChannelsSpikeSortingSync(size_t nChans, ChannelType chanType, uint32_t sortOptions, std::chrono::milliseconds timeout) = 0;
 
+    /// Enable or disable spike extraction for first N channels of a type.
+    /// Uses cbPKTTYPE_CHANSETSPK which controls the cbAINPSPK_EXTRACT bit.
+    /// @param nChans Number of channels to configure
+    /// @param chanType Channel type filter
+    /// @param enabled true = enable extraction, false = disable
+    /// @return Success or error
+    virtual Result<void> setSpikeExtraction(size_t nChans, ChannelType chanType, bool enabled) = 0;
+
     /// Set full channel configuration
     /// Sends a cbPKT_CHANINFO (as CHANSET) to the device
     /// @param chaninfo Complete channel info packet

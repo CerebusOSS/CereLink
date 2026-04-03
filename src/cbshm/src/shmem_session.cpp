@@ -1052,6 +1052,52 @@ Result<void> ShmemSession::setChanInfo(uint32_t channel, const cbPKT_CHANINFO& i
     return Result<void>::ok();
 }
 
+Result<void> ShmemSession::setSysInfo(const cbPKT_SYSINFO& info) {
+    if (!isOpen()) {
+        return Result<void>::error("Session not open");
+    }
+
+    if (m_impl->layout == ShmemLayout::NATIVE) {
+        m_impl->nativeCfg()->sysinfo = info;
+    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        m_impl->legacyCfg()->sysinfo = info;
+    } else {
+        m_impl->centralCfg()->sysinfo = info;
+    }
+
+    return Result<void>::ok();
+}
+
+Result<void> ShmemSession::setGroupInfo(cbproto::InstrumentId id, uint32_t group, const cbPKT_GROUPINFO& info) {
+    if (!isOpen()) {
+        return Result<void>::error("Session not open");
+    }
+    if (!id.isValid()) {
+        return Result<void>::error("Invalid instrument ID");
+    }
+
+    uint8_t idx = id.toIndex();
+
+    if (m_impl->layout == ShmemLayout::NATIVE) {
+        if (idx != 0) {
+            return Result<void>::error("Native mode: single instrument only");
+        }
+        if (group >= NATIVE_MAXGROUPS) {
+            return Result<void>::error("Group index out of range");
+        }
+        m_impl->nativeCfg()->groupinfo[group] = info;
+    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+        if (idx >= CENTRAL_cbMAXPROCS) return Result<void>::error("instrument index out of range");
+        if (group >= CENTRAL_cbMAXGROUPS) return Result<void>::error("Group index out of range");
+        m_impl->legacyCfg()->groupinfo[idx][group] = info;
+    } else {
+        if (group >= CENTRAL_cbMAXGROUPS) return Result<void>::error("Group index out of range");
+        m_impl->centralCfg()->groupinfo[idx][group] = info;
+    }
+
+    return Result<void>::ok();
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Configuration Buffer Direct Access
 

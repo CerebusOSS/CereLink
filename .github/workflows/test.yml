@@ -14,38 +14,110 @@ defaults:
     shell: bash
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/ruff-action@v3
+        with:
+          args: check
+          src: pycbsdk/src
+      - uses: astral-sh/ruff-action@v3
+        with:
+          args: format --check
+          src: pycbsdk/src
+
   test:
-    name: Test ${{ matrix.config.name }}
+    name: ${{ matrix.config.name }}
     runs-on: ${{ matrix.config.os }}
     strategy:
       fail-fast: false
       matrix:
         config:
-          - {name: "windows-x64", os: "windows-latest", cmake_extra: "-T v142,host=x86"}
+          - {name: "windows-x64", os: "windows-2022", cmake_extra: "-T v142,host=x86"}
           - {name: "macOS-latest", os: "macOS-latest"}
           - {name: "ubuntu-latest", os: "ubuntu-latest"}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # setuptools-scm needs tags
 
-      - name: Configure CBSDK
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
-          cmake --version
+          sudo apt-get update && sudo apt-get install -y libportaudio2
+          sudo sysctl -w net.core.rmem_max=8388608
+
+      # Single build: tests + shared library
+      - name: Configure
+        run: |
           cmake -B build -S . \
           -DCBSDK_BUILD_CBMEX=OFF \
           -DCBSDK_BUILD_CBOCT=OFF \
           -DCBSDK_BUILD_TEST=ON \
           -DCBSDK_BUILD_SAMPLE=OFF \
-          -DCBSDK_BUILD_TOOLS=OFF \
+          -DCBSDK_BUILD_SHARED=ON \
           -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_INSTALL_PREFIX=${PWD}/install \
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install" \
           ${{ matrix.config.cmake_extra }}
 
       - name: Build
         run: cmake --build build --config Release -j
 
-      - name: Run Tests
+      # C++ unit tests (fast, no device needed)
+      - name: Unit Tests
         run: >
           ctest --test-dir build --build-config Release --output-on-failure
-          -E "^device\."
+          -E "^(device|integration)\."
+
+      - name: Allow nPlayServer through firewall (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Allow UDP on nPlayServer ports for both nPlayServer and the test executables
+          New-NetFirewallRule -DisplayName "CereLink-UDP-In" -Direction Inbound -Protocol UDP -LocalPort 51001-51002 -Action Allow
+          New-NetFirewallRule -DisplayName "CereLink-UDP-Out" -Direction Outbound -Protocol UDP -RemotePort 51001-51002 -Action Allow
+
+      # C++ integration tests (nPlayServer downloaded at configure time)
+      # Skipped on Windows: nPlayServer launched via CreateProcessA doesn't
+      # reliably bind UDP ports on GHA runners (investigating).
+      - name: Integration Tests
+        if: runner.os != 'Windows'
+        run: >
+          ctest --test-dir build --build-config Release --output-on-failure
+          --timeout 30
+          -R "^integration\."
+        timeout-minutes: 10
+
+      # pycbsdk tests (reuse the shared library from the same build)
+      - name: Install shared library
+        run: cmake --install build --config Release
+
+      - name: Set library path
+        shell: python
+        run: |
+          import os, pathlib
+          workspace = pathlib.Path(os.environ["GITHUB_WORKSPACE"])
+          libdir = workspace / "install" / ("bin" if os.name == "nt" else "lib")
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write(f"CBSDK_LIB_DIR={libdir}\n")
+
+      - name: Install pycbsdk
+        working-directory: pycbsdk
+        run: uv sync
+
+      - name: pycbsdk Tests
+        working-directory: pycbsdk
+        run: uv run pytest tests/ -m integration --timeout=120 -v
+        timeout-minutes: 10

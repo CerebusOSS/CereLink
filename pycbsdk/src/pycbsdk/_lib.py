@@ -30,7 +30,7 @@ def _find_library() -> str:
     elif sys.platform == "darwin":
         lib_names = ["libcbsdk.dylib"]
     else:
-        lib_names = ["libcbsdk.so"]
+        lib_names = ["libcbsdk.so", "libcbsdkd.so"]
 
     # 1. Explicit path
     explicit = os.environ.get("CBSDK_LIB_PATH")
@@ -102,9 +102,7 @@ def load_library():
         # Common MinGW locations
         for mingw_hint in [
             os.environ.get("MINGW_BIN", ""),
-            os.path.expandvars(
-                r"%LOCALAPPDATA%\Programs\CLion\bin\mingw\bin"
-            ),
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\CLion\bin\mingw\bin"),
         ]:
             if mingw_hint and os.path.isdir(mingw_hint):
                 _dll_dirs.append(os.add_dll_directory(mingw_hint))
