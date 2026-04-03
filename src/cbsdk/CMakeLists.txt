@@ -87,8 +87,10 @@ if(CBSDK_BUILD_SHARED)
         target_link_libraries(cbsdk_shared PRIVATE pthread)
     endif()
 
-    # Static-link MinGW runtime to eliminate DLL dependencies (libstdc++, libgcc, libwinpthread)
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # Static-link MinGW runtime to eliminate DLL dependencies (libstdc++, libgcc, libwinpthread).
+    # Only on MinGW — on Linux, static-linking libstdc++ into a shared library causes
+    # dual-runtime conflicts when loaded into a process that also uses libstdc++ dynamically.
+    if(MINGW)
         target_link_options(cbsdk_shared PRIVATE -static-libstdc++ -static-libgcc)
     endif()
 
