@@ -69,6 +69,14 @@ echo "net.core.rmem_default=8388608" | sudo tee -a /etc/sysctl.d/99-cerebus.conf
 ```
 Then reboot.
 
+## Development
+
+Install pre-commit hooks (runs ruff linter/formatter on `pycbsdk/src/`):
+
+```
+pre-commit install
+```
+
 ## Getting Help
 
 1. Read the [project wiki](https://github.com/CerebusOSS/CereLink/wiki)
