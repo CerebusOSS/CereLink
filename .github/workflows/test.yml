@@ -55,7 +55,9 @@ jobs:
 
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+        run: |
+          sudo apt-get update && sudo apt-get install -y libportaudio2
+          sudo sysctl -w net.core.rmem_max=8388608
 
       # Single build: tests + shared library
       - name: Configure
