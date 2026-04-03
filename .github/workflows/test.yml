@@ -75,6 +75,23 @@ jobs:
           ctest --test-dir build --build-config Release --output-on-failure
           -E "^(device|integration)\."
 
+      # Diagnose nPlayServer startup (temporary)
+      - name: Debug nPlayServer
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -x
+          # Find the binary
+          NPLAY=$(find build/tests/integration/_nplay_cache -name 'nPlayServer.exe' | head -1)
+          echo "Binary: $NPLAY"
+          ls -la "$NPLAY"
+          # List everything in its directory (DLLs, etc.)
+          ls -la "$(dirname "$NPLAY")"
+          # Try to run it with --help or briefly, capturing stderr
+          timeout 5 "$NPLAY" --help 2>&1 || true
+          # Also try just running it to see if it prints a missing-DLL error
+          timeout 5 "$NPLAY" 2>&1 || true
+
       # C++ integration tests (nPlayServer downloaded at configure time)
       - name: Integration Tests
         run: >
