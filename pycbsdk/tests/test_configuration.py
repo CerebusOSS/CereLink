@@ -39,13 +39,12 @@ class TestSessionLifecycle:
     only for the connect-and-receive smoke test.
     """
 
-    def test_session_connects_and_receives(self, nplayserver):
-        """Smoke test: fresh session can connect and receive packets."""
-        with Session(DeviceType.NPLAY) as session:
-            assert session.running
-            time.sleep(1)
-            stats = session.stats
-            assert stats.packets_received > 0
+    def test_session_connects_and_receives(self, nplay_session):
+        """Smoke test: session is connected and receiving packets."""
+        assert nplay_session.running
+        time.sleep(1)
+        stats = nplay_session.stats
+        assert stats.packets_received > 0
 
     def test_session_is_standalone(self, nplay_session):
         assert nplay_session.is_standalone
@@ -269,14 +268,23 @@ class TestConfigureChannel:
     """Tests for the configure_channel convenience method."""
 
     def test_configure_smpfilter(self, nplay_session):
+        orig = nplay_session.get_channel_smpfilter(1)
         nplay_session.configure_channel(1, smpfilter=2)
         time.sleep(0.3)
         assert nplay_session.get_channel_smpfilter(1) == 2
+        nplay_session.configure_channel(1, smpfilter=orig)
+        time.sleep(0.3)
 
     def test_configure_spkfilter(self, nplay_session):
+        # Read original value so we can restore it afterward (other tests
+        # depend on a valid spike filter being configured).
+        orig = nplay_session.get_channel_spkfilter(1)
         nplay_session.configure_channel(1, spkfilter=3)
         time.sleep(0.3)
         assert nplay_session.get_channel_spkfilter(1) == 3
+        # Restore
+        nplay_session.configure_channel(1, spkfilter=orig)
+        time.sleep(0.3)
 
     def test_configure_label(self, nplay_session):
         nplay_session.configure_channel(1, label="TestCh")
@@ -284,6 +292,8 @@ class TestConfigureChannel:
         assert nplay_session.get_channel_label(1) == "TestCh"
 
     def test_configure_multiple_attrs(self, nplay_session):
+        orig_filter = nplay_session.get_channel_smpfilter(1)
+        orig_label = nplay_session.get_channel_label(1)
         nplay_session.configure_channel(
             1,
             smpfilter=4,
@@ -292,10 +302,15 @@ class TestConfigureChannel:
         time.sleep(0.3)
         assert nplay_session.get_channel_smpfilter(1) == 4
         assert nplay_session.get_channel_label(1) == "Multi"
+        # Restore
+        nplay_session.configure_channel(1, smpfilter=orig_filter,
+                                        label=orig_label or "chan1")
+        time.sleep(0.3)
 
     def test_configure_unknown_attr_raises(self, nplay_session):
         with pytest.raises(ValueError, match="Unknown channel attribute"):
             nplay_session.configure_channel(1, nonexistent_attr=42)
+
 
 
 # ---------------------------------------------------------------------------

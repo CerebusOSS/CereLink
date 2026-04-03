@@ -180,16 +180,13 @@ class TestOnEvent:
     on the channels for the device to emit spike event packets.
     """
 
-    # cbAINPSPK_EXTRACT | cbAINPSPK_THRLEVEL — enable spike extraction
-    # with analog level threshold detection
-    _SPKOPTS = 0x00000001 | 0x00000100
-
-    def test_receives_spike_events(self, nplay_session):
+    def test_spike_extraction_toggle(self, nplay_session):
+        """Verify spike events arrive when enabled, stop when disabled, resume when re-enabled."""
         _ensure_30k(nplay_session)
-        nplay_session.set_channel_spike_sorting(
-            N_CHANS, ChannelType.FRONTEND, sort_options=self._SPKOPTS,
+        nplay_session.set_spike_extraction(
+            N_CHANS, ChannelType.FRONTEND, enabled=True,
         )
-        time.sleep(0.5)
+        time.sleep(1)
 
         events = []
 
@@ -197,9 +194,31 @@ class TestOnEvent:
         def on_spike(header, data):
             events.append(header.chid)
 
-        time.sleep(2)
+        # Phase 1: spikes should arrive (extraction explicitly enabled)
+        time.sleep(3)
+        phase1_count = len(events)
+        assert phase1_count > 0, "No spike events received with default config"
 
-        assert len(events) > 0, "No spike events received (spiking enabled)"
+        # Phase 2: disable extraction on ALL channels — no new spikes should arrive
+        all_chans = nplay_session.max_chans()
+        events.clear()
+        nplay_session.set_spike_extraction(
+            all_chans, ChannelType.FRONTEND, enabled=False,
+        )
+        time.sleep(2)
+        phase2_count = len(events)
+        assert phase2_count == 0, (
+            f"Got {phase2_count} spike events after disabling extraction"
+        )
+
+        # Phase 3: re-enable — spikes should resume
+        events.clear()
+        nplay_session.set_spike_extraction(
+            all_chans, ChannelType.FRONTEND, enabled=True,
+        )
+        time.sleep(3)
+        phase3_count = len(events)
+        assert phase3_count > 0, "No spike events after re-enabling extraction"
 
     def test_register_all_events(self, nplay_session):
         events = []
@@ -332,39 +351,38 @@ class TestReadContinuous:
 class TestMultiRate:
     """Tests for receiving data at multiple sample rates simultaneously."""
 
-    def test_two_rates(self, nplayserver):
-        with Session(DeviceType.NPLAY) as session:
-            # Configure first 2 channels at 30kHz (disable everything else)
-            session.set_channel_sample_group(
-                2, ChannelType.FRONTEND, SampleRate.SR_30kHz,
-                disable_others=True,
-            )
-            time.sleep(0.3)
+    def test_two_rates(self, nplay_session):
+        # Configure first 2 channels at 30kHz (disable everything else)
+        nplay_session.set_channel_sample_group(
+            2, ChannelType.FRONTEND, SampleRate.SR_30kHz,
+            disable_others=True,
+        )
+        time.sleep(0.3)
 
-            # Individually assign channels 3-4 to 1kHz via configure_channel.
-            fe_ids = session.get_matching_channel_ids(ChannelType.FRONTEND)
-            for chan_id in fe_ids[2:4]:
-                session.configure_channel(chan_id, smpgroup=SampleRate.SR_1kHz)
-            time.sleep(0.5)
+        # Individually assign channels 3-4 to 1kHz via configure_channel.
+        fe_ids = nplay_session.get_matching_channel_ids(ChannelType.FRONTEND)
+        for chan_id in fe_ids[2:4]:
+            nplay_session.configure_channel(chan_id, smpgroup=SampleRate.SR_1kHz)
+        time.sleep(0.5)
 
-            count_30k = [0]
-            count_1k = [0]
+        count_30k = [0]
+        count_1k = [0]
 
-            @session.on_group(SampleRate.SR_30kHz)
-            def on_30k(header, data):
-                count_30k[0] += 1
+        @nplay_session.on_group(SampleRate.SR_30kHz)
+        def on_30k(header, data):
+            count_30k[0] += 1
 
-            @session.on_group(SampleRate.SR_1kHz)
-            def on_1k(header, data):
-                count_1k[0] += 1
+        @nplay_session.on_group(SampleRate.SR_1kHz)
+        def on_1k(header, data):
+            count_1k[0] += 1
 
-            time.sleep(1)
+        time.sleep(1)
 
-            assert count_30k[0] > 0, "No 30kHz samples received"
-            assert count_1k[0] > 0, "No 1kHz samples received"
-            # 30kHz should produce ~30x more samples than 1kHz
-            ratio = count_30k[0] / max(count_1k[0], 1)
-            assert ratio > 10, f"Rate ratio {ratio:.1f} — expected ~30x"
+        assert count_30k[0] > 0, "No 30kHz samples received"
+        assert count_1k[0] > 0, "No 1kHz samples received"
+        # 30kHz should produce ~30x more samples than 1kHz
+        ratio = count_30k[0] / max(count_1k[0], 1)
+        assert ratio > 10, f"Rate ratio {ratio:.1f} — expected ~30x"
 
 
 # ---------------------------------------------------------------------------
