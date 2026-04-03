@@ -262,15 +262,24 @@ struct SdkSession::Impl {
     /// Called after loading a CMP file to overlay positions immediately.
     void applyCmpToAllChannels() {
         for (uint32_t ch = 0; ch < cbMAXCHANS; ++ch) {
-            const cbPKT_CHANINFO* ci = nullptr;
+            // Take a snapshot to avoid racing with the receive thread
+            cbPKT_CHANINFO ci_copy{};
+            bool valid = false;
             if (device_session) {
-                ci = device_session->getChanInfo(ch + 1);
+                const auto* ci = device_session->getChanInfo(ch + 1);
+                if (ci && ci->chan > 0) {
+                    ci_copy = *ci;
+                    valid = true;
+                }
             } else if (shmem_session) {
-                const auto* native = shmem_session->getNativeConfigBuffer();
-                if (native) ci = &native->chaninfo[ch];
+                auto ci_result = shmem_session->getChanInfo(ch);
+                if (ci_result.isOk() && ci_result.value().chan > 0) {
+                    ci_copy = ci_result.value();
+                    valid = true;
+                }
             }
-            if (ci && ci->chan > 0) {
-                applyCmpOverlay(*ci);
+            if (valid) {
+                applyCmpOverlay(ci_copy);
             }
         }
     }
