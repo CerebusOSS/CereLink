@@ -233,3 +233,56 @@ class TestClientDataReception:
         assert data.dtype == np.int16
         assert data.shape[0] == N_CHANS
         assert data.shape[1] > 0
+
+
+# ---------------------------------------------------------------------------
+# Clock synchronization in CLIENT mode
+# ---------------------------------------------------------------------------
+
+
+class TestClientClockSync:
+    """Verify CLIENT reads clock offset from shmem written by STANDALONE.
+
+    The STANDALONE session probes the device and writes clock_offset_ns /
+    clock_uncertainty_ns to the native shmem config buffer.  The CLIENT
+    reads those fields directly — no probing required.
+    """
+
+    def test_clock_offset_available(self, client_session):
+        """CLIENT must see clock offset from shmem."""
+        offset = client_session.clock_offset_ns
+        assert offset is not None, "CLIENT clock_offset_ns is None"
+        assert isinstance(offset, int)
+
+    def test_clock_uncertainty_available(self, client_session):
+        """CLIENT must see clock uncertainty from shmem."""
+        uncertainty = client_session.clock_uncertainty_ns
+        assert uncertainty is not None, "CLIENT clock_uncertainty_ns is None"
+        assert isinstance(uncertainty, int)
+
+    def test_clock_offset_matches_standalone(self, nplay_session, client_session):
+        """CLIENT and STANDALONE should report the same clock offset."""
+        standalone_offset = nplay_session.clock_offset_ns
+        client_offset = client_session.clock_offset_ns
+        assert standalone_offset is not None
+        assert client_offset is not None
+        # Offsets may differ slightly due to read timing, but should be
+        # within 10ms of each other (probes update every 2s)
+        delta_ms = abs(standalone_offset - client_offset) / 1e6
+        assert delta_ms < 10, (
+            f"Offset mismatch: standalone={standalone_offset}ns, "
+            f"client={client_offset}ns, delta={delta_ms:.1f}ms"
+        )
+
+    def test_device_to_monotonic(self, client_session):
+        """CLIENT device_to_monotonic should work using shmem offset."""
+        # Read timestamp and convert immediately to minimize staleness
+        mono_before = time.monotonic()
+        device_ns = client_session.time
+        mono = client_session.device_to_monotonic(device_ns)
+        assert isinstance(mono, float)
+
+    def test_device_time_nonzero(self, client_session):
+        """CLIENT should read device time from shmem."""
+        t = client_session.time
+        assert t > 0
