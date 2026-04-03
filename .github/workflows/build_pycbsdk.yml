@@ -8,13 +8,13 @@ on:
       - 'src/**'
       - 'pycbsdk/**'
       - '.github/workflows/build_pycbsdk.yml'
-  pull_request:
-    branches:
-      - master
-      - dev
-    paths:
-      - 'src/**'
-      - 'pycbsdk/**'
+  # pull_request:
+  #   branches:
+  #     - master
+  #     - dev
+  #   paths:
+  #     - 'src/**'
+  #     - 'pycbsdk/**'
   release:
     types: [ published ]
 
