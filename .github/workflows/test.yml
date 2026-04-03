@@ -81,29 +81,13 @@ jobs:
           ctest --test-dir build --build-config Release --output-on-failure
           -E "^(device|integration)\."
 
-      - name: Check nPlayServer dependencies
-        run: |
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            NPLAY=$(find build/tests/integration/_nplay_cache -name 'nPlayServer' -not -name '*.exe' | head -1)
-            echo "=== nPlayServer directory ==="
-            ls -la "$(dirname "$NPLAY")"
-            echo "=== ldd ==="
-            ldd "$NPLAY" || true
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            NPLAY=$(find build/tests/integration/_nplay_cache -name 'nPlayServer.exe' | head -1)
-            echo "=== nPlayServer directory ==="
-            ls -la "$(dirname "$NPLAY")"
-            echo "=== Quick launch test ==="
-            timeout 5 "$NPLAY" --audio none --plugins noplugins -V --lockfile diag_test -n 2>&1 || true
-          fi
-
       - name: Allow nPlayServer through firewall (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $nplay = (Get-ChildItem -Recurse build/tests/integration/_nplay_cache -Filter nPlayServer.exe).FullName | Select-Object -First 1
-          New-NetFirewallRule -DisplayName "nPlayServer" -Direction Inbound -Program $nplay -Action Allow
-          New-NetFirewallRule -DisplayName "nPlayServer-out" -Direction Outbound -Program $nplay -Action Allow
+          # Allow UDP on nPlayServer ports for both nPlayServer and the test executables
+          New-NetFirewallRule -DisplayName "CereLink-UDP-In" -Direction Inbound -Protocol UDP -LocalPort 51001-51002 -Action Allow
+          New-NetFirewallRule -DisplayName "CereLink-UDP-Out" -Direction Outbound -Protocol UDP -RemotePort 51001-51002 -Action Allow
 
       # C++ integration tests (nPlayServer downloaded at configure time)
       - name: Integration Tests
