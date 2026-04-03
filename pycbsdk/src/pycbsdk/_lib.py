@@ -30,7 +30,7 @@ def _find_library() -> str:
     elif sys.platform == "darwin":
         lib_names = ["libcbsdk.dylib"]
     else:
-        lib_names = ["libcbsdk.so"]
+        lib_names = ["libcbsdk.so", "libcbsdkd.so"]
 
     # 1. Explicit path
     explicit = os.environ.get("CBSDK_LIB_PATH")
