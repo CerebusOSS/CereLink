@@ -312,6 +312,81 @@ class TestConfigureChannel:
             nplay_session.configure_channel(1, nonexistent_attr=42)
 
 
+# ---------------------------------------------------------------------------
+# Per-channel setters (direct API, not configure_channel)
+# ---------------------------------------------------------------------------
+
+
+class TestPerChannelSetters:
+    """Tests for individual channel attribute setters with readback."""
+
+    def test_set_channel_ainpopts(self, nplay_session):
+        orig = nplay_session.get_channel_ainpopts(1)
+        nplay_session.set_channel_ainpopts(1, 0)
+        time.sleep(0.3)
+        assert nplay_session.get_channel_ainpopts(1) == 0
+        # Restore
+        nplay_session.set_channel_ainpopts(1, orig)
+        time.sleep(0.3)
+
+    def test_set_channel_lncrate(self, nplay_session):
+        orig = nplay_session.get_channel_lncrate(1)
+        nplay_session.set_channel_lncrate(1, 2)
+        time.sleep(0.3)
+        assert nplay_session.get_channel_lncrate(1) == 2
+        # Restore
+        nplay_session.set_channel_lncrate(1, orig)
+        time.sleep(0.3)
+
+    def test_set_channel_spkthrlevel(self, nplay_session):
+        orig = nplay_session.get_channel_spkthrlevel(1)
+        nplay_session.set_channel_spkthrlevel(1, -100)
+        time.sleep(0.3)
+        assert nplay_session.get_channel_spkthrlevel(1) == -100
+        # Restore
+        nplay_session.set_channel_spkthrlevel(1, orig)
+        time.sleep(0.3)
+
+    def test_set_channel_autothreshold(self, nplay_session):
+        # Enable auto-threshold, verify spkopts has the THRAUTO bit set
+        nplay_session.set_channel_autothreshold(1, True)
+        time.sleep(0.3)
+        spkopts = nplay_session.get_channel_spkopts(1)
+        THRAUTO = 0x00000400
+        assert spkopts & THRAUTO, (
+            f"THRAUTO bit not set after enable: spkopts=0x{spkopts:08X}"
+        )
+        # Disable
+        nplay_session.set_channel_autothreshold(1, False)
+        time.sleep(0.3)
+        spkopts = nplay_session.get_channel_spkopts(1)
+        assert not (spkopts & THRAUTO), (
+            f"THRAUTO bit still set after disable: spkopts=0x{spkopts:08X}"
+        )
+
+    def test_set_channel_spkopts(self, nplay_session):
+        orig = nplay_session.get_channel_spkopts(1)
+        # Set a known value (THRLEVEL only)
+        THRLEVEL = 0x00000100
+        nplay_session.set_channel_spkopts(1, THRLEVEL)
+        time.sleep(0.3)
+        result = nplay_session.get_channel_spkopts(1)
+        assert result & THRLEVEL, (
+            f"THRLEVEL bit not set: spkopts=0x{result:08X}"
+        )
+        # Restore
+        nplay_session.set_channel_spkopts(1, orig)
+        time.sleep(0.3)
+
+    def test_set_channel_label(self, nplay_session):
+        orig = nplay_session.get_channel_label(1)
+        nplay_session.set_channel_label(1, "MyLabel")
+        time.sleep(0.3)
+        assert nplay_session.get_channel_label(1) == "MyLabel"
+        # Restore
+        nplay_session.set_channel_label(1, orig or "chan1")
+        time.sleep(0.3)
+
 
 # ---------------------------------------------------------------------------
 # Filter info
