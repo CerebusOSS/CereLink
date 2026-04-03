@@ -26,6 +26,20 @@ defaults:
     shell: bash
 
 jobs:
+  lint:
+    name: Lint pycbsdk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/ruff-action@v3
+        with:
+          args: check
+          src: pycbsdk/src
+      - uses: astral-sh/ruff-action@v3
+        with:
+          args: format --check
+          src: pycbsdk/src
+
   build-wheel:
     name: ${{ matrix.config.name }}
     runs-on: ${{ matrix.config.os }}
