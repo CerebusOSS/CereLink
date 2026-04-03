@@ -224,62 +224,34 @@ struct SdkSession::Impl {
 
     /// Apply CMP position overlay to a CHANREP packet's channel in device_config.
     /// Called from the receive path when a CHANREP is received.
-    void applyCmpOverlay(const cbPKT_CHANINFO& chaninfo) {
+    /// Apply CMP positions to all existing chaninfo entries.
+    /// Called after loading a CMP file.  Writes only to shmem.
+    void applyCmpToAllChannels() {
         std::lock_guard<std::mutex> lock(cmp_mutex);
         if (cmp_positions.empty()) return;
 
-        uint64_t key = cmpKey(chaninfo.bank, chaninfo.term);
-        auto it = cmp_positions.find(key);
-        if (it == cmp_positions.end()) return;
-
-        const auto& pos = it->second;
-
-        // Overlay in device_config (STANDALONE mode primary config source)
-        if (device_session) {
-            const uint32_t chan = chaninfo.chan;
-            if (chan >= 1 && chan <= cbMAXCHANS) {
-                // getChanInfo returns const, but we need to write — use getDeviceConfig
-                auto& config = const_cast<cbproto::DeviceConfig&>(device_session->getDeviceConfig());
-                std::memcpy(config.chaninfo[chan - 1].position, pos.data(), sizeof(int32_t) * 4);
-            }
-        }
-
-        // Also overlay in shmem (so CLIENTs see correct positions)
-        if (shmem_session) {
-            const uint32_t chan = chaninfo.chan;
-            if (chan >= 1 && chan <= cbMAXCHANS) {
-                auto ci_result = shmem_session->getChanInfo(chan - 1);
-                if (ci_result.isOk()) {
-                    auto ci = ci_result.value();
-                    std::memcpy(ci.position, pos.data(), sizeof(int32_t) * 4);
-                    shmem_session->setChanInfo(chan - 1, ci);
-                }
-            }
-        }
-    }
-
-    /// Apply CMP positions to all existing chaninfo entries.
-    /// Called after loading a CMP file to overlay positions immediately.
-    void applyCmpToAllChannels() {
         for (uint32_t ch = 0; ch < cbMAXCHANS; ++ch) {
-            // Take a snapshot to avoid racing with the receive thread
-            cbPKT_CHANINFO ci_copy{};
+            // Snapshot chaninfo to avoid racing with the receive thread
+            cbPKT_CHANINFO ci{};
             bool valid = false;
             if (device_session) {
-                const auto* ci = device_session->getChanInfo(ch + 1);
-                if (ci && ci->chan > 0) {
-                    ci_copy = *ci;
-                    valid = true;
-                }
+                const auto* p = device_session->getChanInfo(ch + 1);
+                if (p && p->chan > 0) { ci = *p; valid = true; }
             } else if (shmem_session) {
-                auto ci_result = shmem_session->getChanInfo(ch);
-                if (ci_result.isOk() && ci_result.value().chan > 0) {
-                    ci_copy = ci_result.value();
-                    valid = true;
-                }
+                auto r = shmem_session->getChanInfo(ch);
+                if (r.isOk() && r.value().chan > 0) { ci = r.value(); valid = true; }
             }
-            if (valid) {
-                applyCmpOverlay(ci_copy);
+            if (!valid) continue;
+
+            // Apply position
+            uint64_t key = cmpKey(ci.bank, ci.term);
+            auto it = cmp_positions.find(key);
+            if (it == cmp_positions.end()) continue;
+            std::memcpy(ci.position, it->second.data(), sizeof(int32_t) * 4);
+
+            // Write to shmem (thread-safe)
+            if (shmem_session && ci.chan >= 1 && ci.chan <= cbMAXCHANS) {
+                shmem_session->setChanInfo(ci.chan - 1, ci);
             }
         }
     }
@@ -808,12 +780,22 @@ Result<void> SdkSession::start() {
                     }
                 }
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
-                    const auto* chaninfo = reinterpret_cast<const cbPKT_CHANINFO*>(&pkt);
-                    if (chaninfo->chan >= 1 && chaninfo->chan <= cbMAXCHANS) {
-                        impl->shmem_session->setChanInfo(chaninfo->chan - 1, *chaninfo);
+                    auto chaninfo_copy = *reinterpret_cast<const cbPKT_CHANINFO*>(&pkt);
+                    // Apply CMP position overlay before writing to shmem
+                    // so positions are never lost to a race.
+                    {
+                        std::lock_guard<std::mutex> lock(impl->cmp_mutex);
+                        if (!impl->cmp_positions.empty()) {
+                            uint64_t key = cmpKey(chaninfo_copy.bank, chaninfo_copy.term);
+                            auto it = impl->cmp_positions.find(key);
+                            if (it != impl->cmp_positions.end()) {
+                                std::memcpy(chaninfo_copy.position, it->second.data(), sizeof(int32_t) * 4);
+                            }
+                        }
                     }
-                    // Apply CMP position overlay (overwrites position fields only)
-                    impl->applyCmpOverlay(*chaninfo);
+                    if (chaninfo_copy.chan >= 1 && chaninfo_copy.chan <= cbMAXCHANS) {
+                        impl->shmem_session->setChanInfo(chaninfo_copy.chan - 1, chaninfo_copy);
+                    }
                 }
 
                 // Queue for callback
@@ -1033,10 +1015,9 @@ Result<void> SdkSession::start() {
                                     impl->pending_clock_probe.active = false;
                                 }
                             }
-                            if ((packets[i].cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
-                                const auto* chaninfo = reinterpret_cast<const cbPKT_CHANINFO*>(&packets[i]);
-                                impl->applyCmpOverlay(*chaninfo);
-                            }
+                            // Note: CMP positions are applied by the STANDALONE session
+                            // when it writes chaninfo to shmem. CLIENT doesn't need to
+                            // re-apply them.
                         }
 
                         // Periodic clock sync probing (~every 5 seconds)
@@ -1215,8 +1196,9 @@ const cbPKT_SYSINFO* SdkSession::getSysInfo() const {
 }
 
 const cbPKT_CHANINFO* SdkSession::getChanInfo(const uint32_t chan_id) const {
-    if (m_impl->device_session)
-        return m_impl->device_session->getChanInfo(chan_id);
+    // Prefer shmem over device_config because CMP position overlays are
+    // written to shmem (device_config is owned by the receive thread and
+    // we avoid writing to it from other threads).
     if (m_impl->shmem_session && chan_id >= 1 && chan_id <= cbMAXCHANS) {
         const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
         if (native)
@@ -1225,6 +1207,9 @@ const cbPKT_CHANINFO* SdkSession::getChanInfo(const uint32_t chan_id) const {
         if (legacy)
             return &legacy->chaninfo[chan_id - 1];
     }
+    // Fallback to device_config (no shmem available)
+    if (m_impl->device_session)
+        return m_impl->device_session->getChanInfo(chan_id);
     return nullptr;
 }
 
@@ -1370,13 +1355,16 @@ static int64_t extractChanInfoField(const cbPKT_CHANINFO& ci, ChanInfoField fiel
 
 /// Helper: get chaninfo pointer for a 0-based channel index
 const cbPKT_CHANINFO* SdkSession::Impl::getChanInfoPtr(uint32_t idx) const {
-    if (device_session) {
-        return device_session->getChanInfo(idx + 1);
-    } else if (shmem_session) {
+    // Prefer shmem: CMP position overlays are written there.
+    // device_config is owned by the receive thread and doesn't have positions.
+    if (shmem_session) {
         const auto* native = shmem_session->getNativeConfigBuffer();
         if (native) return &native->chaninfo[idx];
         const auto* legacy = shmem_session->getLegacyConfigBuffer();
         if (legacy) return &legacy->chaninfo[idx];
+    }
+    if (device_session) {
+        return device_session->getChanInfo(idx + 1);
     }
     return nullptr;
 }

@@ -473,12 +473,20 @@ class TestCMP:
 
     def test_positions_after_cmp_load(self, nplay_session, cmp_path):
         nplay_session.load_channel_map(str(cmp_path))
-        time.sleep(0.5)
-        positions = nplay_session.get_channels_positions(
-            ChannelType.FRONTEND, n_chans=4
-        )
+        time.sleep(1)
+        # Check all front-end channels (not just 4) — the CMP maps 96 channels
+        # and matching depends on device-reported bank/term values.
+        positions = nplay_session.get_channels_positions(ChannelType.FRONTEND)
         non_zero = [p for p in positions if any(v != 0 for v in p)]
-        assert len(non_zero) > 0
+        assert len(non_zero) > 0, (
+            f"No non-zero positions found in {len(positions)} channels after CMP load. "
+            f"First 4 channel bank/term: "
+            + ", ".join(
+                f"({nplay_session.get_channel_field(i+1, ChanInfoField.BANK)}, "
+                f"{nplay_session.get_channel_field(i+1, ChanInfoField.TERM)})"
+                for i in range(min(4, len(positions)))
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
