@@ -944,6 +944,20 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
     cbproto_channel_type_t chan_type,
     uint32_t sort_options);
 
+/// Enable or disable spike extraction for channels of a specific type.
+/// Controls the cbAINPSPK_EXTRACT bit via cbPKTTYPE_CHANSETSPK.
+/// When enabled, the device emits spike event packets for matching channels.
+/// @param session Session handle (must not be NULL)
+/// @param n_chans Number of channels to configure
+/// @param chan_type Channel type filter
+/// @param enabled true = enable spike extraction, false = disable
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_spike_extraction(
+    cbsdk_session_t session,
+    size_t n_chans,
+    cbproto_channel_type_t chan_type,
+    bool enabled);
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Clock Synchronization
 ///////////////////////////////////////////////////////////////////////////////////////////////////

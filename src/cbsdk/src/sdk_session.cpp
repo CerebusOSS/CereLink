@@ -1537,6 +1537,48 @@ Result<void> SdkSession::setChannelSpikeSorting(const size_t nChans, const Chann
     return Result<void>::ok();
 }
 
+Result<void> SdkSession::setSpikeExtraction(const size_t nChans, const ChannelType chanType,
+                                             const bool enabled) {
+    // STANDALONE mode: delegate to device session
+    if (m_impl->device_session) {
+        const auto r = m_impl->device_session->setSpikeExtraction(
+            nChans, toDevChannelType(chanType), enabled);
+        if (r.isError())
+            return Result<void>::error(r.error());
+        return Result<void>::ok();
+    }
+
+    // CLIENT mode: build packets from shmem chaninfo
+    if (!m_impl->shmem_session)
+        return Result<void>::error("No session available");
+
+    size_t count = 0;
+    for (uint32_t chan = 1; chan <= cbMAXCHANS && count < nChans; ++chan) {
+        auto ci_result = m_impl->shmem_session->getChanInfo(chan - 1);
+        if (ci_result.isError())
+            continue;
+        auto chaninfo = ci_result.value();
+
+        if (classifyChannelByCaps(chaninfo) != chanType)
+            continue;
+
+        chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSETSPK;
+        chaninfo.chan = chan;
+        chaninfo.spkopts &= ~cbAINPSPK_EXTRACT;
+        if (enabled)
+            chaninfo.spkopts |= cbAINPSPK_EXTRACT;
+
+        auto r = sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
+        if (r.isError())
+            return r;
+        count++;
+    }
+
+    if (count == 0)
+        return Result<void>::error("No channels found matching type");
+    return Result<void>::ok();
+}
+
 Result<void> SdkSession::setACInputCoupling(const size_t nChans, const ChannelType chanType,
                                              const bool enabled) {
     // STANDALONE mode: delegate to device session

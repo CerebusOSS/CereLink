@@ -1252,6 +1252,39 @@ Result<void> DeviceSession::setChannelsSpikeSortingSync(const size_t nChans, con
     );
 }
 
+Result<void> DeviceSession::setSpikeExtraction(const size_t nChans, const ChannelType chanType, const bool enabled) {
+    if (!m_impl || !m_impl->connected) {
+        return Result<void>::error("Device not connected");
+    }
+
+    std::vector<cbPKT_GENERIC> packets;
+    packets.reserve(nChans);
+
+    for (size_t i = 0; i < nChans && i < cbMAXCHANS; ++i) {
+        const uint32_t chan = i + 1;
+        const auto& chaninfo = m_impl->device_config.chaninfo[i];
+
+        if (!channelMatchesType(chaninfo, chanType))
+            continue;
+
+        cbPKT_CHANINFO pkt = chaninfo;
+        pkt.cbpkt_header.type = cbPKTTYPE_CHANSETSPK;  // Spike set (not threshold)
+        pkt.chan = chan;
+
+        // Toggle the EXTRACT bit
+        pkt.spkopts &= ~cbAINPSPK_EXTRACT;
+        if (enabled)
+            pkt.spkopts |= cbAINPSPK_EXTRACT;
+
+        packets.push_back(*reinterpret_cast<cbPKT_GENERIC*>(&pkt));
+    }
+
+    if (packets.empty())
+        return Result<void>::ok();
+
+    return sendPackets(packets);
+}
+
 Result<void> DeviceSession::setChannelConfig(const cbPKT_CHANINFO& chaninfo) {
     if (!m_impl || !m_impl->connected) {
         return Result<void>::error("Device not connected");

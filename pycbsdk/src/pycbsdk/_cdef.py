@@ -330,6 +330,11 @@ cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
     cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
     uint32_t sort_options);
 
+// Spike extraction (enable/disable cbAINPSPK_EXTRACT via CHANSETSPK)
+cbsdk_result_t cbsdk_session_set_spike_extraction(
+    cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
+    bool enabled);
+
 // Clock synchronization
 cbsdk_result_t cbsdk_session_get_clock_offset(cbsdk_session_t session, int64_t* offset_ns);
 cbsdk_result_t cbsdk_session_get_clock_uncertainty(cbsdk_session_t session, int64_t* uncertainty_ns);

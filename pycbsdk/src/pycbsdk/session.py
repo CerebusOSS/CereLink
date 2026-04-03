@@ -1236,6 +1236,32 @@ class Session:
             "Failed to set spike sorting",
         )
 
+    def set_spike_extraction(
+        self,
+        n_chans: int,
+        channel_type: ChannelType,
+        enabled: bool,
+    ):
+        """Enable or disable spike extraction for channels of a specific type.
+
+        Controls the ``cbAINPSPK_EXTRACT`` bit which determines whether the
+        device emits spike event packets. Uses ``cbPKTTYPE_CHANSETSPK``.
+
+        Args:
+            n_chans: Number of channels to configure.
+            channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
+            enabled: ``True`` to enable spike extraction, ``False`` to disable.
+        """
+        _lib = _get_lib()
+        _check(
+            _lib.cbsdk_session_set_spike_extraction(
+                self._session, n_chans,
+                int(_coerce_enum(ChannelType, channel_type)),
+                enabled
+            ),
+            "Failed to set spike extraction",
+        )
+
     # --- Clock Synchronization ---
 
     @staticmethod
