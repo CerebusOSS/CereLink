@@ -6,10 +6,10 @@ on:
     branches:
       - 'master'
       - 'releases/**'
-  # pull_request:
-  #   branches:
-  #     - master
-  #     - dev
+  pull_request:
+    branches:
+      - master
+      - dev
   release:
     types: [published]
 

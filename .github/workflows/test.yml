@@ -109,19 +109,9 @@ jobs:
         run: |
           import os, pathlib
           workspace = pathlib.Path(os.environ["GITHUB_WORKSPACE"])
-          if os.name == "nt":
-              libdir = workspace / "install" / "bin"
-          else:
-              libdir = workspace / "install" / "lib"
+          libdir = workspace / "install" / ("bin" if os.name == "nt" else "lib")
           with open(os.environ["GITHUB_ENV"], "a") as f:
               f.write(f"CBSDK_LIB_DIR={libdir}\n")
-          print(f"Library directory: {libdir}")
-          libs = list(libdir.glob("*cbsdk*"))
-          if libs:
-              for lib in libs:
-                  print(f"  {lib.name} ({lib.stat().st_size} bytes)")
-          else:
-              print("WARNING: no cbsdk library found")
 
       - name: Install pycbsdk
         working-directory: pycbsdk
