@@ -65,11 +65,10 @@ protected:
         std::string cmd = "\"" + binary + "\" --audio none --lockfile " + m_lockName + " -A \"" + ns6 + "\"";
         STARTUPINFOA si = {};
         si.cb = sizeof(si);
-        si.dwFlags = STARTF_USESTDHANDLES;
         BOOL ok = CreateProcessA(
             nullptr, const_cast<char*>(cmd.c_str()),
             nullptr, nullptr, FALSE,
-            CREATE_NO_WINDOW, nullptr, nullptr,
+            DETACHED_PROCESS, nullptr, nullptr,
             &si, &m_pi);
         ASSERT_TRUE(ok) << "Failed to start nPlayServer: error " << GetLastError();
 #else
