@@ -23,11 +23,18 @@ Result<std::unique_ptr<IDeviceSession>> createDeviceSession(
     const ConnectionParams& config,
     ProtocolVersion version) {
 
+    // Resolve client address before protocol detection so the probe socket
+    // binds to the correct interface (e.g. loopback for NPLAY).
+    std::string client_addr = config.client_address;
+    if (client_addr.empty()) {
+        client_addr = detectClientAddress(config.type);
+    }
+
     // Auto-detect protocol if unknown
     if (version == ProtocolVersion::UNKNOWN) {
         auto detect_result = detectProtocol(
             config.device_address.c_str(), config.send_port,
-            config.client_address.c_str(), config.recv_port,
+            client_addr.c_str(), config.recv_port,
             2000  // 2 second timeout
         );
 
