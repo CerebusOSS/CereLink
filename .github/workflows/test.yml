@@ -81,16 +81,17 @@ jobs:
         shell: bash
         run: |
           set -x
-          # Find the binary
           NPLAY=$(find build/tests/integration/_nplay_cache -name 'nPlayServer.exe' | head -1)
+          NS6=$(find build/tests/integration/_nplay_cache -name '*.ns6' | head -1)
           echo "Binary: $NPLAY"
-          ls -la "$NPLAY"
-          # List everything in its directory (DLLs, etc.)
-          ls -la "$(dirname "$NPLAY")"
-          # Try to run it with --help or briefly, capturing stderr
-          timeout 5 "$NPLAY" --help 2>&1 || true
-          # Also try just running it to see if it prints a missing-DLL error
-          timeout 5 "$NPLAY" 2>&1 || true
+          echo "NS6: $NS6"
+          ls -la "$NS6"
+          # Try with the actual args the fixture uses
+          timeout 5 "$NPLAY" -V --lockfile test_lock -A "$NS6" 2>&1 || true
+          # Try without plugins in case nspext_default is missing
+          timeout 5 "$NPLAY" -V --plugins noplugins --lockfile test_lock -A "$NS6" 2>&1 || true
+          # Try without autostart to see if it stays alive
+          timeout 5 "$NPLAY" -V --plugins noplugins --lockfile test_lock2 -n 2>&1 || true
 
       # C++ integration tests (nPlayServer downloaded at configure time)
       - name: Integration Tests
