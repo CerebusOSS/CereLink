@@ -463,11 +463,19 @@ class TestCCF:
         finally:
             Path(ccf_file).unlink(missing_ok=True)
 
-    def test_load_ccf(self, nplay_session, ccf_path):
+    def test_load_ccf(self, nplay_session):
         # Async load_ccf is fire-and-forget — it offers no completion
         # guarantee, so we only verify the call succeeds.  The meaningful
         # config-applied verification lives in test_load_ccf_sync above.
-        nplay_session.load_ccf(str(ccf_path))
+        # Save and reload the current config (a no-op) to avoid changing
+        # device state that could affect subsequent tests.
+        with tempfile.NamedTemporaryFile(suffix=".ccf", delete=False) as f:
+            ccf_file = f.name
+        try:
+            nplay_session.save_ccf(ccf_file)
+            nplay_session.load_ccf(ccf_file)
+        finally:
+            Path(ccf_file).unlink(missing_ok=True)
 
     def test_load_ccf_sync_invalid_file(self, nplay_session):
         with pytest.raises(RuntimeError):
