@@ -430,54 +430,48 @@ class TestCCF:
             Path(ccf_out).unlink(missing_ok=True)
 
     @staticmethod
-    def _wait_for_smpfilter(session, chan_id, expected, timeout=5.0):
-        """Poll until channel smpfilter matches *expected* or timeout."""
+    def _wait_for_spike_length(session, expected, timeout=5.0):
+        """Poll until spike_length matches *expected* or timeout."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            if session.get_channel_smpfilter(chan_id) == expected:
+            if session.spike_length == expected:
                 return
             time.sleep(0.1)
-        assert session.get_channel_smpfilter(chan_id) == expected
+        assert session.spike_length == expected
 
-    def test_load_ccf(self, nplay_session):
-        # Verify on the *last* frontend channel — channel packets are sent in
-        # ascending order, so the last one confirms all preceding packets were
-        # also applied.  Use a non-zero baseline because CCF skips zero fields.
-        last_ch = nplay_session.num_fe_chans()
-        baseline = 2
-        canary = 3
-        nplay_session.set_channel_smpfilter(last_ch, baseline)
-        self._wait_for_smpfilter(nplay_session, last_ch, baseline)
+    def test_load_ccf_sync(self, nplay_session):
+        # Use spike_length as canary — SYSSETSPKLEN is sent in step 7 of
+        # buildConfigPackets, after all per-channel packets (steps 2 & 4).
+        # Confirming it changed means everything before it was also applied.
+        baseline = nplay_session.spike_length
+        canary = baseline + 2 if baseline < 60 else baseline - 2
 
         with tempfile.NamedTemporaryFile(suffix=".ccf", delete=False) as f:
             ccf_file = f.name
         try:
             nplay_session.save_ccf(ccf_file)
-            nplay_session.set_channel_smpfilter(last_ch, canary)
-            self._wait_for_smpfilter(nplay_session, last_ch, canary)
+            nplay_session.set_spike_length(canary, nplay_session.spike_pretrigger)
+            self._wait_for_spike_length(nplay_session, canary)
 
-            nplay_session.load_ccf(ccf_file)
-            self._wait_for_smpfilter(nplay_session, last_ch, baseline)
+            nplay_session.load_ccf_sync(ccf_file, timeout=5.0)
+            self._wait_for_spike_length(nplay_session, baseline)
         finally:
             Path(ccf_file).unlink(missing_ok=True)
 
-    def test_load_ccf_sync(self, nplay_session):
-        # Same as test_load_ccf but using the synchronous load.
-        last_ch = nplay_session.num_fe_chans()
-        baseline = 2
-        canary = 3
-        nplay_session.set_channel_smpfilter(last_ch, baseline)
-        self._wait_for_smpfilter(nplay_session, last_ch, baseline)
+    def test_load_ccf(self, nplay_session):
+        # Same approach as test_load_ccf_sync but with async load.
+        baseline = nplay_session.spike_length
+        canary = baseline + 2 if baseline < 60 else baseline - 2
 
         with tempfile.NamedTemporaryFile(suffix=".ccf", delete=False) as f:
             ccf_file = f.name
         try:
             nplay_session.save_ccf(ccf_file)
-            nplay_session.set_channel_smpfilter(last_ch, canary)
-            self._wait_for_smpfilter(nplay_session, last_ch, canary)
+            nplay_session.set_spike_length(canary, nplay_session.spike_pretrigger)
+            self._wait_for_spike_length(nplay_session, canary)
 
-            nplay_session.load_ccf_sync(ccf_file, timeout=5.0)
-            self._wait_for_smpfilter(nplay_session, last_ch, baseline)
+            nplay_session.load_ccf(ccf_file)
+            self._wait_for_spike_length(nplay_session, baseline)
         finally:
             Path(ccf_file).unlink(missing_ok=True)
 
