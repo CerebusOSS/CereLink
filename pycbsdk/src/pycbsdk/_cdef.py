@@ -317,6 +317,7 @@ cbsdk_result_t cbsdk_session_set_runlevel(cbsdk_session_t session,
 cbsdk_result_t cbsdk_session_load_channel_map(cbsdk_session_t session, const char* filepath, uint32_t bank_offset);
 cbsdk_result_t cbsdk_session_save_ccf(cbsdk_session_t session, const char* filename);
 cbsdk_result_t cbsdk_session_load_ccf(cbsdk_session_t session, const char* filename);
+cbsdk_result_t cbsdk_session_load_ccf_sync(cbsdk_session_t session, const char* filename, uint32_t timeout_ms);
 
 // Recording control (Central)
 cbsdk_result_t cbsdk_session_start_central_recording(cbsdk_session_t session,

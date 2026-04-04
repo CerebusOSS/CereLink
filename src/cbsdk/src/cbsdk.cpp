@@ -1296,6 +1296,19 @@ cbsdk_result_t cbsdk_session_load_ccf(cbsdk_session_t session, const char* filen
     }
 }
 
+cbsdk_result_t cbsdk_session_load_ccf_sync(
+    cbsdk_session_t session, const char* filename, uint32_t timeout_ms) {
+    if (!session || !session->cpp_session || !filename) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->loadCCFSync(filename, timeout_ms);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Instrument Time
 ///////////////////////////////////////////////////////////////////////////////////////////////////

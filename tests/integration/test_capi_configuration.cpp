@@ -416,6 +416,38 @@ TEST_F(CApiCCFTest, LoadCCF) {
     EXPECT_EQ(cbsdk_session_load_ccf(sg.session, ccf.c_str()), CBSDK_RESULT_SUCCESS);
 }
 
+TEST_F(CApiCCFTest, LoadCCFSync) {
+    SessionGuard sg;
+    ASSERT_TRUE(sg.create());
+
+    std::string ccf;
+#ifdef NPLAY_CCF_PATH
+    ccf = NPLAY_CCF_PATH;
+#endif
+    if (ccf.empty()) GTEST_SKIP() << "No CCF test file available";
+
+    EXPECT_EQ(cbsdk_session_load_ccf_sync(sg.session, ccf.c_str(), 5000),
+              CBSDK_RESULT_SUCCESS);
+}
+
+TEST_F(CApiCCFTest, LoadCCFSyncInvalidFile) {
+    SessionGuard sg;
+    ASSERT_TRUE(sg.create());
+
+    EXPECT_NE(cbsdk_session_load_ccf_sync(sg.session, "/nonexistent.ccf", 1000),
+              CBSDK_RESULT_SUCCESS);
+}
+
+TEST_F(CApiCCFTest, LoadCCFSyncNullArgs) {
+    SessionGuard sg;
+    ASSERT_TRUE(sg.create());
+
+    EXPECT_EQ(cbsdk_session_load_ccf_sync(nullptr, "file.ccf", 1000),
+              CBSDK_RESULT_INVALID_PARAMETER);
+    EXPECT_EQ(cbsdk_session_load_ccf_sync(sg.session, nullptr, 1000),
+              CBSDK_RESULT_INVALID_PARAMETER);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // CMP Files
 ///////////////////////////////////////////////////////////////////////////////////////////////////

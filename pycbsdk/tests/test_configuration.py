@@ -429,9 +429,65 @@ class TestCCF:
         finally:
             Path(ccf_out).unlink(missing_ok=True)
 
-    def test_load_ccf(self, nplay_session, ccf_path):
-        nplay_session.load_ccf(str(ccf_path))
-        time.sleep(0.5)
+    def test_load_ccf(self, nplay_session):
+        # Verify on the *last* frontend channel — channel packets are sent in
+        # ascending order, so the last one confirms all preceding packets were
+        # also applied.  Use a non-zero baseline because CCF skips zero fields.
+        last_ch = nplay_session.num_fe_chans()
+        baseline = 2
+        canary = 3
+        nplay_session.set_channel_smpfilter(last_ch, baseline)
+        time.sleep(0.3)
+
+        with tempfile.NamedTemporaryFile(suffix=".ccf", delete=False) as f:
+            ccf_file = f.name
+        try:
+            nplay_session.save_ccf(ccf_file)
+            nplay_session.set_channel_smpfilter(last_ch, canary)
+            time.sleep(0.3)
+            assert nplay_session.get_channel_smpfilter(last_ch) == canary
+
+            nplay_session.load_ccf(ccf_file)
+
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                if nplay_session.get_channel_smpfilter(last_ch) == baseline:
+                    break
+                time.sleep(0.1)
+            assert nplay_session.get_channel_smpfilter(last_ch) == baseline
+        finally:
+            Path(ccf_file).unlink(missing_ok=True)
+
+    def test_load_ccf_sync(self, nplay_session):
+        # Same as test_load_ccf but using the synchronous load.
+        last_ch = nplay_session.num_fe_chans()
+        baseline = 2
+        canary = 3
+        nplay_session.set_channel_smpfilter(last_ch, baseline)
+        time.sleep(0.3)
+
+        with tempfile.NamedTemporaryFile(suffix=".ccf", delete=False) as f:
+            ccf_file = f.name
+        try:
+            nplay_session.save_ccf(ccf_file)
+            nplay_session.set_channel_smpfilter(last_ch, canary)
+            time.sleep(0.3)
+            assert nplay_session.get_channel_smpfilter(last_ch) == canary
+
+            nplay_session.load_ccf_sync(ccf_file, timeout=5.0)
+
+            deadline = time.monotonic() + 2.0
+            while time.monotonic() < deadline:
+                if nplay_session.get_channel_smpfilter(last_ch) == baseline:
+                    break
+                time.sleep(0.1)
+            assert nplay_session.get_channel_smpfilter(last_ch) == baseline
+        finally:
+            Path(ccf_file).unlink(missing_ok=True)
+
+    def test_load_ccf_sync_invalid_file(self, nplay_session):
+        with pytest.raises(RuntimeError):
+            nplay_session.load_ccf_sync("/nonexistent.ccf", timeout=1.0)
 
     def test_save_load_roundtrip(self, nplay_session):
         nplay_session.set_channel_sample_group(

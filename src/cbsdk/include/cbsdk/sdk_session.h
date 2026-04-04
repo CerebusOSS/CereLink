@@ -647,6 +647,18 @@ public:
     /// @return Result indicating success or error
     Result<void> loadCCF(const std::string& filename);
 
+    /// Load a CCF file and wait for the device to finish applying the configuration.
+    ///
+    /// Sends all CCF configuration packets, then sends a runlevel query as a
+    /// synchronization point.  The device processes packets in order, so the
+    /// SYSREP response to the runlevel query confirms that every preceding
+    /// configuration packet has been applied.
+    ///
+    /// @param filename   Path to the CCF file to read
+    /// @param timeout_ms Maximum time (ms) to wait for the device acknowledgment
+    /// @return Result indicating success or error (including timeout)
+    Result<void> loadCCFSync(const std::string& filename, uint32_t timeout_ms = 5000);
+
     ///--------------------------------------------------------------------------------------------
     /// Clock Synchronization
     ///--------------------------------------------------------------------------------------------

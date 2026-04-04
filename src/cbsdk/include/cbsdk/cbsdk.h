@@ -846,6 +846,20 @@ CBSDK_API cbsdk_result_t cbsdk_session_save_ccf(cbsdk_session_t session, const c
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_load_ccf(cbsdk_session_t session, const char* filename);
 
+/// Load a CCF file and wait for the device to acknowledge the configuration.
+///
+/// After sending all configuration packets from the CCF file, a runlevel query
+/// is used as a synchronization point.  The function returns once the device
+/// responds (confirming it has processed every preceding packet) or after the
+/// timeout expires.
+///
+/// @param session    Session handle (must not be NULL)
+/// @param filename   Path to the CCF file to read (must not be NULL)
+/// @param timeout_ms Maximum time in milliseconds to wait for acknowledgment
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure or timeout
+CBSDK_API cbsdk_result_t cbsdk_session_load_ccf_sync(
+    cbsdk_session_t session, const char* filename, uint32_t timeout_ms);
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Instrument Time
 ///////////////////////////////////////////////////////////////////////////////////////////////////

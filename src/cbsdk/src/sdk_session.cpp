@@ -1923,6 +1923,19 @@ Result<void> SdkSession::loadCCF(const std::string& filename) {
     return Result<void>::ok();
 }
 
+Result<void> SdkSession::loadCCFSync(const std::string& filename, uint32_t timeout_ms) {
+    auto result = loadCCF(filename);
+    if (result.isError())
+        return result;
+
+    // Synchronize: re-send the current runlevel (a no-op) and wait for the
+    // SYSREP response.  The device processes packets in order, so receiving
+    // the SYSREP confirms that all prior CCF configuration packets have
+    // been applied.
+    uint32_t current = m_impl->device_runlevel.load(std::memory_order_acquire);
+    return setSystemRunLevel(current, 0, 0, 0, timeout_ms);
+}
+
 ///--------------------------------------------------------------------------------------------
 /// Clock Synchronization
 ///--------------------------------------------------------------------------------------------

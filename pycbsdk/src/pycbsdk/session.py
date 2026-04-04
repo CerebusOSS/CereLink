@@ -1122,7 +1122,8 @@ class Session:
         """Load a CCF file and apply its configuration to the device.
 
         Reads the CCF file and sends the configuration packets to the device.
-        The device must be connected in STANDALONE mode.
+        Returns immediately after queuing the packets; use :meth:`load_ccf_sync`
+        if you need to wait for the device to finish applying the configuration.
 
         Args:
             filename: Path to the CCF file to read.
@@ -1130,6 +1131,29 @@ class Session:
         _check(
             _get_lib().cbsdk_session_load_ccf(self._session, filename.encode()),
             "Failed to load CCF",
+        )
+
+    def load_ccf_sync(self, filename: str, timeout: float = 5.0):
+        """Load a CCF file and wait for the device to acknowledge the configuration.
+
+        After sending all configuration packets from the CCF file, a runlevel
+        query is used as a synchronization point.  The method returns once the
+        device responds (confirming it has processed every preceding packet) or
+        raises on timeout.
+
+        Args:
+            filename: Path to the CCF file to read.
+            timeout: Maximum time in seconds to wait for acknowledgment.
+
+        Raises:
+            RuntimeError: If the device does not acknowledge within *timeout*.
+        """
+        timeout_ms = int(timeout * 1000)
+        _check(
+            _get_lib().cbsdk_session_load_ccf_sync(
+                self._session, filename.encode(), timeout_ms
+            ),
+            "Failed to load CCF (sync)",
         )
 
     # --- Instrument Time ---

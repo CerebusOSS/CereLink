@@ -23,6 +23,7 @@ def load_ccf(
     filename: str,
     device_type: DeviceType,
     timeout: float = 10.0,
+    sync: bool = True,
 ) -> None:
     """Connect to a device and apply a CCF configuration file.
 
@@ -30,6 +31,8 @@ def load_ccf(
         filename: Path to the CCF file to load.
         device_type: Device to connect to.
         timeout: Connection timeout in seconds.
+        sync: If True (default), wait for the device to acknowledge the
+            configuration before returning.
     """
     with Session(device_type=device_type) as session:
         deadline = time.monotonic() + timeout
@@ -43,7 +46,10 @@ def load_ccf(
         time.sleep(0.5)
 
         print(f"Loading CCF {filename!r} onto {device_type.name} ...")
-        session.load_ccf(filename)
+        if sync:
+            session.load_ccf_sync(filename, timeout=timeout)
+        else:
+            session.load_ccf(filename)
         print("CCF loaded successfully.")
 
 
@@ -68,6 +74,12 @@ def main(argv: list[str] | None = None) -> int:
         default=10.0,
         help="Connection timeout in seconds (default: 10).",
     )
+    parser.add_argument(
+        "--no-sync",
+        action="store_true",
+        default=False,
+        help="Don't wait for the device to acknowledge the configuration.",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -77,7 +89,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        load_ccf(args.filename, device_type, timeout=args.timeout)
+        load_ccf(
+            args.filename, device_type, timeout=args.timeout, sync=not args.no_sync
+        )
         return 0
     except Exception as e:
         print(f"ERROR: {e}", file=sys.stderr)
