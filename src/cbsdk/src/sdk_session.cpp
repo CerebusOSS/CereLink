@@ -30,6 +30,34 @@
 #include <vector>
 #include "cbdev/clock_sync.h"
 
+namespace {
+
+/// High-resolution microsecond delay.
+/// On Windows, std::this_thread::sleep_for rounds up to ~15 ms which is far
+/// too coarse for the 50 µs inter-packet pacing the send thread needs.
+/// Use a QPC spin-wait instead (mirrors cbdev's hr_sleep_us).
+inline void hr_sleep_us([[maybe_unused]] uint64_t microseconds) {
+#ifdef _WIN32
+    if (microseconds == 0) return;
+    LARGE_INTEGER freq, start;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&start);
+    const double ticks_per_us = static_cast<double>(freq.QuadPart) / 1'000'000.0;
+    const LONGLONG delta = static_cast<LONGLONG>(microseconds * ticks_per_us);
+    LARGE_INTEGER target;
+    target.QuadPart = start.QuadPart + delta;
+    for (;;) {
+        LARGE_INTEGER now;
+        QueryPerformanceCounter(&now);
+        if (now.QuadPart >= target.QuadPart) break;
+    }
+#else
+    std::this_thread::sleep_for(std::chrono::microseconds(static_cast<int64_t>(microseconds)));
+#endif
+}
+
+} // anonymous namespace
+
 namespace cbsdk {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -895,8 +923,10 @@ Result<void> SdkSession::start() {
                         impl->stats.packets_sent_to_device.fetch_add(1, std::memory_order_relaxed);
                     }
 
-                    // Rate-limit: older firmware processes one packet per 50µs
-                    std::this_thread::sleep_for(std::chrono::microseconds(50));
+                    // Rate-limit: older firmware processes one packet per 50µs.
+                    // Must use hr_sleep_us on Windows where sleep_for rounds
+                    // up to ~15 ms — far too coarse for inter-packet pacing.
+                    hr_sleep_us(50);
                 }
 
                 if (has_packets) {
@@ -904,7 +934,7 @@ Result<void> SdkSession::start() {
                     std::this_thread::yield();
                 } else {
                     // No packets - wait briefly before checking again
-                    std::this_thread::sleep_for(std::chrono::microseconds(100));
+                    hr_sleep_us(100);
                 }
             }
         });
