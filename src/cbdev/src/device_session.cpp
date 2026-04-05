@@ -615,18 +615,16 @@ Result<void> DeviceSession::sendPackets(const std::vector<cbPKT_GENERIC>& pkts) 
         return Result<void>::error("Device not connected");
     }
 
-    // Send each packet as its own datagram with a small delay between packets.
-    // Note: Coalescing multiple packets into one datagram was tried but the device
-    // expects one packet per UDP datagram.
+    // Send each packet as its own datagram (no coalescing).
+    // Each sendto() produces exactly one UDP datagram — the kernel never
+    // merges them.  The device firmware drains its socket receive buffer in
+    // a tight loop each main-loop iteration (~33 µs at 30 kHz), so packets
+    // simply queue in the device-side kernel buffer between iterations.
+    // No inter-packet delay is needed.
     for (const auto& pkt : pkts) {
         if (auto result = sendPacket(pkt); result.isError()) {
             return result;
         }
-#ifdef _WIN32
-        hr_sleep_us(50);
-#else
-        std::this_thread::sleep_for(std::chrono::microseconds(50));
-#endif
     }
 
     return Result<void>::ok();

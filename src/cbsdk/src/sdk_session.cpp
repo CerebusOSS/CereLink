@@ -923,16 +923,15 @@ Result<void> SdkSession::start() {
                         impl->stats.packets_sent_to_device.fetch_add(1, std::memory_order_relaxed);
                     }
 
-                    // Rate-limit: older firmware processes one packet per 50µs.
-                    // Must use hr_sleep_us on Windows where sleep_for rounds
-                    // up to ~15 ms — far too coarse for inter-packet pacing.
-                    hr_sleep_us(50);
+                    // No inter-packet delay needed: each sendto() produces
+                    // exactly one UDP datagram (kernel never merges them), and
+                    // the device firmware drains its socket receive buffer in a
+                    // tight loop each main-loop iteration (~33 µs at 30 kHz).
+                    // Packets that arrive between iterations simply queue in
+                    // the kernel's socket receive buffer on the device side.
                 }
 
-                if (has_packets) {
-                    // Had packets - check again quickly
-                    std::this_thread::yield();
-                } else {
+                if (!has_packets) {
                     // No packets - wait briefly before checking again
                     hr_sleep_us(100);
                 }
