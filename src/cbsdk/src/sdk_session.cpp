@@ -1992,6 +1992,16 @@ Result<void> SdkSession::loadCCFSync(const std::string& filename, uint32_t timeo
         return Result<void>::error("No SYSREP response received for loadCCFSync");
     }
 
+    // The device also sends SYSREP on network error / reset.  If the
+    // returned runlevel is HARDRESET or STANDBY the device dropped our
+    // config packets and restarted — report an error so the caller knows
+    // the CCF was not applied.
+    uint32_t rl = m_impl->device_runlevel.load(std::memory_order_acquire);
+    if (rl <= cbRUNLEVEL_STANDBY) {
+        return Result<void>::error(
+            "Device reset during CCF load (runlevel " + std::to_string(rl) + ")");
+    }
+
     return Result<void>::ok();
 }
 
