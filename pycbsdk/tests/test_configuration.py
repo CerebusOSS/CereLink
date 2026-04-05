@@ -504,6 +504,52 @@ class TestCCF:
 
 
 # ---------------------------------------------------------------------------
+# CCF loading — CLIENT mode
+# ---------------------------------------------------------------------------
+
+
+class TestClientCCF:
+    """CCF operations through a CLIENT-mode session (shmem only, no device)."""
+
+    @staticmethod
+    def _wait_for_smpfilter(session, chan_id, expected, timeout=5.0):
+        """Poll until channel smpfilter matches *expected* or timeout."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if session.get_channel_smpfilter(chan_id) == expected:
+                return
+            time.sleep(0.1)
+        assert session.get_channel_smpfilter(chan_id) == expected
+
+    def test_load_ccf_sync(self, nplay_session, client_session):
+        """CLIENT-mode load_ccf_sync: exercises SYSREP detection via shmem."""
+        last_ch = nplay_session.num_fe_chans()
+        baseline = 2
+        canary = 3
+
+        # STANDALONE sets the baseline, then saves a CCF snapshot
+        nplay_session.set_channel_smpfilter(last_ch, baseline)
+        self._wait_for_smpfilter(nplay_session, last_ch, baseline)
+
+        with tempfile.NamedTemporaryFile(suffix=".ccf", delete=False) as f:
+            ccf_file = f.name
+        try:
+            nplay_session.save_ccf(ccf_file)
+
+            # STANDALONE changes to canary so we can tell when the CCF restores
+            nplay_session.set_channel_smpfilter(last_ch, canary)
+            self._wait_for_smpfilter(nplay_session, last_ch, canary)
+
+            # CLIENT loads CCF and waits for SYSREP through shmem
+            client_session.load_ccf_sync(ccf_file, timeout=5.0)
+
+            # Verify via STANDALONE that the baseline was restored
+            self._wait_for_smpfilter(nplay_session, last_ch, baseline)
+        finally:
+            Path(ccf_file).unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
 # CMP files
 # ---------------------------------------------------------------------------
 
