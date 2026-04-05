@@ -659,6 +659,20 @@ public:
     /// @return Result indicating success or error (including timeout)
     Result<void> loadCCFSync(const std::string& filename, uint32_t timeout_ms = 5000);
 
+    /// Wait for the device to finish processing all previously sent configuration packets.
+    ///
+    /// Sends a no-op runlevel command and waits for the SYSREP response.
+    /// Because the device processes packets in order, receiving the SYSREP
+    /// confirms that all prior configuration packets have been applied.
+    ///
+    /// Call this after fire-and-forget operations like setChannelSampleGroup()
+    /// or setACInputCoupling() when you need to read back the resulting state
+    /// (e.g., getGroupChannels) or register callbacks that depend on it.
+    ///
+    /// @param timeout_ms Maximum time (ms) to wait for the device acknowledgment
+    /// @return Result indicating success or error (including timeout or device reset)
+    Result<void> sync(uint32_t timeout_ms = 5000);
+
     ///--------------------------------------------------------------------------------------------
     /// Clock Synchronization
     ///--------------------------------------------------------------------------------------------

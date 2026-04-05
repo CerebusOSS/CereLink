@@ -860,6 +860,13 @@ CBSDK_API cbsdk_result_t cbsdk_session_load_ccf(cbsdk_session_t session, const c
 CBSDK_API cbsdk_result_t cbsdk_session_load_ccf_sync(
     cbsdk_session_t session, const char* filename, uint32_t timeout_ms);
 
+/// Wait for the device to finish processing all previously sent config packets.
+/// Sends a no-op runlevel command and waits for the SYSREP response.
+/// @param session Session handle (must not be NULL)
+/// @param timeout_ms Maximum time in milliseconds to wait for acknowledgment
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure or timeout
+CBSDK_API cbsdk_result_t cbsdk_session_sync(cbsdk_session_t session, uint32_t timeout_ms);
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Instrument Time
 ///////////////////////////////////////////////////////////////////////////////////////////////////

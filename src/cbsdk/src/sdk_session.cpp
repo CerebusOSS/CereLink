@@ -2004,6 +2004,14 @@ Result<void> SdkSession::loadCCFSync(const std::string& filename, uint32_t timeo
     return Result<void>::ok();
 }
 
+Result<void> SdkSession::sync(uint32_t timeout_ms) {
+    // Send a no-op runlevel SET (current runlevel) as a sync barrier.
+    // The device processes packets in order, so the resulting SYSREP
+    // confirms all prior configuration packets have been applied.
+    uint32_t current = m_impl->device_runlevel.load(std::memory_order_acquire);
+    return setSystemRunLevel(current, 0, 0, 0, timeout_ms);
+}
+
 ///--------------------------------------------------------------------------------------------
 /// Clock Synchronization
 ///--------------------------------------------------------------------------------------------

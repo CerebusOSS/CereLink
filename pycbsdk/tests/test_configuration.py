@@ -151,6 +151,90 @@ class TestChannelSampleGroup:
 
 
 # ---------------------------------------------------------------------------
+# Async config race (ezmsg-blackrock CereLinkProducer.open() sequence)
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncConfigRace:
+    """Reproduces the config→immediate-read pattern from ezmsg-blackrock.
+
+    CereLinkProducer.open() calls set_channel_sample_group and
+    set_ac_input_coupling (both fire-and-forget), then immediately reads
+    get_group_channels and registers callbacks.  If the device hasn't
+    processed all the config packets by then, the group list is incomplete
+    and the data callback delivers the wrong number of channels.
+    """
+
+    N_CHANS = 128  # matches ezmsg-blackrock impedance test
+
+    def test_immediate_group_read_with_sync(self, nplay_session):
+        """Config 128 channels at SR_RAW, sync(), then read group list.
+
+        Repeats 20 times to stress-test the sync barrier.  Without sync()
+        this race produces incomplete channel lists ~5% of the time.
+        """
+        failures = []
+        for i in range(20):
+            # Reset to a known state first
+            nplay_session.set_channel_sample_group(
+                self.N_CHANS, ChannelType.FRONTEND, SampleRate.NONE,
+                disable_others=True,
+            )
+            nplay_session.sync()
+
+            # Fire-and-forget config
+            nplay_session.set_channel_sample_group(
+                self.N_CHANS, ChannelType.FRONTEND, SampleRate.SR_RAW,
+                disable_others=True,
+            )
+            nplay_session.set_ac_input_coupling(
+                self.N_CHANS, ChannelType.FRONTEND, False,
+            )
+
+            # sync() ensures all CHANREP responses are in shmem
+            nplay_session.sync()
+
+            channels = nplay_session.get_group_channels(int(SampleRate.SR_RAW))
+            if len(channels) != self.N_CHANS:
+                failures.append((i, len(channels)))
+
+        assert not failures, (
+            f"Incomplete config in {len(failures)}/20 iterations: "
+            + ", ".join(f"iter {i}: got {n}" for i, n in failures)
+        )
+
+    def test_immediate_data_width(self, nplay_session):
+        """Config 128 channels at SR_RAW, register callback, verify width."""
+        import numpy as np
+
+        nplay_session.set_channel_sample_group(
+            self.N_CHANS, ChannelType.FRONTEND, SampleRate.SR_RAW,
+            disable_others=True,
+        )
+        nplay_session.set_ac_input_coupling(
+            self.N_CHANS, ChannelType.FRONTEND, False,
+        )
+
+        # NO sleep — register callback and immediately start collecting.
+        widths = []
+
+        @nplay_session.on_group(SampleRate.SR_RAW, as_array=True)
+        def on_sample(header, arr):
+            if len(widths) < 20:
+                widths.append(arr.shape[0])
+
+        time.sleep(1)
+
+        assert len(widths) > 0, "No raw group samples received"
+        # Every delivered sample should have exactly N_CHANS channels.
+        bad = [w for w in widths if w != self.N_CHANS]
+        assert not bad, (
+            f"Expected data width {self.N_CHANS} but got widths {bad} "
+            f"(first 20: {widths})"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Channel info accessors
 # ---------------------------------------------------------------------------
 
