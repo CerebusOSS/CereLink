@@ -30,6 +30,34 @@
 #include <vector>
 #include "cbdev/clock_sync.h"
 
+namespace {
+
+/// High-resolution microsecond delay.
+/// On Windows, std::this_thread::sleep_for rounds up to ~15 ms which is far
+/// too coarse for the 50 µs inter-packet pacing the send thread needs.
+/// Use a QPC spin-wait instead (mirrors cbdev's hr_sleep_us).
+inline void hr_sleep_us([[maybe_unused]] uint64_t microseconds) {
+#ifdef _WIN32
+    if (microseconds == 0) return;
+    LARGE_INTEGER freq, start;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&start);
+    const double ticks_per_us = static_cast<double>(freq.QuadPart) / 1'000'000.0;
+    const LONGLONG delta = static_cast<LONGLONG>(microseconds * ticks_per_us);
+    LARGE_INTEGER target;
+    target.QuadPart = start.QuadPart + delta;
+    for (;;) {
+        LARGE_INTEGER now;
+        QueryPerformanceCounter(&now);
+        if (now.QuadPart >= target.QuadPart) break;
+    }
+#else
+    std::this_thread::sleep_for(std::chrono::microseconds(static_cast<int64_t>(microseconds)));
+#endif
+}
+
+} // anonymous namespace
+
 namespace cbsdk {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -895,16 +923,17 @@ Result<void> SdkSession::start() {
                         impl->stats.packets_sent_to_device.fetch_add(1, std::memory_order_relaxed);
                     }
 
-                    // Rate-limit: older firmware processes one packet per 50µs
-                    std::this_thread::sleep_for(std::chrono::microseconds(50));
+                    // No inter-packet delay needed: each sendto() produces
+                    // exactly one UDP datagram (kernel never merges them), and
+                    // the device firmware drains its socket receive buffer in a
+                    // tight loop each main-loop iteration (~33 µs at 30 kHz).
+                    // Packets that arrive between iterations simply queue in
+                    // the kernel's socket receive buffer on the device side.
                 }
 
-                if (has_packets) {
-                    // Had packets - check again quickly
-                    std::this_thread::yield();
-                } else {
+                if (!has_packets) {
                     // No packets - wait briefly before checking again
-                    std::this_thread::sleep_for(std::chrono::microseconds(100));
+                    hr_sleep_us(100);
                 }
             }
         });
@@ -1014,6 +1043,13 @@ Result<void> SdkSession::start() {
                                         device_time_ns, t4);
                                     impl->pending_clock_probe.active = false;
                                 }
+                            }
+                            // Check for SYSREP packets (handshake responses)
+                            if ((packets[i].cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
+                                const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&packets[i]);
+                                impl->device_runlevel.store(sysinfo->runlevel, std::memory_order_release);
+                                impl->received_sysrep.store(true, std::memory_order_release);
+                                impl->handshake_cv.notify_all();
                             }
                             // Note: CMP positions are applied by the STANDALONE session
                             // when it writes chaninfo to shmem. CLIENT doesn't need to
@@ -1928,12 +1964,44 @@ Result<void> SdkSession::loadCCFSync(const std::string& filename, uint32_t timeo
     if (result.isError())
         return result;
 
-    // Synchronize: re-send the current runlevel (a no-op) and wait for the
-    // SYSREP response.  The device processes packets in order, so receiving
-    // the SYSREP confirms that all prior CCF configuration packets have
-    // been applied.
+    // Synchronize: enqueue a no-op runlevel SET through the same shmem
+    // transmit queue that carries the CCF packets, then wait for the SYSREP
+    // response.  Because the device send thread drains this queue in order,
+    // the device will process every CCF packet before it sees the runlevel
+    // SET, so the resulting SYSREP confirms all configuration has been applied.
+    //
+    // NOTE: we deliberately use sendPacket() (shmem path) instead of
+    // device_session->setSystemRunLevel() (direct UDP) to avoid racing
+    // ahead of CCF packets still queued in shared memory.
+    m_impl->received_sysrep.store(false, std::memory_order_relaxed);
+
     uint32_t current = m_impl->device_runlevel.load(std::memory_order_acquire);
-    return setSystemRunLevel(current, 0, 0, 0, timeout_ms);
+    cbPKT_SYSINFO pkt = {};
+    pkt.cbpkt_header.time = 1;
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_SYSSETRUNLEV;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_SYSINFO;
+    pkt.runlevel = current;
+
+    auto send_result = sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+    if (send_result.isError())
+        return send_result;
+
+    if (!waitForSysrep(timeout_ms, 0)) {
+        return Result<void>::error("No SYSREP response received for loadCCFSync");
+    }
+
+    // The device also sends SYSREP on network error / reset.  If the
+    // returned runlevel is HARDRESET or STANDBY the device dropped our
+    // config packets and restarted — report an error so the caller knows
+    // the CCF was not applied.
+    uint32_t rl = m_impl->device_runlevel.load(std::memory_order_acquire);
+    if (rl <= cbRUNLEVEL_STANDBY) {
+        return Result<void>::error(
+            "Device reset during CCF load (runlevel " + std::to_string(rl) + ")");
+    }
+
+    return Result<void>::ok();
 }
 
 ///--------------------------------------------------------------------------------------------

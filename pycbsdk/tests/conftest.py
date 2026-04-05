@@ -196,3 +196,22 @@ def nplay_session(nplayserver):
 
     with Session(DeviceType.NPLAY) as session:
         yield session
+
+
+@pytest.fixture
+def client_session(nplay_session):
+    """A CLIENT-mode Session attached to the STANDALONE nplay_session's shmem.
+
+    Function-scoped: created fresh for each test that requests it.
+    The STANDALONE nplay_session already owns native shmem for NPLAY;
+    creating another Session(DeviceType.NPLAY) finds that shmem and
+    attaches as CLIENT (skipping device creation).
+    """
+    from pycbsdk import DeviceType, Session
+
+    with Session(DeviceType.NPLAY) as session:
+        assert not session.is_standalone, (
+            "Expected CLIENT mode but got STANDALONE — "
+            "is the nplay_session fixture alive?"
+        )
+        yield session

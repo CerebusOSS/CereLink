@@ -203,10 +203,13 @@ class TestOnEvent:
 
         # Phase 2: disable extraction on ALL channels — no new spikes should arrive
         all_chans = nplay_session.max_chans()
-        events.clear()
         nplay_session.set_spike_extraction(
             all_chans, ChannelType.FRONTEND, enabled=False,
         )
+        # Wait for disable to propagate to device before clearing, so
+        # in-flight events from the enable→disable transition are drained.
+        time.sleep(0.5)
+        events.clear()
         time.sleep(2)
         phase2_count = len(events)
         assert phase2_count == 0, (
