@@ -1015,6 +1015,13 @@ Result<void> SdkSession::start() {
                                     impl->pending_clock_probe.active = false;
                                 }
                             }
+                            // Check for SYSREP packets (handshake responses)
+                            if ((packets[i].cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
+                                const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&packets[i]);
+                                impl->device_runlevel.store(sysinfo->runlevel, std::memory_order_release);
+                                impl->received_sysrep.store(true, std::memory_order_release);
+                                impl->handshake_cv.notify_all();
+                            }
                             // Note: CMP positions are applied by the STANDALONE session
                             // when it writes chaninfo to shmem. CLIENT doesn't need to
                             // re-apply them.
@@ -1928,12 +1935,34 @@ Result<void> SdkSession::loadCCFSync(const std::string& filename, uint32_t timeo
     if (result.isError())
         return result;
 
-    // Synchronize: re-send the current runlevel (a no-op) and wait for the
-    // SYSREP response.  The device processes packets in order, so receiving
-    // the SYSREP confirms that all prior CCF configuration packets have
-    // been applied.
+    // Synchronize: enqueue a no-op runlevel SET through the same shmem
+    // transmit queue that carries the CCF packets, then wait for the SYSREP
+    // response.  Because the device send thread drains this queue in order,
+    // the device will process every CCF packet before it sees the runlevel
+    // SET, so the resulting SYSREP confirms all configuration has been applied.
+    //
+    // NOTE: we deliberately use sendPacket() (shmem path) instead of
+    // device_session->setSystemRunLevel() (direct UDP) to avoid racing
+    // ahead of CCF packets still queued in shared memory.
+    m_impl->received_sysrep.store(false, std::memory_order_relaxed);
+
     uint32_t current = m_impl->device_runlevel.load(std::memory_order_acquire);
-    return setSystemRunLevel(current, 0, 0, 0, timeout_ms);
+    cbPKT_SYSINFO pkt = {};
+    pkt.cbpkt_header.time = 1;
+    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    pkt.cbpkt_header.type = cbPKTTYPE_SYSSETRUNLEV;
+    pkt.cbpkt_header.dlen = cbPKTDLEN_SYSINFO;
+    pkt.runlevel = current;
+
+    auto send_result = sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+    if (send_result.isError())
+        return send_result;
+
+    if (!waitForSysrep(timeout_ms, 0)) {
+        return Result<void>::error("No SYSREP response received for loadCCFSync");
+    }
+
+    return Result<void>::ok();
 }
 
 ///--------------------------------------------------------------------------------------------
