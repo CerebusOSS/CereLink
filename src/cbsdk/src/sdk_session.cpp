@@ -923,12 +923,10 @@ Result<void> SdkSession::start() {
                         impl->stats.packets_sent_to_device.fetch_add(1, std::memory_order_relaxed);
                     }
 
-                    // No inter-packet delay needed: each sendto() produces
-                    // exactly one UDP datagram (kernel never merges them), and
-                    // the device firmware drains its socket receive buffer in a
-                    // tight loop each main-loop iteration (~33 µs at 30 kHz).
-                    // Packets that arrive between iterations simply queue in
-                    // the kernel's socket receive buffer on the device side.
+                    // Small delay to avoid overflowing the device's kernel UDP
+                    // receive buffer (as low as 8 KB on some Windows configs).
+                    // 5 µs keeps the rate within what any receiver can buffer.
+                    hr_sleep_us(5);
                 }
 
                 if (!has_packets) {
