@@ -635,10 +635,10 @@ Result<void> DeviceSession::sendPackets(const std::vector<cbPKT_GENERIC>& pkts) 
             return result;
         }
         if ((i % BATCH) == (BATCH - 1)) {
-            // Yield CPU so the receiver process can drain its socket buffer.
-            // On Windows VMs this may sleep up to one scheduler tick (~1-15 ms);
-            // on Linux/macOS it typically returns in <1 ms.
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
+            // Pace sends so the receiver can drain its kernel UDP buffer.
+            // Must use hr_sleep_us (QPC spin-wait) on Windows because
+            // sleep_for rounds sub-ms values to 0, providing no pacing.
+            hr_sleep_us(30);
         }
     }
 
