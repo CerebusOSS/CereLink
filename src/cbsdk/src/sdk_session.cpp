@@ -1271,6 +1271,37 @@ const cbPKT_GROUPINFO* SdkSession::getGroupInfo(uint32_t group_id) const {
     return nullptr;
 }
 
+uint32_t SdkSession::getGroupChannelList(uint32_t group_id, uint16_t* list, uint32_t max_count) const {
+    if (group_id == 0 || group_id > cbMAXGROUPS || !list || max_count == 0)
+        return 0;
+
+    uint32_t count = 0;
+    const bool is_raw = (group_id == cbRAWGROUP);
+
+    for (uint32_t chan = 1; chan <= cbNUM_ANALOG_CHANS && count < max_count; ++chan) {
+        // Prefer device_config (updated in updateConfigFromBuffer before the
+        // sendAndWait / SYSREP sync barrier fires).  shmem chaninfo may lag
+        // slightly because SDK callbacks run after the sync notification.
+        const cbPKT_CHANINFO* ci = nullptr;
+        if (m_impl->device_session)
+            ci = m_impl->device_session->getChanInfo(chan);
+        else
+            ci = getChanInfo(chan);
+
+        if (!ci) continue;
+
+        bool in_group;
+        if (is_raw)
+            in_group = (ci->ainpopts & cbAINP_RAWSTREAM) != 0;
+        else
+            in_group = (ci->smpgroup == group_id);
+
+        if (in_group)
+            list[count++] = static_cast<uint16_t>(chan);
+    }
+    return count;
+}
+
 const cbPKT_FILTINFO* SdkSession::getFilterInfo(const uint32_t filter_id) const {
     if (filter_id >= cbMAXFILTS)
         return nullptr;

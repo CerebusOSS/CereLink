@@ -418,6 +418,16 @@ public:
     /// @return Pointer to group info, or nullptr if invalid/unavailable
     const cbPKT_GROUPINFO* getGroupInfo(uint32_t group_id) const;
 
+    /// Compute the list of channel IDs belonging to a sample group by
+    /// scanning individual chaninfo records.  More reliable than getGroupInfo()
+    /// because CHANREP packets (which update chaninfo) always arrive before
+    /// the SYSREP sync barrier, whereas GROUPREP packets may not.
+    /// @param group_id   Group ID (1 – cbMAXGROUPS)
+    /// @param list       Output buffer for 1-based channel IDs
+    /// @param max_count  Capacity of @p list
+    /// @return Number of channels written to @p list
+    uint32_t getGroupChannelList(uint32_t group_id, uint16_t* list, uint32_t max_count) const;
+
     /// Get filter information
     /// @param filter_id Filter ID (0 to cbMAXFILTS-1)
     /// @return Pointer to filter info, or nullptr if invalid/unavailable
