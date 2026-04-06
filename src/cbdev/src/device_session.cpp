@@ -636,16 +636,13 @@ Result<void> DeviceSession::sendPackets(const std::vector<cbPKT_GENERIC>& pkts) 
         }
         if ((i % BATCH) == (BATCH - 1)) {
             // Pace sends so the receiver can drain its kernel UDP buffer.
-            // Two complementary mechanisms:
-            //  - hr_sleep_us: accurate sub-ms minimum delay (sleep_for rounds
-            //    sub-ms to 0 on Windows, providing no pacing at all).
-            //  - Sleep(0): yields the CPU time-slice so the receiver process
-            //    can actually run.  Critical on shared VMs / CI runners where
-            //    a pure spin-wait starves nPlayServer of CPU.
+            // hr_sleep_us: accurate sub-ms minimum delay (sleep_for rounds
+            //   sub-ms to 0 on Windows, providing no pacing at all).
+            // yield: gives up the CPU time-slice so the receiver process can
+            //   drain its buffer.  Critical on CI runners / shared VMs where
+            //   a pure spin-wait starves nPlayServer.
             hr_sleep_us(30);
-#ifdef _WIN32
-            Sleep(0);
-#endif
+            std::this_thread::yield();
         }
     }
 
