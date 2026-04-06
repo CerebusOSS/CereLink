@@ -156,12 +156,12 @@ class TestDeviceToMonotonic:
     def test_result_close_to_current_monotonic(self, synced_session):
         """Converted time should be close to current time.monotonic().
 
-        nPlayServer loops a short file, resetting device timestamps.  The
-        clock offset may be stale right after a
-        loop boundary, producing a large delta.  Retry a few times to
-        ride past it.
+        nPlayServer loops its file, resetting device timestamps.  ClockSync
+        detects the jump and discards stale probes, but if we read right
+        between the wrap and the next probe (~2s interval), the offset may
+        be briefly stale.  Retry a few times to ride past it.
         """
-        for _ in range(3):
+        for _ in range(5):
             device_ns = synced_session.time
             mono_converted = synced_session.device_to_monotonic(device_ns)
             mono_now = time.monotonic()
@@ -169,7 +169,7 @@ class TestDeviceToMonotonic:
             delta = mono_now - mono_converted
             if -1 < delta < 5:
                 return  # pass
-            time.sleep(0.5)  # wait for clock probe to recalibrate
+            time.sleep(1)  # wait for next clock probe after wrap
 
         assert False, (
             f"device_to_monotonic off by {delta:.3f}s from time.monotonic() "
