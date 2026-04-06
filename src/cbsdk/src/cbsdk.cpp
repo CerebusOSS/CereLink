@@ -935,8 +935,9 @@ static cbsdk_result_t modify_and_send_chaninfo(
         ci.chan = chan_id;
         ci.cbpkt_header.type = pkt_type;
         modify(ci);
-        auto r = session->cpp_session->sendPacket(
-            reinterpret_cast<const cbPKT_GENERIC&>(ci));
+        // Use setChannelConfig which routes via direct UDP in STANDALONE
+        // (matching sync()'s barrier path) and shmem in CLIENT mode.
+        auto r = session->cpp_session->setChannelConfig(ci);
         return r.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
     } catch (...) {
         return CBSDK_RESULT_INTERNAL_ERROR;

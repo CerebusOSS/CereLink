@@ -1402,6 +1402,14 @@ Result<void> SdkSession::setSpikeLength(uint32_t spikelen, uint32_t spikepre) {
     pkt.cbpkt_header.type = cbPKTTYPE_SYSSETSPKLEN;
     pkt.spikelen = spikelen;
     pkt.spikepre = spikepre;
+
+    if (m_impl->device_session) {
+        const auto r = m_impl->device_session->sendPacket(
+            reinterpret_cast<const cbPKT_GENERIC&>(pkt));
+        if (r.isError())
+            return Result<void>::error(r.error());
+        return Result<void>::ok();
+    }
     return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
 }
 
@@ -1996,10 +2004,22 @@ Result<void> SdkSession::loadCCF(const std::string& filename) {
         return Result<void>::error("Failed to read CCF file");
 
     auto packets = ccf::buildConfigPackets(ccf_data);
-    for (const auto& pkt : packets) {
-        auto send_result = sendPacket(pkt);
-        if (send_result.isError())
-            return send_result;
+
+    if (m_impl->device_session) {
+        // STANDALONE: send directly via DeviceSession (same path as
+        // setChannelSampleGroup et al.).  This avoids the unnecessary
+        // shmem round-trip and lets sync() / loadCCFSync() use the
+        // standard direct-UDP barrier.
+        const auto r = m_impl->device_session->sendPackets(packets);
+        if (r.isError())
+            return Result<void>::error(r.error());
+    } else {
+        // CLIENT: enqueue to shmem for the STANDALONE process to transmit.
+        for (const auto& pkt : packets) {
+            auto send_result = sendPacket(pkt);
+            if (send_result.isError())
+                return send_result;
+        }
     }
 
     return Result<void>::ok();
