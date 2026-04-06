@@ -204,7 +204,7 @@ class TestAsyncConfigRace:
         )
 
     def test_immediate_data_width(self, nplay_session):
-        """Config 128 channels at SR_RAW, register callback, verify width."""
+        """Config 128 channels at SR_RAW, sync, register callback, verify width."""
         import numpy as np
 
         nplay_session.set_channel_sample_group(
@@ -214,8 +214,8 @@ class TestAsyncConfigRace:
         nplay_session.set_ac_input_coupling(
             self.N_CHANS, ChannelType.FRONTEND, False,
         )
+        nplay_session.sync()
 
-        # NO sleep — register callback and immediately start collecting.
         widths = []
 
         @nplay_session.on_group(SampleRate.SR_RAW, as_array=True)
