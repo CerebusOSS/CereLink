@@ -873,17 +873,10 @@ cbsdk_result_t cbsdk_session_get_group_list(
         return CBSDK_RESULT_INVALID_PARAMETER;
     }
     try {
-        const cbPKT_GROUPINFO* info = session->cpp_session->getGroupInfo(group_id);
-        if (!info) {
-            *count = 0;
-            return CBSDK_RESULT_INVALID_PARAMETER;
-        }
-        uint32_t n = info->length;
-        if (n > *count) n = *count;
-        for (uint32_t i = 0; i < n; i++) {
-            list[i] = info->list[i];
-        }
-        *count = n;
+        // Compute from individual chaninfo rather than GROUPREP packets.
+        // CHANREP always arrives before the SYSREP sync barrier, whereas
+        // GROUPREP may not be sent at all by some devices (e.g. nPlayServer).
+        *count = session->cpp_session->getGroupChannelList(group_id, list, *count);
         return CBSDK_RESULT_SUCCESS;
     } catch (...) {
         *count = 0;
@@ -1303,6 +1296,18 @@ cbsdk_result_t cbsdk_session_load_ccf_sync(
     }
     try {
         auto result = session->cpp_session->loadCCFSync(filename, timeout_ms);
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_sync(cbsdk_session_t session, uint32_t timeout_ms) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->sync(timeout_ms);
         return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
     } catch (...) {
         return CBSDK_RESULT_INTERNAL_ERROR;

@@ -418,6 +418,16 @@ public:
     /// @return Pointer to group info, or nullptr if invalid/unavailable
     const cbPKT_GROUPINFO* getGroupInfo(uint32_t group_id) const;
 
+    /// Compute the list of channel IDs belonging to a sample group by
+    /// scanning individual chaninfo records.  More reliable than getGroupInfo()
+    /// because CHANREP packets (which update chaninfo) always arrive before
+    /// the SYSREP sync barrier, whereas GROUPREP packets may not.
+    /// @param group_id   Group ID (1 – cbMAXGROUPS)
+    /// @param list       Output buffer for 1-based channel IDs
+    /// @param max_count  Capacity of @p list
+    /// @return Number of channels written to @p list
+    uint32_t getGroupChannelList(uint32_t group_id, uint16_t* list, uint32_t max_count) const;
+
     /// Get filter information
     /// @param filter_id Filter ID (0 to cbMAXFILTS-1)
     /// @return Pointer to filter info, or nullptr if invalid/unavailable
@@ -658,6 +668,20 @@ public:
     /// @param timeout_ms Maximum time (ms) to wait for the device acknowledgment
     /// @return Result indicating success or error (including timeout)
     Result<void> loadCCFSync(const std::string& filename, uint32_t timeout_ms = 5000);
+
+    /// Wait for the device to finish processing all previously sent configuration packets.
+    ///
+    /// Sends a no-op runlevel command and waits for the SYSREP response.
+    /// Because the device processes packets in order, receiving the SYSREP
+    /// confirms that all prior configuration packets have been applied.
+    ///
+    /// Call this after fire-and-forget operations like setChannelSampleGroup()
+    /// or setACInputCoupling() when you need to read back the resulting state
+    /// (e.g., getGroupChannels) or register callbacks that depend on it.
+    ///
+    /// @param timeout_ms Maximum time (ms) to wait for the device acknowledgment
+    /// @return Result indicating success or error (including timeout or device reset)
+    Result<void> sync(uint32_t timeout_ms = 5000);
 
     ///--------------------------------------------------------------------------------------------
     /// Clock Synchronization

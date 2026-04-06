@@ -86,10 +86,25 @@ def test_data_dir() -> Path:
 
 
 @pytest.fixture(scope="session")
-def ns6_path(test_data_dir: Path) -> Path:
-    """Path to the .ns6 file in the test data."""
-    matches = list(test_data_dir.rglob("*.ns6"))
-    assert matches, "No .ns6 file found in test data"
+def test_data_long_dir() -> Path:
+    """Download and extract long test data (4-channel, ~12s, fewer wraps)."""
+    zip_path = CACHE_DIR / "dnss.zip"
+    extract_dir = CACHE_DIR / "dnss"
+    _download(f"{CERELINK_RELEASE_URL}/dnss.zip", zip_path)
+    _extract_zip(zip_path, extract_dir)
+    return extract_dir
+
+
+@pytest.fixture(scope="session")
+def ns6_path(test_data_long_dir: Path) -> Path:
+    """Path to the long .ns6 file used for nPlayServer playback.
+
+    Uses the ~12s recording (dnss) instead of the ~2s one (dnss256) so
+    that device timestamps wrap infrequently, avoiding flaky clock-sync
+    and timing tests.
+    """
+    matches = list(test_data_long_dir.rglob("*.ns6"))
+    assert matches, "No .ns6 file found in long test data"
     return matches[0]
 
 

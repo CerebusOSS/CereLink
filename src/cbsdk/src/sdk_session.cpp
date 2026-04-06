@@ -12,6 +12,9 @@
 
 // Platform headers MUST be included first (before cbproto)
 #include "platform_first.h"
+#ifdef _WIN32
+#include <mmsystem.h>
+#endif
 
 #include "cbsdk/sdk_session.h"
 #include "cmp_parser.h"
@@ -904,6 +907,9 @@ Result<void> SdkSession::start() {
                 bool has_packets = false;
 
                 // Try to dequeue and send all available packets
+#ifdef _WIN32
+                bool timer_raised = false;
+#endif
                 while (true) {
                     cbPKT_GENERIC pkt = {};
 
@@ -914,6 +920,9 @@ Result<void> SdkSession::start() {
                     }
 
                     has_packets = true;
+#ifdef _WIN32
+                    if (!timer_raised) { timeBeginPeriod(1); timer_raised = true; }
+#endif
 
                     // Send packet to device
                     auto send_result = impl->device_session->sendPacket(pkt);
@@ -923,13 +932,19 @@ Result<void> SdkSession::start() {
                         impl->stats.packets_sent_to_device.fetch_add(1, std::memory_order_relaxed);
                     }
 
-                    // No inter-packet delay needed: each sendto() produces
-                    // exactly one UDP datagram (kernel never merges them), and
-                    // the device firmware drains its socket receive buffer in a
-                    // tight loop each main-loop iteration (~33 µs at 30 kHz).
-                    // Packets that arrive between iterations simply queue in
-                    // the kernel's socket receive buffer on the device side.
+                    // Pace sends to avoid overflowing the device's kernel
+                    // UDP receive buffer (~8 KB on Windows = ~8 packets).
+                    if ((impl->stats.packets_sent_to_device.load(std::memory_order_relaxed) % 8) == 0) {
+#ifdef _WIN32
+                        Sleep(1);
+#else
+                        std::this_thread::sleep_for(std::chrono::microseconds(50));
+#endif
+                    }
                 }
+#ifdef _WIN32
+                if (timer_raised) timeEndPeriod(1);
+#endif
 
                 if (!has_packets) {
                     // No packets - wait briefly before checking again
@@ -1268,6 +1283,37 @@ const cbPKT_GROUPINFO* SdkSession::getGroupInfo(uint32_t group_id) const {
         }
     }
     return nullptr;
+}
+
+uint32_t SdkSession::getGroupChannelList(uint32_t group_id, uint16_t* list, uint32_t max_count) const {
+    if (group_id == 0 || group_id > cbMAXGROUPS || !list || max_count == 0)
+        return 0;
+
+    uint32_t count = 0;
+    const bool is_raw = (group_id == cbRAWGROUP);
+
+    for (uint32_t chan = 1; chan <= cbNUM_ANALOG_CHANS && count < max_count; ++chan) {
+        // Prefer device_config (updated in updateConfigFromBuffer before the
+        // sendAndWait / SYSREP sync barrier fires).  shmem chaninfo may lag
+        // slightly because SDK callbacks run after the sync notification.
+        const cbPKT_CHANINFO* ci = nullptr;
+        if (m_impl->device_session)
+            ci = m_impl->device_session->getChanInfo(chan);
+        else
+            ci = getChanInfo(chan);
+
+        if (!ci) continue;
+
+        bool in_group;
+        if (is_raw)
+            in_group = (ci->ainpopts & cbAINP_RAWSTREAM) != 0;
+        else
+            in_group = (ci->smpgroup == group_id);
+
+        if (in_group)
+            list[count++] = static_cast<uint16_t>(chan);
+    }
+    return count;
 }
 
 const cbPKT_FILTINFO* SdkSession::getFilterInfo(const uint32_t filter_id) const {
@@ -2002,6 +2048,26 @@ Result<void> SdkSession::loadCCFSync(const std::string& filename, uint32_t timeo
     }
 
     return Result<void>::ok();
+}
+
+Result<void> SdkSession::sync(uint32_t timeout_ms) {
+    // Send a no-op runlevel SET (current runlevel) as a sync barrier.
+    // The device processes packets in order, so the resulting SYSREPRUNLEV
+    // confirms all prior configuration packets have been applied.
+    uint32_t current = m_impl->device_runlevel.load(std::memory_order_acquire);
+
+    if (m_impl->device_session) {
+        // STANDALONE: use DeviceSession::setSystemRunLevelSync which matches
+        // the specific SYSREPRUNLEV (type 0x12) response via sendAndWait.
+        // The old boolean waitForSysrep path matched any SYSREP (0x10-0x1F)
+        // and was falsely triggered by periodic SYSREP (0x10) heartbeats
+        // from nPlayServer.
+        return m_impl->device_session->setSystemRunLevelSync(
+            current, 0, 0, std::chrono::milliseconds(timeout_ms));
+    }
+
+    // CLIENT mode: route through shmem (uses the boolean waitForSysrep path)
+    return setSystemRunLevel(current, 0, 0, 0, timeout_ms);
 }
 
 ///--------------------------------------------------------------------------------------------

@@ -1156,6 +1156,30 @@ class Session:
             "Failed to load CCF (sync)",
         )
 
+    def sync(self, timeout: float = 5.0):
+        """Wait for the device to finish processing all pending config packets.
+
+        Sends a no-op runlevel command and waits for the SYSREP response.
+        Because the device processes packets in order, receiving the SYSREP
+        confirms that all prior configuration packets have been applied.
+
+        Call this after fire-and-forget operations like
+        :meth:`set_channel_sample_group` or :meth:`set_ac_input_coupling`
+        when you need to read back the resulting state (e.g.,
+        :meth:`get_group_channels`) or register callbacks that depend on it.
+
+        Args:
+            timeout: Maximum time in seconds to wait for acknowledgment.
+
+        Raises:
+            RuntimeError: If the device does not acknowledge within *timeout*.
+        """
+        timeout_ms = int(timeout * 1000)
+        _check(
+            _get_lib().cbsdk_session_sync(self._session, timeout_ms),
+            "Device sync failed",
+        )
+
     # --- Instrument Time ---
 
     @property

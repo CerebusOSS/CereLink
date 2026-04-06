@@ -78,33 +78,59 @@ class TestSessionLifecycle:
 class TestChannelSampleGroup:
     """Tests for set_channel_sample_group and related queries."""
 
-    def test_set_frontend_30k(self, nplay_session):
-        n_chans = 4
+    def test_set_all_frontend_30k(self, nplay_session):
+        n_fe = nplay_session.num_fe_chans()
         nplay_session.set_channel_sample_group(
-            n_chans, ChannelType.FRONTEND, SampleRate.SR_30kHz,
+            n_fe, ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=True,
         )
         time.sleep(0.5)
         channels = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
-        assert len(channels) >= n_chans
+        assert len(channels) == n_fe, (
+            f"Expected {n_fe} channels in 30kHz group, got {len(channels)}"
+        )
+
+    def test_set_all_frontend_30k_data_width(self, nplay_session):
+        """Verify the data callback delivers exactly num_fe_chans samples."""
+        n_fe = nplay_session.num_fe_chans()
+        nplay_session.set_channel_sample_group(
+            n_fe, ChannelType.FRONTEND, SampleRate.SR_30kHz,
+            disable_others=True,
+        )
+        time.sleep(0.5)
+
+        import numpy as np
+        widths = []
+
+        @nplay_session.on_group(SampleRate.SR_30kHz, as_array=True)
+        def on_sample(header, arr):
+            if len(widths) < 10:
+                widths.append(arr.shape[0])
+
+        time.sleep(0.5)
+        assert len(widths) > 0, "No group samples received"
+        assert all(w == n_fe for w in widths), (
+            f"Expected data width {n_fe}, got {widths}"
+        )
 
     def test_set_and_verify_smpgroup_field(self, nplay_session):
-        n_chans = 4
+        n_fe = nplay_session.num_fe_chans()
         nplay_session.set_channel_sample_group(
-            n_chans, ChannelType.FRONTEND, SampleRate.SR_10kHz,
+            n_fe, ChannelType.FRONTEND, SampleRate.SR_10kHz,
             disable_others=True,
         )
         time.sleep(0.5)
 
         groups = nplay_session.get_channels_field(
-            ChannelType.FRONTEND, ChanInfoField.SMPGROUP, n_chans
+            ChannelType.FRONTEND, ChanInfoField.SMPGROUP, n_fe
         )
         assert all(g == int(SampleRate.SR_10kHz) for g in groups)
 
     def test_disable_others(self, nplay_session):
-        # Enable 4 channels at 30kHz
+        n_fe = nplay_session.num_fe_chans()
+        # Enable all frontend channels at 30kHz
         nplay_session.set_channel_sample_group(
-            4, ChannelType.FRONTEND, SampleRate.SR_30kHz,
+            n_fe, ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=False,
         )
         time.sleep(0.5)
@@ -121,7 +147,91 @@ class TestChannelSampleGroup:
         assert len(channels_30k) == 0
 
         channels_1k = nplay_session.get_group_channels(int(SampleRate.SR_1kHz))
-        assert len(channels_1k) >= 2
+        assert len(channels_1k) == 2
+
+
+# ---------------------------------------------------------------------------
+# Async config race (ezmsg-blackrock CereLinkProducer.open() sequence)
+# ---------------------------------------------------------------------------
+
+
+class TestAsyncConfigRace:
+    """Reproduces the config→immediate-read pattern from ezmsg-blackrock.
+
+    CereLinkProducer.open() calls set_channel_sample_group and
+    set_ac_input_coupling (both fire-and-forget), then immediately reads
+    get_group_channels and registers callbacks.  If the device hasn't
+    processed all the config packets by then, the group list is incomplete
+    and the data callback delivers the wrong number of channels.
+    """
+
+    N_CHANS = 128  # matches ezmsg-blackrock impedance test
+
+    def test_immediate_group_read_with_sync(self, nplay_session):
+        """Config 128 channels at SR_RAW, sync(), then read group list.
+
+        Repeats 20 times to stress-test the sync barrier.  Without sync()
+        this race produces incomplete channel lists ~5% of the time.
+        """
+        failures = []
+        for i in range(20):
+            # Reset to a known state first
+            nplay_session.set_channel_sample_group(
+                self.N_CHANS, ChannelType.FRONTEND, SampleRate.NONE,
+                disable_others=True,
+            )
+            nplay_session.sync()
+
+            # Fire-and-forget config
+            nplay_session.set_channel_sample_group(
+                self.N_CHANS, ChannelType.FRONTEND, SampleRate.SR_RAW,
+                disable_others=True,
+            )
+            nplay_session.set_ac_input_coupling(
+                self.N_CHANS, ChannelType.FRONTEND, False,
+            )
+
+            # sync() ensures all CHANREP responses are in shmem
+            nplay_session.sync()
+
+            channels = nplay_session.get_group_channels(int(SampleRate.SR_RAW))
+            if len(channels) != self.N_CHANS:
+                failures.append((i, len(channels)))
+
+        assert not failures, (
+            f"Incomplete config in {len(failures)}/20 iterations: "
+            + ", ".join(f"iter {i}: got {n}" for i, n in failures)
+        )
+
+    def test_immediate_data_width(self, nplay_session):
+        """Config 128 channels at SR_RAW, sync, register callback, verify width."""
+        import numpy as np
+
+        nplay_session.set_channel_sample_group(
+            self.N_CHANS, ChannelType.FRONTEND, SampleRate.SR_RAW,
+            disable_others=True,
+        )
+        nplay_session.set_ac_input_coupling(
+            self.N_CHANS, ChannelType.FRONTEND, False,
+        )
+        nplay_session.sync()
+
+        widths = []
+
+        @nplay_session.on_group(SampleRate.SR_RAW, as_array=True)
+        def on_sample(header, arr):
+            if len(widths) < 20:
+                widths.append(arr.shape[0])
+
+        time.sleep(1)
+
+        assert len(widths) > 0, "No raw group samples received"
+        # Every delivered sample should have exactly N_CHANS channels.
+        bad = [w for w in widths if w != self.N_CHANS]
+        assert not bad, (
+            f"Expected data width {self.N_CHANS} but got widths {bad} "
+            f"(first 20: {widths})"
+        )
 
 
 # ---------------------------------------------------------------------------

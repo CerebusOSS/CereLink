@@ -14,6 +14,7 @@
 #include "platform_first.h"
 
 #ifdef _WIN32
+    #include <mmsystem.h>
     #pragma comment(lib, "iphlpapi.lib")
     typedef int socklen_t;
     #define INVALID_SOCKET_VALUE INVALID_SOCKET
@@ -63,35 +64,7 @@ namespace {
 #endif
     }
 
-    // High-resolution microsecond delay.
-    // On Windows, use QueryPerformanceCounter spin-wait to achieve sub-millisecond precision.
-    // On other platforms, steady_clock busy-wait is used as a fallback.
-    inline void hr_sleep_us(uint64_t microseconds) {
-        if (microseconds == 0) return;
-#ifdef _WIN32
-        LARGE_INTEGER freq;
-        LARGE_INTEGER start, target;
-        QueryPerformanceFrequency(&freq);
-        QueryPerformanceCounter(&start);
-        // Calculate target ticks: microseconds * (freq / 1e6)
-        const double ticks_per_us = static_cast<double>(freq.QuadPart) / 1'000'000.0;
-        const LONGLONG delta_ticks = static_cast<LONGLONG>(microseconds * ticks_per_us);
-        target.QuadPart = start.QuadPart + delta_ticks;
-        for (;;) {
-            LARGE_INTEGER now;
-            QueryPerformanceCounter(&now);
-            if (now.QuadPart >= target.QuadPart) break;
-            // Optional short pause to reduce power; comment out for maximum precision
-            // _mm_pause();
-        }
-#else
-        auto start = std::chrono::steady_clock::now();
-        auto target = start + std::chrono::microseconds(static_cast<int64_t>(microseconds));
-        while (std::chrono::steady_clock::now() < target) {
-            // busy-wait
-        }
-#endif
-    }
+
 }
 
 namespace cbdev {
@@ -615,15 +588,43 @@ Result<void> DeviceSession::sendPackets(const std::vector<cbPKT_GENERIC>& pkts) 
         return Result<void>::error("Device not connected");
     }
 
-    // Send each packet as its own datagram (no coalescing).
-    // Each sendto() produces exactly one UDP datagram — the kernel never
-    // merges them.  The device firmware drains its socket receive buffer in
-    // a tight loop each main-loop iteration (~33 µs at 30 kHz), so packets
-    // simply queue in the device-side kernel buffer between iterations.
-    // No inter-packet delay is needed.
-    for (const auto& pkt : pkts) {
-        if (auto result = sendPacket(pkt); result.isError()) {
+    // Send each packet as its own datagram (no coalescing).  Two concerns:
+    //
+    // 1. Pacing: the receiver's kernel UDP buffer can be as small as 8 KB
+    //    (~8 CHANINFO packets).  We must not send faster than the receiver
+    //    can drain.
+    //
+    // 2. CPU fairness: on shared VMs (CI runners), a pure busy-wait
+    //    between sends starves nPlayServer of CPU, preventing it from
+    //    draining its buffer even when packets arrive slowly.
+    //
+    // Strategy: send a small batch, then yield the CPU so the receiver
+    // process can run.  The batch size (8) matches the worst-case kernel
+    // buffer capacity, so even if the yield takes a while the buffer
+    // won't overflow from the preceding burst.
+    // On Windows, temporarily raise the timer resolution so Sleep(1)
+    // actually sleeps ~1 ms instead of ~15 ms.  The RAII guard restores
+    // the resolution when sendPackets returns.
+#ifdef _WIN32
+    timeBeginPeriod(1);
+    struct TimerGuard { ~TimerGuard() { timeEndPeriod(1); } } timerGuard;
+#endif
+
+    constexpr size_t BATCH = 8;
+    for (size_t i = 0; i < pkts.size(); ++i) {
+        if (auto result = sendPacket(pkts[i]); result.isError()) {
             return result;
+        }
+        if ((i % BATCH) == (BATCH - 1)) {
+            // Pace sends so the receiver can drain its kernel UDP buffer.
+            // Sleep(1) yields for one scheduler quantum (~1 ms with the
+            // timer resolution raised above).  On other platforms,
+            // sleep_for is already accurate at sub-ms granularity.
+#ifdef _WIN32
+            Sleep(1);
+#else
+            std::this_thread::sleep_for(std::chrono::microseconds(50));
+#endif
         }
     }
 

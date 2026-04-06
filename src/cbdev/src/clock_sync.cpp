@@ -43,6 +43,16 @@ void ClockSync::addProbeSample(time_point t1_local, uint64_t t3_device_ns, time_
     const int64_t offset_ns = static_cast<int64_t>(t3_device_ns) - t1_ns
         - static_cast<int64_t>(std::round(m_config.forward_delay_fraction * rtt_ns));
 
+    // Detect device clock wrap (e.g., nPlayServer file loop).  If the new
+    // offset differs from the current estimate by more than 1 second, the
+    // device clock has jumped and all old probes are stale.
+    if (m_current_offset_ns) {
+        const int64_t drift = offset_ns - *m_current_offset_ns;
+        if (std::abs(drift) > 1'000'000'000LL) {
+            m_probe_samples.clear();
+        }
+    }
+
     ProbeSample sample;
     sample.offset_ns = offset_ns;
     sample.rtt_ns = rtt_ns;
