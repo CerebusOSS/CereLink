@@ -154,15 +154,26 @@ class TestDeviceToMonotonic:
         assert isinstance(mono, float)
 
     def test_result_close_to_current_monotonic(self, synced_session):
-        """Converted time should be close to current time.monotonic()."""
-        device_ns = synced_session.time
-        mono_converted = synced_session.device_to_monotonic(device_ns)
-        mono_now = time.monotonic()
+        """Converted time should be close to current time.monotonic().
 
-        # The converted time should be in the recent past (within 5s)
-        delta = mono_now - mono_converted
-        assert -1 < delta < 5, (
-            f"device_to_monotonic off by {delta:.3f}s from time.monotonic()"
+        nPlayServer loops a short file, resetting device timestamps.  The
+        clock offset may be stale right after a
+        loop boundary, producing a large delta.  Retry a few times to
+        ride past it.
+        """
+        for _ in range(3):
+            device_ns = synced_session.time
+            mono_converted = synced_session.device_to_monotonic(device_ns)
+            mono_now = time.monotonic()
+
+            delta = mono_now - mono_converted
+            if -1 < delta < 5:
+                return  # pass
+            time.sleep(0.5)  # wait for clock probe to recalibrate
+
+        assert False, (
+            f"device_to_monotonic off by {delta:.3f}s from time.monotonic() "
+            f"after retries (nPlayServer file loop?)"
         )
 
     def test_monotonicity(self, synced_session):
