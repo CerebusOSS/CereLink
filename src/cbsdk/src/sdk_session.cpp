@@ -923,10 +923,12 @@ Result<void> SdkSession::start() {
                         impl->stats.packets_sent_to_device.fetch_add(1, std::memory_order_relaxed);
                     }
 
-                    // Small delay to avoid overflowing the device's kernel UDP
-                    // receive buffer (as low as 8 KB on some Windows configs).
-                    // 5 µs keeps the rate within what any receiver can buffer.
-                    hr_sleep_us(5);
+                    // Delay to avoid overflowing the device's kernel UDP
+                    // receive buffer (as low as 8 KB on Windows, ~8 packets).
+                    // 30 µs keeps sends ≤1 per device main-loop iteration
+                    // (33 µs at 30 kHz), preventing buffer overflow even on
+                    // slow VMs where the device drains only ~4 packets/iter.
+                    hr_sleep_us(30);
                 }
 
                 if (!has_packets) {

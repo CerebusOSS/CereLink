@@ -617,16 +617,17 @@ Result<void> DeviceSession::sendPackets(const std::vector<cbPKT_GENERIC>& pkts) 
 
     // Send each packet as its own datagram (no coalescing).
     // Each sendto() produces exactly one UDP datagram — the kernel never
-    // merges them.  A small delay between packets prevents the burst from
+    // merges them.  A delay between packets prevents the burst from
     // overflowing the receiver's kernel UDP socket buffer (as low as 8 KB
-    // on some Windows configurations, ~8 packets of 1 KB each).  5 µs
-    // keeps the rate well within what any receiver can buffer while still
-    // being fast (400 packets → ~2 ms).
+    // on Windows, ~8 CHANINFO-sized packets).  The device main loop runs
+    // at 30 kHz (33 µs) and can drain ~4-6 packets per iteration on slow
+    // VMs.  30 µs ensures we send ≤1 packet per iteration, keeping the
+    // buffer well below capacity.  (400 packets → ~12 ms.)
     for (const auto& pkt : pkts) {
         if (auto result = sendPacket(pkt); result.isError()) {
             return result;
         }
-        hr_sleep_us(5);
+        hr_sleep_us(30);
     }
 
     return Result<void>::ok();
