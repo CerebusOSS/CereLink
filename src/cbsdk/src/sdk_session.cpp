@@ -925,11 +925,12 @@ Result<void> SdkSession::start() {
 
                     // Pace sends to avoid overflowing the device's kernel
                     // UDP receive buffer (~8 KB on Windows = ~8 packets).
-                    // hr_sleep_us: accurate sub-ms minimum delay.
-                    // yield: gives up CPU so the receiver process can drain.
                     if ((impl->stats.packets_sent_to_device.load(std::memory_order_relaxed) % 8) == 0) {
-                        hr_sleep_us(30);
-                        std::this_thread::yield();
+#ifdef _WIN32
+                        Sleep(1);
+#else
+                        std::this_thread::sleep_for(std::chrono::microseconds(50));
+#endif
                     }
                 }
 
