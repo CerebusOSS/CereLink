@@ -84,7 +84,7 @@ class TestChannelSampleGroup:
             n_fe, ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=True,
         )
-        time.sleep(0.5)
+        nplay_session.sync()
         channels = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
         assert len(channels) == n_fe, (
             f"Expected {n_fe} channels in 30kHz group, got {len(channels)}"
@@ -97,7 +97,7 @@ class TestChannelSampleGroup:
             n_fe, ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=True,
         )
-        time.sleep(0.5)
+        nplay_session.sync()
 
         import numpy as np
         widths = []
@@ -119,7 +119,7 @@ class TestChannelSampleGroup:
             n_fe, ChannelType.FRONTEND, SampleRate.SR_10kHz,
             disable_others=True,
         )
-        time.sleep(0.5)
+        nplay_session.sync()
 
         groups = nplay_session.get_channels_field(
             ChannelType.FRONTEND, ChanInfoField.SMPGROUP, n_fe
@@ -133,14 +133,12 @@ class TestChannelSampleGroup:
             n_fe, ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=False,
         )
-        time.sleep(0.5)
-
         # Now set 2 at 1kHz with disable_others
         nplay_session.set_channel_sample_group(
             2, ChannelType.FRONTEND, SampleRate.SR_1kHz,
             disable_others=True,
         )
-        time.sleep(0.5)
+        nplay_session.sync()
 
         # 30kHz group should be empty (others were disabled)
         channels_30k = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
@@ -323,7 +321,7 @@ class TestBulkChannelQueries:
             4, ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=True,
         )
-        time.sleep(0.5)
+        nplay_session.sync()
         channels = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
         assert len(channels) >= 4
 
@@ -345,13 +343,13 @@ class TestACInputCoupling:
         nplay_session.set_ac_input_coupling(
             4, ChannelType.FRONTEND, enabled=True,
         )
-        time.sleep(0.3)
+        nplay_session.sync()
 
     def test_set_dc_coupling(self, nplay_session):
         nplay_session.set_ac_input_coupling(
             4, ChannelType.FRONTEND, enabled=False,
         )
-        time.sleep(0.3)
+        nplay_session.sync()
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +364,7 @@ class TestSpikeSorting:
         nplay_session.set_channel_spike_sorting(
             4, ChannelType.FRONTEND, sort_options=0,
         )
-        time.sleep(0.3)
+        nplay_session.sync()
 
 
 # ---------------------------------------------------------------------------
@@ -380,25 +378,25 @@ class TestConfigureChannel:
     def test_configure_smpfilter(self, nplay_session):
         orig = nplay_session.get_channel_smpfilter(1)
         nplay_session.configure_channel(1, smpfilter=2)
-        time.sleep(0.3)
+        nplay_session.sync()
         assert nplay_session.get_channel_smpfilter(1) == 2
         nplay_session.configure_channel(1, smpfilter=orig)
-        time.sleep(0.3)
+        nplay_session.sync()
 
     def test_configure_spkfilter(self, nplay_session):
         # Read original value so we can restore it afterward (other tests
         # depend on a valid spike filter being configured).
         orig = nplay_session.get_channel_spkfilter(1)
         nplay_session.configure_channel(1, spkfilter=3)
-        time.sleep(0.3)
+        nplay_session.sync()
         assert nplay_session.get_channel_spkfilter(1) == 3
         # Restore
         nplay_session.configure_channel(1, spkfilter=orig)
-        time.sleep(0.3)
+        nplay_session.sync()
 
     def test_configure_label(self, nplay_session):
         nplay_session.configure_channel(1, label="TestCh")
-        time.sleep(0.3)
+        nplay_session.sync()
         assert nplay_session.get_channel_label(1) == "TestCh"
 
     def test_configure_multiple_attrs(self, nplay_session):
@@ -409,13 +407,13 @@ class TestConfigureChannel:
             smpfilter=4,
             label="Multi",
         )
-        time.sleep(0.3)
+        nplay_session.sync()
         assert nplay_session.get_channel_smpfilter(1) == 4
         assert nplay_session.get_channel_label(1) == "Multi"
         # Restore
         nplay_session.configure_channel(1, smpfilter=orig_filter,
                                         label=orig_label or "chan1")
-        time.sleep(0.3)
+        nplay_session.sync()
 
     def test_configure_unknown_attr_raises(self, nplay_session):
         with pytest.raises(ValueError, match="Unknown channel attribute"):
@@ -433,34 +431,34 @@ class TestPerChannelSetters:
     def test_set_channel_ainpopts(self, nplay_session):
         orig = nplay_session.get_channel_ainpopts(1)
         nplay_session.set_channel_ainpopts(1, 0)
-        time.sleep(0.3)
+        nplay_session.sync()
         assert nplay_session.get_channel_ainpopts(1) == 0
         # Restore
         nplay_session.set_channel_ainpopts(1, orig)
-        time.sleep(0.3)
+        nplay_session.sync()
 
     def test_set_channel_lncrate(self, nplay_session):
         orig = nplay_session.get_channel_lncrate(1)
         nplay_session.set_channel_lncrate(1, 2)
-        time.sleep(0.3)
+        nplay_session.sync()
         assert nplay_session.get_channel_lncrate(1) == 2
         # Restore
         nplay_session.set_channel_lncrate(1, orig)
-        time.sleep(0.3)
+        nplay_session.sync()
 
     def test_set_channel_spkthrlevel(self, nplay_session):
         orig = nplay_session.get_channel_spkthrlevel(1)
         nplay_session.set_channel_spkthrlevel(1, -100)
-        time.sleep(0.3)
+        nplay_session.sync()
         assert nplay_session.get_channel_spkthrlevel(1) == -100
         # Restore
         nplay_session.set_channel_spkthrlevel(1, orig)
-        time.sleep(0.3)
+        nplay_session.sync()
 
     def test_set_channel_autothreshold(self, nplay_session):
         # Enable auto-threshold, verify spkopts has the THRAUTO bit set
         nplay_session.set_channel_autothreshold(1, True)
-        time.sleep(0.3)
+        nplay_session.sync()
         spkopts = nplay_session.get_channel_spkopts(1)
         THRAUTO = 0x00000400
         assert spkopts & THRAUTO, (
@@ -468,7 +466,7 @@ class TestPerChannelSetters:
         )
         # Disable
         nplay_session.set_channel_autothreshold(1, False)
-        time.sleep(0.3)
+        nplay_session.sync()
         spkopts = nplay_session.get_channel_spkopts(1)
         assert not (spkopts & THRAUTO), (
             f"THRAUTO bit still set after disable: spkopts=0x{spkopts:08X}"
@@ -479,23 +477,23 @@ class TestPerChannelSetters:
         # Set a known value (THRLEVEL only)
         THRLEVEL = 0x00000100
         nplay_session.set_channel_spkopts(1, THRLEVEL)
-        time.sleep(0.3)
+        nplay_session.sync()
         result = nplay_session.get_channel_spkopts(1)
         assert result & THRLEVEL, (
             f"THRLEVEL bit not set: spkopts=0x{result:08X}"
         )
         # Restore
         nplay_session.set_channel_spkopts(1, orig)
-        time.sleep(0.3)
+        nplay_session.sync()
 
     def test_set_channel_label(self, nplay_session):
         orig = nplay_session.get_channel_label(1)
         nplay_session.set_channel_label(1, "MyLabel")
-        time.sleep(0.3)
+        nplay_session.sync()
         assert nplay_session.get_channel_label(1) == "MyLabel"
         # Restore
         nplay_session.set_channel_label(1, orig or "chan1")
-        time.sleep(0.3)
+        nplay_session.sync()
 
 
 # ---------------------------------------------------------------------------
@@ -596,7 +594,7 @@ class TestCCF:
             4, ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=True,
         )
-        time.sleep(0.5)
+        nplay_session.sync()
 
         with tempfile.NamedTemporaryFile(suffix=".ccf", delete=False) as f:
             ccf_file = f.name
@@ -605,7 +603,7 @@ class TestCCF:
             assert Path(ccf_file).stat().st_size > 0
 
             nplay_session.load_ccf(ccf_file)
-            time.sleep(0.5)
+            nplay_session.sync()
 
             channels = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
             assert len(channels) >= 4
@@ -711,7 +709,7 @@ class TestSpikeLength:
 
     def test_set_spike_length(self, nplay_session):
         nplay_session.set_spike_length(48, 12)
-        time.sleep(0.3)
+        nplay_session.sync()
         assert nplay_session.spike_length == 48
         # nPlayServer may clamp pretrigger to its own limits
         assert nplay_session.spike_pretrigger > 0

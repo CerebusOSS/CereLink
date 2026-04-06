@@ -595,7 +595,10 @@ class Session:
         return _get_lib().cbsdk_session_get_spike_pretrigger(self._session)
 
     def set_spike_length(self, spike_length: int, spike_pretrigger: int):
-        """Set the global spike event length and pre-trigger.
+        """Set the global spike event length and pre-trigger (fire-and-forget).
+
+        Call :meth:`sync` before reading back state that depends on this
+        configuration.
 
         Args:
             spike_length: Total spike waveform length in samples.
@@ -905,7 +908,12 @@ class Session:
         rate: SampleRate,
         disable_others: bool = False,
     ):
-        """Set sampling rate for channels of a specific type.
+        """Set sampling rate for channels of a specific type (fire-and-forget).
+
+        The device will not have applied the new configuration when this
+        call returns.  Call :meth:`sync` before reading back state (e.g.,
+        :meth:`get_group_channels`) or registering callbacks that depend
+        on the new configuration.
 
         Args:
             n_chans: Number of channels to configure.
@@ -932,7 +940,10 @@ class Session:
         channel_type: ChannelType,
         enabled: bool,
     ):
-        """Set AC/DC input coupling for channels of a specific type.
+        """Set AC/DC input coupling for channels of a specific type (fire-and-forget).
+
+        Call :meth:`sync` before reading back state that depends on this
+        configuration.
 
         Args:
             n_chans: Number of channels to configure.
@@ -1313,7 +1324,10 @@ class Session:
         channel_type: ChannelType,
         sort_options: int,
     ):
-        """Set spike sorting options for channels of a specific type.
+        """Set spike sorting options for channels of a specific type (fire-and-forget).
+
+        Call :meth:`sync` before reading back state that depends on this
+        configuration.
 
         Args:
             n_chans: Number of channels to configure.
@@ -1337,10 +1351,13 @@ class Session:
         channel_type: ChannelType,
         enabled: bool,
     ):
-        """Enable or disable spike extraction for channels of a specific type.
+        """Enable or disable spike extraction for channels of a specific type (fire-and-forget).
 
         Controls the ``cbAINPSPK_EXTRACT`` bit which determines whether the
         device emits spike event packets. Uses ``cbPKTTYPE_CHANSETSPK``.
+
+        Call :meth:`sync` before reading back state that depends on this
+        configuration.
 
         Args:
             n_chans: Number of channels to configure.

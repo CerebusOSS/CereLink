@@ -457,7 +457,8 @@ public:
     /// @return Pre-trigger length in samples, or 0 if unavailable
     uint32_t getSpikePretrigger() const;
 
-    /// Set the global spike event length and pre-trigger
+    /// Set the global spike event length and pre-trigger (fire-and-forget).
+    /// Call sync() before reading back state that depends on this configuration.
     /// @param spikelen Total spike waveform length in samples
     /// @param spikepre Pre-trigger samples (must be < spikelen)
     /// @return Result indicating success or error
@@ -508,7 +509,10 @@ public:
     /// Channel Configuration
     ///--------------------------------------------------------------------------------------------
 
-    /// Set sampling rate for channels of a specific type
+    /// Set sampling rate for channels of a specific type (fire-and-forget).
+    /// The device will not have applied the new configuration when this call
+    /// returns.  Call sync() before reading back state (e.g., getGroupChannelList)
+    /// or registering callbacks that depend on the new configuration.
     /// @param nChans Number of channels to configure (cbMAXCHANS for all)
     /// @param chanType Channel type filter
     /// @param rate Desired sample rate (NONE to disable, SR_500 through SR_RAW)
@@ -517,7 +521,8 @@ public:
     Result<void> setChannelSampleGroup(size_t nChans, ChannelType chanType,
                                        SampleRate rate, bool disableOthers = false);
 
-    /// Set spike sorting options for channels of a specific type
+    /// Set spike sorting options for channels of a specific type (fire-and-forget).
+    /// Call sync() before reading back state that depends on this configuration.
     /// @param nChans Number of channels to configure
     /// @param chanType Channel type filter
     /// @param sortOptions Spike sorting option flags (cbAINPSPK_*)
@@ -525,23 +530,28 @@ public:
     Result<void> setChannelSpikeSorting(size_t nChans, ChannelType chanType,
                                         uint32_t sortOptions);
 
-    /// Enable or disable spike extraction (cbAINPSPK_EXTRACT) for channels of a type.
+    /// Enable or disable spike extraction (cbAINPSPK_EXTRACT) for channels
+    /// of a type (fire-and-forget).
     /// This controls whether the device emits spike event packets for these channels.
     /// Uses cbPKTTYPE_CHANSETSPK (not the threshold command).
+    /// Call sync() before reading back state that depends on this configuration.
     /// @param nChans Number of channels to configure
     /// @param chanType Channel type filter
     /// @param enabled true = enable spike extraction, false = disable
     /// @return Result indicating success or error
     Result<void> setSpikeExtraction(size_t nChans, ChannelType chanType, bool enabled);
 
-    /// Set AC input coupling (offset correction) for channels of a specific type
+    /// Set AC input coupling (offset correction) for channels of a specific
+    /// type (fire-and-forget).
+    /// Call sync() before reading back state that depends on this configuration.
     /// @param nChans Number of channels to configure (cbMAXCHANS for all)
     /// @param chanType Channel type filter
     /// @param enabled true = AC coupling (offset correction on), false = DC coupling
     /// @return Result indicating success or error
     Result<void> setACInputCoupling(size_t nChans, ChannelType chanType, bool enabled);
 
-    /// Set full channel configuration by packet
+    /// Set full channel configuration by packet (fire-and-forget).
+    /// Call sync() before reading back state that depends on this configuration.
     /// @param chaninfo Complete channel info packet to send
     /// @return Result indicating success or error
     Result<void> setChannelConfig(const cbPKT_CHANINFO& chaninfo);

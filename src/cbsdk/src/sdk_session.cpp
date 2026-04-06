@@ -2029,45 +2029,7 @@ Result<void> SdkSession::loadCCFSync(const std::string& filename, uint32_t timeo
     auto result = loadCCF(filename);
     if (result.isError())
         return result;
-
-    // Synchronize: enqueue a no-op runlevel SET through the same shmem
-    // transmit queue that carries the CCF packets, then wait for the SYSREP
-    // response.  Because the device send thread drains this queue in order,
-    // the device will process every CCF packet before it sees the runlevel
-    // SET, so the resulting SYSREP confirms all configuration has been applied.
-    //
-    // NOTE: we deliberately use sendPacket() (shmem path) instead of
-    // device_session->setSystemRunLevel() (direct UDP) to avoid racing
-    // ahead of CCF packets still queued in shared memory.
-    m_impl->received_sysrep.store(false, std::memory_order_relaxed);
-
-    uint32_t current = m_impl->device_runlevel.load(std::memory_order_acquire);
-    cbPKT_SYSINFO pkt = {};
-    pkt.cbpkt_header.time = 1;
-    pkt.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
-    pkt.cbpkt_header.type = cbPKTTYPE_SYSSETRUNLEV;
-    pkt.cbpkt_header.dlen = cbPKTDLEN_SYSINFO;
-    pkt.runlevel = current;
-
-    auto send_result = sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(pkt));
-    if (send_result.isError())
-        return send_result;
-
-    if (!waitForSysrep(timeout_ms, 0)) {
-        return Result<void>::error("No SYSREP response received for loadCCFSync");
-    }
-
-    // The device also sends SYSREP on network error / reset.  If the
-    // returned runlevel is HARDRESET or STANDBY the device dropped our
-    // config packets and restarted — report an error so the caller knows
-    // the CCF was not applied.
-    uint32_t rl = m_impl->device_runlevel.load(std::memory_order_acquire);
-    if (rl <= cbRUNLEVEL_STANDBY) {
-        return Result<void>::error(
-            "Device reset during CCF load (runlevel " + std::to_string(rl) + ")");
-    }
-
-    return Result<void>::ok();
+    return sync(timeout_ms);
 }
 
 Result<void> SdkSession::sync(uint32_t timeout_ms) {
@@ -2076,18 +2038,32 @@ Result<void> SdkSession::sync(uint32_t timeout_ms) {
     // confirms all prior configuration packets have been applied.
     uint32_t current = m_impl->device_runlevel.load(std::memory_order_acquire);
 
+    Result<void> result = Result<void>::error("No session available");
     if (m_impl->device_session) {
         // STANDALONE: use DeviceSession::setSystemRunLevelSync which matches
         // the specific SYSREPRUNLEV (type 0x12) response via sendAndWait.
         // The old boolean waitForSysrep path matched any SYSREP (0x10-0x1F)
         // and was falsely triggered by periodic SYSREP (0x10) heartbeats
         // from nPlayServer.
-        return m_impl->device_session->setSystemRunLevelSync(
+        result = m_impl->device_session->setSystemRunLevelSync(
             current, 0, 0, std::chrono::milliseconds(timeout_ms));
+    } else {
+        // CLIENT mode: route through shmem (uses the boolean waitForSysrep path)
+        result = setSystemRunLevel(current, 0, 0, 0, timeout_ms);
+    }
+    if (result.isError())
+        return result;
+
+    // The device also sends SYSREP on network error / reset.  If the
+    // returned runlevel is HARDRESET or STANDBY the device dropped our
+    // config packets and restarted.
+    uint32_t rl = m_impl->device_runlevel.load(std::memory_order_acquire);
+    if (rl <= cbRUNLEVEL_STANDBY) {
+        return Result<void>::error(
+            "Device reset during configuration (runlevel " + std::to_string(rl) + ")");
     }
 
-    // CLIENT mode: route through shmem (uses the boolean waitForSysrep path)
-    return setSystemRunLevel(current, 0, 0, 0, timeout_ms);
+    return Result<void>::ok();
 }
 
 ///--------------------------------------------------------------------------------------------
