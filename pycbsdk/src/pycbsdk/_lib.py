@@ -32,10 +32,16 @@ def _find_library() -> str:
     else:
         lib_names = ["libcbsdk.so", "libcbsdkd.so"]
 
-    # 1. Explicit path
+    # 1. Explicit path (file or directory)
     explicit = os.environ.get("CBSDK_LIB_PATH")
-    if explicit and os.path.isfile(explicit):
-        return explicit
+    if explicit:
+        if os.path.isfile(explicit):
+            return explicit
+        if os.path.isdir(explicit):
+            for name in lib_names:
+                path = os.path.join(explicit, name)
+                if os.path.isfile(path):
+                    return path
 
     # 2. Explicit directory
     lib_dir = os.environ.get("CBSDK_LIB_DIR")
