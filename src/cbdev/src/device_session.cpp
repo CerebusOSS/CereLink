@@ -615,19 +615,31 @@ Result<void> DeviceSession::sendPackets(const std::vector<cbPKT_GENERIC>& pkts) 
         return Result<void>::error("Device not connected");
     }
 
-    // Send each packet as its own datagram (no coalescing).
-    // Each sendto() produces exactly one UDP datagram — the kernel never
-    // merges them.  A delay between packets prevents the burst from
-    // overflowing the receiver's kernel UDP socket buffer (as low as 8 KB
-    // on Windows, ~8 CHANINFO-sized packets).  The device main loop runs
-    // at 30 kHz (33 µs) and can drain ~4-6 packets per iteration on slow
-    // VMs.  30 µs ensures we send ≤1 packet per iteration, keeping the
-    // buffer well below capacity.  (400 packets → ~12 ms.)
-    for (const auto& pkt : pkts) {
-        if (auto result = sendPacket(pkt); result.isError()) {
+    // Send each packet as its own datagram (no coalescing).  Two concerns:
+    //
+    // 1. Pacing: the receiver's kernel UDP buffer can be as small as 8 KB
+    //    (~8 CHANINFO packets).  We must not send faster than the receiver
+    //    can drain.
+    //
+    // 2. CPU fairness: on shared VMs (CI runners), a pure busy-wait
+    //    between sends starves nPlayServer of CPU, preventing it from
+    //    draining its buffer even when packets arrive slowly.
+    //
+    // Strategy: send a small batch, then yield the CPU so the receiver
+    // process can run.  The batch size (8) matches the worst-case kernel
+    // buffer capacity, so even if the yield takes a while the buffer
+    // won't overflow from the preceding burst.
+    constexpr size_t BATCH = 8;
+    for (size_t i = 0; i < pkts.size(); ++i) {
+        if (auto result = sendPacket(pkts[i]); result.isError()) {
             return result;
         }
-        hr_sleep_us(30);
+        if ((i % BATCH) == (BATCH - 1)) {
+            // Yield CPU so the receiver process can drain its socket buffer.
+            // On Windows VMs this may sleep up to one scheduler tick (~1-15 ms);
+            // on Linux/macOS it typically returns in <1 ms.
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
     }
 
     return Result<void>::ok();

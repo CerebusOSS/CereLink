@@ -923,12 +923,14 @@ Result<void> SdkSession::start() {
                         impl->stats.packets_sent_to_device.fetch_add(1, std::memory_order_relaxed);
                     }
 
-                    // Delay to avoid overflowing the device's kernel UDP
-                    // receive buffer (as low as 8 KB on Windows, ~8 packets).
-                    // 30 µs keeps sends ≤1 per device main-loop iteration
-                    // (33 µs at 30 kHz), preventing buffer overflow even on
-                    // slow VMs where the device drains only ~4 packets/iter.
-                    hr_sleep_us(30);
+                    // Pace sends to avoid overflowing the device's kernel
+                    // UDP receive buffer (~8 KB on Windows = ~8 packets).
+                    // sleep_for yields the CPU on Windows VMs (rounds up to
+                    // one scheduler tick ~1-15 ms), preventing starvation of
+                    // nPlayServer.  On Linux/macOS it sleeps ~100 µs.
+                    if ((impl->stats.packets_sent_to_device.load(std::memory_order_relaxed) % 8) == 0) {
+                        std::this_thread::sleep_for(std::chrono::microseconds(100));
+                    }
                 }
 
                 if (!has_packets) {
