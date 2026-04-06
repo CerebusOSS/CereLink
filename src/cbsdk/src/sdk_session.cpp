@@ -2038,9 +2038,21 @@ Result<void> SdkSession::loadCCFSync(const std::string& filename, uint32_t timeo
 
 Result<void> SdkSession::sync(uint32_t timeout_ms) {
     // Send a no-op runlevel SET (current runlevel) as a sync barrier.
-    // The device processes packets in order, so the resulting SYSREP
+    // The device processes packets in order, so the resulting SYSREPRUNLEV
     // confirms all prior configuration packets have been applied.
     uint32_t current = m_impl->device_runlevel.load(std::memory_order_acquire);
+
+    if (m_impl->device_session) {
+        // STANDALONE: use DeviceSession::setSystemRunLevelSync which matches
+        // the specific SYSREPRUNLEV (type 0x12) response via sendAndWait.
+        // The old boolean waitForSysrep path matched any SYSREP (0x10-0x1F)
+        // and was falsely triggered by periodic SYSREP (0x10) heartbeats
+        // from nPlayServer.
+        return m_impl->device_session->setSystemRunLevelSync(
+            current, 0, 0, std::chrono::milliseconds(timeout_ms));
+    }
+
+    // CLIENT mode: route through shmem (uses the boolean waitForSysrep path)
     return setSystemRunLevel(current, 0, 0, 0, timeout_ms);
 }
 
