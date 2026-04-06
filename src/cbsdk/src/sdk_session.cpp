@@ -12,6 +12,9 @@
 
 // Platform headers MUST be included first (before cbproto)
 #include "platform_first.h"
+#ifdef _WIN32
+#include <mmsystem.h>
+#endif
 
 #include "cbsdk/sdk_session.h"
 #include "cmp_parser.h"
@@ -904,6 +907,9 @@ Result<void> SdkSession::start() {
                 bool has_packets = false;
 
                 // Try to dequeue and send all available packets
+#ifdef _WIN32
+                bool timer_raised = false;
+#endif
                 while (true) {
                     cbPKT_GENERIC pkt = {};
 
@@ -914,6 +920,9 @@ Result<void> SdkSession::start() {
                     }
 
                     has_packets = true;
+#ifdef _WIN32
+                    if (!timer_raised) { timeBeginPeriod(1); timer_raised = true; }
+#endif
 
                     // Send packet to device
                     auto send_result = impl->device_session->sendPacket(pkt);
@@ -933,6 +942,9 @@ Result<void> SdkSession::start() {
 #endif
                     }
                 }
+#ifdef _WIN32
+                if (timer_raised) timeEndPeriod(1);
+#endif
 
                 if (!has_packets) {
                     // No packets - wait briefly before checking again

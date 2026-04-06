@@ -14,6 +14,7 @@
 #include "platform_first.h"
 
 #ifdef _WIN32
+    #include <mmsystem.h>
     #pragma comment(lib, "iphlpapi.lib")
     typedef int socklen_t;
     #define INVALID_SOCKET_VALUE INVALID_SOCKET
@@ -629,6 +630,14 @@ Result<void> DeviceSession::sendPackets(const std::vector<cbPKT_GENERIC>& pkts) 
     // process can run.  The batch size (8) matches the worst-case kernel
     // buffer capacity, so even if the yield takes a while the buffer
     // won't overflow from the preceding burst.
+    // On Windows, temporarily raise the timer resolution so Sleep(1)
+    // actually sleeps ~1 ms instead of ~15 ms.  The RAII guard restores
+    // the resolution when sendPackets returns.
+#ifdef _WIN32
+    timeBeginPeriod(1);
+    struct TimerGuard { ~TimerGuard() { timeEndPeriod(1); } } timerGuard;
+#endif
+
     constexpr size_t BATCH = 8;
     for (size_t i = 0; i < pkts.size(); ++i) {
         if (auto result = sendPacket(pkts[i]); result.isError()) {
@@ -636,9 +645,9 @@ Result<void> DeviceSession::sendPackets(const std::vector<cbPKT_GENERIC>& pkts) 
         }
         if ((i % BATCH) == (BATCH - 1)) {
             // Pace sends so the receiver can drain its kernel UDP buffer.
-            // On Windows, Sleep(1) yields for a full scheduler quantum
-            // (1–15 ms) so nPlayServer on any core can drain.
-            // On other platforms, sleep_for(30µs) is accurate and yields.
+            // Sleep(1) yields for one scheduler quantum (~1 ms with the
+            // timer resolution raised above).  On other platforms,
+            // sleep_for is already accurate at sub-ms granularity.
 #ifdef _WIN32
             Sleep(1);
 #else

@@ -82,7 +82,7 @@ if(CBSDK_BUILD_SHARED)
     endif()
 
     if(WIN32)
-        target_link_libraries(cbsdk_shared PRIVATE wsock32 ws2_32)
+        target_link_libraries(cbsdk_shared PRIVATE wsock32 ws2_32 winmm)
     else()
         target_link_libraries(cbsdk_shared PRIVATE pthread)
     endif()
