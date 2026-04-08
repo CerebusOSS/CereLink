@@ -27,7 +27,7 @@ N_CHANS = 4
 
 def _ensure_30k(session):
     """Make sure 4 channels are configured at 30kHz."""
-    session.set_channel_sample_group(
+    session.set_sample_group(
         N_CHANS, ChannelType.FRONTEND, SampleRate.SR_30kHz,
         disable_others=True,
     )
@@ -81,7 +81,7 @@ class TestOnGroupDifferentRate:
     """Test group callback at 1kHz."""
 
     def test_different_rate(self, nplay_session):
-        nplay_session.set_channel_sample_group(
+        nplay_session.set_sample_group(
             N_CHANS, ChannelType.FRONTEND, SampleRate.SR_1kHz,
             disable_others=True,
         )
@@ -309,7 +309,7 @@ class TestContinuousReader:
     def test_no_channels_raises(self, nplayserver):
         with Session(DeviceType.NPLAY) as session:
             # Disable all channels first
-            session.set_channel_sample_group(
+            session.set_sample_group(
                 0, ChannelType.FRONTEND, SampleRate.NONE,
                 disable_others=True,
             )
@@ -358,7 +358,7 @@ class TestMultiRate:
 
     def test_two_rates(self, nplay_session):
         # Configure first 2 channels at 30kHz (disable everything else)
-        nplay_session.set_channel_sample_group(
+        nplay_session.set_sample_group(
             2, ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=True,
         )

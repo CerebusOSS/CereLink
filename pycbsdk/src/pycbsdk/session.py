@@ -901,7 +901,7 @@ class Session:
 
     # --- Channel Configuration ---
 
-    def set_channel_sample_group(
+    def set_sample_group(
         self,
         n_chans: int,
         channel_type: ChannelType,
@@ -910,10 +910,21 @@ class Session:
     ):
         """Set sampling rate for channels of a specific type (fire-and-forget).
 
+        Configures the first *n_chans* channels matching *channel_type*.
+        To configure a specific channel by ID, use :meth:`set_channel_smpgroup`.
+
         The device will not have applied the new configuration when this
         call returns.  Call :meth:`sync` before reading back state (e.g.,
         :meth:`get_group_channels`) or registering callbacks that depend
         on the new configuration.
+
+        .. note::
+
+            The device does not update the ``smpgroup`` field for raw
+            channels.  After setting ``SampleRate.SR_RAW``,
+            :meth:`get_channel_config` will show ``smpgroup=0``.
+            Use ``get_group_channels(int(SampleRate.SR_RAW))`` to check
+            raw group membership.
 
         Args:
             n_chans: Number of channels to configure.
@@ -924,7 +935,7 @@ class Session:
         """
         _lib = _get_lib()
         _check(
-            _lib.cbsdk_session_set_channel_sample_group(
+            _lib.cbsdk_session_set_sample_group(
                 self._session,
                 n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),
@@ -1175,7 +1186,7 @@ class Session:
         confirms that all prior configuration packets have been applied.
 
         Call this after fire-and-forget operations like
-        :meth:`set_channel_sample_group` or :meth:`set_ac_input_coupling`
+        :meth:`set_sample_group` or :meth:`set_ac_input_coupling`
         when you need to read back the resulting state (e.g.,
         :meth:`get_group_channels`) or register callbacks that depend on it.
 
@@ -1318,7 +1329,7 @@ class Session:
 
     # --- Spike Sorting ---
 
-    def set_channel_spike_sorting(
+    def set_spike_sorting(
         self,
         n_chans: int,
         channel_type: ChannelType,
@@ -1336,7 +1347,7 @@ class Session:
         """
         _lib = _get_lib()
         _check(
-            _lib.cbsdk_session_set_channel_spike_sorting(
+            _lib.cbsdk_session_set_spike_sorting(
                 self._session,
                 n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),

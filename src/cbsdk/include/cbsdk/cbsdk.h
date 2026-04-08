@@ -550,7 +550,7 @@ CBSDK_API cbsdk_result_t cbsdk_session_get_group_list(
 /// @param rate Sample rate (CBPROTO_GROUP_RATE_NONE to disable, _500Hz through _RAW)
 /// @param disable_others If true, disable sampling on unselected channels of this type
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
-CBSDK_API cbsdk_result_t cbsdk_session_set_channel_sample_group(
+CBSDK_API cbsdk_result_t cbsdk_session_set_sample_group(
     cbsdk_session_t session,
     size_t n_chans,
     cbproto_channel_type_t chan_type,
@@ -959,7 +959,7 @@ CBSDK_API cbsdk_result_t cbsdk_session_close_central_file_dialog(cbsdk_session_t
 /// @param chan_type Channel type filter
 /// @param sort_options Spike sorting option flags (cbAINPSPK_*)
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
-CBSDK_API cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
+CBSDK_API cbsdk_result_t cbsdk_session_set_spike_sorting(
     cbsdk_session_t session,
     size_t n_chans,
     cbproto_channel_type_t chan_type,

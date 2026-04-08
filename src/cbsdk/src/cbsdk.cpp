@@ -888,7 +888,7 @@ cbsdk_result_t cbsdk_session_get_group_list(
 // Channel Configuration
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-cbsdk_result_t cbsdk_session_set_channel_sample_group(
+cbsdk_result_t cbsdk_session_set_sample_group(
     cbsdk_session_t session,
     size_t n_chans,
     cbproto_channel_type_t chan_type,
@@ -1461,7 +1461,7 @@ cbsdk_result_t cbsdk_session_set_ac_input_coupling(
 // Spike Sorting
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
+cbsdk_result_t cbsdk_session_set_spike_sorting(
     cbsdk_session_t session,
     size_t n_chans,
     cbproto_channel_type_t chan_type,

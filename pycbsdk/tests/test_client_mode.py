@@ -34,7 +34,7 @@ def client_session(nplay_session):
     shared memory segments exist.
     """
     # Ensure channels are configured on the STANDALONE side first
-    nplay_session.set_channel_sample_group(
+    nplay_session.set_sample_group(
         N_CHANS, ChannelType.FRONTEND, SampleRate.SR_30kHz,
         disable_others=True,
     )

@@ -205,7 +205,7 @@ cbsdk_result_t cbsdk_session_get_group_list(cbsdk_session_t session,
     uint32_t group_id, uint16_t* list, uint32_t* count);
 
 // Channel configuration
-cbsdk_result_t cbsdk_session_set_channel_sample_group(
+cbsdk_result_t cbsdk_session_set_sample_group(
     cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
     cbproto_group_rate_t rate, _Bool disable_others);
 cbsdk_result_t cbsdk_session_set_ac_input_coupling(
@@ -328,7 +328,7 @@ cbsdk_result_t cbsdk_session_open_central_file_dialog(cbsdk_session_t session);
 cbsdk_result_t cbsdk_session_close_central_file_dialog(cbsdk_session_t session);
 
 // Spike sorting
-cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
+cbsdk_result_t cbsdk_session_set_spike_sorting(
     cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
     uint32_t sort_options);
 

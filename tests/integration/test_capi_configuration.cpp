@@ -131,7 +131,7 @@ TEST_F(CApiSampleGroupTest, SetFrontend30kHz) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
-    EXPECT_EQ(cbsdk_session_set_channel_sample_group(
+    EXPECT_EQ(cbsdk_session_set_sample_group(
         sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND,
         CBPROTO_GROUP_RATE_30000Hz, true), CBSDK_RESULT_SUCCESS);
 
@@ -149,7 +149,7 @@ TEST_F(CApiSampleGroupTest, SetAndVerifyField) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
-    EXPECT_EQ(cbsdk_session_set_channel_sample_group(
+    EXPECT_EQ(cbsdk_session_set_sample_group(
         sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND,
         CBPROTO_GROUP_RATE_10000Hz, true), CBSDK_RESULT_SUCCESS);
 
@@ -289,7 +289,7 @@ TEST_F(CApiSpikeSortingTest, SetSpikeSorting) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
-    EXPECT_EQ(cbsdk_session_set_channel_spike_sorting(
+    EXPECT_EQ(cbsdk_session_set_spike_sorting(
         sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, 0), CBSDK_RESULT_SUCCESS);
 }
 

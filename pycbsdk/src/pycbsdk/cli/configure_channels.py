@@ -69,15 +69,13 @@ def configure(
         )
 
         # Set sample group (disable_others=True to turn off remaining channels)
-        session.set_channel_sample_group(
-            n_chans, channel_type, rate, disable_others=True
-        )
+        session.set_sample_group(n_chans, channel_type, rate, disable_others=True)
 
         if dc_coupling and rate != SampleRate.NONE:
             session.set_ac_input_coupling(n_chans, channel_type, False)
             print("  AC input coupling disabled (DC mode)")
         if disable_spikes and rate != SampleRate.NONE:
-            session.set_channel_spike_sorting(n_chans, channel_type, _SPKOPTS_NOSORT)
+            session.set_spike_sorting(n_chans, channel_type, _SPKOPTS_NOSORT)
             print("  Spike sorting disabled")
 
         # Wait for config confirmations
