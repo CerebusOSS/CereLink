@@ -76,7 +76,9 @@ class TestSessionLifecycle:
 
 
 class TestChannelSampleGroup:
-    """Tests for set_channel_sample_group and related queries."""
+    """Tests for batch (set_sample_group) and per-channel (set_channel_smpgroup)."""
+
+    # --- Batch setter (set_sample_group) ---
 
     def test_set_all_frontend_30k(self, nplay_session):
         n_fe = nplay_session.num_fe_chans()
@@ -146,6 +148,67 @@ class TestChannelSampleGroup:
 
         channels_1k = nplay_session.get_group_channels(int(SampleRate.SR_1kHz))
         assert len(channels_1k) == 2
+
+    # --- Per-channel setter (set_channel_smpgroup) ---
+
+    def test_single_channel_30k(self, nplay_session):
+        """set_channel_smpgroup targets the exact channel ID."""
+        # Clear all first
+        n_fe = nplay_session.num_fe_chans()
+        nplay_session.set_sample_group(
+            n_fe, ChannelType.FRONTEND, SampleRate.NONE,
+            disable_others=True,
+        )
+        nplay_session.sync()
+
+        # Set only channel 2
+        nplay_session.set_channel_smpgroup(2, SampleRate.SR_30kHz)
+        nplay_session.sync()
+
+        channels = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
+        assert channels == [2], f"Expected [2], got {channels}"
+
+    def test_single_channel_raw(self, nplay_session):
+        """set_channel_smpgroup with SR_RAW sets the RAWSTREAM flag."""
+        n_fe = nplay_session.num_fe_chans()
+        nplay_session.set_sample_group(
+            n_fe, ChannelType.FRONTEND, SampleRate.NONE,
+            disable_others=True,
+        )
+        nplay_session.sync()
+
+        nplay_session.set_channel_smpgroup(3, SampleRate.SR_RAW)
+        nplay_session.sync()
+
+        channels = nplay_session.get_group_channels(int(SampleRate.SR_RAW))
+        assert 3 in channels, f"Channel 3 not in RAW group: {channels}"
+
+    def test_single_channel_disable(self, nplay_session):
+        """set_channel_smpgroup with NONE removes the channel from its group."""
+        nplay_session.set_channel_smpgroup(1, SampleRate.SR_30kHz)
+        nplay_session.sync()
+        assert 1 in nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
+
+        nplay_session.set_channel_smpgroup(1, SampleRate.NONE)
+        nplay_session.sync()
+        assert 1 not in nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
+
+    def test_single_channel_does_not_affect_others(self, nplay_session):
+        """Setting channel 2 should not change channel 1's group."""
+        n_fe = nplay_session.num_fe_chans()
+        nplay_session.set_sample_group(
+            n_fe, ChannelType.FRONTEND, SampleRate.NONE,
+            disable_others=True,
+        )
+        nplay_session.set_channel_smpgroup(1, SampleRate.SR_10kHz)
+        nplay_session.set_channel_smpgroup(2, SampleRate.SR_30kHz)
+        nplay_session.sync()
+
+        ch_10k = nplay_session.get_group_channels(int(SampleRate.SR_10kHz))
+        ch_30k = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
+        assert 1 in ch_10k, f"Channel 1 not in 10kHz group: {ch_10k}"
+        assert 2 in ch_30k, f"Channel 2 not in 30kHz group: {ch_30k}"
+        assert 1 not in ch_30k, f"Channel 1 leaked into 30kHz group"
 
 
 # ---------------------------------------------------------------------------

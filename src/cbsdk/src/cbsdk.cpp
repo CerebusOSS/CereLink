@@ -954,6 +954,53 @@ cbsdk_result_t cbsdk_session_set_channel_label(
         });
 }
 
+cbsdk_result_t cbsdk_session_set_channel_smpgroup(
+    cbsdk_session_t session, uint32_t chan_id, cbproto_group_rate_t rate) {
+    if (!session || !session->cpp_session) return CBSDK_RESULT_INVALID_PARAMETER;
+    // Mirror the per-group logic from DeviceSession::setChannelsGroupByType.
+    // The packet type varies by group because the device firmware only reads
+    // specific fields depending on the type.
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        if (!info) return CBSDK_RESULT_INVALID_PARAMETER;
+        cbPKT_CHANINFO ci = *info;
+        ci.chan = chan_id;
+
+        if (rate == 0) {
+            // NONE: disable all groups including raw
+            ci.cbpkt_header.type = cbPKTTYPE_CHANSET;
+            ci.smpgroup = 0;
+            ci.ainpopts &= ~cbAINP_RAWSTREAM;
+        } else if (rate == cbRAWGROUP) {
+            // Raw (group 6): only set the RAWSTREAM flag via CHANSETAINP.
+            // Note: the device does not update smpgroup for raw channels,
+            // so get_channel_config will show smpgroup=0 even when the
+            // channel is in the raw group.  Use get_group_channels(6) to
+            // check raw membership.
+            ci.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
+            ci.ainpopts |= cbAINP_RAWSTREAM;
+        } else if (rate == 5) {
+            // Group 5 (30 kHz filtered): must clear RAWSTREAM (mutually exclusive)
+            ci.cbpkt_header.type = cbPKTTYPE_CHANSET;
+            ci.smpgroup = rate;
+            ci.ainpopts &= ~cbAINP_RAWSTREAM;
+            ci.smpfilter = 0;  // no default filter for group 5
+        } else {
+            // Groups 1-4: set smpgroup + default filter
+            ci.cbpkt_header.type = cbPKTTYPE_CHANSETSMP;
+            ci.smpgroup = rate;
+            constexpr uint32_t filter_map[] = {0, 5, 6, 7, 10};
+            if (rate >= 1 && rate <= 4)
+                ci.smpfilter = filter_map[rate];
+        }
+
+        auto r = session->cpp_session->setChannelConfig(ci);
+        return r.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
 cbsdk_result_t cbsdk_session_set_channel_smpfilter(
     cbsdk_session_t session, uint32_t chan_id, uint32_t filter_id) {
     return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETSMP,
@@ -1476,6 +1523,15 @@ cbsdk_result_t cbsdk_session_set_spike_sorting(
     } catch (...) {
         return CBSDK_RESULT_INTERNAL_ERROR;
     }
+}
+
+cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
+    cbsdk_session_t session, uint32_t chan_id, uint32_t sort_options) {
+    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETSPKTHR,
+        [sort_options](cbPKT_CHANINFO& ci) {
+            ci.spkopts &= ~cbAINPSPK_ALLSORT;
+            ci.spkopts |= sort_options;
+        });
 }
 
 cbsdk_result_t cbsdk_session_set_spike_extraction(

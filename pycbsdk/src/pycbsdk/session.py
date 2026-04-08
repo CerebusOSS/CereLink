@@ -982,6 +982,36 @@ class Session:
             "Failed to set channel label",
         )
 
+    def set_channel_smpgroup(self, chan_id: int, rate: SampleRate | int):
+        """Set a single channel's sample group (fire-and-forget).
+
+        Handles group-specific logic: RAWSTREAM flag for group 6 (raw),
+        filter mapping for groups 1-4, clearing conflicting flags.
+        Groups 5 (30 kHz filtered) and 6 (raw) are mutually exclusive.
+        Call :meth:`sync` before reading back state that depends on this.
+
+        .. note::
+
+            The device does not update the ``smpgroup`` field for raw
+            channels.  After setting ``SampleRate.SR_RAW``,
+            :meth:`get_channel_config` will show ``smpgroup=0``.
+            Use ``get_group_channels(int(SampleRate.SR_RAW))`` to check
+            raw group membership.
+
+        Args:
+            chan_id: 1-based channel ID.
+            rate: Sample group (``SampleRate.NONE`` to disable, 1-5 for
+                filtered groups, ``SampleRate.SR_RAW`` for raw).
+        """
+        _check(
+            _get_lib().cbsdk_session_set_channel_smpgroup(
+                self._session,
+                chan_id,
+                int(_coerce_enum(SampleRate, rate, _RATE_ALIASES)),
+            ),
+            "Failed to set channel smpgroup",
+        )
+
     def set_channel_smpfilter(self, chan_id: int, filter_id: int):
         """Set a channel's continuous-time pathway filter."""
         _check(
@@ -1083,20 +1113,7 @@ class Session:
         }
         for key, value in kwargs.items():
             if key == "smpgroup":
-                # Special case: smpgroup goes through the batch setter for one channel
-                chan_type = self.get_channel_type(chan_id)
-                if chan_type is not None:
-                    _lib = _get_lib()
-                    _check(
-                        _lib.cbsdk_session_set_channel_sample_group(
-                            self._session,
-                            1,
-                            int(chan_type),
-                            int(_coerce_enum(SampleRate, value, _RATE_ALIASES)),
-                            False,
-                        ),
-                        "Failed to set smpgroup",
-                    )
+                self.set_channel_smpgroup(chan_id, value)
             elif key in _dispatch:
                 _dispatch[key](chan_id, value)
             else:
@@ -1354,6 +1371,28 @@ class Session:
                 sort_options,
             ),
             "Failed to set spike sorting",
+        )
+
+    def set_channel_spike_sorting(self, chan_id: int, sort_options: int):
+        """Set spike sorting options for a single channel (fire-and-forget).
+
+        Clears ``cbAINPSPK_ALLSORT`` bits then sets *sort_options*.
+        Unlike :meth:`set_channel_spkopts` (which replaces the entire
+        ``spkopts`` field), this preserves non-sorting bits like
+        ``cbAINPSPK_EXTRACT``.
+
+        Call :meth:`sync` before reading back state that depends on this
+        configuration.
+
+        Args:
+            chan_id: 1-based channel ID.
+            sort_options: Spike sorting option flags (cbAINPSPK_*).
+        """
+        _check(
+            _get_lib().cbsdk_session_set_channel_spike_sorting(
+                self._session, chan_id, sort_options
+            ),
+            "Failed to set channel spike sorting",
         )
 
     def set_spike_extraction(
