@@ -1751,6 +1751,22 @@ class Session:
         """Get the SDK version string."""
         return ffi.string(_get_lib().cbsdk_get_version()).decode()
 
+    # --- Deprecated aliases (removed in a future release) ---
+
+    def set_channel_sample_group(self, *args, **kwargs):
+        """
+        Deprecated: use :meth:`set_sample_group`.
+        Per-channel sample group setting via set_channel_smpgroup
+        """
+        import warnings
+
+        warnings.warn(
+            "set_channel_sample_group is renamed to set_sample_group",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.set_sample_group(*args, **kwargs)
+
 
 class ContinuousReader:
     """Ring buffer that accumulates continuous group data into a numpy array.
