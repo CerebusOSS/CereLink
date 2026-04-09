@@ -72,6 +72,8 @@ void ClockSync::addProbeSample(time_point t1_local, uint64_t t3_device_ns, time_
 void ClockSync::reset() {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_probe_samples.clear();
+    m_data_samples.clear();
+    m_data_floor_ns = std::nullopt;
     m_current_offset_ns = std::nullopt;
     m_current_uncertainty_ns = std::nullopt;
 }
@@ -124,6 +126,7 @@ void ClockSync::addDataPacketSample(const uint64_t device_time_ns, const time_po
     // Detect clock jumps (same logic as addProbeSample)
     if (m_current_offset_ns && std::abs(offset_ns - *m_current_offset_ns) > 1'000'000'000LL) {
         m_data_samples.clear();
+        m_data_floor_ns = std::nullopt;
     }
 
     DataSample ds;
@@ -147,19 +150,37 @@ void ClockSync::addDataPacketSample(const uint64_t device_time_ns, const time_po
     // this correction the converted timestamps appear in the future.
     // 0.7 ms is the observed lower bound on the device's capture-to-
     // send latency (ADC sample → UDP datagram on the wire).
+    //
+    // Pick minimum offset (closest to true offset = least network delay).
+    // Once established, only allow the offset to DECREASE (= converted
+    // timestamps move forward in time, never backwards).
+    // device_to_monotonic(D) = D - offset, so a smaller offset shifts
+    // results later.  When old minimum-delay samples expire the raw
+    // minimum jumps up, but we hold the previous lower value to
+    // preserve monotonicity.
+    //
+    // The monotonicity constraint is tracked separately from probe-based
+    // offsets (m_data_floor_ns) so that the initial transition from a
+    // stale probe offset to the data-based estimate isn't blocked.
     if (!m_data_samples.empty()) {
         constexpr int64_t ONE_WAY_DELAY_ESTIMATE_NS = 700'000;  // 0.7 ms
         int64_t best = m_data_samples.front().offset_ns;
         for (const auto& s : m_data_samples)
             best = std::min(best, s.offset_ns);
-        m_current_offset_ns = best + ONE_WAY_DELAY_ESTIMATE_NS;
+        const int64_t candidate = best + ONE_WAY_DELAY_ESTIMATE_NS;
+        if (!m_data_floor_ns || candidate < *m_data_floor_ns) {
+            m_data_floor_ns = candidate;
+        }
+        m_current_offset_ns = *m_data_floor_ns;
         m_current_uncertainty_ns = ONE_WAY_DELAY_ESTIMATE_NS;
     }
 }
 
 void ClockSync::recomputeEstimate() {
-    // If data-packet fallback is active, don't overwrite it with bad probe data.
-    if (!m_data_samples.empty() && !probeSpreadOk())
+    // If data-packet fallback has been activated, never revert to probes.
+    // Data timestamps (from the ADC/PTP clock) are always reliable, while
+    // probe timestamps (from header->time) may be broken on some firmware.
+    if (m_data_floor_ns.has_value())
         return;
 
     // Find probe with minimum RTT — least queuing/jitter gives most reliable estimate
