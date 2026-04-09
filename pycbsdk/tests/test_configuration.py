@@ -76,11 +76,13 @@ class TestSessionLifecycle:
 
 
 class TestChannelSampleGroup:
-    """Tests for set_channel_sample_group and related queries."""
+    """Tests for batch (set_sample_group) and per-channel (set_channel_smpgroup)."""
+
+    # --- Batch setter (set_sample_group) ---
 
     def test_set_all_frontend_30k(self, nplay_session):
         n_fe = nplay_session.num_fe_chans()
-        nplay_session.set_channel_sample_group(
+        nplay_session.set_sample_group(
             n_fe, ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=True,
         )
@@ -93,7 +95,7 @@ class TestChannelSampleGroup:
     def test_set_all_frontend_30k_data_width(self, nplay_session):
         """Verify the data callback delivers exactly num_fe_chans samples."""
         n_fe = nplay_session.num_fe_chans()
-        nplay_session.set_channel_sample_group(
+        nplay_session.set_sample_group(
             n_fe, ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=True,
         )
@@ -115,7 +117,7 @@ class TestChannelSampleGroup:
 
     def test_set_and_verify_smpgroup_field(self, nplay_session):
         n_fe = nplay_session.num_fe_chans()
-        nplay_session.set_channel_sample_group(
+        nplay_session.set_sample_group(
             n_fe, ChannelType.FRONTEND, SampleRate.SR_10kHz,
             disable_others=True,
         )
@@ -129,12 +131,12 @@ class TestChannelSampleGroup:
     def test_disable_others(self, nplay_session):
         n_fe = nplay_session.num_fe_chans()
         # Enable all frontend channels at 30kHz
-        nplay_session.set_channel_sample_group(
+        nplay_session.set_sample_group(
             n_fe, ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=False,
         )
         # Now set 2 at 1kHz with disable_others
-        nplay_session.set_channel_sample_group(
+        nplay_session.set_sample_group(
             2, ChannelType.FRONTEND, SampleRate.SR_1kHz,
             disable_others=True,
         )
@@ -147,6 +149,54 @@ class TestChannelSampleGroup:
         channels_1k = nplay_session.get_group_channels(int(SampleRate.SR_1kHz))
         assert len(channels_1k) == 2
 
+    # --- Per-channel setter (set_channel_smpgroup) ---
+    #
+    # These tests use only per-channel setters for setup (no batch clear)
+    # to avoid the fragile 256-packet burst that can drop on slow CI VMs.
+
+    def test_single_channel_30k(self, nplay_session):
+        """set_channel_smpgroup targets the exact channel ID."""
+        nplay_session.set_channel_smpgroup(2, SampleRate.NONE)
+        nplay_session.set_channel_smpgroup(2, SampleRate.SR_30kHz)
+        nplay_session.sync()
+
+        assert 2 in nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
+
+    def test_single_channel_raw(self, nplay_session):
+        """set_channel_smpgroup with SR_RAW sets the RAWSTREAM flag."""
+        nplay_session.set_channel_smpgroup(3, SampleRate.NONE)
+        nplay_session.set_channel_smpgroup(3, SampleRate.SR_RAW)
+        nplay_session.sync()
+
+        channels = nplay_session.get_group_channels(int(SampleRate.SR_RAW))
+        assert 3 in channels, f"Channel 3 not in RAW group: {channels}"
+
+    def test_single_channel_disable(self, nplay_session):
+        """set_channel_smpgroup with NONE removes the channel from its group."""
+        nplay_session.set_channel_smpgroup(1, SampleRate.SR_30kHz)
+        nplay_session.sync()
+        assert 1 in nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
+
+        nplay_session.set_channel_smpgroup(1, SampleRate.NONE)
+        nplay_session.sync()
+        assert 1 not in nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
+
+    def test_single_channel_does_not_affect_others(self, nplay_session):
+        """Setting channel 2 should not change channel 1's group."""
+        nplay_session.set_channel_smpgroup(1, SampleRate.NONE)
+        nplay_session.set_channel_smpgroup(2, SampleRate.NONE)
+        nplay_session.sync()
+
+        nplay_session.set_channel_smpgroup(1, SampleRate.SR_10kHz)
+        nplay_session.set_channel_smpgroup(2, SampleRate.SR_30kHz)
+        nplay_session.sync()
+
+        ch_10k = nplay_session.get_group_channels(int(SampleRate.SR_10kHz))
+        ch_30k = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
+        assert 1 in ch_10k, f"Channel 1 not in 10kHz group: {ch_10k}"
+        assert 2 in ch_30k, f"Channel 2 not in 30kHz group: {ch_30k}"
+        assert 1 not in ch_30k, f"Channel 1 leaked into 30kHz group"
+
 
 # ---------------------------------------------------------------------------
 # Async config race (ezmsg-blackrock CereLinkProducer.open() sequence)
@@ -156,7 +206,7 @@ class TestChannelSampleGroup:
 class TestAsyncConfigRace:
     """Reproduces the config→immediate-read pattern from ezmsg-blackrock.
 
-    CereLinkProducer.open() calls set_channel_sample_group and
+    CereLinkProducer.open() calls set_sample_group and
     set_ac_input_coupling (both fire-and-forget), then immediately reads
     get_group_channels and registers callbacks.  If the device hasn't
     processed all the config packets by then, the group list is incomplete
@@ -174,14 +224,14 @@ class TestAsyncConfigRace:
         failures = []
         for i in range(20):
             # Reset to a known state first
-            nplay_session.set_channel_sample_group(
+            nplay_session.set_sample_group(
                 self.N_CHANS, ChannelType.FRONTEND, SampleRate.NONE,
                 disable_others=True,
             )
             nplay_session.sync()
 
             # Fire-and-forget config
-            nplay_session.set_channel_sample_group(
+            nplay_session.set_sample_group(
                 self.N_CHANS, ChannelType.FRONTEND, SampleRate.SR_RAW,
                 disable_others=True,
             )
@@ -205,7 +255,7 @@ class TestAsyncConfigRace:
         """Config 128 channels at SR_RAW, sync, register callback, verify width."""
         import numpy as np
 
-        nplay_session.set_channel_sample_group(
+        nplay_session.set_sample_group(
             self.N_CHANS, ChannelType.FRONTEND, SampleRate.SR_RAW,
             disable_others=True,
         )
@@ -317,7 +367,7 @@ class TestBulkChannelQueries:
         assert all(len(p) == 4 for p in positions)
 
     def test_get_group_channels(self, nplay_session):
-        nplay_session.set_channel_sample_group(
+        nplay_session.set_sample_group(
             4, ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=True,
         )
@@ -361,7 +411,7 @@ class TestSpikeSorting:
     """Tests for spike sorting configuration."""
 
     def test_set_spike_sorting(self, nplay_session):
-        nplay_session.set_channel_spike_sorting(
+        nplay_session.set_spike_sorting(
             4, ChannelType.FRONTEND, sort_options=0,
         )
         nplay_session.sync()
@@ -590,7 +640,7 @@ class TestCCF:
             nplay_session.load_ccf_sync("/nonexistent.ccf", timeout=1.0)
 
     def test_save_load_roundtrip(self, nplay_session):
-        nplay_session.set_channel_sample_group(
+        nplay_session.set_sample_group(
             4, ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=True,
         )

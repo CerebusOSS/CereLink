@@ -901,7 +901,7 @@ class Session:
 
     # --- Channel Configuration ---
 
-    def set_channel_sample_group(
+    def set_sample_group(
         self,
         n_chans: int,
         channel_type: ChannelType,
@@ -910,10 +910,21 @@ class Session:
     ):
         """Set sampling rate for channels of a specific type (fire-and-forget).
 
+        Configures the first *n_chans* channels matching *channel_type*.
+        To configure a specific channel by ID, use :meth:`set_channel_smpgroup`.
+
         The device will not have applied the new configuration when this
         call returns.  Call :meth:`sync` before reading back state (e.g.,
         :meth:`get_group_channels`) or registering callbacks that depend
         on the new configuration.
+
+        .. note::
+
+            The device does not update the ``smpgroup`` field for raw
+            channels.  After setting ``SampleRate.SR_RAW``,
+            :meth:`get_channel_config` will show ``smpgroup=0``.
+            Use ``get_group_channels(int(SampleRate.SR_RAW))`` to check
+            raw group membership.
 
         Args:
             n_chans: Number of channels to configure.
@@ -924,7 +935,7 @@ class Session:
         """
         _lib = _get_lib()
         _check(
-            _lib.cbsdk_session_set_channel_sample_group(
+            _lib.cbsdk_session_set_sample_group(
                 self._session,
                 n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),
@@ -969,6 +980,36 @@ class Session:
                 self._session, chan_id, label.encode()
             ),
             "Failed to set channel label",
+        )
+
+    def set_channel_smpgroup(self, chan_id: int, rate: SampleRate | int):
+        """Set a single channel's sample group (fire-and-forget).
+
+        Handles group-specific logic: RAWSTREAM flag for group 6 (raw),
+        filter mapping for groups 1-4, clearing conflicting flags.
+        Groups 5 (30 kHz filtered) and 6 (raw) are mutually exclusive.
+        Call :meth:`sync` before reading back state that depends on this.
+
+        .. note::
+
+            The device does not update the ``smpgroup`` field for raw
+            channels.  After setting ``SampleRate.SR_RAW``,
+            :meth:`get_channel_config` will show ``smpgroup=0``.
+            Use ``get_group_channels(int(SampleRate.SR_RAW))`` to check
+            raw group membership.
+
+        Args:
+            chan_id: 1-based channel ID.
+            rate: Sample group (``SampleRate.NONE`` to disable, 1-5 for
+                filtered groups, ``SampleRate.SR_RAW`` for raw).
+        """
+        _check(
+            _get_lib().cbsdk_session_set_channel_smpgroup(
+                self._session,
+                chan_id,
+                int(_coerce_enum(SampleRate, rate, _RATE_ALIASES)),
+            ),
+            "Failed to set channel smpgroup",
         )
 
     def set_channel_smpfilter(self, chan_id: int, filter_id: int):
@@ -1072,20 +1113,7 @@ class Session:
         }
         for key, value in kwargs.items():
             if key == "smpgroup":
-                # Special case: smpgroup goes through the batch setter for one channel
-                chan_type = self.get_channel_type(chan_id)
-                if chan_type is not None:
-                    _lib = _get_lib()
-                    _check(
-                        _lib.cbsdk_session_set_channel_sample_group(
-                            self._session,
-                            1,
-                            int(chan_type),
-                            int(_coerce_enum(SampleRate, value, _RATE_ALIASES)),
-                            False,
-                        ),
-                        "Failed to set smpgroup",
-                    )
+                self.set_channel_smpgroup(chan_id, value)
             elif key in _dispatch:
                 _dispatch[key](chan_id, value)
             else:
@@ -1175,7 +1203,7 @@ class Session:
         confirms that all prior configuration packets have been applied.
 
         Call this after fire-and-forget operations like
-        :meth:`set_channel_sample_group` or :meth:`set_ac_input_coupling`
+        :meth:`set_sample_group` or :meth:`set_ac_input_coupling`
         when you need to read back the resulting state (e.g.,
         :meth:`get_group_channels`) or register callbacks that depend on it.
 
@@ -1318,7 +1346,7 @@ class Session:
 
     # --- Spike Sorting ---
 
-    def set_channel_spike_sorting(
+    def set_spike_sorting(
         self,
         n_chans: int,
         channel_type: ChannelType,
@@ -1336,13 +1364,35 @@ class Session:
         """
         _lib = _get_lib()
         _check(
-            _lib.cbsdk_session_set_channel_spike_sorting(
+            _lib.cbsdk_session_set_spike_sorting(
                 self._session,
                 n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),
                 sort_options,
             ),
             "Failed to set spike sorting",
+        )
+
+    def set_channel_spike_sorting(self, chan_id: int, sort_options: int):
+        """Set spike sorting options for a single channel (fire-and-forget).
+
+        Clears ``cbAINPSPK_ALLSORT`` bits then sets *sort_options*.
+        Unlike :meth:`set_channel_spkopts` (which replaces the entire
+        ``spkopts`` field), this preserves non-sorting bits like
+        ``cbAINPSPK_EXTRACT``.
+
+        Call :meth:`sync` before reading back state that depends on this
+        configuration.
+
+        Args:
+            chan_id: 1-based channel ID.
+            sort_options: Spike sorting option flags (cbAINPSPK_*).
+        """
+        _check(
+            _get_lib().cbsdk_session_set_channel_spike_sorting(
+                self._session, chan_id, sort_options
+            ),
+            "Failed to set channel spike sorting",
         )
 
     def set_spike_extraction(
@@ -1700,6 +1750,22 @@ class Session:
     def version() -> str:
         """Get the SDK version string."""
         return ffi.string(_get_lib().cbsdk_get_version()).decode()
+
+    # --- Deprecated aliases (removed in a future release) ---
+
+    def set_channel_sample_group(self, *args, **kwargs):
+        """
+        Deprecated: use :meth:`set_sample_group`.
+        Per-channel sample group setting via set_channel_smpgroup
+        """
+        import warnings
+
+        warnings.warn(
+            "set_channel_sample_group is renamed to set_sample_group",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.set_sample_group(*args, **kwargs)
 
 
 class ContinuousReader:

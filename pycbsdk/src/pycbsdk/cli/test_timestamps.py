@@ -109,7 +109,7 @@ def _collect_packets(
 
     if configure:
         # Activate one FRONTEND channel on RAW to guarantee traffic.
-        session.set_channel_sample_group(
+        session.set_sample_group(
             n_chans=1,
             channel_type=0,  # ChannelType.FRONTEND
             rate=SampleRate.SR_RAW,
@@ -243,7 +243,7 @@ def run_scenario(device_type: DeviceType, mode: str) -> list[TestResult]:
                     f"from pycbsdk import Session, DeviceType, SampleRate; "
                     f"s = Session(DeviceType.{device_type.name}); "
                     "time.sleep(3); "
-                    "s.set_channel_sample_group(1, 0, SampleRate.SR_RAW); "
+                    "s.set_sample_group(1, 0, SampleRate.SR_RAW); "
                     "time.sleep(120)",
                 ],
                 stdout=subprocess.DEVNULL,
@@ -271,7 +271,7 @@ def run_scenario(device_type: DeviceType, mode: str) -> list[TestResult]:
             # streaming on our port.  This avoids inflated clock-sync latency
             # when another device floods the same UDP port (see #165).
             if mode == "STANDALONE":
-                session.set_channel_sample_group(
+                session.set_sample_group(
                     n_chans=1,
                     channel_type=0,  # ChannelType.FRONTEND
                     rate=SampleRate.SR_RAW,

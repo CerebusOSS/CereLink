@@ -123,7 +123,7 @@ TEST_F(ChannelSampleGroupTest, SetFrontend30kHz) {
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
-    auto set_result = session.setChannelSampleGroup(
+    auto set_result = session.setSampleGroup(
         8, ChannelType::FRONTEND, SampleRate::SR_30kHz, true);
     EXPECT_TRUE(set_result.isOk()) << set_result.error();
 
@@ -140,7 +140,7 @@ TEST_F(ChannelSampleGroupTest, SetAndVerifyViaChannelField) {
     auto& session = result.value();
 
     const size_t n_chans = 4;
-    auto set_result = session.setChannelSampleGroup(
+    auto set_result = session.setSampleGroup(
         n_chans, ChannelType::FRONTEND, SampleRate::SR_10kHz, true);
     EXPECT_TRUE(set_result.isOk()) << set_result.error();
 
@@ -164,11 +164,11 @@ TEST_F(ChannelSampleGroupTest, DisableOthers) {
     auto& session = result.value();
 
     // Enable 96 channels at 30kHz
-    session.setChannelSampleGroup(96, ChannelType::FRONTEND, SampleRate::SR_30kHz, false);
+    session.setSampleGroup(96, ChannelType::FRONTEND, SampleRate::SR_30kHz, false);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     // Now set 8 at 1kHz with disable_others
-    session.setChannelSampleGroup(8, ChannelType::FRONTEND, SampleRate::SR_1kHz, true);
+    session.setSampleGroup(8, ChannelType::FRONTEND, SampleRate::SR_1kHz, true);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     // 30kHz group should now be empty
@@ -282,7 +282,7 @@ TEST_F(SpikeSortingTest, SetSpikeSorting) {
     auto result = createNPlaySession();
     ASSERT_TRUE(result.isOk()) << result.error();
 
-    auto sort_result = result.value().setChannelSpikeSorting(
+    auto sort_result = result.value().setSpikeSorting(
         8, ChannelType::FRONTEND, 0);
     EXPECT_TRUE(sort_result.isOk()) << sort_result.error();
 }
@@ -377,7 +377,7 @@ TEST_F(CCFTest, SaveLoadRoundtrip) {
     auto& session = result.value();
 
     // Configure some channels
-    session.setChannelSampleGroup(8, ChannelType::FRONTEND, SampleRate::SR_30kHz, true);
+    session.setSampleGroup(8, ChannelType::FRONTEND, SampleRate::SR_30kHz, true);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     // Save
@@ -507,7 +507,7 @@ TEST_F(CallbackTest, ReceiveGroupData) {
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
-    session.setChannelSampleGroup(8, ChannelType::FRONTEND, SampleRate::SR_30kHz, true);
+    session.setSampleGroup(8, ChannelType::FRONTEND, SampleRate::SR_30kHz, true);
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
     std::atomic<int> count{0};

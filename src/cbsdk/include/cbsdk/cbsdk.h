@@ -550,7 +550,7 @@ CBSDK_API cbsdk_result_t cbsdk_session_get_group_list(
 /// @param rate Sample rate (CBPROTO_GROUP_RATE_NONE to disable, _500Hz through _RAW)
 /// @param disable_others If true, disable sampling on unselected channels of this type
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
-CBSDK_API cbsdk_result_t cbsdk_session_set_channel_sample_group(
+CBSDK_API cbsdk_result_t cbsdk_session_set_sample_group(
     cbsdk_session_t session,
     size_t n_chans,
     cbproto_channel_type_t chan_type,
@@ -586,6 +586,18 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_channel_label(
     cbsdk_session_t session,
     uint32_t chan_id,
     const char* label);
+
+/// Set a single channel's sample group (fire-and-forget).
+/// Handles group-specific logic: RAWSTREAM flag for group 6, filter mapping
+/// for groups 1-5, clearing conflicting flags.
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param rate Sample group (0=NONE, 1-5=filtered, 6=RAW)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_smpgroup(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    cbproto_group_rate_t rate);
 
 /// Set a channel's continuous-time pathway filter
 /// @param session Session handle (must not be NULL)
@@ -959,10 +971,21 @@ CBSDK_API cbsdk_result_t cbsdk_session_close_central_file_dialog(cbsdk_session_t
 /// @param chan_type Channel type filter
 /// @param sort_options Spike sorting option flags (cbAINPSPK_*)
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
-CBSDK_API cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
+CBSDK_API cbsdk_result_t cbsdk_session_set_spike_sorting(
     cbsdk_session_t session,
     size_t n_chans,
     cbproto_channel_type_t chan_type,
+    uint32_t sort_options);
+
+/// Set spike sorting options for a single channel (fire-and-forget).
+/// Clears cbAINPSPK_ALLSORT bits then sets sort_options.
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param sort_options Spike sorting option flags (cbAINPSPK_*)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
+    cbsdk_session_t session,
+    uint32_t chan_id,
     uint32_t sort_options);
 
 /// Enable or disable spike extraction for channels of a specific type.

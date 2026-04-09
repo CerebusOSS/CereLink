@@ -888,7 +888,7 @@ cbsdk_result_t cbsdk_session_get_group_list(
 // Channel Configuration
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-cbsdk_result_t cbsdk_session_set_channel_sample_group(
+cbsdk_result_t cbsdk_session_set_sample_group(
     cbsdk_session_t session,
     size_t n_chans,
     cbproto_channel_type_t chan_type,
@@ -898,7 +898,7 @@ cbsdk_result_t cbsdk_session_set_channel_sample_group(
         return CBSDK_RESULT_INVALID_PARAMETER;
     }
     try {
-        auto result = session->cpp_session->setChannelSampleGroup(
+        auto result = session->cpp_session->setSampleGroup(
             n_chans, to_cpp_channel_type(chan_type), static_cast<cbsdk::SampleRate>(rate), disable_others);
         return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
     } catch (...) {
@@ -952,6 +952,53 @@ cbsdk_result_t cbsdk_session_set_channel_label(
             std::strncpy(ci.label, label, sizeof(ci.label) - 1);
             ci.label[sizeof(ci.label) - 1] = '\0';
         });
+}
+
+cbsdk_result_t cbsdk_session_set_channel_smpgroup(
+    const cbsdk_session_t session, const uint32_t chan_id, const cbproto_group_rate_t rate) {
+    if (!session || !session->cpp_session) return CBSDK_RESULT_INVALID_PARAMETER;
+    // Mirror the per-group logic from DeviceSession::setChannelsGroupByType.
+    // The packet type varies by group because the device firmware only reads
+    // specific fields depending on the type.
+    try {
+        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
+        if (!info) return CBSDK_RESULT_INVALID_PARAMETER;
+        cbPKT_CHANINFO ci = *info;
+        ci.chan = chan_id;
+
+        if (rate == 0) {
+            // NONE: disable all groups including raw
+            ci.cbpkt_header.type = cbPKTTYPE_CHANSET;
+            ci.smpgroup = 0;
+            ci.ainpopts &= ~cbAINP_RAWSTREAM;
+        } else if (rate == cbRAWGROUP) {
+            // Raw (group 6): only set the RAWSTREAM flag via CHANSETAINP.
+            // Note: the device does not update smpgroup for raw channels,
+            // so get_channel_config will show smpgroup=0 even when the
+            // channel is in the raw group.  Use get_group_channels(6) to
+            // check raw membership.
+            ci.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
+            ci.ainpopts |= cbAINP_RAWSTREAM;
+        } else if (rate == 5) {
+            // Group 5 (30 kHz filtered): must clear RAWSTREAM (mutually exclusive)
+            ci.cbpkt_header.type = cbPKTTYPE_CHANSET;
+            ci.smpgroup = rate;
+            ci.ainpopts &= ~cbAINP_RAWSTREAM;
+            ci.smpfilter = 0;  // no default filter for group 5
+        } else {
+            // Groups 1-4: set smpgroup + default filter
+            ci.cbpkt_header.type = cbPKTTYPE_CHANSETSMP;
+            ci.smpgroup = rate;
+            constexpr uint32_t filter_map[] = {0, 5, 6, 7, 10};
+            if (rate >= 1 && rate <= 4)
+                ci.smpfilter = filter_map[rate];
+        }
+
+        auto r = session->cpp_session->setChannelConfig(ci);
+        return r.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
 }
 
 cbsdk_result_t cbsdk_session_set_channel_smpfilter(
@@ -1461,7 +1508,7 @@ cbsdk_result_t cbsdk_session_set_ac_input_coupling(
 // Spike Sorting
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
+cbsdk_result_t cbsdk_session_set_spike_sorting(
     cbsdk_session_t session,
     size_t n_chans,
     cbproto_channel_type_t chan_type,
@@ -1470,12 +1517,21 @@ cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
         return CBSDK_RESULT_INVALID_PARAMETER;
     }
     try {
-        auto result = session->cpp_session->setChannelSpikeSorting(
+        auto result = session->cpp_session->setSpikeSorting(
             n_chans, to_cpp_channel_type(chan_type), sort_options);
         return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
     } catch (...) {
         return CBSDK_RESULT_INTERNAL_ERROR;
     }
+}
+
+cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
+    cbsdk_session_t session, uint32_t chan_id, uint32_t sort_options) {
+    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETSPKTHR,
+        [sort_options](cbPKT_CHANINFO& ci) {
+            ci.spkopts &= ~cbAINPSPK_ALLSORT;
+            ci.spkopts |= sort_options;
+        });
 }
 
 cbsdk_result_t cbsdk_session_set_spike_extraction(

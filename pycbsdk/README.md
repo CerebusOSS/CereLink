@@ -85,8 +85,8 @@ session = Session(device_type="HUB1", callback_queue_depth=16384)
 - `session.send_comment("marker text", rgba=0xFF0000)` — inject a comment
 - `session.set_digital_output(chan_id, value)` — set digital output
 - `session.set_runlevel(level)` — change system run level
-- `session.set_channel_sample_group(n, "FRONTEND", group_id)` — configure sampling
-- `session.set_channel_spike_sorting(n, "FRONTEND", sort_options)` — configure spike sorting
+- `session.set_sample_group(n, "FRONTEND", group_id)` — configure sampling
+- `session.set_spike_sorting(n, "FRONTEND", sort_options)` — configure spike sorting
 
 **CCF Configuration Files**:
 
