@@ -230,7 +230,7 @@ cbsdk_result_t cbsdk_session_get_channel_scaling(
 cbsdk_result_t cbsdk_session_set_channel_label(cbsdk_session_t session,
     uint32_t chan_id, const char* label);
 cbsdk_result_t cbsdk_session_set_channel_smpgroup(cbsdk_session_t session,
-    uint32_t chan_id, uint8_t rate);
+    uint32_t chan_id, cbproto_group_rate_t rate);
 cbsdk_result_t cbsdk_session_set_channel_smpfilter(cbsdk_session_t session,
     uint32_t chan_id, uint32_t filter_id);
 cbsdk_result_t cbsdk_session_set_channel_spkfilter(cbsdk_session_t session,
