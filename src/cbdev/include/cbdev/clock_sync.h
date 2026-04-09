@@ -65,6 +65,16 @@ public:
     /// Uncertainty (RTT/2) from the best probe.
     [[nodiscard]] std::optional<int64_t> getUncertaintyNs() const;
 
+    /// True if probes are producing consistent offsets (spread < threshold).
+    /// When false, the caller should feed data-packet timestamps as a fallback.
+    [[nodiscard]] bool probesAreReliable() const;
+
+    /// Add a data-packet observation for fallback clock sync.
+    /// @param device_time_ns  Device timestamp from a data packet header
+    /// @param recv_local      Host time when the datagram was received
+    /// Used only when probesAreReliable() returns false.
+    void addDataPacketSample(uint64_t device_time_ns, time_point recv_local);
+
 private:
     mutable std::mutex m_mutex;
     Config m_config;
@@ -77,11 +87,18 @@ private:
 
     std::deque<ProbeSample> m_probe_samples;
 
+    struct DataSample {
+        int64_t offset_ns;   // device_ns - recv_host_ns
+        time_point when;
+    };
+    std::deque<DataSample> m_data_samples;
+
     std::optional<int64_t> m_current_offset_ns;
     std::optional<int64_t> m_current_uncertainty_ns;
 
-    void recomputeEstimate();   // called with lock held
+    void recomputeEstimate();       // called with lock held
     void pruneExpired(time_point now);  // called with lock held
+    bool probeSpreadOk() const;     // called with lock held
 };
 
 } // namespace cbdev
