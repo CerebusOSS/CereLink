@@ -163,6 +163,12 @@ def main():
         current_trial: int | None = None  # set by main thread when tone plays
         trial_detected = False
 
+        # Monotonicity tracking: detect backwards jumps in converted timestamps
+        last_mono_time: float | None = None
+        mono_violations = 0
+        mono_worst_ms = 0.0
+        mono_total_samples = 0
+
         @sess.on_group_batch(SampleRate.SR_RAW)
         def on_raw_batch(samples: np.ndarray, timestamps: np.ndarray):
             """Process a batch of raw samples.
@@ -176,6 +182,17 @@ def main():
             """
             nonlocal baseline_done, baseline_mean, baseline_std, threshold
             nonlocal current_trial, trial_detected
+            nonlocal last_mono_time, mono_violations, mono_worst_ms, mono_total_samples
+
+            # Check every converted timestamp for monotonicity.
+            for ts in timestamps:
+                t = sess.device_to_monotonic(int(ts))
+                mono_total_samples += 1
+                if last_mono_time is not None and t < last_mono_time:
+                    mono_violations += 1
+                    jump_ms = (last_mono_time - t) * 1000
+                    mono_worst_ms = max(mono_worst_ms, jump_ms)
+                last_mono_time = t
 
             # Extract our channel's column
             ch_data = samples[:, chan_index].astype(np.float64)
@@ -342,6 +359,22 @@ def main():
         if uncert is not None:
             print(f"  Clock sync uncertainty: {uncert / 1e6:.2f} ms")
             print(f"  (Latency std should be comparable to this value.)")
+
+        print()
+        print(f"  Timestamp monotonicity: {mono_total_samples} samples checked")
+        if mono_violations == 0:
+            print("  No backwards jumps detected.")
+        elif mono_violations <= 2 and mono_worst_ms > 50:
+            # A single large jump is the expected one-time correction when
+            # the clock sync switches from probe-based to data-packet-based
+            # offset estimation (happens ~4-6 s after connect).
+            print(f"  {mono_violations} backwards jump(s) "
+                  f"(worst: {mono_worst_ms:.1f} ms) — initial clock sync "
+                  f"settling, not a steady-state issue.")
+        else:
+            print(f"  {mono_violations} backwards jumps "
+                  f"(worst: {mono_worst_ms:.3f} ms)")
+
         print()
         print("The latency includes: OS audio buffer → DAC → cable → "
               "NSP ADC → UDP → clock conversion.")
