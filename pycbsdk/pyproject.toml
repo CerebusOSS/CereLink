@@ -34,6 +34,7 @@ Issues = "https://github.com/CerebusOSS/CereLink/issues"
 
 [project.optional-dependencies]
 numpy = ["numpy"]
+examples = ["sounddevice"]
 
 [dependency-groups]
 dev = [
