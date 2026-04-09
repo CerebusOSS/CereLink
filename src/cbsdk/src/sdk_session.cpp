@@ -1542,7 +1542,7 @@ static cbdev::ChannelType toDevChannelType(const ChannelType chanType) {
 }
 
 
-Result<void> SdkSession::setChannelSampleGroup(const size_t nChans, const ChannelType chanType,
+Result<void> SdkSession::setSampleGroup(const size_t nChans, const ChannelType chanType,
                                                 const SampleRate rate, const bool disableOthers) {
     const uint32_t group_id = static_cast<uint32_t>(rate);
     // STANDALONE mode: delegate to device session (has full config + direct send)
@@ -1603,7 +1603,7 @@ Result<void> SdkSession::setChannelSampleGroup(const size_t nChans, const Channe
     return Result<void>::ok();
 }
 
-Result<void> SdkSession::setChannelSpikeSorting(const size_t nChans, const ChannelType chanType,
+Result<void> SdkSession::setSpikeSorting(const size_t nChans, const ChannelType chanType,
                                                  const uint32_t sortOptions) {
     // STANDALONE mode: delegate to device session
     if (m_impl->device_session) {
@@ -2007,7 +2007,7 @@ Result<void> SdkSession::loadCCF(const std::string& filename) {
 
     if (m_impl->device_session) {
         // STANDALONE: send directly via DeviceSession (same path as
-        // setChannelSampleGroup et al.).  This avoids the unnecessary
+        // setSampleGroup et al.).  This avoids the unnecessary
         // shmem round-trip and lets sync() / loadCCFSync() use the
         // standard direct-UDP barrier.
         const auto r = m_impl->device_session->sendPackets(packets);

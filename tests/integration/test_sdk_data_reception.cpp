@@ -33,7 +33,7 @@ static Result<SdkSession> createNPlaySession() {
 }
 
 static void setupChannels(SdkSession& session, SampleRate rate = SampleRate::SR_30kHz) {
-    session.setChannelSampleGroup(N_CHANS, ChannelType::FRONTEND, rate, true);
+    session.setSampleGroup(N_CHANS, ChannelType::FRONTEND, rate, true);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 }
 
@@ -240,7 +240,7 @@ TEST_F(MultiRateTest, TwoRatesSimultaneously) {
     auto& session = result.value();
 
     // Configure first 2 channels at 30kHz
-    session.setChannelSampleGroup(2, ChannelType::FRONTEND, SampleRate::SR_30kHz, true);
+    session.setSampleGroup(2, ChannelType::FRONTEND, SampleRate::SR_30kHz, true);
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
     // Get channel IDs and individually configure channels 3-4 at 1kHz

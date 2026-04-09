@@ -898,7 +898,7 @@ cbsdk_result_t cbsdk_session_set_sample_group(
         return CBSDK_RESULT_INVALID_PARAMETER;
     }
     try {
-        auto result = session->cpp_session->setChannelSampleGroup(
+        auto result = session->cpp_session->setSampleGroup(
             n_chans, to_cpp_channel_type(chan_type), static_cast<cbsdk::SampleRate>(rate), disable_others);
         return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
     } catch (...) {
@@ -955,7 +955,7 @@ cbsdk_result_t cbsdk_session_set_channel_label(
 }
 
 cbsdk_result_t cbsdk_session_set_channel_smpgroup(
-    cbsdk_session_t session, uint32_t chan_id, cbproto_group_rate_t rate) {
+    const cbsdk_session_t session, const uint32_t chan_id, const cbproto_group_rate_t rate) {
     if (!session || !session->cpp_session) return CBSDK_RESULT_INVALID_PARAMETER;
     // Mirror the per-group logic from DeviceSession::setChannelsGroupByType.
     // The packet type varies by group because the device firmware only reads
@@ -1517,7 +1517,7 @@ cbsdk_result_t cbsdk_session_set_spike_sorting(
         return CBSDK_RESULT_INVALID_PARAMETER;
     }
     try {
-        auto result = session->cpp_session->setChannelSpikeSorting(
+        auto result = session->cpp_session->setSpikeSorting(
             n_chans, to_cpp_channel_type(chan_type), sort_options);
         return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
     } catch (...) {

@@ -518,7 +518,7 @@ public:
     /// @param rate Desired sample rate (NONE to disable, SR_500 through SR_RAW)
     /// @param disableOthers Disable sampling on channels not in the first nChans of type
     /// @return Result indicating success or error
-    Result<void> setChannelSampleGroup(size_t nChans, ChannelType chanType,
+    Result<void> setSampleGroup(size_t nChans, ChannelType chanType,
                                        SampleRate rate, bool disableOthers = false);
 
     /// Set spike sorting options for channels of a specific type (fire-and-forget).
@@ -527,7 +527,7 @@ public:
     /// @param chanType Channel type filter
     /// @param sortOptions Spike sorting option flags (cbAINPSPK_*)
     /// @return Result indicating success or error
-    Result<void> setChannelSpikeSorting(size_t nChans, ChannelType chanType,
+    Result<void> setSpikeSorting(size_t nChans, ChannelType chanType,
                                         uint32_t sortOptions);
 
     /// Enable or disable spike extraction (cbAINPSPK_EXTRACT) for channels
@@ -685,7 +685,7 @@ public:
     /// Because the device processes packets in order, receiving the SYSREP
     /// confirms that all prior configuration packets have been applied.
     ///
-    /// Call this after fire-and-forget operations like setChannelSampleGroup()
+    /// Call this after fire-and-forget operations like setSampleGroup()
     /// or setACInputCoupling() when you need to read back the resulting state
     /// (e.g., getGroupChannels) or register callbacks that depend on it.
     ///
