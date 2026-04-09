@@ -1333,6 +1333,14 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
         return;  // Nothing to process
     }
 
+    // If probe-based clock sync is unreliable (e.g., NSP header->time
+    // running at the wrong rate), fall back to data-packet timestamps.
+    // Track the LAST data packet's timestamp in the datagram — it is
+    // closest to the actual send time (earlier packets may be ~1 ms
+    // stale from the start of the device's transmit batch).
+    const bool need_data_clock_sample = !m_impl->clock_sync.probesAreReliable();
+    uint64_t last_data_time = 0;
+
     // Parse packets in buffer and update device_config for configuration packets
     const auto* buff_bytes = static_cast<const uint8_t*>(buffer);
     size_t offset = 0;
@@ -1349,6 +1357,15 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
 
         // Count every packet for protocol monitor drop detection
         m_impl->pkts_since_monitor++;
+
+        // Track the last data packet timestamp for fallback clock sync.
+        // Data timestamps come from the ADC/PTP clock and are reliable
+        // even when probe header->time is broken.
+        if (need_data_clock_sample &&
+            !(header->chid & cbPKTCHAN_CONFIGURATION) &&
+            header->time != 0) {
+            last_data_time = header->time;
+        }
 
         if ((header->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
             // Configuration packet - process based on type
@@ -1562,7 +1579,6 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                         m_impl->pending_clock_probe.t1_local,
                         device_time_ns,
                         m_impl->last_recv_timestamp);
-
                     m_impl->pending_clock_probe.active = false;
                 }
             }
@@ -1580,6 +1596,12 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
         }
 
         offset += packet_size;
+    }
+
+    // Feed the last data packet's timestamp for fallback clock sync.
+    if (last_data_time != 0) {
+        m_impl->clock_sync.addDataPacketSample(
+            last_data_time, m_impl->last_recv_timestamp);
     }
 }
 
