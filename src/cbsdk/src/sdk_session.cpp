@@ -965,6 +965,31 @@ Result<void> SdkSession::start() {
                     impl->last_clock_probe_time = now;
                 }
 
+                // If this NSP is using data-packet fallback, try to inject
+                // a peer HUB's probe-based offset into the ClockSync so
+                // that toLocalTime() uses it on the hot path.
+                constexpr int64_t DATA_FALLBACK_UNCERT = 700'000;
+                auto own_uncert = impl->device_session->getUncertaintyNs();
+                if (own_uncert && *own_uncert == DATA_FALLBACK_UNCERT &&
+                    (impl->config.device_type == DeviceType::NSP ||
+                     impl->config.device_type == DeviceType::LEGACY_NSP)) {
+                    if (!impl->peer_clock_attempted) {
+                        impl->peer_clock_attempted = true;
+                        for (auto hub : {DeviceType::HUB1, DeviceType::HUB2, DeviceType::HUB3}) {
+                            std::string name = getNativeSegmentName(hub, "config");
+                            if (impl->peer_clock.tryOpen(name))
+                                break;
+                        }
+                    }
+                    auto peer_offset = impl->peer_clock.getClockOffsetNs();
+                    auto peer_uncert = impl->peer_clock.getClockUncertaintyNs();
+                    if (peer_offset) {
+                        impl->device_session->setExternalClockOffset(peer_offset, peer_uncert);
+                    } else {
+                        impl->device_session->setExternalClockOffset(std::nullopt);
+                    }
+                }
+
                 // Propagate clock sync offset to shmem for CLIENT mode readers
                 if (auto offset = impl->device_session->getOffsetNs()) {
                     auto uncertainty = impl->device_session->getUncertaintyNs().value_or(0);
@@ -2230,33 +2255,12 @@ Result<void> SdkSession::sendClockProbe() {
 }
 
 std::optional<int64_t> SdkSession::getClockOffsetNs() const {
-    // STANDALONE: get from device_session's ClockSync
-    if (m_impl->device_session) {
-        auto offset = m_impl->device_session->getOffsetNs();
-        auto uncert = m_impl->device_session->getUncertaintyNs();
-
-        // If using data-packet fallback (uncertainty == 700 µs) and this
-        // is an NSP, try to read a peer HUB's probe-based offset from
-        // shared memory.  Both devices share the same PTP clock, so the
-        // HUB's offset is valid for the NSP too.
-        constexpr int64_t DATA_FALLBACK_UNCERT = 700'000;
-        if (uncert && *uncert == DATA_FALLBACK_UNCERT &&
-            (m_impl->config.device_type == DeviceType::NSP ||
-             m_impl->config.device_type == DeviceType::LEGACY_NSP)) {
-            if (!m_impl->peer_clock_attempted) {
-                m_impl->peer_clock_attempted = true;
-                for (auto hub : {DeviceType::HUB1, DeviceType::HUB2, DeviceType::HUB3}) {
-                    std::string name = getNativeSegmentName(hub, "config");
-                    if (m_impl->peer_clock.tryOpen(name))
-                        break;
-                }
-            }
-            if (auto peer = m_impl->peer_clock.getClockOffsetNs())
-                return peer;
-        }
-
-        return offset;
-    }
+    // STANDALONE: get from device_session's ClockSync.
+    // The peer HUB offset (if active) is already injected into the
+    // ClockSync via setExternalOffset() in the periodic update, so
+    // this returns the peer's value transparently.
+    if (m_impl->device_session)
+        return m_impl->device_session->getOffsetNs();
 
     // CLIENT: try shmem clock sync fields (NATIVE layout)
     if (m_impl->shmem_session) {
@@ -2270,20 +2274,8 @@ std::optional<int64_t> SdkSession::getClockOffsetNs() const {
 }
 
 std::optional<int64_t> SdkSession::getClockUncertaintyNs() const {
-    // STANDALONE: get from device_session's ClockSync
-    if (m_impl->device_session) {
-        auto uncert = m_impl->device_session->getUncertaintyNs();
-
-        // If using data fallback and peer clock is active, report the
-        // peer's (lower) uncertainty instead.
-        constexpr int64_t DATA_FALLBACK_UNCERT = 700'000;
-        if (uncert && *uncert == DATA_FALLBACK_UNCERT && m_impl->peer_clock.isOpen()) {
-            if (auto peer_uncert = m_impl->peer_clock.getClockUncertaintyNs())
-                return peer_uncert;
-        }
-
-        return uncert;
-    }
+    if (m_impl->device_session)
+        return m_impl->device_session->getUncertaintyNs();
 
     // CLIENT: try shmem clock sync fields (NATIVE layout)
     if (m_impl->shmem_session) {

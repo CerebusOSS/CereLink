@@ -109,6 +109,21 @@ std::optional<int64_t> ClockSync::getUncertaintyNs() const {
     return m_current_uncertainty_ns;
 }
 
+void ClockSync::setExternalOffset(std::optional<int64_t> offset_ns,
+                                   std::optional<int64_t> uncertainty_ns) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_external_offset_ns = offset_ns;
+    m_external_uncertainty_ns = uncertainty_ns;
+    if (offset_ns) {
+        m_current_offset_ns = offset_ns;
+        if (uncertainty_ns)
+            m_current_uncertainty_ns = uncertainty_ns;
+    } else {
+        // Cleared — revert to internal estimate
+        recomputeEstimate();
+    }
+}
+
 bool ClockSync::probesAreReliable() const {
     std::lock_guard<std::mutex> lock(m_mutex);
     return probeSpreadOk();
@@ -174,6 +189,14 @@ void ClockSync::addDataPacketSample(const uint64_t device_time_ns, const time_po
 }
 
 void ClockSync::recomputeEstimate() {
+    // External offset (from peer device shmem) takes unconditional priority.
+    if (m_external_offset_ns) {
+        m_current_offset_ns = m_external_offset_ns;
+        if (m_external_uncertainty_ns)
+            m_current_uncertainty_ns = m_external_uncertainty_ns;
+        return;
+    }
+
     // Strategy:
     //   1. If probes are reliable (tight spread), use glitch-filtered
     //      max-offset probe.  This is the HUB1 path.

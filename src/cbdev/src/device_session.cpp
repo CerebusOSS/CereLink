@@ -981,6 +981,12 @@ std::optional<int64_t> DeviceSession::getUncertaintyNs() const {
     return m_impl->clock_sync.getUncertaintyNs();
 }
 
+void DeviceSession::setExternalClockOffset(std::optional<int64_t> offset_ns,
+                                            std::optional<int64_t> uncertainty_ns) {
+    if (!m_impl) return;
+    m_impl->clock_sync.setExternalOffset(offset_ns, uncertainty_ns);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Channel Configuration
 ///////////////////////////////////////////////////////////////////////////////////////////////////

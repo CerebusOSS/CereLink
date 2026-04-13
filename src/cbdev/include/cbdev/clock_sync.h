@@ -75,6 +75,13 @@ public:
     /// Used only when probesAreReliable() returns false.
     void addDataPacketSample(uint64_t device_time_ns, time_point recv_local);
 
+    /// Inject an externally-determined offset (e.g., from a peer device's
+    /// shared memory).  Takes immediate effect and overrides probe/data
+    /// estimates in toLocalTime()/toDeviceTime().  Call with nullopt to
+    /// clear and revert to internal estimates.
+    void setExternalOffset(std::optional<int64_t> offset_ns,
+                           std::optional<int64_t> uncertainty_ns = std::nullopt);
+
 private:
     mutable std::mutex m_mutex;
     Config m_config;
@@ -96,6 +103,11 @@ private:
 
     std::optional<int64_t> m_current_offset_ns;
     std::optional<int64_t> m_current_uncertainty_ns;
+
+    // External offset injected by setExternalOffset() — takes priority
+    // over internal estimates when set.
+    std::optional<int64_t> m_external_offset_ns;
+    std::optional<int64_t> m_external_uncertainty_ns;
 
     void recomputeEstimate();       // called with lock held
     void pruneExpired(time_point now);  // called with lock held

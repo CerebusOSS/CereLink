@@ -330,6 +330,12 @@ public:
     /// @return Uncertainty in nanoseconds, or nullopt if no sync data available
     [[nodiscard]] virtual std::optional<int64_t> getUncertaintyNs() const = 0;
 
+    /// Inject an externally-determined offset (e.g., from a peer device).
+    /// When set, overrides internal probe/data estimates in toLocalTime().
+    /// Pass nullopt to clear and revert to internal estimates.
+    virtual void setExternalClockOffset(std::optional<int64_t> offset_ns,
+                                        std::optional<int64_t> uncertainty_ns = std::nullopt) = 0;
+
     /// @}
 };
 
