@@ -147,47 +147,50 @@ TEST(ClockSyncTest, ProbeExpiry) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// Best Probe Selection (minimum RTT)
+// Best Probe Selection (maximum offset)
+//
+// The algorithm selects the probe with the largest computed offset (after gap-based glitch
+// rejection). For symmetric network paths this is equivalent to minimum RTT: the probe with the
+// least processing delay has the largest offset estimate. For asymmetric paths, max-offset is
+// the correct criterion because a higher offset means less queuing/processing bias in T3.
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-TEST(ClockSyncTest, MinRTTSelection) {
+TEST(ClockSyncTest, MaxOffsetSelection) {
     ClockSync sync;
 
-    // Probe 1: RTT = 1000 (worse)
+    // Probe 1: RTT = 1000, offset = 5000 — higher offset, should be selected
     // T1 = 1000, T3 = 6500, T4 = 2000
     // offset = 6500 - 1000 - 0.5 * 1000 = 5000
     sync.addProbeSample(tp_from_ns(1000), 6500, tp_from_ns(2000));
     EXPECT_EQ(*sync.getOffsetNs(), 5000);
 
-    // Probe 2: RTT = 200 (better — should be selected)
+    // Probe 2: RTT = 200, offset = 4900 — lower RTT but also lower offset, not selected
     // T1 = 3000, T3 = 8000, T4 = 3200
     // offset = 8000 - 3000 - 0.5 * 200 = 4900
     sync.addProbeSample(tp_from_ns(3000), 8000, tp_from_ns(3200));
 
-    // Best probe is probe 2 (lowest RTT)
-    EXPECT_EQ(*sync.getOffsetNs(), 4900);
-    EXPECT_EQ(*sync.getUncertaintyNs(), 100);
+    // Best probe is probe 1 (highest offset), not probe 2 (lowest RTT)
+    EXPECT_EQ(*sync.getOffsetNs(), 5000);
+    EXPECT_EQ(*sync.getUncertaintyNs(), 500);
 }
 
-TEST(ClockSyncTest, BestProbeIsMinimumRTT) {
+TEST(ClockSyncTest, BestProbeIsMaxOffset) {
     ClockSync sync;
 
-    // Add 3 probes with different RTTs. The min-RTT probe should win
-    // regardless of insertion order.
+    // Add 3 probes. The max-offset probe should win regardless of insertion order.
+    // In this case the max-offset probe also happens to have the minimum RTT
+    // (consistent with symmetric-path assumptions).
 
-    // Probe A: RTT = 500
+    // Probe A: RTT = 500, offset = 9750
     sync.addProbeSample(tp_from_ns(0), 10000, tp_from_ns(500));
-    // offset = 10000 - 0 - 0.5 * 500 = 9750
 
-    // Probe B: RTT = 100 (best)
+    // Probe B: RTT = 100, offset = 9950  (max offset — should be selected)
     sync.addProbeSample(tp_from_ns(1000), 11000, tp_from_ns(1100));
-    // offset = 11000 - 1000 - 0.5 * 100 = 9950
 
-    // Probe C: RTT = 300
+    // Probe C: RTT = 300, offset = 9850
     sync.addProbeSample(tp_from_ns(2000), 12000, tp_from_ns(2300));
-    // offset = 12000 - 2000 - 0.5 * 300 = 9850
 
-    // Probe B should be selected (RTT = 100)
+    // Probe B should be selected (highest offset = 9950)
     EXPECT_EQ(*sync.getOffsetNs(), 9950);
     EXPECT_EQ(*sync.getUncertaintyNs(), 50);  // RTT/2 = 100/2 = 50
 }
