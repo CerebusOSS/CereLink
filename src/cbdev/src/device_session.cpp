@@ -981,6 +981,12 @@ std::optional<int64_t> DeviceSession::getUncertaintyNs() const {
     return m_impl->clock_sync.getUncertaintyNs();
 }
 
+void DeviceSession::setExternalClockOffset(std::optional<int64_t> offset_ns,
+                                            std::optional<int64_t> uncertainty_ns) {
+    if (!m_impl) return;
+    m_impl->clock_sync.setExternalOffset(offset_ns, uncertainty_ns);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Channel Configuration
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1338,7 +1344,7 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
     // Track the LAST data packet's timestamp in the datagram — it is
     // closest to the actual send time (earlier packets may be ~1 ms
     // stale from the start of the device's transmit batch).
-    const bool need_data_clock_sample = !m_impl->clock_sync.probesAreReliable();
+    const bool need_fallback_clock_sample = !m_impl->clock_sync.probesAreReliable();
     uint64_t last_data_time = 0;
 
     // Parse packets in buffer and update device_config for configuration packets
@@ -1361,7 +1367,7 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
         // Track the last data packet timestamp for fallback clock sync.
         // Data timestamps come from the ADC/PTP clock and are reliable
         // even when probe header->time is broken.
-        if (need_data_clock_sample &&
+        if (need_fallback_clock_sample &&
             !(header->chid & cbPKTCHAN_CONFIGURATION) &&
             header->time != 0) {
             last_data_time = header->time;

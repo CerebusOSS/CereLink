@@ -230,6 +230,11 @@ public:
         return m_device.getUncertaintyNs();
     }
 
+    void setExternalClockOffset(std::optional<int64_t> offset_ns,
+                                std::optional<int64_t> uncertainty_ns = std::nullopt) override {
+        m_device.setExternalClockOffset(offset_ns, uncertainty_ns);
+    }
+
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////

@@ -10,6 +10,8 @@
 #include "cbdev/clock_sync.h"
 #include <algorithm>
 #include <cmath>
+#include <numeric>
+#include <vector>
 
 namespace cbdev {
 
@@ -107,6 +109,21 @@ std::optional<int64_t> ClockSync::getUncertaintyNs() const {
     return m_current_uncertainty_ns;
 }
 
+void ClockSync::setExternalOffset(std::optional<int64_t> offset_ns,
+                                   std::optional<int64_t> uncertainty_ns) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_external_offset_ns = offset_ns;
+    m_external_uncertainty_ns = uncertainty_ns;
+    if (offset_ns) {
+        m_current_offset_ns = offset_ns;
+        if (uncertainty_ns)
+            m_current_uncertainty_ns = uncertainty_ns;
+    } else {
+        // Cleared — revert to internal estimate
+        recomputeEstimate();
+    }
+}
+
 bool ClockSync::probesAreReliable() const {
     std::lock_guard<std::mutex> lock(m_mutex);
     return probeSpreadOk();
@@ -116,11 +133,9 @@ void ClockSync::addDataPacketSample(const uint64_t device_time_ns, const time_po
     std::lock_guard<std::mutex> lock(m_mutex);
 
     const int64_t recv_ns = to_ns(recv_local);
-    // offset = device_time - recv_time.
-    // This overestimates the true offset by the one-way network delay
-    // (host→device path isn't measured).  Over many samples the minimum
-    // offset will approach the true value because the minimum corresponds
-    // to the least-queued packet.
+    // raw_offset = device_time - recv_time = true_offset - one_way_delay.
+    // The maximum raw_offset (minimum one-way delay) is closest to the
+    // true offset, regardless of clock epoch.
     const int64_t offset_ns = static_cast<int64_t>(device_time_ns) - recv_ns;
 
     // Detect clock jumps (same logic as addProbeSample)
@@ -144,61 +159,117 @@ void ClockSync::addDataPacketSample(const uint64_t device_time_ns, const time_po
         m_data_samples.pop_front();
     }
 
-    // Pick minimum offset (closest to true offset = least network delay).
-    // Add a constant to compensate for the one-way acquisition-to-
-    // transmission delay that this method can't measure.  Without
-    // this correction the converted timestamps appear in the future.
-    // 0.7 ms is the observed lower bound on the device's capture-to-
-    // send latency (ADC sample → UDP datagram on the wire).
-    //
-    // Pick minimum offset (closest to true offset = least network delay).
-    // Once established, only allow the offset to DECREASE (= converted
-    // timestamps move forward in time, never backwards).
-    // device_to_monotonic(D) = D - offset, so a smaller offset shifts
-    // results later.  When old minimum-delay samples expire the raw
-    // minimum jumps up, but we hold the previous lower value to
-    // preserve monotonicity.
-    //
-    // The monotonicity constraint is tracked separately from probe-based
-    // offsets (m_data_floor_ns) so that the initial transition from a
-    // stale probe offset to the data-based estimate isn't blocked.
+    // Compute fallback offset: max raw_offset with gap-based glitch
+    // rejection, plus a small correction for residual network delay.
+    // Recomputed from the current window each time (no permanent floor).
     if (!m_data_samples.empty()) {
         constexpr int64_t ONE_WAY_DELAY_ESTIMATE_NS = 700'000;  // 0.7 ms
-        int64_t best = m_data_samples.front().offset_ns;
+        constexpr int64_t DATA_GAP_THRESHOLD_NS = 5'000'000;    // 5 ms
+
+        // Sort offsets to find the glitch-filtered max.
+        std::vector<int64_t> offsets;
+        offsets.reserve(m_data_samples.size());
         for (const auto& s : m_data_samples)
-            best = std::min(best, s.offset_ns);
-        const int64_t candidate = best + ONE_WAY_DELAY_ESTIMATE_NS;
-        if (!m_data_floor_ns || candidate < *m_data_floor_ns) {
-            m_data_floor_ns = candidate;
+            offsets.push_back(s.offset_ns);
+        std::sort(offsets.begin(), offsets.end());
+
+        // Strip isolated upward outliers (same gap logic as probes).
+        size_t top = offsets.size();
+        while (top > 1) {
+            if (offsets[top - 1] - offsets[top - 2] > DATA_GAP_THRESHOLD_NS)
+                --top;
+            else
+                break;
         }
-        m_current_offset_ns = *m_data_floor_ns;
-        m_current_uncertainty_ns = ONE_WAY_DELAY_ESTIMATE_NS;
+
+        m_data_floor_ns = offsets[top - 1] + ONE_WAY_DELAY_ESTIMATE_NS;
     }
+
+    recomputeEstimate();
 }
 
 void ClockSync::recomputeEstimate() {
-    // If data-packet fallback has been activated, never revert to probes.
-    // Data timestamps (from the ADC/PTP clock) are always reliable, while
-    // probe timestamps (from header->time) may be broken on some firmware.
-    if (m_data_floor_ns.has_value())
+    // External offset (from peer device shmem) takes unconditional priority.
+    if (m_external_offset_ns) {
+        m_current_offset_ns = m_external_offset_ns;
+        if (m_external_uncertainty_ns)
+            m_current_uncertainty_ns = m_external_uncertainty_ns;
         return;
+    }
 
-    // Find probe with minimum RTT — least queuing/jitter gives most reliable estimate
-    const ProbeSample* best_probe = nullptr;
-    for (const auto& p : m_probe_samples) {
-        if (!best_probe || p.rtt_ns < best_probe->rtt_ns) {
-            best_probe = &p;
+    // Strategy:
+    //   1. If probes are reliable (tight spread), use glitch-filtered
+    //      max-offset probe.  This is the HUB1 path.
+    //   2. Otherwise, if data-packet samples are available, use the
+    //      glitch-filtered max raw_offset from data packets.  This is
+    //      the NSP path — data-packet timestamps (from the ADC/PTP
+    //      clock) are more stable than probe header->time on the NSP.
+    //   3. If neither is available, use probes anyway (unreliable but
+    //      better than nothing).
+
+    // Check if probes are reliable enough to use directly.
+    if (!m_probe_samples.empty() && probeSpreadOk()) {
+        // Probes are tight — use glitch-filtered max-offset.
+        std::vector<size_t> indices(m_probe_samples.size());
+        std::iota(indices.begin(), indices.end(), 0);
+        std::sort(indices.begin(), indices.end(),
+                  [this](size_t a, size_t b) {
+                      return m_probe_samples[a].offset_ns
+                           < m_probe_samples[b].offset_ns;
+                  });
+
+        constexpr int64_t GAP_THRESHOLD_NS = 10'000'000;  // 10 ms
+        size_t top = indices.size();
+        while (top > 1) {
+            if (m_probe_samples[indices[top - 1]].offset_ns -
+                m_probe_samples[indices[top - 2]].offset_ns > GAP_THRESHOLD_NS)
+                --top;
+            else
+                break;
         }
+
+        const auto& best = m_probe_samples[indices[top - 1]];
+        m_current_offset_ns = best.offset_ns;
+        m_current_uncertainty_ns = best.rtt_ns / 2;
+        return;
     }
 
-    if (best_probe) {
-        m_current_offset_ns = best_probe->offset_ns;
-        m_current_uncertainty_ns = best_probe->rtt_ns / 2;
-    } else if (m_data_samples.empty()) {
-        // Only clear if no data-packet fallback either
-        m_current_offset_ns = std::nullopt;
-        m_current_uncertainty_ns = std::nullopt;
+    // Probes unreliable or absent — use data-packet fallback.
+    if (m_data_floor_ns.has_value()) {
+        m_current_offset_ns = *m_data_floor_ns;
+        m_current_uncertainty_ns = 700'000;  // ONE_WAY_DELAY_ESTIMATE_NS
+        return;
     }
+
+    // Last resort: use probes even though they're unreliable.
+    if (!m_probe_samples.empty()) {
+        // Same glitch-filtered max-offset as above.
+        std::vector<size_t> indices(m_probe_samples.size());
+        std::iota(indices.begin(), indices.end(), 0);
+        std::sort(indices.begin(), indices.end(),
+                  [this](size_t a, size_t b) {
+                      return m_probe_samples[a].offset_ns
+                           < m_probe_samples[b].offset_ns;
+                  });
+
+        constexpr int64_t GAP_THRESHOLD_NS = 10'000'000;
+        size_t top = indices.size();
+        while (top > 1) {
+            if (m_probe_samples[indices[top - 1]].offset_ns -
+                m_probe_samples[indices[top - 2]].offset_ns > GAP_THRESHOLD_NS)
+                --top;
+            else
+                break;
+        }
+
+        const auto& best = m_probe_samples[indices[top - 1]];
+        m_current_offset_ns = best.offset_ns;
+        m_current_uncertainty_ns = best.rtt_ns / 2;
+        return;
+    }
+
+    m_current_offset_ns = std::nullopt;
+    m_current_uncertainty_ns = std::nullopt;
 }
 
 bool ClockSync::probeSpreadOk() const {

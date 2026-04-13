@@ -32,6 +32,13 @@
 #include <array>
 #include <vector>
 #include "cbdev/clock_sync.h"
+#ifndef _WIN32
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -58,6 +65,85 @@ inline void hr_sleep_us([[maybe_unused]] uint64_t microseconds) {
     std::this_thread::sleep_for(std::chrono::microseconds(static_cast<int64_t>(microseconds)));
 #endif
 }
+
+/// Lightweight read-only reader for a peer device's clock sync fields
+/// in shared memory.  Opens only the config segment via shm_open/mmap
+/// (not a full ShmemSession).  Used by the NSP to borrow a HUB's
+/// probe-based clock offset when its own probes are unreliable.
+struct PeerClockReader {
+#ifndef _WIN32
+    int fd = -1;
+    void* mapped = nullptr;
+    size_t mapped_size = 0;
+
+    bool isOpen() const { return mapped != nullptr && mapped != MAP_FAILED; }
+
+    bool tryOpen(const std::string& segment_name) {
+        close();
+        std::string posix_name = "/" + segment_name;
+        fd = shm_open(posix_name.c_str(), O_RDONLY, 0);
+        if (fd < 0)
+            return false;
+        struct stat st{};
+        if (fstat(fd, &st) < 0 || st.st_size < static_cast<off_t>(sizeof(cbshm::NativeConfigBuffer))) {
+            ::close(fd);
+            fd = -1;
+            return false;
+        }
+        mapped_size = static_cast<size_t>(st.st_size);
+        mapped = mmap(nullptr, mapped_size, PROT_READ, MAP_SHARED, fd, 0);
+        if (mapped == MAP_FAILED) {
+            mapped = nullptr;
+            ::close(fd);
+            fd = -1;
+            return false;
+        }
+        return true;
+    }
+
+    std::optional<int64_t> getClockOffsetNs() const {
+        if (!isOpen()) return std::nullopt;
+        const auto* cfg = static_cast<const cbshm::NativeConfigBuffer*>(mapped);
+        if (!cfg->clock_sync_valid) return std::nullopt;
+        // Liveness check: is the owning process still alive?
+        if (cfg->owner_pid != 0 && kill(static_cast<pid_t>(cfg->owner_pid), 0) != 0)
+            return std::nullopt;
+        return cfg->clock_offset_ns;
+    }
+
+    std::optional<int64_t> getClockUncertaintyNs() const {
+        if (!isOpen()) return std::nullopt;
+        const auto* cfg = static_cast<const cbshm::NativeConfigBuffer*>(mapped);
+        if (!cfg->clock_sync_valid) return std::nullopt;
+        if (cfg->owner_pid != 0 && kill(static_cast<pid_t>(cfg->owner_pid), 0) != 0)
+            return std::nullopt;
+        return cfg->clock_uncertainty_ns;
+    }
+
+    void close() {
+        if (mapped && mapped != MAP_FAILED)
+            munmap(mapped, mapped_size);
+        mapped = nullptr;
+        mapped_size = 0;
+        if (fd >= 0)
+            ::close(fd);
+        fd = -1;
+    }
+
+    ~PeerClockReader() { close(); }
+#else
+    // Windows stub — not yet implemented
+    bool isOpen() const { return false; }
+    bool tryOpen(const std::string&) { return false; }
+    std::optional<int64_t> getClockOffsetNs() const { return std::nullopt; }
+    std::optional<int64_t> getClockUncertaintyNs() const { return std::nullopt; }
+    void close() {}
+#endif
+
+    PeerClockReader() = default;
+    PeerClockReader(const PeerClockReader&) = delete;
+    PeerClockReader& operator=(const PeerClockReader&) = delete;
+};
 
 } // anonymous namespace
 
@@ -192,6 +278,12 @@ struct SdkSession::Impl {
 
     // CLIENT-mode clock sync (used when no device_session is available)
     cbdev::ClockSync client_clock_sync;
+
+    // Peer-device clock sync reader.  When this device (NSP) has
+    // unreliable probes, we try to read a peer HUB's clock offset
+    // from its shared memory config segment instead.
+    PeerClockReader peer_clock;
+    bool peer_clock_attempted = false;  // only try once
     struct PendingClockProbe {
         std::chrono::steady_clock::time_point t1_local;
         bool active = false;
@@ -868,9 +960,34 @@ Result<void> SdkSession::start() {
 
                 // Periodic clock sync probing
                 auto now = std::chrono::steady_clock::now();
-                if (now - impl->last_clock_probe_time > std::chrono::seconds(2)) {
+                if (now - impl->last_clock_probe_time > std::chrono::milliseconds(100)) {
                     impl->device_session->sendClockProbe();
                     impl->last_clock_probe_time = now;
+                }
+
+                // If this NSP is using data-packet fallback, try to inject
+                // a peer HUB's probe-based offset into the ClockSync so
+                // that toLocalTime() uses it on the hot path.
+                constexpr int64_t DATA_FALLBACK_UNCERT = 700'000;
+                auto own_uncert = impl->device_session->getUncertaintyNs();
+                if (own_uncert && *own_uncert == DATA_FALLBACK_UNCERT &&
+                    (impl->config.device_type == DeviceType::NSP ||
+                     impl->config.device_type == DeviceType::LEGACY_NSP)) {
+                    if (!impl->peer_clock_attempted) {
+                        impl->peer_clock_attempted = true;
+                        for (auto hub : {DeviceType::HUB1, DeviceType::HUB2, DeviceType::HUB3}) {
+                            std::string name = getNativeSegmentName(hub, "config");
+                            if (impl->peer_clock.tryOpen(name))
+                                break;
+                        }
+                    }
+                    auto peer_offset = impl->peer_clock.getClockOffsetNs();
+                    auto peer_uncert = impl->peer_clock.getClockUncertaintyNs();
+                    if (peer_offset) {
+                        impl->device_session->setExternalClockOffset(peer_offset, peer_uncert);
+                    } else {
+                        impl->device_session->setExternalClockOffset(std::nullopt);
+                    }
                 }
 
                 // Propagate clock sync offset to shmem for CLIENT mode readers
@@ -2138,7 +2255,10 @@ Result<void> SdkSession::sendClockProbe() {
 }
 
 std::optional<int64_t> SdkSession::getClockOffsetNs() const {
-    // STANDALONE: get from device_session's ClockSync
+    // STANDALONE: get from device_session's ClockSync.
+    // The peer HUB offset (if active) is already injected into the
+    // ClockSync via setExternalOffset() in the periodic update, so
+    // this returns the peer's value transparently.
     if (m_impl->device_session)
         return m_impl->device_session->getOffsetNs();
 
@@ -2154,7 +2274,6 @@ std::optional<int64_t> SdkSession::getClockOffsetNs() const {
 }
 
 std::optional<int64_t> SdkSession::getClockUncertaintyNs() const {
-    // STANDALONE: get from device_session's ClockSync
     if (m_impl->device_session)
         return m_impl->device_session->getUncertaintyNs();
 

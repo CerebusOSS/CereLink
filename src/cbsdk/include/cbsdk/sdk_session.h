@@ -714,12 +714,15 @@ public:
     Result<void> sendClockProbe();
 
     /// Current offset estimate: device_ns - steady_clock_ns.
+    /// On NSP devices with unreliable probes, may transparently read
+    /// a peer HUB's offset from shared memory when available.
     /// @return Offset in nanoseconds, or nullopt if no sync data available
     std::optional<int64_t> getClockOffsetNs() const;
 
-    /// Uncertainty (half-RTT) from best probe, or INT64_MAX for one-way only.
+    /// Uncertainty (half-RTT) from best probe, or ONE_WAY_DELAY_ESTIMATE for data fallback.
     /// @return Uncertainty in nanoseconds, or nullopt if no sync data available
     std::optional<int64_t> getClockUncertaintyNs() const;
+
 
     ///--------------------------------------------------------------------------------------------
     /// Packet Transmission
