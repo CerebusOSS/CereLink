@@ -34,7 +34,7 @@ public:
 
     struct Config {
         double forward_delay_fraction = 0.5; // α: assumed D1/(D1+D2)
-        size_t max_probe_samples = 8;
+        size_t max_probe_samples = 80;
         std::chrono::seconds max_probe_age = std::chrono::seconds{15};
     };
 

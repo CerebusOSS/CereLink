@@ -868,7 +868,7 @@ Result<void> SdkSession::start() {
 
                 // Periodic clock sync probing
                 auto now = std::chrono::steady_clock::now();
-                if (now - impl->last_clock_probe_time > std::chrono::seconds(2)) {
+                if (now - impl->last_clock_probe_time > std::chrono::milliseconds(100)) {
                     impl->device_session->sendClockProbe();
                     impl->last_clock_probe_time = now;
                 }
