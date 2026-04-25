@@ -1297,11 +1297,12 @@ cbsdk_result_t cbsdk_session_set_runlevel(
 // Channel Mapping (CMP) Files
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-cbsdk_result_t cbsdk_session_load_channel_map(cbsdk_session_t session, const char* filepath, uint32_t bank_offset) {
+cbsdk_result_t cbsdk_session_load_channel_map(
+    cbsdk_session_t session, const char* filepath, uint32_t start_chan, uint32_t hs_id) {
     if (!session || !session->cpp_session || !filepath) {
         return CBSDK_RESULT_INVALID_PARAMETER;
     }
-    auto result = session->cpp_session->loadChannelMap(filepath, bank_offset);
+    auto result = session->cpp_session->loadChannelMap(filepath, start_chan, hs_id);
     if (result.isOk()) {
         return CBSDK_RESULT_SUCCESS;
     } else {

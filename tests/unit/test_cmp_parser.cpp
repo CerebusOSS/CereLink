@@ -4,6 +4,12 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include <gtest/gtest.h>
+
+#include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <set>
+
 #include "cmp_parser.h"
 
 #ifndef CMP_TEST_DATA_DIR
@@ -18,102 +24,106 @@ TEST(CmpParser, Parse8Channel) {
     auto result = cbsdk::parseCmpFile(testFile("8ChannelDefaultMapping.cmp"));
     ASSERT_TRUE(result.isOk()) << result.error();
 
-    const auto& positions = result.value();
-    // 8 channels: bank A, electrodes 1-8
-    EXPECT_EQ(positions.size(), 8u);
+    const auto& entries = result.value();
+    EXPECT_EQ(entries.size(), 8u);
 
-    // First entry: 0 1 A 1 chan1 → bank=1(A), term=0(electrode 1-1)
-    auto it = positions.find(cbsdk::cmpKey(1, 0));
-    ASSERT_NE(it, positions.end());
-    EXPECT_EQ(it->second[0], 0);  // col
-    EXPECT_EQ(it->second[1], 1);  // row
-    EXPECT_EQ(it->second[2], 1);  // bank_letter (A=1)
-    EXPECT_EQ(it->second[3], 1);  // electrode
+    // Defaults: start_chan=1, hs_id=0 → chans 1..8, no label prefix.
+    std::set<uint32_t> chans;
+    for (const auto& [chan_id, _] : entries) chans.insert(chan_id);
+    EXPECT_EQ(chans, std::set<uint32_t>({1, 2, 3, 4, 5, 6, 7, 8}));
 
-    // Last entry: 3 0 A 8 chan8 → bank=1(A), term=7(electrode 8-1)
-    it = positions.find(cbsdk::cmpKey(1, 7));
-    ASSERT_NE(it, positions.end());
-    EXPECT_EQ(it->second[0], 3);  // col
-    EXPECT_EQ(it->second[1], 0);  // row
-    EXPECT_EQ(it->second[2], 1);  // bank_letter (A=1)
-    EXPECT_EQ(it->second[3], 8);  // electrode
+    // hs_id=0 leaves labels un-prefixed.
+    for (const auto& [_, entry] : entries) {
+        EXPECT_NE(entry.label.substr(0, 2), "hs");
+    }
+}
+
+TEST(CmpParser, HsIdZeroLeavesLabelsUnprefixed) {
+    // Same file, default hs_id=0 vs explicit hs_id=3, comparing stripped labels.
+    auto bare = cbsdk::parseCmpFile(testFile("8ChannelDefaultMapping.cmp"));
+    auto with_hs = cbsdk::parseCmpFile(testFile("8ChannelDefaultMapping.cmp"), 1, 3);
+    ASSERT_TRUE(bare.isOk());
+    ASSERT_TRUE(with_hs.isOk());
+
+    for (const auto& [chan_id, prefixed] : with_hs.value()) {
+        const auto it = bare.value().find(chan_id);
+        ASSERT_NE(it, bare.value().end());
+        EXPECT_EQ(prefixed.label, "hs3-" + it->second.label);
+    }
 }
 
 TEST(CmpParser, Parse128Channel) {
     auto result = cbsdk::parseCmpFile(testFile("128ChannelDefaultMapping.cmp"));
     ASSERT_TRUE(result.isOk()) << result.error();
 
-    const auto& positions = result.value();
-    EXPECT_EQ(positions.size(), 128u);
+    const auto& entries = result.value();
+    EXPECT_EQ(entries.size(), 128u);
 
-    // First entry: 0 7 A 1 → bank=1, term=0
-    auto it = positions.find(cbsdk::cmpKey(1, 0));
-    ASSERT_NE(it, positions.end());
-    EXPECT_EQ(it->second[0], 0);   // col
-    EXPECT_EQ(it->second[1], 7);   // row
+    // 128 contiguous channel IDs starting at 1.
+    for (uint32_t ch = 1; ch <= 128; ++ch) {
+        ASSERT_TRUE(entries.count(ch)) << "missing chan " << ch;
+    }
 
-    // Bank B entry: 0 5 B 1 chan33 → bank=2, term=0
-    it = positions.find(cbsdk::cmpKey(2, 0));
-    ASSERT_NE(it, positions.end());
-    EXPECT_EQ(it->second[0], 0);   // col
-    EXPECT_EQ(it->second[1], 5);   // row
-    EXPECT_EQ(it->second[2], 2);   // bank_letter (B=2)
-
-    // Bank D, last electrode: 15 0 D 32 chan128 → bank=4, term=31
-    it = positions.find(cbsdk::cmpKey(4, 31));
-    ASSERT_NE(it, positions.end());
-    EXPECT_EQ(it->second[0], 15);  // col
-    EXPECT_EQ(it->second[1], 0);   // row
-    EXPECT_EQ(it->second[2], 4);   // bank_letter (D=4)
-    EXPECT_EQ(it->second[3], 32);  // electrode
+    // Bank layout after sort: chan 1 → (bank 1, elec 1), chan 33 → (bank 2, elec 1),
+    // chan 65 → (bank 3, elec 1), chan 128 → (bank 4, elec 32).
+    EXPECT_EQ(entries.at(1).position[2], 1);
+    EXPECT_EQ(entries.at(1).position[3], 1);
+    EXPECT_EQ(entries.at(33).position[2], 2);
+    EXPECT_EQ(entries.at(33).position[3], 1);
+    EXPECT_EQ(entries.at(128).position[2], 4);
+    EXPECT_EQ(entries.at(128).position[3], 32);
 }
 
-TEST(CmpParser, Parse96Channel) {
-    auto result = cbsdk::parseCmpFile(testFile("96ChannelDefaultMapping.cmp"));
+TEST(CmpParser, StartChanOffsetsChanIds) {
+    // Second headstage: same 96-channel CMP mapped to chans 129..224.
+    auto result = cbsdk::parseCmpFile(
+        testFile("96ChannelDefaultMapping.cmp"), /*start_chan=*/129, /*hs_id=*/2);
     ASSERT_TRUE(result.isOk()) << result.error();
 
-    const auto& positions = result.value();
-    EXPECT_EQ(positions.size(), 96u);
+    const auto& entries = result.value();
+    EXPECT_EQ(entries.size(), 96u);
 
-    // 96-channel has banks A, B, C (3 banks × 32 electrodes)
-    // Verify bank C exists
-    auto it = positions.find(cbsdk::cmpKey(3, 0));
-    ASSERT_NE(it, positions.end());
+    std::set<uint32_t> chans;
+    for (const auto& [chan_id, _] : entries) chans.insert(chan_id);
+    EXPECT_EQ(*chans.begin(), 129u);
+    EXPECT_EQ(*chans.rbegin(), 129u + 95u);
 
-    // Verify bank D does NOT exist (only 96 channels)
-    it = positions.find(cbsdk::cmpKey(4, 0));
-    EXPECT_EQ(it, positions.end());
+    for (const auto& [_, entry] : entries) {
+        EXPECT_EQ(entry.label.substr(0, 4), "hs2-");
+    }
 }
 
-TEST(CmpParser, BankOffset) {
-    // Load 8-channel CMP with bank_offset=4 (simulating port 2)
-    auto result = cbsdk::parseCmpFile(testFile("8ChannelDefaultMapping.cmp"), 4);
+TEST(CmpParser, SortsOutOfOrderRows) {
+    // Synthesize a tiny CMP whose rows are deliberately out of (bank, elec) order.
+    auto path = (std::filesystem::temp_directory_path() / "cmp_unsorted_tmp.cmp").string();
+    {
+        std::ofstream out(path);
+        out << "// scratch file\n"
+            << "unsorted test map\n"
+            // Rows given in reverse electrode order within bank A, then bank B first.
+            << "0 0 B 1 label_b1\n"
+            << "0 0 A 3 label_a3\n"
+            << "0 0 A 1 label_a1\n"
+            << "0 0 A 2 label_a2\n";
+    }
+
+    // Use an explicit hs_id so we exercise the prefix path here.
+    auto result = cbsdk::parseCmpFile(path, /*start_chan=*/1, /*hs_id=*/1);
     ASSERT_TRUE(result.isOk()) << result.error();
 
-    const auto& positions = result.value();
-    EXPECT_EQ(positions.size(), 8u);
+    const auto& entries = result.value();
+    ASSERT_EQ(entries.size(), 4u);
 
-    // Bank A with offset 4 → absolute bank 5
-    auto it = positions.find(cbsdk::cmpKey(5, 0));
-    ASSERT_NE(it, positions.end());
-    EXPECT_EQ(it->second[0], 0);  // col
-    EXPECT_EQ(it->second[1], 1);  // row
-    // position[2] stores the original bank letter index (A=1), not the offset bank
-    EXPECT_EQ(it->second[2], 1);
+    // Sort puts (A,1), (A,2), (A,3), (B,1) at chans 1..4.
+    EXPECT_EQ(entries.at(1).label, "hs1-label_a1");
+    EXPECT_EQ(entries.at(2).label, "hs1-label_a2");
+    EXPECT_EQ(entries.at(3).label, "hs1-label_a3");
+    EXPECT_EQ(entries.at(4).label, "hs1-label_b1");
 
-    // Original bank 1 should NOT have entries
-    it = positions.find(cbsdk::cmpKey(1, 0));
-    EXPECT_EQ(it, positions.end());
+    std::filesystem::remove(path);
 }
 
 TEST(CmpParser, NonexistentFile) {
     auto result = cbsdk::parseCmpFile("/nonexistent/path.cmp");
     EXPECT_TRUE(result.isError());
-}
-
-TEST(CmpParser, CmpKeyUniqueness) {
-    // Verify different (bank, term) pairs produce different keys
-    EXPECT_NE(cbsdk::cmpKey(1, 0), cbsdk::cmpKey(2, 0));
-    EXPECT_NE(cbsdk::cmpKey(1, 0), cbsdk::cmpKey(1, 1));
-    EXPECT_EQ(cbsdk::cmpKey(3, 15), cbsdk::cmpKey(3, 15));
 }

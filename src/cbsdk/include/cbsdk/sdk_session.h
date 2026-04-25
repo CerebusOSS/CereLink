@@ -638,20 +638,26 @@ public:
 
     /// Load a channel mapping file and apply electrode positions
     ///
-    /// CMP files define physical electrode positions on arrays. Because the device does not
-    /// persist the position field in chaninfo, this method stores positions locally and
-    /// overlays them onto channel info whenever updated config data arrives from the device.
+    /// CMP files describe one headstage. Rows are sorted by (bank, electrode)
+    /// and assigned absolute channel IDs starting at @c start_chan. Positions
+    /// are stored locally and overlaid on CHANREP packets; labels are prefixed
+    /// "hs{hs_id}-" and pushed to the device so they persist in chaninfo.
     ///
-    /// Can be called multiple times for different ports on a Hub device (each port may
-    /// have a different array with its own CMP file). Subsequent calls merge positions
-    /// into the existing map.
+    /// Call this once per headstage. Subsequent calls merge their entries
+    /// into the overlay, so multiple headstages can coexist on one device.
     ///
-    /// @param filepath Path to the .cmp file
-    /// @param bank_offset Offset added to CMP bank indices to produce absolute bank numbers.
-    ///        CMP bank letter A becomes absolute bank (1 + bank_offset).
-    ///        Port 1: offset 0 (A=bank 1). Port 2: offset 4 (A=bank 5), etc.
+    /// @param filepath   Path to the .cmp file
+    /// @param start_chan 1-based channel to assign the first sorted row. Use
+    ///                   1 for the first headstage, 129 for the second of a
+    ///                   128-channel headstage, etc.
+    /// @param hs_id      Headstage identifier used to prefix labels
+    ///                   ("hs{hs_id}-{label}"). Pass 0 (the default) to leave
+    ///                   labels un-prefixed.
     /// @return Result indicating success or error
-    Result<void> loadChannelMap(const std::string& filepath, uint32_t bank_offset = 0);
+    Result<void> loadChannelMap(
+        const std::string& filepath,
+        uint32_t start_chan = 1,
+        uint32_t hs_id = 0);
 
     ///--------------------------------------------------------------------------------------------
     /// CCF Configuration Files
