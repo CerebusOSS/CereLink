@@ -316,7 +316,7 @@ cbsdk_result_t cbsdk_session_set_runlevel(cbsdk_session_t session,
     uint32_t runlevel);
 
 // CCF configuration files
-cbsdk_result_t cbsdk_session_load_channel_map(cbsdk_session_t session, const char* filepath, uint32_t bank_offset);
+cbsdk_result_t cbsdk_session_load_channel_map(cbsdk_session_t session, const char* filepath, uint32_t start_chan, uint32_t hs_id);
 cbsdk_result_t cbsdk_session_save_ccf(cbsdk_session_t session, const char* filename);
 cbsdk_result_t cbsdk_session_load_ccf(cbsdk_session_t session, const char* filename);
 cbsdk_result_t cbsdk_session_load_ccf_sync(cbsdk_session_t session, const char* filename, uint32_t timeout_ms);

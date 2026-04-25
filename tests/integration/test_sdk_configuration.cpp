@@ -411,14 +411,15 @@ TEST_F(CMPTest, LoadChannelMap) {
     EXPECT_TRUE(load_result.isOk()) << load_result.error();
 }
 
-TEST_F(CMPTest, LoadChannelMapWithBankOffset) {
+TEST_F(CMPTest, LoadChannelMapSecondHeadstage) {
     std::string cmp = getCmpPath();
     if (cmp.empty()) GTEST_SKIP() << "No CMP test file available";
 
     auto result = createNPlaySession();
     ASSERT_TRUE(result.isOk()) << result.error();
 
-    auto load_result = result.value().loadChannelMap(cmp, 4);
+    // Map the same CMP to channels starting at 129 with hs_id=2.
+    auto load_result = result.value().loadChannelMap(cmp, 129, 2);
     EXPECT_TRUE(load_result.isOk()) << load_result.error();
 }
 

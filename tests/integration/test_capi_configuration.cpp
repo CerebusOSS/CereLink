@@ -464,11 +464,11 @@ TEST_F(CApiCMPTest, LoadChannelMap) {
 #endif
     if (cmp.empty()) GTEST_SKIP() << "No CMP test file available";
 
-    EXPECT_EQ(cbsdk_session_load_channel_map(sg.session, cmp.c_str(), 0),
+    EXPECT_EQ(cbsdk_session_load_channel_map(sg.session, cmp.c_str(), 1, 1),
               CBSDK_RESULT_SUCCESS);
 }
 
-TEST_F(CApiCMPTest, LoadChannelMapWithBankOffset) {
+TEST_F(CApiCMPTest, LoadChannelMapSecondHeadstage) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
@@ -478,7 +478,8 @@ TEST_F(CApiCMPTest, LoadChannelMapWithBankOffset) {
 #endif
     if (cmp.empty()) GTEST_SKIP() << "No CMP test file available";
 
-    EXPECT_EQ(cbsdk_session_load_channel_map(sg.session, cmp.c_str(), 4),
+    // Apply the same CMP to channels 129.. with a different headstage id.
+    EXPECT_EQ(cbsdk_session_load_channel_map(sg.session, cmp.c_str(), 129, 2),
               CBSDK_RESULT_SUCCESS);
 }
 

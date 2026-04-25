@@ -1121,25 +1121,29 @@ class Session:
 
     # --- Channel Mapping (CMP) Files ---
 
-    def load_channel_map(self, filepath: str, bank_offset: int = 0):
-        """Load a channel mapping file (.cmp) and apply electrode positions.
+    def load_channel_map(self, filepath: str, start_chan: int = 1, hs_id: int = 0):
+        """Load a channel mapping file (.cmp) for one headstage.
 
-        CMP files define physical electrode positions on arrays. Because the device
-        does not persist position data, positions are stored locally and overlaid
-        onto channel info whenever updated config data arrives from the device.
+        CMP files describe one headstage's electrode layout. The file's rows
+        are sorted by (bank, electrode) and assigned absolute channel IDs
+        starting at ``start_chan``. Positions are stored locally and overlaid
+        onto chaninfo; labels are prefixed ``"hs{hs_id}-"`` and pushed to the
+        device so they persist in chaninfo.
 
-        Can be called multiple times for different front-end ports on a Hub device,
-        each with a different array and CMP file.
+        Call once per headstage — subsequent calls merge into the overlay,
+        so multiple headstages can coexist on one device.
 
         Args:
             filepath: Path to the .cmp file.
-            bank_offset: Offset added to CMP bank indices for multi-port Hubs.
-                CMP bank letter A becomes absolute bank (1 + bank_offset).
-                Port 1: offset 0 (A=bank 1). Port 2: offset 4 (A=bank 5), etc.
+            start_chan: 1-based channel to assign the first sorted row.
+                Typical: 1 for the first headstage, 129 for the second of a
+                128-channel headstage, etc.
+            hs_id: Headstage identifier used to prefix labels. Pass ``0``
+                (the default) to leave labels un-prefixed.
         """
         _check(
             _get_lib().cbsdk_session_load_channel_map(
-                self._session, filepath.encode(), bank_offset
+                self._session, filepath.encode(), start_chan, hs_id
             ),
             "Failed to load channel map",
         )

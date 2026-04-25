@@ -126,6 +126,20 @@ def cmp_path() -> Path:
 
 
 @pytest.fixture(scope="session")
+def manufacturer_cmp_path() -> Path:
+    """Path to the sanitized 128-channel manufacturer CMP fixture.
+
+    The default 96-channel file has rows that are already in (bank, electrode)
+    order — useful for parser tests but not for exercising the sort. The
+    manufacturer sample has out-of-order rows like a real .cmp file.
+    """
+    repo_root = Path(__file__).parent.parent.parent
+    cmp = repo_root / "tests" / "128ChannelManufacturerMapping.cmp"
+    assert cmp.exists(), f"CMP file not found at {cmp}"
+    return cmp
+
+
+@pytest.fixture(scope="session")
 def nplayserver_binary() -> Path | None:
     """Locate or download the nPlayServer binary for this platform."""
     env_path = os.environ.get("NPLAYSERVER_PATH")

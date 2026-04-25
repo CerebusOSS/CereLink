@@ -130,8 +130,10 @@ if(NPLAY_AVAILABLE)
     endif()
 endif()
 
-# CMP file from the repo's test fixtures
-set(NPLAY_CMP_FILE "${PROJECT_SOURCE_DIR}/tests/96ChannelDefaultMapping.cmp")
+# CMP file from the repo's test fixtures. Use the sanitized 128-ch
+# manufacturer sample so integration tests exercise out-of-order rows
+# and the real manufacturer's bank ordering (not the sorted defaults).
+set(NPLAY_CMP_FILE "${PROJECT_SOURCE_DIR}/tests/128ChannelManufacturerMapping.cmp")
 
 ###############################################################################
 # Integration test executables

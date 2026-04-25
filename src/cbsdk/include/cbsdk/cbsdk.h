@@ -824,23 +824,27 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_runlevel(
 // Channel Mapping (CMP) Files
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Load a channel mapping file (.cmp) and apply electrode positions
+/// Load a channel mapping file (.cmp) for one headstage
 ///
-/// CMP files define physical electrode positions on arrays. Because the device does not
-/// persist the position field in chaninfo, positions are stored locally and overlaid
-/// onto channel info whenever config data arrives from the device.
+/// The CMP file's rows are sorted by (bank, electrode) and assigned absolute
+/// channel IDs starting at @p start_chan. Positions are stored locally and
+/// overlaid on CHANREP packets; labels are prefixed "hs{hs_id}-" and pushed
+/// to the device so they persist in chaninfo.
 ///
-/// Can be called multiple times for different ports on a Hub device.
+/// Call once per headstage — subsequent calls merge into the overlay.
 ///
-/// @param session Session handle (must not be NULL)
-/// @param filepath Path to the .cmp file (must not be NULL)
-/// @param bank_offset Offset added to CMP bank indices. A=1+offset, B=2+offset, etc.
-///        Use 0 for port 1, 4 for port 2, 8 for port 3, etc.
+/// @param session    Session handle (must not be NULL)
+/// @param filepath   Path to the .cmp file (must not be NULL)
+/// @param start_chan 1-based channel to assign the first sorted row
+///                   (typical: 1 for first headstage, 129 for second)
+/// @param hs_id      Headstage identifier used to prefix labels
+///                   ("hs{hs_id}-{label}"). Pass 0 to leave labels un-prefixed.
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_load_channel_map(
     cbsdk_session_t session,
     const char* filepath,
-    uint32_t bank_offset);
+    uint32_t start_chan,
+    uint32_t hs_id);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // CCF Configuration Files

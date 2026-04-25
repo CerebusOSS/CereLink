@@ -257,10 +257,10 @@ struct SdkSession::Impl {
     std::array<ChannelType, cbMAXCHANS> channel_type_cache;
     bool channel_cache_valid = false;
 
-    // CMP (channel mapping) position overlay
-    // Keyed by cmpKey(bank, term) → position[4] = {col, row, bank_letter, electrode}
-    CmpPositionMap cmp_positions;
-    std::mutex cmp_mutex;  // protects cmp_positions (loaded rarely, read on every CHANREP)
+    // CMP (channel mapping) overlay. Keyed by 1-based absolute chan_id →
+    // {position[4], prefixed label}. Loaded rarely, read on every CHANREP.
+    CmpEntries cmp_entries;
+    std::mutex cmp_mutex;
 
     void rebuildChannelTypeCache() {
         for (uint32_t ch = 0; ch < cbMAXCHANS; ++ch) {
@@ -345,36 +345,34 @@ struct SdkSession::Impl {
     // (e.g., during the handshake phase in start()).
     std::atomic<bool> shutting_down{false};
 
-    /// Apply CMP position overlay to a CHANREP packet's channel in device_config.
-    /// Called from the receive path when a CHANREP is received.
-    /// Apply CMP positions to all existing chaninfo entries.
-    /// Called after loading a CMP file.  Writes only to shmem.
+    /// Apply CMP overlay (position + label) to all existing chaninfo entries.
+    /// Called after loading a CMP file. Writes the updated chaninfo to shmem.
+    /// Label push to the device is done separately by SdkSession::loadChannelMap.
     void applyCmpToAllChannels() {
         std::lock_guard<std::mutex> lock(cmp_mutex);
-        if (cmp_positions.empty()) return;
+        if (cmp_entries.empty()) return;
 
-        for (uint32_t ch = 0; ch < cbMAXCHANS; ++ch) {
+        for (const auto& [chan_id, entry] : cmp_entries) {
+            if (chan_id < 1 || chan_id > cbMAXCHANS) continue;
+
             // Snapshot chaninfo to avoid racing with the receive thread
             cbPKT_CHANINFO ci{};
             bool valid = false;
             if (device_session) {
-                const auto* p = device_session->getChanInfo(ch + 1);
+                const auto* p = device_session->getChanInfo(chan_id);
                 if (p && p->chan > 0) { ci = *p; valid = true; }
             } else if (shmem_session) {
-                auto r = shmem_session->getChanInfo(ch);
+                auto r = shmem_session->getChanInfo(chan_id - 1);
                 if (r.isOk() && r.value().chan > 0) { ci = r.value(); valid = true; }
             }
             if (!valid) continue;
 
-            // Apply position
-            uint64_t key = cmpKey(ci.bank, ci.term);
-            auto it = cmp_positions.find(key);
-            if (it == cmp_positions.end()) continue;
-            std::memcpy(ci.position, it->second.data(), sizeof(int32_t) * 4);
+            std::memcpy(ci.position, entry.position.data(), sizeof(int32_t) * 4);
+            std::strncpy(ci.label, entry.label.c_str(), sizeof(ci.label) - 1);
+            ci.label[sizeof(ci.label) - 1] = '\0';
 
-            // Write to shmem (thread-safe)
-            if (shmem_session && ci.chan >= 1 && ci.chan <= cbMAXCHANS) {
-                shmem_session->setChanInfo(ci.chan - 1, ci);
+            if (shmem_session) {
+                shmem_session->setChanInfo(chan_id - 1, ci);
             }
         }
     }
@@ -904,15 +902,21 @@ Result<void> SdkSession::start() {
                 }
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
                     auto chaninfo_copy = *reinterpret_cast<const cbPKT_CHANINFO*>(&pkt);
-                    // Apply CMP position overlay before writing to shmem
-                    // so positions are never lost to a race.
+                    // Apply CMP overlay (position + label) before writing to
+                    // shmem so locally-supplied geometry and labels survive
+                    // even when the device sends a fresh CHANREP.
                     {
                         std::lock_guard<std::mutex> lock(impl->cmp_mutex);
-                        if (!impl->cmp_positions.empty()) {
-                            uint64_t key = cmpKey(chaninfo_copy.bank, chaninfo_copy.term);
-                            auto it = impl->cmp_positions.find(key);
-                            if (it != impl->cmp_positions.end()) {
-                                std::memcpy(chaninfo_copy.position, it->second.data(), sizeof(int32_t) * 4);
+                        if (!impl->cmp_entries.empty()) {
+                            auto it = impl->cmp_entries.find(chaninfo_copy.chan);
+                            if (it != impl->cmp_entries.end()) {
+                                std::memcpy(chaninfo_copy.position,
+                                            it->second.position.data(),
+                                            sizeof(int32_t) * 4);
+                                std::strncpy(chaninfo_copy.label,
+                                             it->second.label.c_str(),
+                                             sizeof(chaninfo_copy.label) - 1);
+                                chaninfo_copy.label[sizeof(chaninfo_copy.label) - 1] = '\0';
                             }
                         }
                     }
@@ -2067,22 +2071,42 @@ static void extractFromNativeConfig(const cbshm::NativeConfigBuffer& native, cbC
 // Channel Mapping (CMP) Files
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-Result<void> SdkSession::loadChannelMap(const std::string& filepath, uint32_t bank_offset) {
-    auto parse_result = parseCmpFile(filepath, bank_offset);
+Result<void> SdkSession::loadChannelMap(
+    const std::string& filepath, uint32_t start_chan, uint32_t hs_id) {
+    auto parse_result = parseCmpFile(filepath, start_chan, hs_id);
     if (parse_result.isError()) {
         return Result<void>::error(parse_result.error());
     }
 
-    // Merge parsed positions into our map (allows multiple loadChannelMap calls for multi-port)
+    // Snapshot labels before moving entries into the overlay map — we
+    // need a stable list to push to the device outside the cmp_mutex.
+    std::vector<std::pair<uint32_t, std::string>> labels_to_push;
     {
         std::lock_guard<std::mutex> lock(m_impl->cmp_mutex);
-        for (auto& [key, pos] : parse_result.value()) {
-            m_impl->cmp_positions[key] = pos;
+        for (auto& [chan_id, entry] : parse_result.value()) {
+            labels_to_push.emplace_back(chan_id, entry.label);
+            m_impl->cmp_entries[chan_id] = std::move(entry);
         }
     }
 
-    // Apply positions to all existing chaninfo entries
+    // Apply positions + labels to shmem for any chaninfo already present.
     m_impl->applyCmpToAllChannels();
+
+    // Push labels to the device so they persist in chaninfo and are echoed
+    // back in future CHANREP packets. Positions aren't persisted by the
+    // device, so no analogous push for position.
+    if (m_impl->device_session || m_impl->shmem_session) {
+        for (const auto& [chan_id, label] : labels_to_push) {
+            const cbPKT_CHANINFO* info = getChanInfo(chan_id);
+            if (!info) continue;
+            cbPKT_CHANINFO ci = *info;
+            ci.chan = chan_id;
+            ci.cbpkt_header.type = cbPKTTYPE_CHANSETLABEL;
+            std::strncpy(ci.label, label.c_str(), sizeof(ci.label) - 1);
+            ci.label[sizeof(ci.label) - 1] = '\0';
+            (void)setChannelConfig(ci);  // best-effort; per-channel failures shouldn't abort
+        }
+    }
 
     return Result<void>::ok();
 }
