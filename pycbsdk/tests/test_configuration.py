@@ -713,32 +713,165 @@ class TestClientCCF:
 
 
 class TestCMP:
-    """Tests for channel mapping (CMP) file loading."""
+    """Tests for channel mapping (CMP) file loading.
 
-    def test_load_channel_map(self, nplay_session, cmp_path):
+    ``load_channel_map`` writes positions into shmem synchronously, but pushes
+    labels to the device asynchronously (one ``CHANSETLABEL`` packet per
+    channel; the device echoes a ``CHANREP`` for each). ``session.sync()``
+    sends a no-op runlevel SET and waits for the matching ``SYSREPRUNLEV``,
+    which guarantees every preceding ``CHANREP`` has been mirrored into shmem.
+
+    The shared ``nplay_session`` plays back the 4-channel ``dnss`` recording,
+    so these tests intersect the parsed CMP entries with the frontend channels
+    the device actually reports. End-to-end coverage of larger channel counts
+    lives in the C++ integration tests against ``dnss256``.
+    """
+
+    @staticmethod
+    def _frontend_view(session):
+        """Return ``{chan_id: (position, label)}`` for present FRONTEND chans."""
+        chan_ids = session.get_matching_channel_ids(ChannelType.FRONTEND)
+        positions = session.get_channels_positions(ChannelType.FRONTEND)
+        labels = session.get_channels_labels(ChannelType.FRONTEND)
+        return {c: (p, l) for c, p, l in zip(chan_ids, positions, labels)}
+
+    def test_load_channel_map_smoke(self, nplay_session, cmp_path):
+        """Loading a CMP and syncing succeeds without raising."""
         nplay_session.load_channel_map(str(cmp_path))
-        time.sleep(0.5)
+        nplay_session.sync()
 
-    def test_load_channel_map_with_bank_offset(self, nplay_session, cmp_path):
-        nplay_session.load_channel_map(str(cmp_path), bank_offset=4)
-        time.sleep(0.5)
+    def test_load_nonexistent_file_raises(self, nplay_session, tmp_path):
+        bogus = tmp_path / "does_not_exist.cmp"
+        with pytest.raises(RuntimeError):
+            nplay_session.load_channel_map(str(bogus))
 
-    def test_positions_after_cmp_load(self, nplay_session, cmp_path):
+    def test_positions_match_parsed(self, nplay_session, cmp_path):
+        """For each FE chan present on the device, position == parser output."""
+        from pycbsdk.cmp import parse_cmp
+
         nplay_session.load_channel_map(str(cmp_path))
-        time.sleep(1)
-        # Check all front-end channels (not just 4) — the CMP maps 96 channels
-        # and matching depends on device-reported bank/term values.
-        positions = nplay_session.get_channels_positions(ChannelType.FRONTEND)
-        non_zero = [p for p in positions if any(v != 0 for v in p)]
-        assert len(non_zero) > 0, (
-            f"No non-zero positions found in {len(positions)} channels after CMP load. "
-            f"First 4 channel bank/term: "
-            + ", ".join(
-                f"({nplay_session.get_channel_field(i+1, ChanInfoField.BANK)}, "
-                f"{nplay_session.get_channel_field(i+1, ChanInfoField.TERM)})"
-                for i in range(min(4, len(positions)))
+        nplay_session.sync()
+
+        expected = parse_cmp(str(cmp_path))
+        view = self._frontend_view(nplay_session)
+        intersect = sorted(set(expected) & set(view))
+        assert intersect, "no FRONTEND chans overlap parsed CMP entries"
+
+        for chan_id in intersect:
+            actual_pos, _ = view[chan_id]
+            assert actual_pos == expected[chan_id].position, (
+                f"chan {chan_id}: expected {expected[chan_id].position}, got {actual_pos}"
             )
+
+    def test_labels_round_trip_through_device(self, nplay_session, cmp_path):
+        """After load + sync, labels read back through the device match the prefix."""
+        from pycbsdk.cmp import parse_cmp
+
+        nplay_session.load_channel_map(str(cmp_path), hs_id=7)
+        nplay_session.sync()
+
+        expected = parse_cmp(str(cmp_path), hs_id=7)
+        view = self._frontend_view(nplay_session)
+        intersect = sorted(set(expected) & set(view))
+        assert intersect
+
+        for chan_id in intersect:
+            _, actual_label = view[chan_id]
+            assert actual_label == expected[chan_id].label, (
+                f"chan {chan_id}: expected {expected[chan_id].label!r}, "
+                f"got {actual_label!r}"
+            )
+            # All labels carry the hs7 prefix we requested.
+            assert actual_label.startswith("hs7-")
+
+    def test_hs_id_prefix_changes_label(self, nplay_session, cmp_path):
+        """Loading with a different hs_id rewrites labels on the device."""
+        from pycbsdk.cmp import parse_cmp
+
+        cmp_chans = set(parse_cmp(str(cmp_path)))
+
+        nplay_session.load_channel_map(str(cmp_path), hs_id=4)
+        nplay_session.sync()
+        before = self._frontend_view(nplay_session)
+
+        nplay_session.load_channel_map(str(cmp_path), hs_id=5)
+        nplay_session.sync()
+        after = self._frontend_view(nplay_session)
+
+        # Only chans the CMP covers carry the hs prefix; the rest keep their
+        # device-default labels. Restrict the check to covered chans that are
+        # also visible on the device.
+        relabeled = sorted(set(before) & set(after) & cmp_chans)
+        assert relabeled
+        for chan_id in relabeled:
+            assert before[chan_id][1].startswith("hs4-")
+            assert after[chan_id][1].startswith("hs5-")
+            # The original (un-prefixed) label is unchanged across the two loads.
+            assert before[chan_id][1].split("-", 1)[1] == after[chan_id][1].split("-", 1)[1]
+
+    def test_start_chan_assignment(
+        self, nplay_session, manufacturer_cmp_path
+    ):
+        """Loading the same file at start_chan=1 vs 129 produces matching layouts.
+
+        Parser output for ``(start_chan=1, hs_id=1)`` and ``(start_chan=129,
+        hs_id=2)`` must agree on (col, row, bank, electrode) at offset chans —
+        e.g. chan 1 under hs1 has the same position as chan 129 under hs2 — and
+        whichever of those chans the device actually reports must reflect the
+        right layout.
+        """
+        from pycbsdk.cmp import parse_cmp
+
+        # Load both headstages so chans 1.. and 129.. are populated.
+        nplay_session.load_channel_map(
+            str(manufacturer_cmp_path), start_chan=1, hs_id=1
         )
+        nplay_session.load_channel_map(
+            str(manufacturer_cmp_path), start_chan=129, hs_id=2
+        )
+        nplay_session.sync()
+
+        hs1 = parse_cmp(str(manufacturer_cmp_path), start_chan=1, hs_id=1)
+        hs2 = parse_cmp(str(manufacturer_cmp_path), start_chan=129, hs_id=2)
+
+        # Shared invariant: corresponding (chan, chan+128) entries describe the
+        # same electrode and differ only in the hs prefix.
+        for sorted_idx in range(min(len(hs1), len(hs2))):
+            assert hs1[1 + sorted_idx].position == hs2[129 + sorted_idx].position
+            assert hs1[1 + sorted_idx].label == hs2[129 + sorted_idx].label.replace(
+                "hs2-", "hs1-", 1
+            )
+
+        # And on the device, every present FE chan that falls in either range
+        # matches its parsed entry.
+        view = self._frontend_view(nplay_session)
+        for chan_id, (pos, label) in view.items():
+            if chan_id in hs1:
+                assert pos == hs1[chan_id].position
+                assert label == hs1[chan_id].label
+            elif chan_id in hs2:
+                assert pos == hs2[chan_id].position
+                assert label == hs2[chan_id].label
+
+    def test_overlay_survives_chanrep_refresh(self, nplay_session, cmp_path):
+        """A CHANREP echoed back from the device should not erase our overlay.
+
+        ``setChannelConfig`` triggers the device to send a CHANREP for the
+        channel we just labeled. The receive path re-applies the CMP overlay
+        before mirroring the CHANREP into shmem; otherwise, the position would
+        get clobbered by whatever the device thinks (which is not persisted).
+        """
+        from pycbsdk.cmp import parse_cmp
+
+        nplay_session.load_channel_map(str(cmp_path), hs_id=9)
+        nplay_session.sync()
+
+        expected = parse_cmp(str(cmp_path), hs_id=9)
+        view = self._frontend_view(nplay_session)
+        for chan_id in sorted(set(expected) & set(view)):
+            pos, label = view[chan_id]
+            assert pos == expected[chan_id].position
+            assert label == expected[chan_id].label
 
 
 # ---------------------------------------------------------------------------
