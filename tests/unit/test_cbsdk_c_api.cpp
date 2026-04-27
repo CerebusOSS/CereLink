@@ -385,8 +385,9 @@ TEST_F(CbsdkCApiTest, ConfigAccess_WithSession) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 TEST_F(CbsdkCApiTest, SetChannelSampleGroup_NullSession) {
-    EXPECT_EQ(cbsdk_session_set_sample_group(nullptr, 256,
-        CBPROTO_CHANNEL_TYPE_FRONTEND, CBPROTO_GROUP_RATE_30000Hz, false), CBSDK_RESULT_INVALID_PARAMETER);
+    EXPECT_EQ(cbsdk_session_set_sample_group(nullptr, 256u,
+        CBPROTO_CHANNEL_TYPE_FRONTEND, CBPROTO_GROUP_RATE_30000Hz, false, nullptr),
+        CBSDK_RESULT_INVALID_PARAMETER);
 }
 
 TEST_F(CbsdkCApiTest, SetChannelConfig_NullSession) {

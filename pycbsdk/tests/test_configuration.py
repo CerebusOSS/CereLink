@@ -418,6 +418,61 @@ class TestSpikeSorting:
 
 
 # ---------------------------------------------------------------------------
+# n_configured return + chans=None semantics
+# ---------------------------------------------------------------------------
+
+
+class TestNConfigured:
+    """Bulk setters return the count of channels in the post-config state."""
+
+    def test_set_sample_group_returns_count(self, nplay_session):
+        n_fe = nplay_session.num_fe_chans()
+        n = nplay_session.set_sample_group(
+            n_fe, ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=True,
+        )
+        assert n == n_fe
+        # And matches a fresh re-scan via get_group_channels.
+        assert n == len(nplay_session.get_group_channels(int(SampleRate.SR_30kHz)))
+
+    def test_set_sample_group_chans_none_is_all(self, nplay_session):
+        n_fe = nplay_session.num_fe_chans()
+        n = nplay_session.set_sample_group(
+            None, ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=True,
+        )
+        assert n == n_fe
+
+    def test_set_sample_group_partial(self, nplay_session):
+        # Configure only the first 2 channels at 1kHz, leave the rest untouched.
+        n = nplay_session.set_sample_group(
+            2, ChannelType.FRONTEND, SampleRate.SR_1kHz, disable_others=False,
+        )
+        # Returned count is "channels at SR_1kHz post-config", i.e. exactly 2.
+        assert n == 2
+
+    def test_set_ac_input_coupling_returns_count(self, nplay_session):
+        n_fe = nplay_session.num_fe_chans()
+        n_on = nplay_session.set_ac_input_coupling(
+            None, ChannelType.FRONTEND, True,
+        )
+        assert n_on == n_fe
+        n_off = nplay_session.set_ac_input_coupling(
+            None, ChannelType.FRONTEND, False,
+        )
+        assert n_off == n_fe
+
+    def test_set_spike_extraction_returns_count(self, nplay_session):
+        n_fe = nplay_session.num_fe_chans()
+        n_on = nplay_session.set_spike_extraction(
+            None, ChannelType.FRONTEND, True,
+        )
+        assert n_on == n_fe
+        n_off = nplay_session.set_spike_extraction(
+            None, ChannelType.FRONTEND, False,
+        )
+        assert n_off == n_fe
+
+
+# ---------------------------------------------------------------------------
 # Per-channel configuration (configure_channel)
 # ---------------------------------------------------------------------------
 

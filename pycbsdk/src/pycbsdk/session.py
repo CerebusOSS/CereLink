@@ -12,6 +12,9 @@ from typing import Callable, Optional
 
 from ._lib import ffi, load_library
 
+# "All matching" sentinel for bulk channel-config setters.
+_ALL_CHANS = 0xFFFFFFFF
+
 lib = None  # Lazy-loaded
 
 
@@ -903,37 +906,46 @@ class Session:
 
     def set_sample_group(
         self,
-        n_chans: int,
+        chans: int | None,
         channel_type: ChannelType,
         rate: SampleRate,
         disable_others: bool = False,
-    ):
-        """Set sampling rate for channels of a specific type (fire-and-forget).
+    ) -> int:
+        """Set sampling rate for channels of a specific type.
 
-        Configures the first *n_chans* channels matching *channel_type*.
-        To configure a specific channel by ID, use :meth:`set_channel_smpgroup`.
+        Configures the first *chans* channels matching *channel_type* (or
+        every matching channel when *chans* is ``None``).  To configure a
+        specific channel by ID, use :meth:`set_channel_smpgroup`.
 
-        The device will not have applied the new configuration when this
-        call returns.  Call :meth:`sync` before reading back state (e.g.,
-        :meth:`get_group_channels`) or registering callbacks that depend
-        on the new configuration.
+        Self-synchronizing: runs :meth:`sync` before reading the local cache
+        (so prior in-flight config has landed) and again after sending, so
+        the returned count reflects the post-config state.  Always sends a
+        CHANSET* packet for every in-scope channel — never skips channels
+        that look already configured (the local cache may be stale due to
+        a dropped CHANREP).
 
         .. note::
 
             The device does not update the ``smpgroup`` field for raw
-            channels.  After setting ``SampleRate.SR_RAW``,
-            :meth:`get_channel_config` will show ``smpgroup=0``.
-            Use ``get_group_channels(int(SampleRate.SR_RAW))`` to check
-            raw group membership.
+            channels.  When *rate* is ``SampleRate.SR_RAW`` the returned
+            count and :meth:`get_group_channels` use the
+            ``cbAINP_RAWSTREAM`` bit instead.
 
         Args:
-            n_chans: Number of channels to configure.
+            chans: Number of channels to configure, or ``None`` for all
+                matching.
             channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
             rate: Sample rate (e.g., ``SampleRate.SR_30kHz``, ``SampleRate.NONE``
                 to disable).
             disable_others: Disable sampling on unselected channels.
+
+        Returns:
+            Count of *channel_type* channels whose post-config state matches
+            *rate*.
         """
         _lib = _get_lib()
+        n_chans = _ALL_CHANS if chans is None else int(chans)
+        out_n = ffi.new("uint32_t *")
         _check(
             _lib.cbsdk_session_set_sample_group(
                 self._session,
@@ -941,37 +953,47 @@ class Session:
                 int(_coerce_enum(ChannelType, channel_type)),
                 int(_coerce_enum(SampleRate, rate, _RATE_ALIASES)),
                 disable_others,
+                out_n,
             ),
             "Failed to set channel sample group",
         )
+        return int(out_n[0])
 
     def set_ac_input_coupling(
         self,
-        n_chans: int,
+        chans: int | None,
         channel_type: ChannelType,
         enabled: bool,
-    ):
-        """Set AC/DC input coupling for channels of a specific type (fire-and-forget).
+    ) -> int:
+        """Set AC/DC input coupling for channels of a specific type.
 
-        Call :meth:`sync` before reading back state that depends on this
-        configuration.
+        Self-synchronizing — see :meth:`set_sample_group` for the contract.
 
         Args:
-            n_chans: Number of channels to configure.
+            chans: Number of channels to configure, or ``None`` for all
+                matching.
             channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
             enabled: ``True`` for AC coupling (offset correction on),
                 ``False`` for DC coupling.
+
+        Returns:
+            Count of *channel_type* channels whose post-config
+            ``cbAINP_OFFSET_CORRECT`` bit matches *enabled*.
         """
         _lib = _get_lib()
+        n_chans = _ALL_CHANS if chans is None else int(chans)
+        out_n = ffi.new("uint32_t *")
         _check(
             _lib.cbsdk_session_set_ac_input_coupling(
                 self._session,
                 n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),
                 enabled,
+                out_n,
             ),
             "Failed to set AC input coupling",
         )
+        return int(out_n[0])
 
     def set_channel_label(self, chan_id: int, label: str, auto_sync: bool = False):
         """Set a channel's label.
@@ -1401,30 +1423,38 @@ class Session:
 
     def set_spike_sorting(
         self,
-        n_chans: int,
+        chans: int | None,
         channel_type: ChannelType,
         sort_options: int,
-    ):
-        """Set spike sorting options for channels of a specific type (fire-and-forget).
+    ) -> int:
+        """Set spike sorting options for channels of a specific type.
 
-        Call :meth:`sync` before reading back state that depends on this
-        configuration.
+        Self-synchronizing — see :meth:`set_sample_group` for the contract.
 
         Args:
-            n_chans: Number of channels to configure.
+            chans: Number of channels to configure, or ``None`` for all
+                matching.
             channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
             sort_options: Spike sorting option flags (cbAINPSPK_*).
+
+        Returns:
+            Count of *channel_type* channels whose post-config
+            ``spkopts & cbAINPSPK_ALLSORT`` matches *sort_options*.
         """
         _lib = _get_lib()
+        n_chans = _ALL_CHANS if chans is None else int(chans)
+        out_n = ffi.new("uint32_t *")
         _check(
             _lib.cbsdk_session_set_spike_sorting(
                 self._session,
                 n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),
                 sort_options,
+                out_n,
             ),
             "Failed to set spike sorting",
         )
+        return int(out_n[0])
 
     def set_channel_spike_sorting(
         self, chan_id: int, sort_options: int, auto_sync: bool = False
@@ -1451,33 +1481,41 @@ class Session:
 
     def set_spike_extraction(
         self,
-        n_chans: int,
+        chans: int | None,
         channel_type: ChannelType,
         enabled: bool,
-    ):
-        """Enable or disable spike extraction for channels of a specific type (fire-and-forget).
+    ) -> int:
+        """Enable or disable spike extraction for channels of a specific type.
 
         Controls the ``cbAINPSPK_EXTRACT`` bit which determines whether the
         device emits spike event packets. Uses ``cbPKTTYPE_CHANSETSPK``.
 
-        Call :meth:`sync` before reading back state that depends on this
-        configuration.
+        Self-synchronizing — see :meth:`set_sample_group` for the contract.
 
         Args:
-            n_chans: Number of channels to configure.
+            chans: Number of channels to configure, or ``None`` for all
+                matching.
             channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
             enabled: ``True`` to enable spike extraction, ``False`` to disable.
+
+        Returns:
+            Count of *channel_type* channels whose post-config
+            ``cbAINPSPK_EXTRACT`` bit matches *enabled*.
         """
         _lib = _get_lib()
+        n_chans = _ALL_CHANS if chans is None else int(chans)
+        out_n = ffi.new("uint32_t *")
         _check(
             _lib.cbsdk_session_set_spike_extraction(
                 self._session,
                 n_chans,
                 int(_coerce_enum(ChannelType, channel_type)),
                 enabled,
+                out_n,
             ),
             "Failed to set spike extraction",
         )
+        return int(out_n[0])
 
     # --- Clock Synchronization ---
 

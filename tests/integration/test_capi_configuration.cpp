@@ -131,11 +131,11 @@ TEST_F(CApiSampleGroupTest, SetFrontend30kHz) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
+    uint32_t n_configured = 0;
     EXPECT_EQ(cbsdk_session_set_sample_group(
         sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND,
-        CBPROTO_GROUP_RATE_30000Hz, true), CBSDK_RESULT_SUCCESS);
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        CBPROTO_GROUP_RATE_30000Hz, true, &n_configured), CBSDK_RESULT_SUCCESS);
+    EXPECT_EQ(n_configured, 4u);
 
     // Verify via group list
     uint16_t list[256];
@@ -149,11 +149,11 @@ TEST_F(CApiSampleGroupTest, SetAndVerifyField) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
+    uint32_t n_configured = 0;
     EXPECT_EQ(cbsdk_session_set_sample_group(
         sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND,
-        CBPROTO_GROUP_RATE_10000Hz, true), CBSDK_RESULT_SUCCESS);
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        CBPROTO_GROUP_RATE_10000Hz, true, &n_configured), CBSDK_RESULT_SUCCESS);
+    EXPECT_EQ(n_configured, 4u);
 
     // Query via bulk field getter
     int64_t values[512];
@@ -267,16 +267,22 @@ TEST_F(CApiACCouplingTest, SetACCoupling) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
+    uint32_t n_configured = 0;
     EXPECT_EQ(cbsdk_session_set_ac_input_coupling(
-        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, true), CBSDK_RESULT_SUCCESS);
+        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, true, &n_configured),
+        CBSDK_RESULT_SUCCESS);
+    EXPECT_EQ(n_configured, 4u);
 }
 
 TEST_F(CApiACCouplingTest, SetDCCoupling) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
+    uint32_t n_configured = 0;
     EXPECT_EQ(cbsdk_session_set_ac_input_coupling(
-        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, false), CBSDK_RESULT_SUCCESS);
+        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, false, &n_configured),
+        CBSDK_RESULT_SUCCESS);
+    EXPECT_EQ(n_configured, 4u);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -289,8 +295,11 @@ TEST_F(CApiSpikeSortingTest, SetSpikeSorting) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
+    uint32_t n_configured = 0;
     EXPECT_EQ(cbsdk_session_set_spike_sorting(
-        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, 0), CBSDK_RESULT_SUCCESS);
+        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, 0, &n_configured),
+        CBSDK_RESULT_SUCCESS);
+    EXPECT_EQ(n_configured, 4u);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

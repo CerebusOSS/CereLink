@@ -509,46 +509,53 @@ public:
     /// Channel Configuration
     ///--------------------------------------------------------------------------------------------
 
-    /// Set sampling rate for channels of a specific type (fire-and-forget).
-    /// The device will not have applied the new configuration when this call
-    /// returns.  Call sync() before reading back state (e.g., getGroupChannelList)
-    /// or registering callbacks that depend on the new configuration.
-    /// @param nChans Number of channels to configure (cbMAXCHANS for all)
+    /// Set sampling rate for channels of a specific type.
+    ///
+    /// Internally runs sync() before reading the local cache (so any prior
+    /// in-flight config from this process has landed) and again after sending
+    /// (so the returned count reflects post-config state).  Always sends a
+    /// CHANSET* packet for every in-scope channel — never skips channels that
+    /// look already configured, since the local cache may be stale due to
+    /// dropped CHANREP packets from a concurrent client.
+    ///
+    /// @param nChans Number of channels of @p chanType to configure, in
+    ///        ascending channel-id order.  Use UINT32_MAX for all matching.
     /// @param chanType Channel type filter
     /// @param rate Desired sample rate (NONE to disable, SR_500 through SR_RAW)
-    /// @param disableOthers Disable sampling on channels not in the first nChans of type
-    /// @return Result indicating success or error
-    Result<void> setSampleGroup(size_t nChans, ChannelType chanType,
-                                       SampleRate rate, bool disableOthers = false);
+    /// @param disableOthers Disable sampling on channels not in the first
+    ///        @p nChans of @p chanType
+    /// @return Number of channels of @p chanType whose post-config state
+    ///         matches @p rate, or error.
+    Result<uint32_t> setSampleGroup(uint32_t nChans, ChannelType chanType,
+                                    SampleRate rate, bool disableOthers = false);
 
-    /// Set spike sorting options for channels of a specific type (fire-and-forget).
-    /// Call sync() before reading back state that depends on this configuration.
-    /// @param nChans Number of channels to configure
+    /// Set spike sorting options for channels of a specific type.
+    /// See setSampleGroup() for the auto-sync and idempotency contract.
+    /// @param nChans Channels to configure (UINT32_MAX = all matching)
     /// @param chanType Channel type filter
     /// @param sortOptions Spike sorting option flags (cbAINPSPK_*)
-    /// @return Result indicating success or error
-    Result<void> setSpikeSorting(size_t nChans, ChannelType chanType,
-                                        uint32_t sortOptions);
+    /// @return Count of @p chanType channels whose spkopts ALLSORT bits
+    ///         match @p sortOptions post-sync, or error.
+    Result<uint32_t> setSpikeSorting(uint32_t nChans, ChannelType chanType,
+                                     uint32_t sortOptions);
 
     /// Enable or disable spike extraction (cbAINPSPK_EXTRACT) for channels
-    /// of a type (fire-and-forget).
-    /// This controls whether the device emits spike event packets for these channels.
-    /// Uses cbPKTTYPE_CHANSETSPK (not the threshold command).
-    /// Call sync() before reading back state that depends on this configuration.
-    /// @param nChans Number of channels to configure
+    /// of a type.  See setSampleGroup() for the auto-sync contract.
+    /// @param nChans Channels to configure (UINT32_MAX = all matching)
     /// @param chanType Channel type filter
     /// @param enabled true = enable spike extraction, false = disable
-    /// @return Result indicating success or error
-    Result<void> setSpikeExtraction(size_t nChans, ChannelType chanType, bool enabled);
+    /// @return Count of @p chanType channels whose EXTRACT bit matches
+    ///         @p enabled post-sync, or error.
+    Result<uint32_t> setSpikeExtraction(uint32_t nChans, ChannelType chanType, bool enabled);
 
     /// Set AC input coupling (offset correction) for channels of a specific
-    /// type (fire-and-forget).
-    /// Call sync() before reading back state that depends on this configuration.
-    /// @param nChans Number of channels to configure (cbMAXCHANS for all)
+    /// type.  See setSampleGroup() for the auto-sync contract.
+    /// @param nChans Channels to configure (UINT32_MAX = all matching)
     /// @param chanType Channel type filter
     /// @param enabled true = AC coupling (offset correction on), false = DC coupling
-    /// @return Result indicating success or error
-    Result<void> setACInputCoupling(size_t nChans, ChannelType chanType, bool enabled);
+    /// @return Count of @p chanType channels whose OFFSET_CORRECT bit
+    ///         matches @p enabled post-sync, or error.
+    Result<uint32_t> setACInputCoupling(uint32_t nChans, ChannelType chanType, bool enabled);
 
     /// Set full channel configuration by packet (fire-and-forget).
     /// Call sync() before reading back state that depends on this configuration.

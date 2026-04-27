@@ -206,11 +206,11 @@ cbsdk_result_t cbsdk_session_get_group_list(cbsdk_session_t session,
 
 // Channel configuration
 cbsdk_result_t cbsdk_session_set_sample_group(
-    cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
-    cbproto_group_rate_t rate, _Bool disable_others);
+    cbsdk_session_t session, uint32_t n_chans, cbproto_channel_type_t chan_type,
+    cbproto_group_rate_t rate, _Bool disable_others, uint32_t* out_n_configured);
 cbsdk_result_t cbsdk_session_set_ac_input_coupling(
-    cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
-    _Bool enabled);
+    cbsdk_session_t session, uint32_t n_chans, cbproto_channel_type_t chan_type,
+    _Bool enabled, uint32_t* out_n_configured);
 
 // Per-channel getters
 cbproto_channel_type_t cbsdk_session_get_channel_type(cbsdk_session_t session, uint32_t chan_id);
@@ -335,15 +335,15 @@ cbsdk_result_t cbsdk_session_close_central_file_dialog(cbsdk_session_t session);
 
 // Spike sorting
 cbsdk_result_t cbsdk_session_set_spike_sorting(
-    cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
-    uint32_t sort_options);
+    cbsdk_session_t session, uint32_t n_chans, cbproto_channel_type_t chan_type,
+    uint32_t sort_options, uint32_t* out_n_configured);
 cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
     cbsdk_session_t session, uint32_t chan_id, uint32_t sort_options, int auto_sync);
 
 // Spike extraction (enable/disable cbAINPSPK_EXTRACT via CHANSETSPK)
 cbsdk_result_t cbsdk_session_set_spike_extraction(
-    cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
-    bool enabled);
+    cbsdk_session_t session, uint32_t n_chans, cbproto_channel_type_t chan_type,
+    bool enabled, uint32_t* out_n_configured);
 
 // Clock synchronization
 cbsdk_result_t cbsdk_session_get_clock_offset(cbsdk_session_t session, int64_t* offset_ns);

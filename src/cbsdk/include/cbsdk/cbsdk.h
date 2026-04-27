@@ -543,31 +543,46 @@ CBSDK_API cbsdk_result_t cbsdk_session_get_group_list(
 // Channel Configuration
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Set sampling rate for channels of a specific type
+/// Set sampling rate for channels of a specific type.
+///
+/// Internally syncs before reading the local cache and again after sending,
+/// so @p out_n_configured reflects the channels' post-config state rather
+/// than the count just changed by this call.  Always sends a CHANSET* packet
+/// for every in-scope channel — no skip-if-already-correct optimization,
+/// since the local cache may be stale due to a dropped CHANREP.
+///
 /// @param session Session handle (must not be NULL)
-/// @param n_chans Number of channels to configure (use cbMAXCHANS for all)
+/// @param n_chans Channels of @p chan_type to configure, in ascending
+///        channel-id order.  Use UINT32_MAX for all matching.
 /// @param chan_type Channel type filter
 /// @param rate Sample rate (CBPROTO_GROUP_RATE_NONE to disable, _500Hz through _RAW)
 /// @param disable_others If true, disable sampling on unselected channels of this type
+/// @param[out] out_n_configured Receives the count of @p chan_type channels
+///        whose post-config state matches @p rate. May be NULL.
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_sample_group(
     cbsdk_session_t session,
-    size_t n_chans,
+    uint32_t n_chans,
     cbproto_channel_type_t chan_type,
     cbproto_group_rate_t rate,
-    bool disable_others);
+    bool disable_others,
+    uint32_t* out_n_configured);
 
-/// Set AC input coupling (offset correction) for channels of a specific type
+/// Set AC input coupling (offset correction) for channels of a specific type.
+/// See cbsdk_session_set_sample_group() for the auto-sync contract.
 /// @param session Session handle (must not be NULL)
-/// @param n_chans Number of channels to configure (use cbMAXCHANS for all)
+/// @param n_chans Channels to configure (UINT32_MAX = all matching)
 /// @param chan_type Channel type filter
 /// @param enabled true = AC coupling, false = DC coupling
+/// @param[out] out_n_configured Count of @p chan_type channels whose
+///        post-config OFFSET_CORRECT bit matches @p enabled. May be NULL.
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_ac_input_coupling(
     cbsdk_session_t session,
-    size_t n_chans,
+    uint32_t n_chans,
     cbproto_channel_type_t chan_type,
-    bool enabled);
+    bool enabled,
+    uint32_t* out_n_configured);
 
 /// Set full channel configuration by sending a CHANINFO packet
 /// @param session Session handle (must not be NULL)
@@ -996,17 +1011,21 @@ CBSDK_API cbsdk_result_t cbsdk_session_close_central_file_dialog(cbsdk_session_t
 // Spike Sorting
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Set spike sorting options for channels of a specific type
+/// Set spike sorting options for channels of a specific type.
+/// See cbsdk_session_set_sample_group() for the auto-sync contract.
 /// @param session Session handle (must not be NULL)
-/// @param n_chans Number of channels to configure
+/// @param n_chans Channels to configure (UINT32_MAX = all matching)
 /// @param chan_type Channel type filter
 /// @param sort_options Spike sorting option flags (cbAINPSPK_*)
+/// @param[out] out_n_configured Count of @p chan_type channels whose
+///        post-config spkopts ALLSORT bits match @p sort_options. May be NULL.
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_spike_sorting(
     cbsdk_session_t session,
-    size_t n_chans,
+    uint32_t n_chans,
     cbproto_channel_type_t chan_type,
-    uint32_t sort_options);
+    uint32_t sort_options,
+    uint32_t* out_n_configured);
 
 /// Set spike sorting options for a single channel (fire-and-forget).
 /// Clears cbAINPSPK_ALLSORT bits then sets sort_options.
@@ -1024,16 +1043,20 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
 /// Enable or disable spike extraction for channels of a specific type.
 /// Controls the cbAINPSPK_EXTRACT bit via cbPKTTYPE_CHANSETSPK.
 /// When enabled, the device emits spike event packets for matching channels.
+/// See cbsdk_session_set_sample_group() for the auto-sync contract.
 /// @param session Session handle (must not be NULL)
-/// @param n_chans Number of channels to configure
+/// @param n_chans Channels to configure (UINT32_MAX = all matching)
 /// @param chan_type Channel type filter
 /// @param enabled true = enable spike extraction, false = disable
+/// @param[out] out_n_configured Count of @p chan_type channels whose
+///        post-config EXTRACT bit matches @p enabled. May be NULL.
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_spike_extraction(
     cbsdk_session_t session,
-    size_t n_chans,
+    uint32_t n_chans,
     cbproto_channel_type_t chan_type,
-    bool enabled);
+    bool enabled,
+    uint32_t* out_n_configured);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Clock Synchronization
