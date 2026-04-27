@@ -226,25 +226,29 @@ int16_t  cbsdk_session_get_channel_amplrejneg(cbsdk_session_t session, uint32_t 
 cbsdk_result_t cbsdk_session_get_channel_scaling(
     cbsdk_session_t session, uint32_t chan_id, cbsdk_channel_scaling_t* scaling);
 
-// Per-channel setters
+// Per-channel setters.
+// `auto_sync` is non-zero to run an internal sync() before the read-modify-write
+// (so any prior in-flight config from this process has landed in the cache);
+// set_channel_spkthrlevel is "narrow" (CHANSETSPKTHR overwrites the only field
+// the firmware reads) and so does not need an auto_sync flag.
 cbsdk_result_t cbsdk_session_set_channel_label(cbsdk_session_t session,
-    uint32_t chan_id, const char* label);
+    uint32_t chan_id, const char* label, int auto_sync);
 cbsdk_result_t cbsdk_session_set_channel_smpgroup(cbsdk_session_t session,
-    uint32_t chan_id, cbproto_group_rate_t rate);
+    uint32_t chan_id, cbproto_group_rate_t rate, int auto_sync);
 cbsdk_result_t cbsdk_session_set_channel_smpfilter(cbsdk_session_t session,
-    uint32_t chan_id, uint32_t filter_id);
+    uint32_t chan_id, uint32_t filter_id, int auto_sync);
 cbsdk_result_t cbsdk_session_set_channel_spkfilter(cbsdk_session_t session,
-    uint32_t chan_id, uint32_t filter_id);
+    uint32_t chan_id, uint32_t filter_id, int auto_sync);
 cbsdk_result_t cbsdk_session_set_channel_ainpopts(cbsdk_session_t session,
-    uint32_t chan_id, uint32_t ainpopts);
+    uint32_t chan_id, uint32_t ainpopts, int auto_sync);
 cbsdk_result_t cbsdk_session_set_channel_lncrate(cbsdk_session_t session,
-    uint32_t chan_id, uint32_t lncrate);
+    uint32_t chan_id, uint32_t lncrate, int auto_sync);
 cbsdk_result_t cbsdk_session_set_channel_spkopts(cbsdk_session_t session,
-    uint32_t chan_id, uint32_t spkopts);
+    uint32_t chan_id, uint32_t spkopts, int auto_sync);
 cbsdk_result_t cbsdk_session_set_channel_spkthrlevel(cbsdk_session_t session,
     uint32_t chan_id, int32_t level);
 cbsdk_result_t cbsdk_session_set_channel_autothreshold(cbsdk_session_t session,
-    uint32_t chan_id, _Bool enabled);
+    uint32_t chan_id, _Bool enabled, int auto_sync);
 
 // Channel info field selector
 typedef enum {
@@ -334,7 +338,7 @@ cbsdk_result_t cbsdk_session_set_spike_sorting(
     cbsdk_session_t session, size_t n_chans, cbproto_channel_type_t chan_type,
     uint32_t sort_options);
 cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
-    cbsdk_session_t session, uint32_t chan_id, uint32_t sort_options);
+    cbsdk_session_t session, uint32_t chan_id, uint32_t sort_options, int auto_sync);
 
 // Spike extraction (enable/disable cbAINPSPK_EXTRACT via CHANSETSPK)
 cbsdk_result_t cbsdk_session_set_spike_extraction(
