@@ -578,6 +578,24 @@ cbsdk_callback_handle_t cbsdk_session_register_config_callback(
     }
 }
 
+cbsdk_callback_handle_t cbsdk_session_register_runlevel_callback(
+    cbsdk_session_t session,
+    cbsdk_runlevel_callback_fn callback,
+    void* user_data) {
+    if (!session || !session->cpp_session || !callback) {
+        return 0;
+    }
+    try {
+        return session->cpp_session->registerRunlevelChangeCallback(
+            [callback, user_data](uint32_t runlevel) {
+                callback(runlevel, user_data);
+            }
+        );
+    } catch (...) {
+        return 0;
+    }
+}
+
 void cbsdk_session_unregister_callback(cbsdk_session_t session,
                                         cbsdk_callback_handle_t handle) {
     if (!session || !session->cpp_session || handle == 0) {

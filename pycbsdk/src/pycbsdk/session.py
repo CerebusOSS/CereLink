@@ -4,6 +4,7 @@ Pythonic session wrapper for the CereLink SDK.
 
 from __future__ import annotations
 
+import asyncio
 import enum
 import time as _time
 import threading
@@ -11,6 +12,17 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from ._lib import ffi, load_library
+
+# Device runlevels (cbRUNLEVEL_*).  Mirrors values in cbproto types.h.
+RUNLEVEL_STARTUP = 10
+RUNLEVEL_HARDRESET = 20
+RUNLEVEL_STANDBY = 30
+RUNLEVEL_RESET = 40
+RUNLEVEL_RUNNING = 50
+RUNLEVEL_STRESSED = 60
+RUNLEVEL_ERROR = 70
+RUNLEVEL_UPDATE = 78
+RUNLEVEL_SHUTDOWN = 80
 
 # "All matching" sentinel for bulk channel-config setters.
 _ALL_CHANS = 0xFFFFFFFF
@@ -503,6 +515,31 @@ class Session:
         self._handles.append(handle)
         self._callback_refs.append(c_config_cb)
 
+    def _register_runlevel_callback(self, fn: Callable[[int], None]) -> int:
+        """Register a runlevel-change callback. Returns the callback handle.
+
+        The callback is invoked on the SDK's receive thread (or shmem-receive
+        thread in CLIENT mode), so ``fn`` must be fast and thread-safe.  For
+        async use, see :meth:`wait_for_runlevel`.
+        """
+        _lib = _get_lib()
+
+        @ffi.callback("void(uint32_t, void*)")
+        def c_runlevel_cb(runlevel, user_data):
+            try:
+                fn(int(runlevel))
+            except Exception:
+                pass  # Never let exceptions propagate into C
+
+        handle = _lib.cbsdk_session_register_runlevel_callback(
+            self._session, c_runlevel_cb, ffi.NULL
+        )
+        if handle == 0:
+            raise RuntimeError("Failed to register runlevel callback")
+        self._handles.append(handle)
+        self._callback_refs.append(c_runlevel_cb)
+        return handle
+
     def _register_packet_callback(self, fn):
         _lib = _get_lib()
 
@@ -556,6 +593,52 @@ class Session:
     def runlevel(self) -> int:
         """Get the current device run level."""
         return _get_lib().cbsdk_session_get_runlevel(self._session)
+
+    async def wait_for_runlevel(self, level: int, timeout: float = 10.0) -> None:
+        """Resolve when the device runlevel reaches ``level``.
+
+        Returns immediately if ``self.runlevel >= level`` at call time.
+        Otherwise registers a one-shot listener for the next runlevel
+        transition matching the predicate and resolves on its arrival.
+
+        Args:
+            level: Target runlevel (use one of the ``RUNLEVEL_*`` module
+                constants, e.g. :data:`RUNLEVEL_RUNNING`).
+            timeout: Seconds to wait before raising
+                :class:`asyncio.TimeoutError`.
+        """
+        if self.runlevel >= level:
+            return
+
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future = loop.create_future()
+
+        def _on_change(rl: int) -> None:
+            if rl >= level and not fut.done():
+                loop.call_soon_threadsafe(_resolve, rl)
+
+        def _resolve(_rl: int) -> None:
+            if not fut.done():
+                fut.set_result(None)
+
+        handle = self._register_runlevel_callback(_on_change)
+        try:
+            await asyncio.wait_for(fut, timeout)
+        finally:
+            _get_lib().cbsdk_session_unregister_callback(self._session, handle)
+            # Drop our local handle reference so close() doesn't double-free.
+            try:
+                self._handles.remove(handle)
+            except ValueError:
+                pass
+
+    async def wait_until_running(self, timeout: float = 10.0) -> None:
+        """Resolve when the device runlevel reaches ``RUNLEVEL_RUNNING``.
+
+        Thin wrapper over :meth:`wait_for_runlevel` for the common case of
+        gating boot-time configuration on device readiness.
+        """
+        await self.wait_for_runlevel(RUNLEVEL_RUNNING, timeout)
 
     @property
     def is_standalone(self) -> bool:

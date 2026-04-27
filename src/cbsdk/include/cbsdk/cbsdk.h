@@ -340,6 +340,24 @@ CBSDK_API cbsdk_callback_handle_t cbsdk_session_register_config_callback(
     cbsdk_config_callback_fn callback,
     void* user_data);
 
+/// Callback type for device-runlevel transitions.
+typedef void (*cbsdk_runlevel_callback_fn)(uint32_t runlevel, void* user_data);
+
+/// Register a callback that fires whenever the device-reported runlevel
+/// transitions to a new value (driven by SYSREP packets).  Useful for
+/// awaiting cbRUNLEVEL_RUNNING after a reset.  The callback runs on the
+/// receive thread (STANDALONE) or shmem-receive thread (CLIENT) — keep it
+/// fast or post into a queue.
+/// @param session Session handle (must not be NULL)
+/// @param callback Function to call on each transition (must not be NULL)
+/// @param user_data Opaque user pointer passed to @p callback
+/// @return Callback handle for later cbsdk_session_unregister_callback,
+///         or 0 on error
+CBSDK_API cbsdk_callback_handle_t cbsdk_session_register_runlevel_callback(
+    cbsdk_session_t session,
+    cbsdk_runlevel_callback_fn callback,
+    void* user_data);
+
 /// Unregister a previously registered callback
 /// @param session Session handle (must not be NULL)
 /// @param handle Handle returned by a register_*_callback function

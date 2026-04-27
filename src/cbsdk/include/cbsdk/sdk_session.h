@@ -269,6 +269,11 @@ using GroupBatchCallback = std::function<void(const int16_t* samples, size_t n_s
 /// @param pkt The received config packet
 using ConfigCallback = std::function<void(const cbPKT_GENERIC& pkt)>;
 
+/// Runlevel-change callback. Fired when the device runlevel reported in a
+/// SYSREP packet differs from the previously recorded value.
+/// @param runlevel The new runlevel (cbRUNLEVEL_*)
+using RunlevelCallback = std::function<void(uint32_t runlevel)>;
+
 /// Error callback for queue overflow and other errors
 /// @param error_message Description of the error
 using ErrorCallback = std::function<void(const std::string& error_message)>;
@@ -376,6 +381,16 @@ public:
     /// @param callback Function to call for matching config packets
     /// @return Handle for unregistration
     CallbackHandle registerConfigCallback(uint16_t packet_type, ConfigCallback callback) const;
+
+    /// Register callback for device-runlevel transitions.
+    /// Fires when the runlevel reported in a SYSREP packet differs from the
+    /// previously recorded value.  Useful for waiting on the device to reach
+    /// cbRUNLEVEL_RUNNING after a reset.  Callbacks run on the receive
+    /// thread (STANDALONE) or shmem-receive thread (CLIENT) — keep them fast,
+    /// or post to your own queue.
+    /// @param callback Function to call on each transition (receives new runlevel)
+    /// @return Handle for unregistration
+    CallbackHandle registerRunlevelChangeCallback(RunlevelCallback callback) const;
 
     /// Unregister a previously registered callback
     /// @param handle Handle returned by any register*Callback method

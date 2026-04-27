@@ -473,6 +473,40 @@ class TestNConfigured:
 
 
 # ---------------------------------------------------------------------------
+# Async wait_until_running
+# ---------------------------------------------------------------------------
+
+
+class TestWaitUntilRunning:
+    """Async runlevel-awaitable.
+
+    The fixture brings the device up to RUNNING before yielding the session,
+    so wait_until_running() returns immediately without registering a
+    listener; covering the registration path requires fault injection that
+    isn't worth the test complexity.
+    """
+
+    def test_returns_immediately_when_running(self, nplay_session):
+        import asyncio
+        from pycbsdk.session import RUNLEVEL_RUNNING
+
+        async def run() -> None:
+            assert nplay_session.runlevel >= RUNLEVEL_RUNNING
+            await nplay_session.wait_until_running(timeout=1.0)
+
+        asyncio.run(run())
+
+    def test_wait_for_runlevel_immediate(self, nplay_session):
+        import asyncio
+        from pycbsdk.session import RUNLEVEL_STANDBY
+
+        async def run() -> None:
+            await nplay_session.wait_for_runlevel(RUNLEVEL_STANDBY, timeout=1.0)
+
+        asyncio.run(run())
+
+
+# ---------------------------------------------------------------------------
 # Per-channel configuration (configure_channel)
 # ---------------------------------------------------------------------------
 

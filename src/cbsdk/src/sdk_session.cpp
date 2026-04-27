@@ -242,12 +242,30 @@ struct SdkSession::Impl {
     struct GroupCB       { CallbackHandle handle; uint8_t group_id; GroupCallback cb; };
     struct GroupBatchCB  { CallbackHandle handle; uint8_t group_id; GroupBatchCallback cb; };
     struct ConfigCB     { CallbackHandle handle; uint16_t packet_type; ConfigCallback cb; };
+    struct RunlevelCB   { CallbackHandle handle; RunlevelCallback cb; };
 
     std::vector<PacketCB>     packet_callbacks;
     std::vector<EventCB>      event_callbacks;
     std::vector<GroupCB>       group_callbacks;
     std::vector<GroupBatchCB>  group_batch_callbacks;
     std::vector<ConfigCB>     config_callbacks;
+    std::vector<RunlevelCB>   runlevel_callbacks;
+
+    /// Atomically update device_runlevel; fire registered callbacks if the
+    /// value changed.  Called from the receive thread (STANDALONE) or the
+    /// shmem-receive thread (CLIENT) — both paths converge here.
+    void updateRunlevel(uint32_t new_runlevel) {
+        const uint32_t prev = device_runlevel.exchange(new_runlevel, std::memory_order_acq_rel);
+        if (prev == new_runlevel) return;
+        std::vector<RunlevelCB> snap;
+        {
+            std::lock_guard<std::mutex> lock(user_callback_mutex);
+            snap = runlevel_callbacks;
+        }
+        for (const auto& cb : snap) {
+            if (cb.cb) cb.cb(new_runlevel);
+        }
+    }
 
     CallbackHandle next_callback_handle = 1;
     ErrorCallback error_callback;
@@ -872,7 +890,7 @@ Result<void> SdkSession::start() {
                 // Check for SYSREP packets (handshake responses)
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
                     const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
-                    impl->device_runlevel.store(sysinfo->runlevel, std::memory_order_release);
+                    impl->updateRunlevel(sysinfo->runlevel);
                     impl->received_sysrep.store(true, std::memory_order_release);
                     impl->handshake_cv.notify_all();
                 }
@@ -1183,7 +1201,7 @@ Result<void> SdkSession::start() {
                             // Check for SYSREP packets (handshake responses)
                             if ((packets[i].cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
                                 const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&packets[i]);
-                                impl->device_runlevel.store(sysinfo->runlevel, std::memory_order_release);
+                                impl->updateRunlevel(sysinfo->runlevel);
                                 impl->received_sysrep.store(true, std::memory_order_release);
                                 impl->handshake_cv.notify_all();
                             }
@@ -1320,6 +1338,13 @@ CallbackHandle SdkSession::registerConfigCallback(const uint16_t packet_type, Co
     return handle;
 }
 
+CallbackHandle SdkSession::registerRunlevelChangeCallback(RunlevelCallback callback) const {
+    std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
+    const auto handle = m_impl->next_callback_handle++;
+    m_impl->runlevel_callbacks.push_back({handle, std::move(callback)});
+    return handle;
+}
+
 void SdkSession::unregisterCallback(CallbackHandle handle) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     auto erase_by_handle = [handle](auto& vec) {
@@ -1332,6 +1357,7 @@ void SdkSession::unregisterCallback(CallbackHandle handle) const {
     erase_by_handle(m_impl->group_callbacks);
     erase_by_handle(m_impl->group_batch_callbacks);
     erase_by_handle(m_impl->config_callbacks);
+    erase_by_handle(m_impl->runlevel_callbacks);
 }
 
 void SdkSession::setErrorCallback(ErrorCallback callback) {
