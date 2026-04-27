@@ -666,6 +666,17 @@ public:
         uint32_t start_chan = 1,
         uint32_t hs_id = 0);
 
+    /// Clear all channel maps loaded via loadChannelMap().
+    ///
+    /// Wipes the local position+label overlay (so positions revert) and pushes
+    /// default labels ("chan1", "chan2", ...) to the device for every channel
+    /// that was previously mapped, so the device-side label state matches.
+    /// Fire-and-forget: returns once labels are queued; the caller can call
+    /// sync() if it needs to read back state.
+    ///
+    /// @return Result indicating success or error
+    Result<void> clearChannelMap();
+
     ///--------------------------------------------------------------------------------------------
     /// CCF Configuration Files
     ///--------------------------------------------------------------------------------------------

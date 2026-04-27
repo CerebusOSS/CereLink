@@ -888,6 +888,16 @@ CBSDK_API cbsdk_result_t cbsdk_session_load_channel_map(
     uint32_t start_chan,
     uint32_t hs_id);
 
+/// Clear all channel maps loaded via cbsdk_session_load_channel_map().
+///
+/// Drops the local position+label overlay and pushes default labels
+/// ("chan{N}") to the device for every previously-mapped channel so the
+/// device-side label state reverts.  Fire-and-forget.
+///
+/// @param session Session handle (must not be NULL)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_clear_channel_map(cbsdk_session_t session);
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // CCF Configuration Files
 ///////////////////////////////////////////////////////////////////////////////////////////////////

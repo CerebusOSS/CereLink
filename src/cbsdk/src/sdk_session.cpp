@@ -2139,6 +2139,55 @@ Result<void> SdkSession::loadChannelMap(
     return Result<void>::ok();
 }
 
+Result<void> SdkSession::clearChannelMap() {
+    // Snapshot the previously-mapped channel ids and drop the overlay so
+    // future CHANREPs land in chaninfo as the device sends them.  Any further
+    // applyCmpToAllChannels() call is now a no-op.
+    std::vector<uint32_t> mapped_chans;
+    {
+        std::lock_guard<std::mutex> lock(m_impl->cmp_mutex);
+        mapped_chans.reserve(m_impl->cmp_entries.size());
+        for (const auto& [chan_id, _] : m_impl->cmp_entries) {
+            mapped_chans.push_back(chan_id);
+        }
+        m_impl->cmp_entries.clear();
+    }
+
+    // Reset shmem positions to zero for previously-mapped channels.  The
+    // device doesn't persist positions, so there's no on-device action — just
+    // wipe the local overlay we applied in applyCmpToAllChannels().
+    if (m_impl->shmem_session) {
+        for (uint32_t chan_id : mapped_chans) {
+            if (chan_id < 1 || chan_id > cbMAXCHANS) continue;
+            auto r = m_impl->shmem_session->getChanInfo(chan_id - 1);
+            if (r.isError()) continue;
+            cbPKT_CHANINFO ci = r.value();
+            std::memset(ci.position, 0, sizeof(ci.position));
+            m_impl->shmem_session->setChanInfo(chan_id - 1, ci);
+        }
+    }
+
+    // Push default labels ("chan{N}") to the device so the device-side label
+    // state matches.  Labels were modified by loadChannelMap; positions were
+    // local-only.
+    if (m_impl->device_session || m_impl->shmem_session) {
+        for (uint32_t chan_id : mapped_chans) {
+            const cbPKT_CHANINFO* info = getChanInfo(chan_id);
+            if (!info) continue;
+            cbPKT_CHANINFO ci = *info;
+            ci.chan = chan_id;
+            ci.cbpkt_header.type = cbPKTTYPE_CHANSETLABEL;
+            char default_label[16];
+            std::snprintf(default_label, sizeof(default_label), "chan%u", chan_id);
+            std::strncpy(ci.label, default_label, sizeof(ci.label) - 1);
+            ci.label[sizeof(ci.label) - 1] = '\0';
+            (void)setChannelConfig(ci);  // best-effort
+        }
+    }
+
+    return Result<void>::ok();
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // CCF Configuration Files
 ///////////////////////////////////////////////////////////////////////////////////////////////////

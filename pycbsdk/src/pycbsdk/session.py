@@ -1219,6 +1219,20 @@ class Session:
             "Failed to load channel map",
         )
 
+    def clear_channel_map(self):
+        """Remove all channel maps loaded via :meth:`load_channel_map`.
+
+        Drops the local position+label overlay and pushes the device's
+        default labels (``"chan{N}"``) back to the device for every
+        previously-mapped channel so the device-side state matches.
+        Fire-and-forget; call :meth:`sync` if you need to read back state
+        before issuing further config calls.
+        """
+        _check(
+            _get_lib().cbsdk_session_clear_channel_map(self._session),
+            "Failed to clear channel map",
+        )
+
     # --- CCF Configuration Files ---
 
     def save_ccf(self, filename: str):

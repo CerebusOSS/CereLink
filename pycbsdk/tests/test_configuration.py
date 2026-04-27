@@ -928,6 +928,54 @@ class TestCMP:
             assert pos == expected[chan_id].position
             assert label == expected[chan_id].label
 
+    def test_clear_channel_map_resets_labels(self, nplay_session, cmp_path):
+        """clear_channel_map() reverts labels to the device default ("chanN")."""
+        from pycbsdk.cmp import parse_cmp
+
+        nplay_session.load_channel_map(str(cmp_path), hs_id=11)
+        nplay_session.sync()
+
+        expected = parse_cmp(str(cmp_path), hs_id=11)
+        view_before = self._frontend_view(nplay_session)
+        loaded = sorted(set(expected) & set(view_before))
+        assert loaded
+        for chan_id in loaded:
+            _, label = view_before[chan_id]
+            assert label.startswith("hs11-")
+
+        nplay_session.clear_channel_map()
+        nplay_session.sync()
+
+        view_after = self._frontend_view(nplay_session)
+        for chan_id in loaded:
+            _, label = view_after[chan_id]
+            assert label == f"chan{chan_id}", (
+                f"chan {chan_id}: expected default label, got {label!r}"
+            )
+
+    def test_clear_channel_map_resets_positions(self, nplay_session, cmp_path):
+        """clear_channel_map() drops the position overlay; positions revert to zero."""
+        nplay_session.load_channel_map(str(cmp_path))
+        nplay_session.sync()
+
+        view_before = self._frontend_view(nplay_session)
+        loaded = [c for c, (pos, _) in view_before.items() if any(p != 0 for p in pos)]
+        assert loaded, "expected at least one frontend chan with non-zero position"
+
+        nplay_session.clear_channel_map()
+        nplay_session.sync()
+
+        view_after = self._frontend_view(nplay_session)
+        for chan_id in loaded:
+            pos, _ = view_after[chan_id]
+            assert all(p == 0 for p in pos), (
+                f"chan {chan_id}: expected zeroed position after clear, got {pos}"
+            )
+
+    def test_clear_channel_map_empty_is_noop(self, nplay_session):
+        """Calling clear_channel_map() with no map loaded is a no-op."""
+        nplay_session.clear_channel_map()  # must not raise
+
 
 # ---------------------------------------------------------------------------
 # Spike length configuration
