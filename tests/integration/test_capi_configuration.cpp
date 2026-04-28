@@ -267,6 +267,16 @@ TEST_F(CApiACCouplingTest, SetACCoupling) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
+    // Establish a known state: all FE chans DC-coupled.  n_configured is
+    // "post-config FE chans whose OFFSET_CORRECT matches `enabled`", so we
+    // can't assert on its value without controlling the starting state.
+    uint32_t n_dc = 0;
+    ASSERT_EQ(cbsdk_session_set_ac_input_coupling(
+        sg.session, UINT32_MAX, /*chans=*/nullptr,
+        CBPROTO_CHANNEL_TYPE_FRONTEND, false, &n_dc),
+        CBSDK_RESULT_SUCCESS);
+
+    // Now AC-couple the first 4 FE chans.  Returned count should be exactly 4.
     uint32_t n_configured = 0;
     EXPECT_EQ(cbsdk_session_set_ac_input_coupling(
         sg.session, 4, /*chans=*/nullptr, CBPROTO_CHANNEL_TYPE_FRONTEND, true,
@@ -278,6 +288,14 @@ TEST_F(CApiACCouplingTest, SetACCoupling) {
 TEST_F(CApiACCouplingTest, SetDCCoupling) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
+
+    // Establish a known state: all FE chans AC-coupled, then DC-couple 4 and
+    // expect the returned post-config count to be 4.
+    uint32_t n_ac = 0;
+    ASSERT_EQ(cbsdk_session_set_ac_input_coupling(
+        sg.session, UINT32_MAX, /*chans=*/nullptr,
+        CBPROTO_CHANNEL_TYPE_FRONTEND, true, &n_ac),
+        CBSDK_RESULT_SUCCESS);
 
     uint32_t n_configured = 0;
     EXPECT_EQ(cbsdk_session_set_ac_input_coupling(
@@ -296,6 +314,15 @@ class CApiSpikeSortingTest : public NPlayFixture {};
 TEST_F(CApiSpikeSortingTest, SetSpikeSorting) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
+
+    // Establish a known state — all FE chans with HOOPSORT — so that
+    // setting 4 to NOSORT yields a post-config count of exactly 4 FE
+    // chans whose spkopts ALLSORT bits == 0.
+    uint32_t n_init = 0;
+    ASSERT_EQ(cbsdk_session_set_spike_sorting(
+        sg.session, UINT32_MAX, /*chans=*/nullptr,
+        CBPROTO_CHANNEL_TYPE_FRONTEND, cbAINPSPK_HOOPSORT, &n_init),
+        CBSDK_RESULT_SUCCESS);
 
     uint32_t n_configured = 0;
     EXPECT_EQ(cbsdk_session_set_spike_sorting(
