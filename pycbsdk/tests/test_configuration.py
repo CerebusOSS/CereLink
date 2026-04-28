@@ -149,6 +149,21 @@ class TestChannelSampleGroup:
         channels_1k = nplay_session.get_group_channels(int(SampleRate.SR_1kHz))
         assert len(channels_1k) == 2
 
+    def test_disable_others_30k_no_preamble(self, nplay_session):
+        """Repro for ezmsg-blackrock hang: disable_others=True at SR_30kHz
+        called immediately after session creation, no preamble.
+
+        Must complete within the per-test timeout (60 s).  An indefinite
+        hang here points to a sync-vs-bulk-send race in the bulk setter.
+        """
+        n = nplay_session.set_sample_group(
+            2, ChannelType.FRONTEND, SampleRate.SR_30kHz,
+            disable_others=True,
+        )
+        assert n == 2
+        ch_30k = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
+        assert sorted(ch_30k) == [1, 2]
+
     # --- Per-channel setter (set_channel_smpgroup) ---
     #
     # These tests use only per-channel setters for setup (no batch clear)
