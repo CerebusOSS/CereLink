@@ -533,44 +533,66 @@ public:
     /// look already configured, since the local cache may be stale due to
     /// dropped CHANREP packets from a concurrent client.
     ///
-    /// @param nChans Number of channels of @p chanType to configure, in
-    ///        ascending channel-id order.  Use UINT32_MAX for all matching.
-    /// @param chanType Channel type filter
+    /// Channel selection has two modes:
+    /// - @p chans is nullptr: configure the first @p nChans channels of
+    ///   @p chanType in channel-id order.  Use UINT32_MAX for all matching.
+    /// - @p chans is non-null: configure the explicit list of @p nChans
+    ///   1-based channel ids.  No type filtering is performed on the listed
+    ///   channels (caller is trusted), but @p chanType still selects the
+    ///   "others" set for @p disableOthers and the post-config count.
+    ///
+    /// @param nChans When @p chans is nullptr: count to configure (UINT32_MAX
+    ///        for all matching).  When @p chans is non-null: list length.
+    /// @param chanType Channel type filter (used for matching when @p chans
+    ///        is nullptr, and for the "others" set + count regardless).
     /// @param rate Desired sample rate (NONE to disable, SR_500 through SR_RAW)
-    /// @param disableOthers Disable sampling on channels not in the first
-    ///        @p nChans of @p chanType
+    /// @param disableOthers Disable sampling on channels of @p chanType not
+    ///        in the configured set.
+    /// @param chans Optional explicit list of 1-based channel ids; must be
+    ///        non-null only when caller wants the explicit-list mode.
     /// @return Number of channels of @p chanType whose post-config state
     ///         matches @p rate, or error.
     Result<uint32_t> setSampleGroup(uint32_t nChans, ChannelType chanType,
-                                    SampleRate rate, bool disableOthers = false);
+                                    SampleRate rate, bool disableOthers = false,
+                                    const uint32_t* chans = nullptr);
 
     /// Set spike sorting options for channels of a specific type.
-    /// See setSampleGroup() for the auto-sync and idempotency contract.
-    /// @param nChans Channels to configure (UINT32_MAX = all matching)
+    /// See setSampleGroup() for the channel-selection and auto-sync contract.
+    /// @param nChans Count or list length (see setSampleGroup)
     /// @param chanType Channel type filter
     /// @param sortOptions Spike sorting option flags (cbAINPSPK_*)
+    /// @param chans Optional explicit list of 1-based channel ids
     /// @return Count of @p chanType channels whose spkopts ALLSORT bits
     ///         match @p sortOptions post-sync, or error.
     Result<uint32_t> setSpikeSorting(uint32_t nChans, ChannelType chanType,
-                                     uint32_t sortOptions);
+                                     uint32_t sortOptions,
+                                     const uint32_t* chans = nullptr);
 
     /// Enable or disable spike extraction (cbAINPSPK_EXTRACT) for channels
-    /// of a type.  See setSampleGroup() for the auto-sync contract.
-    /// @param nChans Channels to configure (UINT32_MAX = all matching)
+    /// of a type.  See setSampleGroup() for the channel-selection and
+    /// auto-sync contract.
+    /// @param nChans Count or list length (see setSampleGroup)
     /// @param chanType Channel type filter
     /// @param enabled true = enable spike extraction, false = disable
+    /// @param chans Optional explicit list of 1-based channel ids
     /// @return Count of @p chanType channels whose EXTRACT bit matches
     ///         @p enabled post-sync, or error.
-    Result<uint32_t> setSpikeExtraction(uint32_t nChans, ChannelType chanType, bool enabled);
+    Result<uint32_t> setSpikeExtraction(uint32_t nChans, ChannelType chanType,
+                                        bool enabled,
+                                        const uint32_t* chans = nullptr);
 
     /// Set AC input coupling (offset correction) for channels of a specific
-    /// type.  See setSampleGroup() for the auto-sync contract.
-    /// @param nChans Channels to configure (UINT32_MAX = all matching)
+    /// type.  See setSampleGroup() for the channel-selection and auto-sync
+    /// contract.
+    /// @param nChans Count or list length (see setSampleGroup)
     /// @param chanType Channel type filter
     /// @param enabled true = AC coupling (offset correction on), false = DC coupling
+    /// @param chans Optional explicit list of 1-based channel ids
     /// @return Count of @p chanType channels whose OFFSET_CORRECT bit
     ///         matches @p enabled post-sync, or error.
-    Result<uint32_t> setACInputCoupling(uint32_t nChans, ChannelType chanType, bool enabled);
+    Result<uint32_t> setACInputCoupling(uint32_t nChans, ChannelType chanType,
+                                        bool enabled,
+                                        const uint32_t* chans = nullptr);
 
     /// Set full channel configuration by packet (fire-and-forget).
     /// Call sync() before reading back state that depends on this configuration.
@@ -772,6 +794,15 @@ public:
     /// @param pkt Packet to send
     /// @return Result indicating success or error
     Result<void> sendPacket(const cbPKT_GENERIC& pkt);
+
+    /// Bulk-send a vector of packets using the most efficient available path
+    /// (direct UDP via device_session in STANDALONE — coalesces with built-in
+    /// pacing — and per-packet shmem enqueue in CLIENT).  Used by the bulk
+    /// by-type setters; useful directly when the caller has already built
+    /// the packet vector.
+    /// @param packets Packets to send (may be empty, in which case this is a no-op)
+    /// @return Result indicating success or error
+    Result<void> sendBulkPackets(const std::vector<cbPKT_GENERIC>& packets);
 
     /// Send a runlevel command packet to the device
     /// @param runlevel Desired runlevel (cbRUNLEVEL_*)

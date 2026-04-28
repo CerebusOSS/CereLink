@@ -987,18 +987,42 @@ class Session:
 
     # --- Channel Configuration ---
 
+    @staticmethod
+    def _normalize_chans(chans):
+        """Resolve ``chans`` (``int | Iterable[int] | None``) for the C-API.
+
+        Returns ``(n_chans, c_arr)`` where ``c_arr`` is either ``ffi.NULL``
+        (count-based mode) or an ffi-owned ``uint32_t[]`` (explicit-list
+        mode).  Caller must keep ``c_arr`` alive across the C call.
+        """
+        if chans is None:
+            return _ALL_CHANS, ffi.NULL
+        if isinstance(chans, (bool,)):
+            raise TypeError("chans must be an int, an iterable of ints, or None")
+        if isinstance(chans, int):
+            return int(chans), ffi.NULL
+        chan_list = [int(c) for c in chans]
+        return len(chan_list), ffi.new("uint32_t[]", chan_list)
+
     def set_sample_group(
         self,
-        chans: int | None,
+        chans: "int | list[int] | None",
         channel_type: ChannelType,
         rate: SampleRate,
         disable_others: bool = False,
     ) -> int:
         """Set sampling rate for channels of a specific type.
 
-        Configures the first *chans* channels matching *channel_type* (or
-        every matching channel when *chans* is ``None``).  To configure a
-        specific channel by ID, use :meth:`set_channel_smpgroup`.
+        ``chans`` selects the channels to configure:
+
+        - ``None``: every channel matching *channel_type*.
+        - ``int N``: the first N channels matching *channel_type* in
+          channel-id order.
+        - ``list[int]`` (or any iterable of ints): the explicit list of
+          1-based channel IDs.  Caller is trusted; no type filter is
+          applied to listed channels, but *channel_type* still defines
+          the "others" set for *disable_others* and the post-config
+          count.
 
         Self-synchronizing: runs :meth:`sync` before reading the local cache
         (so prior in-flight config has landed) and again after sending, so
@@ -1015,24 +1039,25 @@ class Session:
             ``cbAINP_RAWSTREAM`` bit instead.
 
         Args:
-            chans: Number of channels to configure, or ``None`` for all
-                matching.
-            channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
+            chans: Channel selection (see above).
+            channel_type: Channel type filter.
             rate: Sample rate (e.g., ``SampleRate.SR_30kHz``, ``SampleRate.NONE``
                 to disable).
-            disable_others: Disable sampling on unselected channels.
+            disable_others: Disable sampling on channels of *channel_type*
+                that are not in the configured set.
 
         Returns:
             Count of *channel_type* channels whose post-config state matches
             *rate*.
         """
         _lib = _get_lib()
-        n_chans = _ALL_CHANS if chans is None else int(chans)
+        n_chans, c_arr = self._normalize_chans(chans)
         out_n = ffi.new("uint32_t *")
         _check(
             _lib.cbsdk_session_set_sample_group(
                 self._session,
                 n_chans,
+                c_arr,
                 int(_coerce_enum(ChannelType, channel_type)),
                 int(_coerce_enum(SampleRate, rate, _RATE_ALIASES)),
                 disable_others,
@@ -1044,18 +1069,18 @@ class Session:
 
     def set_ac_input_coupling(
         self,
-        chans: int | None,
+        chans: "int | list[int] | None",
         channel_type: ChannelType,
         enabled: bool,
     ) -> int:
         """Set AC/DC input coupling for channels of a specific type.
 
-        Self-synchronizing — see :meth:`set_sample_group` for the contract.
+        Self-synchronizing — see :meth:`set_sample_group` for the channel
+        selection and contract.
 
         Args:
-            chans: Number of channels to configure, or ``None`` for all
-                matching.
-            channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
+            chans: Channel selection (see :meth:`set_sample_group`).
+            channel_type: Channel type filter.
             enabled: ``True`` for AC coupling (offset correction on),
                 ``False`` for DC coupling.
 
@@ -1064,12 +1089,13 @@ class Session:
             ``cbAINP_OFFSET_CORRECT`` bit matches *enabled*.
         """
         _lib = _get_lib()
-        n_chans = _ALL_CHANS if chans is None else int(chans)
+        n_chans, c_arr = self._normalize_chans(chans)
         out_n = ffi.new("uint32_t *")
         _check(
             _lib.cbsdk_session_set_ac_input_coupling(
                 self._session,
                 n_chans,
+                c_arr,
                 int(_coerce_enum(ChannelType, channel_type)),
                 enabled,
                 out_n,
@@ -1520,17 +1546,17 @@ class Session:
 
     def set_spike_sorting(
         self,
-        chans: int | None,
+        chans: "int | list[int] | None",
         channel_type: ChannelType,
         sort_options: int,
     ) -> int:
         """Set spike sorting options for channels of a specific type.
 
-        Self-synchronizing — see :meth:`set_sample_group` for the contract.
+        Self-synchronizing — see :meth:`set_sample_group` for the channel
+        selection and contract.
 
         Args:
-            chans: Number of channels to configure, or ``None`` for all
-                matching.
+            chans: Channel selection (see :meth:`set_sample_group`).
             channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
             sort_options: Spike sorting option flags (cbAINPSPK_*).
 
@@ -1539,12 +1565,13 @@ class Session:
             ``spkopts & cbAINPSPK_ALLSORT`` matches *sort_options*.
         """
         _lib = _get_lib()
-        n_chans = _ALL_CHANS if chans is None else int(chans)
+        n_chans, c_arr = self._normalize_chans(chans)
         out_n = ffi.new("uint32_t *")
         _check(
             _lib.cbsdk_session_set_spike_sorting(
                 self._session,
                 n_chans,
+                c_arr,
                 int(_coerce_enum(ChannelType, channel_type)),
                 sort_options,
                 out_n,
@@ -1578,7 +1605,7 @@ class Session:
 
     def set_spike_extraction(
         self,
-        chans: int | None,
+        chans: "int | list[int] | None",
         channel_type: ChannelType,
         enabled: bool,
     ) -> int:
@@ -1587,11 +1614,11 @@ class Session:
         Controls the ``cbAINPSPK_EXTRACT`` bit which determines whether the
         device emits spike event packets. Uses ``cbPKTTYPE_CHANSETSPK``.
 
-        Self-synchronizing — see :meth:`set_sample_group` for the contract.
+        Self-synchronizing — see :meth:`set_sample_group` for the channel
+        selection and contract.
 
         Args:
-            chans: Number of channels to configure, or ``None`` for all
-                matching.
+            chans: Channel selection (see :meth:`set_sample_group`).
             channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
             enabled: ``True`` to enable spike extraction, ``False`` to disable.
 
@@ -1600,12 +1627,13 @@ class Session:
             ``cbAINPSPK_EXTRACT`` bit matches *enabled*.
         """
         _lib = _get_lib()
-        n_chans = _ALL_CHANS if chans is None else int(chans)
+        n_chans, c_arr = self._normalize_chans(chans)
         out_n = ffi.new("uint32_t *")
         _check(
             _lib.cbsdk_session_set_spike_extraction(
                 self._session,
                 n_chans,
+                c_arr,
                 int(_coerce_enum(ChannelType, channel_type)),
                 enabled,
                 out_n,

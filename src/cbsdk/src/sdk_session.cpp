@@ -30,6 +30,7 @@
 #include <iostream>
 #include <algorithm>
 #include <array>
+#include <set>
 #include <vector>
 #include "cbdev/clock_sync.h"
 #ifndef _WIN32
@@ -1705,63 +1706,93 @@ static uint32_t countChannelsMatching(const SdkSession& session,
     return count;
 }
 
-Result<uint32_t> SdkSession::setSampleGroup(const uint32_t nChans, const ChannelType chanType,
-                                            const SampleRate rate, const bool disableOthers) {
+// Resolve (nChans, chans) into the explicit set of 1-based channel ids to
+// configure.  When @p chans is non-null, it's the verbatim list (length
+// nChans).  When @p chans is null, walk channel ids in ascending order and
+// pick the first @p nChans that match @p chanType; nChans == UINT32_MAX
+// selects all matching.
+static std::vector<uint32_t> resolveTargetChans(
+    const SdkSession& session, uint32_t nChans, ChannelType chanType,
+    const uint32_t* chans) {
+    if (chans != nullptr) {
+        return std::vector<uint32_t>(chans, chans + nChans);
+    }
+    std::vector<uint32_t> result;
+    if (nChans != UINT32_MAX) {
+        result.reserve(std::min<uint32_t>(nChans, cbMAXCHANS));
+    }
+    for (uint32_t chan = 1; chan <= cbMAXCHANS && result.size() < nChans; ++chan) {
+        const cbPKT_CHANINFO* ci = session.getChanInfo(chan);
+        if (ci && classifyChannelByCaps(*ci) == chanType) {
+            result.push_back(chan);
+        }
+    }
+    return result;
+}
+
+Result<uint32_t> SdkSession::setSampleGroup(
+    const uint32_t nChans, const ChannelType chanType, const SampleRate rate,
+    const bool disableOthers, const uint32_t* chans) {
     // Pre-sync: ensure local chaninfo cache is up to date before we seed
     // outgoing CHANSET* packets from it.  Stale cache would re-send obsolete
     // values for fields we don't explicitly modify here.
     if (auto r = sync(5000); r.isError()) return Result<uint32_t>::error(r.error());
 
     const uint32_t group_id = static_cast<uint32_t>(rate);
-    Result<void> send_result = Result<void>::error("No session available");
-    if (m_impl->device_session) {
-        send_result = m_impl->device_session->setChannelsGroupByType(
-            nChans, toDevChannelType(chanType),
-            static_cast<cbdev::DeviceRate>(group_id), disableOthers);
-    } else if (m_impl->shmem_session) {
-        // CLIENT mode: build packets from shmem chaninfo and send through xmt queue.
-        // Always send for every in-scope channel — don't skip "looks already correct"
-        // since a dropped CHANREP could leave us cached against a concurrent change
-        // we'd have no way to escape from except by sending the desired value.
-        uint32_t sent_count = 0;
-        for (uint32_t chan = 1; chan <= cbMAXCHANS; ++chan) {
-            if (!disableOthers && sent_count >= nChans)
-                break;
+    const std::vector<uint32_t> targets = resolveTargetChans(*this, nChans, chanType, chans);
 
-            auto ci_result = m_impl->shmem_session->getChanInfo(chan - 1);
-            if (ci_result.isError()) continue;
-            auto chaninfo = ci_result.value();
-
-            if (classifyChannelByCaps(chaninfo) != chanType) continue;
-
-            const auto grp = sent_count < nChans ? group_id : 0u;
-            chaninfo.chan = chan;
-
-            if (grp > 0 && grp < 6) {
-                chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSETSMP;
-                chaninfo.smpgroup = grp;
-                constexpr uint32_t filter_map[] = {0, 5, 6, 7, 10, 0, 0};
-                chaninfo.smpfilter = filter_map[grp];
-                if (grp == 5) {
-                    chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSET;
-                    chaninfo.ainpopts &= ~cbAINP_RAWSTREAM;
-                }
-            } else if (grp == 6) {
-                chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
-                chaninfo.ainpopts |= cbAINP_RAWSTREAM;
-            } else {
+    // Build a packet for `chan` with `grp` as its target group.
+    // Always sends the full chaninfo (seeded from local cache), so a stale
+    // CHANREP can't leave us stuck against a concurrent change.
+    auto build_packet = [this](uint32_t chan, uint32_t grp) -> std::optional<cbPKT_CHANINFO> {
+        const cbPKT_CHANINFO* base = getChanInfo(chan);
+        if (!base || base->chan == 0) return std::nullopt;
+        cbPKT_CHANINFO chaninfo = *base;
+        chaninfo.chan = chan;
+        if (grp > 0 && grp < 6) {
+            chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSETSMP;
+            chaninfo.smpgroup = grp;
+            constexpr uint32_t filter_map[] = {0, 5, 6, 7, 10, 0, 0};
+            chaninfo.smpfilter = filter_map[grp];
+            if (grp == 5) {
                 chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSET;
-                chaninfo.smpgroup = 0;
                 chaninfo.ainpopts &= ~cbAINP_RAWSTREAM;
             }
-
-            auto sr = sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
-            if (sr.isError()) return Result<uint32_t>::error(sr.error());
-            sent_count++;
+        } else if (grp == 6) {
+            chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
+            chaninfo.ainpopts |= cbAINP_RAWSTREAM;
+        } else {
+            chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSET;
+            chaninfo.smpgroup = 0;
+            chaninfo.ainpopts &= ~cbAINP_RAWSTREAM;
         }
-        send_result = Result<void>::ok();
+        return chaninfo;
+    };
+
+    // Build the packet vector.  Targets first (configured to `rate`), then
+    // — if disableOthers — every other matching channel set to disabled.
+    std::vector<cbPKT_GENERIC> packets;
+    packets.reserve(targets.size() + (disableOthers ? cbMAXCHANS : 0));
+    for (uint32_t chan : targets) {
+        if (auto pkt = build_packet(chan, group_id); pkt) {
+            packets.push_back(reinterpret_cast<const cbPKT_GENERIC&>(*pkt));
+        }
     }
-    if (send_result.isError()) return Result<uint32_t>::error(send_result.error());
+    if (disableOthers) {
+        std::set<uint32_t> target_set(targets.begin(), targets.end());
+        for (uint32_t chan = 1; chan <= cbMAXCHANS; ++chan) {
+            if (target_set.count(chan)) continue;
+            const cbPKT_CHANINFO* ci = getChanInfo(chan);
+            if (!ci || classifyChannelByCaps(*ci) != chanType) continue;
+            if (auto pkt = build_packet(chan, 0u); pkt) {
+                packets.push_back(reinterpret_cast<const cbPKT_GENERIC&>(*pkt));
+            }
+        }
+    }
+
+    if (auto r = sendBulkPackets(packets); r.isError()) {
+        return Result<uint32_t>::error(r.error());
+    }
 
     // Post-sync: ensure the device has applied our changes before we count.
     if (auto r = sync(5000); r.isError()) return Result<uint32_t>::error(r.error());
@@ -1781,127 +1812,105 @@ Result<uint32_t> SdkSession::setSampleGroup(const uint32_t nChans, const Channel
         }));
 }
 
-Result<uint32_t> SdkSession::setSpikeSorting(const uint32_t nChans, const ChannelType chanType,
-                                             const uint32_t sortOptions) {
-    if (auto r = sync(5000); r.isError()) return Result<uint32_t>::error(r.error());
-
-    Result<void> send_result = Result<void>::error("No session available");
+// Bulk-send a vector of packets using the most efficient path:
+// - STANDALONE: device_session->sendPackets — direct UDP with built-in
+//   pacing, returns synchronously after every packet has been sent so a
+//   subsequent sync() barrier sees them in order.
+// - CLIENT: per-packet shmem enqueue.  The peer STANDALONE process drains
+//   the same FIFO xmt buffer the sync() SYSSETRUNLEV is queued into, so
+//   ordering is preserved regardless.
+Result<void> SdkSession::sendBulkPackets(const std::vector<cbPKT_GENERIC>& packets) {
+    if (packets.empty()) return Result<void>::ok();
     if (m_impl->device_session) {
-        send_result = m_impl->device_session->setChannelsSpikeSortingByType(
-            nChans, toDevChannelType(chanType), sortOptions);
-    } else if (m_impl->shmem_session) {
-        uint32_t sent_count = 0;
-        for (uint32_t chan = 1; chan <= cbMAXCHANS && sent_count < nChans; ++chan) {
-            auto ci_result = m_impl->shmem_session->getChanInfo(chan - 1);
-            if (ci_result.isError()) continue;
-            auto chaninfo = ci_result.value();
-
-            if (classifyChannelByCaps(chaninfo) != chanType) continue;
-
-            // Use CHANSET so the device applies spkopts changes.  CHANSETSPKTHR
-            // (used by older revisions) only reads spkthrlevel and would
-            // silently ignore the spkopts modification we want here.
-            chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSET;
-            chaninfo.chan = chan;
-            chaninfo.spkopts &= ~cbAINPSPK_ALLSORT;
-            chaninfo.spkopts |= sortOptions;
-
-            auto sr = sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
-            if (sr.isError()) return Result<uint32_t>::error(sr.error());
-            sent_count++;
-        }
-        send_result = Result<void>::ok();
+        return m_impl->device_session->sendPackets(packets);
     }
-    if (send_result.isError()) return Result<uint32_t>::error(send_result.error());
-
-    if (auto r = sync(5000); r.isError()) return Result<uint32_t>::error(r.error());
-
-    const uint32_t want_sort = sortOptions & cbAINPSPK_ALLSORT;
-    return Result<uint32_t>::ok(countChannelsMatching(*this, chanType,
-        [want_sort](const cbPKT_CHANINFO& ci) {
-            return (ci.spkopts & cbAINPSPK_ALLSORT) == want_sort;
-        }));
+    if (!m_impl->shmem_session) {
+        return Result<void>::error("No session available");
+    }
+    for (const auto& pkt : packets) {
+        if (auto r = sendPacket(pkt); r.isError()) return r;
+    }
+    return Result<void>::ok();
 }
 
-Result<uint32_t> SdkSession::setSpikeExtraction(const uint32_t nChans, const ChannelType chanType,
-                                                const bool enabled) {
-    if (auto r = sync(5000); r.isError()) return Result<uint32_t>::error(r.error());
+// Helper for the three "configure-each" bulk setters that don't have
+// disable_others semantics: setSpikeSorting, setSpikeExtraction,
+// setACInputCoupling.  Iterates the resolved target list, builds a packet
+// per chan via @p mutate, sends, syncs, and counts post-config matches via
+// @p predicate.
+template<typename Mutate, typename Predicate>
+static Result<uint32_t> applyBulkSetter(
+    SdkSession& session, uint32_t nChans, ChannelType chanType,
+    const uint32_t* chans, Mutate&& mutate, Predicate&& predicate) {
+    if (auto r = session.sync(5000); r.isError()) return Result<uint32_t>::error(r.error());
 
-    Result<void> send_result = Result<void>::error("No session available");
-    if (m_impl->device_session) {
-        send_result = m_impl->device_session->setSpikeExtraction(
-            nChans, toDevChannelType(chanType), enabled);
-    } else if (m_impl->shmem_session) {
-        uint32_t sent_count = 0;
-        for (uint32_t chan = 1; chan <= cbMAXCHANS && sent_count < nChans; ++chan) {
-            auto ci_result = m_impl->shmem_session->getChanInfo(chan - 1);
-            if (ci_result.isError()) continue;
-            auto chaninfo = ci_result.value();
-
-            if (classifyChannelByCaps(chaninfo) != chanType) continue;
-
-            chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSETSPK;
-            chaninfo.chan = chan;
-            chaninfo.spkopts &= ~cbAINPSPK_EXTRACT;
-            if (enabled)
-                chaninfo.spkopts |= cbAINPSPK_EXTRACT;
-
-            auto sr = sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
-            if (sr.isError()) return Result<uint32_t>::error(sr.error());
-            sent_count++;
-        }
-        send_result = Result<void>::ok();
+    const std::vector<uint32_t> targets = resolveTargetChans(session, nChans, chanType, chans);
+    std::vector<cbPKT_GENERIC> packets;
+    packets.reserve(targets.size());
+    for (uint32_t chan : targets) {
+        const cbPKT_CHANINFO* base = session.getChanInfo(chan);
+        if (!base || base->chan == 0) continue;
+        cbPKT_CHANINFO chaninfo = *base;
+        chaninfo.chan = chan;
+        mutate(chaninfo);
+        packets.push_back(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
     }
-    if (send_result.isError()) return Result<uint32_t>::error(send_result.error());
 
-    if (auto r = sync(5000); r.isError()) return Result<uint32_t>::error(r.error());
+    if (auto r = session.sendBulkPackets(packets); r.isError()) {
+        return Result<uint32_t>::error(r.error());
+    }
 
-    return Result<uint32_t>::ok(countChannelsMatching(*this, chanType,
+    if (auto r = session.sync(5000); r.isError()) return Result<uint32_t>::error(r.error());
+
+    return Result<uint32_t>::ok(countChannelsMatching(session, chanType, predicate));
+}
+
+Result<uint32_t> SdkSession::setSpikeSorting(
+    const uint32_t nChans, const ChannelType chanType, const uint32_t sortOptions,
+    const uint32_t* chans) {
+    const uint32_t want_sort = sortOptions & cbAINPSPK_ALLSORT;
+    return applyBulkSetter(*this, nChans, chanType, chans,
+        [sortOptions](cbPKT_CHANINFO& ci) {
+            // Use CHANSET so the firmware applies spkopts.  CHANSETSPKTHR
+            // (used by older revisions) only reads spkthrlevel and would
+            // silently ignore the spkopts modification.
+            ci.cbpkt_header.type = cbPKTTYPE_CHANSET;
+            ci.spkopts &= ~cbAINPSPK_ALLSORT;
+            ci.spkopts |= sortOptions;
+        },
+        [want_sort](const cbPKT_CHANINFO& ci) {
+            return (ci.spkopts & cbAINPSPK_ALLSORT) == want_sort;
+        });
+}
+
+Result<uint32_t> SdkSession::setSpikeExtraction(
+    const uint32_t nChans, const ChannelType chanType, const bool enabled,
+    const uint32_t* chans) {
+    return applyBulkSetter(*this, nChans, chanType, chans,
+        [enabled](cbPKT_CHANINFO& ci) {
+            ci.cbpkt_header.type = cbPKTTYPE_CHANSETSPK;
+            ci.spkopts &= ~cbAINPSPK_EXTRACT;
+            if (enabled) ci.spkopts |= cbAINPSPK_EXTRACT;
+        },
         [enabled](const cbPKT_CHANINFO& ci) {
             const bool is_extracting = (ci.spkopts & cbAINPSPK_EXTRACT) != 0;
             return is_extracting == enabled;
-        }));
+        });
 }
 
-Result<uint32_t> SdkSession::setACInputCoupling(const uint32_t nChans, const ChannelType chanType,
-                                                const bool enabled) {
-    if (auto r = sync(5000); r.isError()) return Result<uint32_t>::error(r.error());
-
-    Result<void> send_result = Result<void>::error("No session available");
-    if (m_impl->device_session) {
-        send_result = m_impl->device_session->setChannelsACInputCouplingByType(
-            nChans, toDevChannelType(chanType), enabled);
-    } else if (m_impl->shmem_session) {
-        uint32_t sent_count = 0;
-        for (uint32_t chan = 1; chan <= cbMAXCHANS && sent_count < nChans; ++chan) {
-            auto ci_result = m_impl->shmem_session->getChanInfo(chan - 1);
-            if (ci_result.isError()) continue;
-            auto chaninfo = ci_result.value();
-
-            if (classifyChannelByCaps(chaninfo) != chanType) continue;
-
-            chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
-            chaninfo.chan = chan;
-            if (enabled)
-                chaninfo.ainpopts |= cbAINP_OFFSET_CORRECT;
-            else
-                chaninfo.ainpopts &= ~cbAINP_OFFSET_CORRECT;
-
-            auto sr = sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
-            if (sr.isError()) return Result<uint32_t>::error(sr.error());
-            sent_count++;
-        }
-        send_result = Result<void>::ok();
-    }
-    if (send_result.isError()) return Result<uint32_t>::error(send_result.error());
-
-    if (auto r = sync(5000); r.isError()) return Result<uint32_t>::error(r.error());
-
-    return Result<uint32_t>::ok(countChannelsMatching(*this, chanType,
+Result<uint32_t> SdkSession::setACInputCoupling(
+    const uint32_t nChans, const ChannelType chanType, const bool enabled,
+    const uint32_t* chans) {
+    return applyBulkSetter(*this, nChans, chanType, chans,
+        [enabled](cbPKT_CHANINFO& ci) {
+            ci.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
+            if (enabled) ci.ainpopts |= cbAINP_OFFSET_CORRECT;
+            else         ci.ainpopts &= ~cbAINP_OFFSET_CORRECT;
+        },
         [enabled](const cbPKT_CHANINFO& ci) {
             const bool is_offset_correct = (ci.ainpopts & cbAINP_OFFSET_CORRECT) != 0;
             return is_offset_correct == enabled;
-        }));
+        });
 }
 
 Result<void> SdkSession::setChannelConfig(const cbPKT_CHANINFO& chaninfo) {

@@ -473,6 +473,117 @@ class TestNConfigured:
 
 
 # ---------------------------------------------------------------------------
+# Explicit channel-list mode for bulk setters
+# ---------------------------------------------------------------------------
+
+
+class TestBulkSettersChanList:
+    """``chans`` accepts an explicit list of 1-based channel ids."""
+
+    def test_disjoint_ranges_via_two_calls(self, nplay_session):
+        """Configure chans 1-2 to one rate, chans 3-4 to another."""
+        n_lo = nplay_session.set_sample_group(
+            [1, 2], ChannelType.FRONTEND, SampleRate.SR_1kHz,
+            disable_others=False,
+        )
+        n_hi = nplay_session.set_sample_group(
+            [3, 4], ChannelType.FRONTEND, SampleRate.SR_2kHz,
+            disable_others=False,
+        )
+        # Returned counts cover all channels of the type matching each rate.
+        # With only 4 chans in the nplay fixture, the second call's count
+        # is the count of FE chans at SR_2kHz post-config = 2.
+        assert n_lo >= 2
+        assert n_hi >= 2
+        assert 1 in nplay_session.get_group_channels(int(SampleRate.SR_1kHz))
+        assert 2 in nplay_session.get_group_channels(int(SampleRate.SR_1kHz))
+        assert 3 in nplay_session.get_group_channels(int(SampleRate.SR_2kHz))
+        assert 4 in nplay_session.get_group_channels(int(SampleRate.SR_2kHz))
+
+    def test_disjoint_set(self, nplay_session):
+        """Non-contiguous list of channels is configured correctly."""
+        # First clear any prior state on these chans.
+        nplay_session.set_sample_group(
+            None, ChannelType.FRONTEND, SampleRate.NONE, disable_others=True,
+        )
+        nplay_session.set_sample_group(
+            [1, 3], ChannelType.FRONTEND, SampleRate.SR_30kHz,
+            disable_others=False,
+        )
+        ch_30k = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
+        assert 1 in ch_30k
+        assert 3 in ch_30k
+        assert 2 not in ch_30k
+
+    def test_disable_others_with_list(self, nplay_session):
+        """disable_others=True with an explicit list disables every FE chan
+        that isn't in the list."""
+        n_fe = nplay_session.num_fe_chans()
+        # Enable everything at 30kHz first.
+        nplay_session.set_sample_group(
+            None, ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=True,
+        )
+        # Now keep only chans 1, 2 at 1kHz; disable everything else.
+        n = nplay_session.set_sample_group(
+            [1, 2], ChannelType.FRONTEND, SampleRate.SR_1kHz, disable_others=True,
+        )
+        assert n == 2
+        ch_1k = nplay_session.get_group_channels(int(SampleRate.SR_1kHz))
+        ch_30k = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
+        assert sorted(ch_1k) == [1, 2]
+        assert ch_30k == [] or set(ch_30k).isdisjoint({1, 2}) and not ch_30k
+        if n_fe > 2:
+            # The not-listed FE chans should be disabled (smpgroup=0).
+            for chan_id in range(3, n_fe + 1):
+                assert chan_id not in ch_30k
+
+    def test_list_with_set_ac_input_coupling(self, nplay_session):
+        """Explicit list works for set_ac_input_coupling."""
+        n_on = nplay_session.set_ac_input_coupling(
+            [1, 3], ChannelType.FRONTEND, True,
+        )
+        # post-config count = at least 2 chans with offset_correct on
+        assert n_on >= 2
+
+    def test_list_with_set_spike_extraction(self, nplay_session):
+        """Explicit list works for set_spike_extraction."""
+        # First enable extraction everywhere
+        nplay_session.set_spike_extraction(
+            None, ChannelType.FRONTEND, True,
+        )
+        # Then disable just chans 1, 3
+        n_on = nplay_session.set_spike_extraction(
+            [1, 3], ChannelType.FRONTEND, False,
+        )
+        # After: chans 1, 3 disabled; rest enabled. Returned count is the
+        # number of FE chans with EXTRACT == False (i.e., 2).
+        assert n_on == 2
+
+    def test_empty_list_with_disable_others(self, nplay_session):
+        """Empty list + disable_others disables all FE chans."""
+        # Enable everything first
+        nplay_session.set_sample_group(
+            None, ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=True,
+        )
+        # Empty list with disable_others: nothing configured, all disabled.
+        n = nplay_session.set_sample_group(
+            [], ChannelType.FRONTEND, SampleRate.SR_1kHz, disable_others=True,
+        )
+        assert n == 0
+        assert nplay_session.get_group_channels(int(SampleRate.SR_30kHz)) == []
+        assert nplay_session.get_group_channels(int(SampleRate.SR_1kHz)) == []
+
+    def test_tuple_and_range_accepted(self, nplay_session):
+        """chans accepts any iterable of ints, not just list."""
+        nplay_session.set_sample_group(
+            (1, 2), ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=False,
+        )
+        nplay_session.set_sample_group(
+            range(1, 3), ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=False,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Async wait_until_running
 # ---------------------------------------------------------------------------
 

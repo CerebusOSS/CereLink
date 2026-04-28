@@ -909,6 +909,7 @@ cbsdk_result_t cbsdk_session_get_group_list(
 cbsdk_result_t cbsdk_session_set_sample_group(
     cbsdk_session_t session,
     uint32_t n_chans,
+    const uint32_t* chans,
     cbproto_channel_type_t chan_type,
     cbproto_group_rate_t rate,
     bool disable_others,
@@ -919,7 +920,7 @@ cbsdk_result_t cbsdk_session_set_sample_group(
     try {
         auto result = session->cpp_session->setSampleGroup(
             n_chans, to_cpp_channel_type(chan_type),
-            static_cast<cbsdk::SampleRate>(rate), disable_others);
+            static_cast<cbsdk::SampleRate>(rate), disable_others, chans);
         if (result.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
         if (out_n_configured) *out_n_configured = result.value();
         return CBSDK_RESULT_SUCCESS;
@@ -1549,6 +1550,7 @@ cbsdk_result_t cbsdk_session_close_central_file_dialog(cbsdk_session_t session) 
 cbsdk_result_t cbsdk_session_set_ac_input_coupling(
     cbsdk_session_t session,
     uint32_t n_chans,
+    const uint32_t* chans,
     cbproto_channel_type_t chan_type,
     bool enabled,
     uint32_t* out_n_configured) {
@@ -1557,7 +1559,7 @@ cbsdk_result_t cbsdk_session_set_ac_input_coupling(
     }
     try {
         auto result = session->cpp_session->setACInputCoupling(
-            n_chans, to_cpp_channel_type(chan_type), enabled);
+            n_chans, to_cpp_channel_type(chan_type), enabled, chans);
         if (result.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
         if (out_n_configured) *out_n_configured = result.value();
         return CBSDK_RESULT_SUCCESS;
@@ -1573,6 +1575,7 @@ cbsdk_result_t cbsdk_session_set_ac_input_coupling(
 cbsdk_result_t cbsdk_session_set_spike_sorting(
     cbsdk_session_t session,
     uint32_t n_chans,
+    const uint32_t* chans,
     cbproto_channel_type_t chan_type,
     uint32_t sort_options,
     uint32_t* out_n_configured) {
@@ -1581,7 +1584,7 @@ cbsdk_result_t cbsdk_session_set_spike_sorting(
     }
     try {
         auto result = session->cpp_session->setSpikeSorting(
-            n_chans, to_cpp_channel_type(chan_type), sort_options);
+            n_chans, to_cpp_channel_type(chan_type), sort_options, chans);
         if (result.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
         if (out_n_configured) *out_n_configured = result.value();
         return CBSDK_RESULT_SUCCESS;
@@ -1606,6 +1609,7 @@ cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
 cbsdk_result_t cbsdk_session_set_spike_extraction(
     cbsdk_session_t session,
     uint32_t n_chans,
+    const uint32_t* chans,
     cbproto_channel_type_t chan_type,
     bool enabled,
     uint32_t* out_n_configured) {
@@ -1614,7 +1618,7 @@ cbsdk_result_t cbsdk_session_set_spike_extraction(
     }
     try {
         auto result = session->cpp_session->setSpikeExtraction(
-            n_chans, to_cpp_channel_type(chan_type), enabled);
+            n_chans, to_cpp_channel_type(chan_type), enabled, chans);
         if (result.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
         if (out_n_configured) *out_n_configured = result.value();
         return CBSDK_RESULT_SUCCESS;

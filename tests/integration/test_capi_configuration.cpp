@@ -133,7 +133,7 @@ TEST_F(CApiSampleGroupTest, SetFrontend30kHz) {
 
     uint32_t n_configured = 0;
     EXPECT_EQ(cbsdk_session_set_sample_group(
-        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND,
+        sg.session, 4, /*chans=*/nullptr, CBPROTO_CHANNEL_TYPE_FRONTEND,
         CBPROTO_GROUP_RATE_30000Hz, true, &n_configured), CBSDK_RESULT_SUCCESS);
     EXPECT_EQ(n_configured, 4u);
 
@@ -151,7 +151,7 @@ TEST_F(CApiSampleGroupTest, SetAndVerifyField) {
 
     uint32_t n_configured = 0;
     EXPECT_EQ(cbsdk_session_set_sample_group(
-        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND,
+        sg.session, 4, /*chans=*/nullptr, CBPROTO_CHANNEL_TYPE_FRONTEND,
         CBPROTO_GROUP_RATE_10000Hz, true, &n_configured), CBSDK_RESULT_SUCCESS);
     EXPECT_EQ(n_configured, 4u);
 
@@ -269,7 +269,8 @@ TEST_F(CApiACCouplingTest, SetACCoupling) {
 
     uint32_t n_configured = 0;
     EXPECT_EQ(cbsdk_session_set_ac_input_coupling(
-        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, true, &n_configured),
+        sg.session, 4, /*chans=*/nullptr, CBPROTO_CHANNEL_TYPE_FRONTEND, true,
+        &n_configured),
         CBSDK_RESULT_SUCCESS);
     EXPECT_EQ(n_configured, 4u);
 }
@@ -280,7 +281,8 @@ TEST_F(CApiACCouplingTest, SetDCCoupling) {
 
     uint32_t n_configured = 0;
     EXPECT_EQ(cbsdk_session_set_ac_input_coupling(
-        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, false, &n_configured),
+        sg.session, 4, /*chans=*/nullptr, CBPROTO_CHANNEL_TYPE_FRONTEND, false,
+        &n_configured),
         CBSDK_RESULT_SUCCESS);
     EXPECT_EQ(n_configured, 4u);
 }
@@ -297,7 +299,8 @@ TEST_F(CApiSpikeSortingTest, SetSpikeSorting) {
 
     uint32_t n_configured = 0;
     EXPECT_EQ(cbsdk_session_set_spike_sorting(
-        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, 0, &n_configured),
+        sg.session, 4, /*chans=*/nullptr, CBPROTO_CHANNEL_TYPE_FRONTEND, 0,
+        &n_configured),
         CBSDK_RESULT_SUCCESS);
     EXPECT_EQ(n_configured, 4u);
 }
