@@ -1690,22 +1690,6 @@ static cbdev::ChannelType toDevChannelType(const ChannelType chanType) {
 }
 
 
-// Count channels of `chanType` for which `predicate(chaninfo)` is true.
-// Caller must ensure the local chaninfo cache is fresh (typically by calling
-// sync() first) so the count reflects post-config state rather than pre-config.
-template<typename Predicate>
-static uint32_t countChannelsMatching(const SdkSession& session,
-                                      ChannelType chanType, Predicate&& predicate) {
-    uint32_t count = 0;
-    for (uint32_t chan = 1; chan <= cbMAXCHANS; ++chan) {
-        const cbPKT_CHANINFO* ci = session.getChanInfo(chan);
-        if (!ci) continue;
-        if (classifyChannelByCaps(*ci) != chanType) continue;
-        if (predicate(*ci)) count++;
-    }
-    return count;
-}
-
 // Resolve (nChans, chans) into the explicit set of 1-based channel ids to
 // configure.  When @p chans is non-null, it's the verbatim list (length
 // nChans).  When @p chans is null, walk channel ids in ascending order and
@@ -1730,13 +1714,13 @@ static std::vector<uint32_t> resolveTargetChans(
     return result;
 }
 
-Result<uint32_t> SdkSession::setSampleGroup(
+Result<void> SdkSession::setSampleGroup(
     const uint32_t nChans, const ChannelType chanType, const SampleRate rate,
     const bool disableOthers, const uint32_t* chans) {
     // Pre-sync: ensure local chaninfo cache is up to date before we seed
     // outgoing CHANSET* packets from it.  Stale cache would re-send obsolete
     // values for fields we don't explicitly modify here.
-    if (auto r = sync(5000); r.isError()) return Result<uint32_t>::error(r.error());
+    if (auto r = sync(5000); r.isError()) return r;
 
     const uint32_t group_id = static_cast<uint32_t>(rate);
     const std::vector<uint32_t> targets = resolveTargetChans(*this, nChans, chanType, chans);
@@ -1790,35 +1774,14 @@ Result<uint32_t> SdkSession::setSampleGroup(
         }
     }
 
-    if (auto r = sendBulkPackets(packets); r.isError()) {
-        return Result<uint32_t>::error(r.error());
-    }
-
-    // Post-sync: ensure the device has applied our changes before we count.
-    if (auto r = sync(5000); r.isError()) return Result<uint32_t>::error(r.error());
-
-    // Count channels of chanType whose post-config state matches the request.
-    // SR_RAW is the special case: the device does not update smpgroup for raw
-    // channels, so check the RAWSTREAM bit instead.
-    if (rate == SampleRate::SR_RAW) {
-        return Result<uint32_t>::ok(countChannelsMatching(*this, chanType,
-            [](const cbPKT_CHANINFO& ci) {
-                return (ci.ainpopts & cbAINP_RAWSTREAM) != 0;
-            }));
-    }
-    return Result<uint32_t>::ok(countChannelsMatching(*this, chanType,
-        [group_id](const cbPKT_CHANINFO& ci) {
-            return ci.smpgroup == group_id;
-        }));
+    return sendBulkPackets(packets);
 }
 
 // Bulk-send a vector of packets using the most efficient path:
 // - STANDALONE: device_session->sendPackets — direct UDP with built-in
-//   pacing, returns synchronously after every packet has been sent so a
-//   subsequent sync() barrier sees them in order.
-// - CLIENT: per-packet shmem enqueue.  The peer STANDALONE process drains
-//   the same FIFO xmt buffer the sync() SYSSETRUNLEV is queued into, so
-//   ordering is preserved regardless.
+//   pacing.
+// - CLIENT: per-packet shmem enqueue, drained in FIFO order by the peer
+//   STANDALONE process.
 Result<void> SdkSession::sendBulkPackets(const std::vector<cbPKT_GENERIC>& packets) {
     if (packets.empty()) return Result<void>::ok();
     if (m_impl->device_session) {
@@ -1835,14 +1798,15 @@ Result<void> SdkSession::sendBulkPackets(const std::vector<cbPKT_GENERIC>& packe
 
 // Helper for the three "configure-each" bulk setters that don't have
 // disable_others semantics: setSpikeSorting, setSpikeExtraction,
-// setACInputCoupling.  Iterates the resolved target list, builds a packet
-// per chan via @p mutate, sends, syncs, and counts post-config matches via
-// @p predicate.
-template<typename Mutate, typename Predicate>
-static Result<uint32_t> applyBulkSetter(
+// setACInputCoupling.  Pre-syncs, iterates the resolved target list,
+// builds a packet per chan via @p mutate, and sends.  Fire-and-forget
+// on the response side — caller can call sync() if it needs to read
+// back state.
+template<typename Mutate>
+static Result<void> applyBulkSetter(
     SdkSession& session, uint32_t nChans, ChannelType chanType,
-    const uint32_t* chans, Mutate&& mutate, Predicate&& predicate) {
-    if (auto r = session.sync(5000); r.isError()) return Result<uint32_t>::error(r.error());
+    const uint32_t* chans, Mutate&& mutate) {
+    if (auto r = session.sync(5000); r.isError()) return r;
 
     const std::vector<uint32_t> targets = resolveTargetChans(session, nChans, chanType, chans);
     std::vector<cbPKT_GENERIC> packets;
@@ -1856,19 +1820,12 @@ static Result<uint32_t> applyBulkSetter(
         packets.push_back(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
     }
 
-    if (auto r = session.sendBulkPackets(packets); r.isError()) {
-        return Result<uint32_t>::error(r.error());
-    }
-
-    if (auto r = session.sync(5000); r.isError()) return Result<uint32_t>::error(r.error());
-
-    return Result<uint32_t>::ok(countChannelsMatching(session, chanType, predicate));
+    return session.sendBulkPackets(packets);
 }
 
-Result<uint32_t> SdkSession::setSpikeSorting(
+Result<void> SdkSession::setSpikeSorting(
     const uint32_t nChans, const ChannelType chanType, const uint32_t sortOptions,
     const uint32_t* chans) {
-    const uint32_t want_sort = sortOptions & cbAINPSPK_ALLSORT;
     return applyBulkSetter(*this, nChans, chanType, chans,
         [sortOptions](cbPKT_CHANINFO& ci) {
             // Use CHANSET so the firmware applies spkopts.  CHANSETSPKTHR
@@ -1877,13 +1834,10 @@ Result<uint32_t> SdkSession::setSpikeSorting(
             ci.cbpkt_header.type = cbPKTTYPE_CHANSET;
             ci.spkopts &= ~cbAINPSPK_ALLSORT;
             ci.spkopts |= sortOptions;
-        },
-        [want_sort](const cbPKT_CHANINFO& ci) {
-            return (ci.spkopts & cbAINPSPK_ALLSORT) == want_sort;
         });
 }
 
-Result<uint32_t> SdkSession::setSpikeExtraction(
+Result<void> SdkSession::setSpikeExtraction(
     const uint32_t nChans, const ChannelType chanType, const bool enabled,
     const uint32_t* chans) {
     return applyBulkSetter(*this, nChans, chanType, chans,
@@ -1891,14 +1845,10 @@ Result<uint32_t> SdkSession::setSpikeExtraction(
             ci.cbpkt_header.type = cbPKTTYPE_CHANSETSPK;
             ci.spkopts &= ~cbAINPSPK_EXTRACT;
             if (enabled) ci.spkopts |= cbAINPSPK_EXTRACT;
-        },
-        [enabled](const cbPKT_CHANINFO& ci) {
-            const bool is_extracting = (ci.spkopts & cbAINPSPK_EXTRACT) != 0;
-            return is_extracting == enabled;
         });
 }
 
-Result<uint32_t> SdkSession::setACInputCoupling(
+Result<void> SdkSession::setACInputCoupling(
     const uint32_t nChans, const ChannelType chanType, const bool enabled,
     const uint32_t* chans) {
     return applyBulkSetter(*this, nChans, chanType, chans,
@@ -1906,10 +1856,6 @@ Result<uint32_t> SdkSession::setACInputCoupling(
             ci.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
             if (enabled) ci.ainpopts |= cbAINP_OFFSET_CORRECT;
             else         ci.ainpopts &= ~cbAINP_OFFSET_CORRECT;
-        },
-        [enabled](const cbPKT_CHANINFO& ci) {
-            const bool is_offset_correct = (ci.ainpopts & cbAINP_OFFSET_CORRECT) != 0;
-            return is_offset_correct == enabled;
         });
 }
 

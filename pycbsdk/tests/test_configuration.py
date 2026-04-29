@@ -156,11 +156,11 @@ class TestChannelSampleGroup:
         Must complete within the per-test timeout (60 s).  An indefinite
         hang here points to a sync-vs-bulk-send race in the bulk setter.
         """
-        n = nplay_session.set_sample_group(
+        nplay_session.set_sample_group(
             2, ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=True,
         )
-        assert n == 2
+        nplay_session.sync()
         ch_30k = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
         assert sorted(ch_30k) == [1, 2]
 
@@ -433,61 +433,6 @@ class TestSpikeSorting:
 
 
 # ---------------------------------------------------------------------------
-# n_configured return + chans=None semantics
-# ---------------------------------------------------------------------------
-
-
-class TestNConfigured:
-    """Bulk setters return the count of channels in the post-config state."""
-
-    def test_set_sample_group_returns_count(self, nplay_session):
-        n_fe = nplay_session.num_fe_chans()
-        n = nplay_session.set_sample_group(
-            n_fe, ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=True,
-        )
-        assert n == n_fe
-        # And matches a fresh re-scan via get_group_channels.
-        assert n == len(nplay_session.get_group_channels(int(SampleRate.SR_30kHz)))
-
-    def test_set_sample_group_chans_none_is_all(self, nplay_session):
-        n_fe = nplay_session.num_fe_chans()
-        n = nplay_session.set_sample_group(
-            None, ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=True,
-        )
-        assert n == n_fe
-
-    def test_set_sample_group_partial(self, nplay_session):
-        # Configure only the first 2 channels at 1kHz, leave the rest untouched.
-        n = nplay_session.set_sample_group(
-            2, ChannelType.FRONTEND, SampleRate.SR_1kHz, disable_others=False,
-        )
-        # Returned count is "channels at SR_1kHz post-config", i.e. exactly 2.
-        assert n == 2
-
-    def test_set_ac_input_coupling_returns_count(self, nplay_session):
-        n_fe = nplay_session.num_fe_chans()
-        n_on = nplay_session.set_ac_input_coupling(
-            None, ChannelType.FRONTEND, True,
-        )
-        assert n_on == n_fe
-        n_off = nplay_session.set_ac_input_coupling(
-            None, ChannelType.FRONTEND, False,
-        )
-        assert n_off == n_fe
-
-    def test_set_spike_extraction_returns_count(self, nplay_session):
-        n_fe = nplay_session.num_fe_chans()
-        n_on = nplay_session.set_spike_extraction(
-            None, ChannelType.FRONTEND, True,
-        )
-        assert n_on == n_fe
-        n_off = nplay_session.set_spike_extraction(
-            None, ChannelType.FRONTEND, False,
-        )
-        assert n_off == n_fe
-
-
-# ---------------------------------------------------------------------------
 # Explicit channel-list mode for bulk setters
 # ---------------------------------------------------------------------------
 
@@ -497,19 +442,15 @@ class TestBulkSettersChanList:
 
     def test_disjoint_ranges_via_two_calls(self, nplay_session):
         """Configure chans 1-2 to one rate, chans 3-4 to another."""
-        n_lo = nplay_session.set_sample_group(
+        nplay_session.set_sample_group(
             [1, 2], ChannelType.FRONTEND, SampleRate.SR_1kHz,
             disable_others=False,
         )
-        n_hi = nplay_session.set_sample_group(
+        nplay_session.set_sample_group(
             [3, 4], ChannelType.FRONTEND, SampleRate.SR_2kHz,
             disable_others=False,
         )
-        # Returned counts cover all channels of the type matching each rate.
-        # With only 4 chans in the nplay fixture, the second call's count
-        # is the count of FE chans at SR_2kHz post-config = 2.
-        assert n_lo >= 2
-        assert n_hi >= 2
+        nplay_session.sync()
         assert 1 in nplay_session.get_group_channels(int(SampleRate.SR_1kHz))
         assert 2 in nplay_session.get_group_channels(int(SampleRate.SR_1kHz))
         assert 3 in nplay_session.get_group_channels(int(SampleRate.SR_2kHz))
@@ -525,6 +466,7 @@ class TestBulkSettersChanList:
             [1, 3], ChannelType.FRONTEND, SampleRate.SR_30kHz,
             disable_others=False,
         )
+        nplay_session.sync()
         ch_30k = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
         assert 1 in ch_30k
         assert 3 in ch_30k
@@ -539,40 +481,32 @@ class TestBulkSettersChanList:
             None, ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=True,
         )
         # Now keep only chans 1, 2 at 1kHz; disable everything else.
-        n = nplay_session.set_sample_group(
+        nplay_session.set_sample_group(
             [1, 2], ChannelType.FRONTEND, SampleRate.SR_1kHz, disable_others=True,
         )
-        assert n == 2
+        nplay_session.sync()
         ch_1k = nplay_session.get_group_channels(int(SampleRate.SR_1kHz))
         ch_30k = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
         assert sorted(ch_1k) == [1, 2]
-        assert ch_30k == [] or set(ch_30k).isdisjoint({1, 2}) and not ch_30k
         if n_fe > 2:
             # The not-listed FE chans should be disabled (smpgroup=0).
             for chan_id in range(3, n_fe + 1):
                 assert chan_id not in ch_30k
 
     def test_list_with_set_ac_input_coupling(self, nplay_session):
-        """Explicit list works for set_ac_input_coupling."""
-        n_on = nplay_session.set_ac_input_coupling(
+        """Explicit list works for set_ac_input_coupling — smoke test."""
+        nplay_session.set_ac_input_coupling(
             [1, 3], ChannelType.FRONTEND, True,
         )
-        # post-config count = at least 2 chans with offset_correct on
-        assert n_on >= 2
 
     def test_list_with_set_spike_extraction(self, nplay_session):
-        """Explicit list works for set_spike_extraction."""
-        # First enable extraction everywhere
+        """Explicit list works for set_spike_extraction — smoke test."""
         nplay_session.set_spike_extraction(
             None, ChannelType.FRONTEND, True,
         )
-        # Then disable just chans 1, 3
-        n_on = nplay_session.set_spike_extraction(
+        nplay_session.set_spike_extraction(
             [1, 3], ChannelType.FRONTEND, False,
         )
-        # After: chans 1, 3 disabled; rest enabled. Returned count is the
-        # number of FE chans with EXTRACT == False (i.e., 2).
-        assert n_on == 2
 
     def test_empty_list_with_disable_others(self, nplay_session):
         """Empty list + disable_others disables all FE chans."""
@@ -581,10 +515,10 @@ class TestBulkSettersChanList:
             None, ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=True,
         )
         # Empty list with disable_others: nothing configured, all disabled.
-        n = nplay_session.set_sample_group(
+        nplay_session.set_sample_group(
             [], ChannelType.FRONTEND, SampleRate.SR_1kHz, disable_others=True,
         )
-        assert n == 0
+        nplay_session.sync()
         assert nplay_session.get_group_channels(int(SampleRate.SR_30kHz)) == []
         assert nplay_session.get_group_channels(int(SampleRate.SR_1kHz)) == []
 
