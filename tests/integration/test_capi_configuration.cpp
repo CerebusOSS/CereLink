@@ -132,10 +132,9 @@ TEST_F(CApiSampleGroupTest, SetFrontend30kHz) {
     ASSERT_TRUE(sg.create());
 
     EXPECT_EQ(cbsdk_session_set_sample_group(
-        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND,
+        sg.session, 4, /*chans=*/nullptr, CBPROTO_CHANNEL_TYPE_FRONTEND,
         CBPROTO_GROUP_RATE_30000Hz, true), CBSDK_RESULT_SUCCESS);
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    EXPECT_EQ(cbsdk_session_sync(sg.session, 5000), CBSDK_RESULT_SUCCESS);
 
     // Verify via group list
     uint16_t list[256];
@@ -150,10 +149,9 @@ TEST_F(CApiSampleGroupTest, SetAndVerifyField) {
     ASSERT_TRUE(sg.create());
 
     EXPECT_EQ(cbsdk_session_set_sample_group(
-        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND,
+        sg.session, 4, /*chans=*/nullptr, CBPROTO_CHANNEL_TYPE_FRONTEND,
         CBPROTO_GROUP_RATE_10000Hz, true), CBSDK_RESULT_SUCCESS);
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    EXPECT_EQ(cbsdk_session_sync(sg.session, 5000), CBSDK_RESULT_SUCCESS);
 
     // Query via bulk field getter
     int64_t values[512];
@@ -268,7 +266,8 @@ TEST_F(CApiACCouplingTest, SetACCoupling) {
     ASSERT_TRUE(sg.create());
 
     EXPECT_EQ(cbsdk_session_set_ac_input_coupling(
-        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, true), CBSDK_RESULT_SUCCESS);
+        sg.session, 4, /*chans=*/nullptr, CBPROTO_CHANNEL_TYPE_FRONTEND, true),
+        CBSDK_RESULT_SUCCESS);
 }
 
 TEST_F(CApiACCouplingTest, SetDCCoupling) {
@@ -276,7 +275,8 @@ TEST_F(CApiACCouplingTest, SetDCCoupling) {
     ASSERT_TRUE(sg.create());
 
     EXPECT_EQ(cbsdk_session_set_ac_input_coupling(
-        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, false), CBSDK_RESULT_SUCCESS);
+        sg.session, 4, /*chans=*/nullptr, CBPROTO_CHANNEL_TYPE_FRONTEND, false),
+        CBSDK_RESULT_SUCCESS);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -290,7 +290,8 @@ TEST_F(CApiSpikeSortingTest, SetSpikeSorting) {
     ASSERT_TRUE(sg.create());
 
     EXPECT_EQ(cbsdk_session_set_spike_sorting(
-        sg.session, 4, CBPROTO_CHANNEL_TYPE_FRONTEND, 0), CBSDK_RESULT_SUCCESS);
+        sg.session, 4, /*chans=*/nullptr, CBPROTO_CHANNEL_TYPE_FRONTEND, 0),
+        CBSDK_RESULT_SUCCESS);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -327,9 +328,9 @@ TEST_F(CApiPerChannelTest, SetChannelLabel) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
-    EXPECT_EQ(cbsdk_session_set_channel_label(sg.session, 1, "TestCh"),
+    EXPECT_EQ(cbsdk_session_set_channel_label(sg.session, 1, "TestCh", /*auto_sync=*/0),
               CBSDK_RESULT_SUCCESS);
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    EXPECT_EQ(cbsdk_session_sync(sg.session, 5000), CBSDK_RESULT_SUCCESS);
 
     const char* label = cbsdk_session_get_channel_label(sg.session, 1);
     ASSERT_NE(label, nullptr);
@@ -340,9 +341,9 @@ TEST_F(CApiPerChannelTest, SetChannelSmpfilter) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
-    EXPECT_EQ(cbsdk_session_set_channel_smpfilter(sg.session, 1, 2),
+    EXPECT_EQ(cbsdk_session_set_channel_smpfilter(sg.session, 1, 2, /*auto_sync=*/0),
               CBSDK_RESULT_SUCCESS);
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    EXPECT_EQ(cbsdk_session_sync(sg.session, 5000), CBSDK_RESULT_SUCCESS);
 
     EXPECT_EQ(cbsdk_session_get_channel_smpfilter(sg.session, 1), 2u);
 }
@@ -351,9 +352,9 @@ TEST_F(CApiPerChannelTest, SetChannelSpkfilter) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
-    EXPECT_EQ(cbsdk_session_set_channel_spkfilter(sg.session, 1, 3),
+    EXPECT_EQ(cbsdk_session_set_channel_spkfilter(sg.session, 1, 3, /*auto_sync=*/0),
               CBSDK_RESULT_SUCCESS);
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    EXPECT_EQ(cbsdk_session_sync(sg.session, 5000), CBSDK_RESULT_SUCCESS);
 
     EXPECT_EQ(cbsdk_session_get_channel_spkfilter(sg.session, 1), 3u);
 }

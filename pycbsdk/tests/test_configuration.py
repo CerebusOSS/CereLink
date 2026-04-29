@@ -149,6 +149,21 @@ class TestChannelSampleGroup:
         channels_1k = nplay_session.get_group_channels(int(SampleRate.SR_1kHz))
         assert len(channels_1k) == 2
 
+    def test_disable_others_30k_no_preamble(self, nplay_session):
+        """Repro for ezmsg-blackrock hang: disable_others=True at SR_30kHz
+        called immediately after session creation, no preamble.
+
+        Must complete within the per-test timeout (60 s).  An indefinite
+        hang here points to a sync-vs-bulk-send race in the bulk setter.
+        """
+        nplay_session.set_sample_group(
+            2, ChannelType.FRONTEND, SampleRate.SR_30kHz,
+            disable_others=True,
+        )
+        nplay_session.sync()
+        ch_30k = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
+        assert sorted(ch_30k) == [1, 2]
+
     # --- Per-channel setter (set_channel_smpgroup) ---
     #
     # These tests use only per-channel setters for setup (no batch clear)
@@ -415,6 +430,140 @@ class TestSpikeSorting:
             4, ChannelType.FRONTEND, sort_options=0,
         )
         nplay_session.sync()
+
+
+# ---------------------------------------------------------------------------
+# Explicit channel-list mode for bulk setters
+# ---------------------------------------------------------------------------
+
+
+class TestBulkSettersChanList:
+    """``chans`` accepts an explicit list of 1-based channel ids."""
+
+    def test_disjoint_ranges_via_two_calls(self, nplay_session):
+        """Configure chans 1-2 to one rate, chans 3-4 to another."""
+        nplay_session.set_sample_group(
+            [1, 2], ChannelType.FRONTEND, SampleRate.SR_1kHz,
+            disable_others=False,
+        )
+        nplay_session.set_sample_group(
+            [3, 4], ChannelType.FRONTEND, SampleRate.SR_2kHz,
+            disable_others=False,
+        )
+        nplay_session.sync()
+        assert 1 in nplay_session.get_group_channels(int(SampleRate.SR_1kHz))
+        assert 2 in nplay_session.get_group_channels(int(SampleRate.SR_1kHz))
+        assert 3 in nplay_session.get_group_channels(int(SampleRate.SR_2kHz))
+        assert 4 in nplay_session.get_group_channels(int(SampleRate.SR_2kHz))
+
+    def test_disjoint_set(self, nplay_session):
+        """Non-contiguous list of channels is configured correctly."""
+        # First clear any prior state on these chans.
+        nplay_session.set_sample_group(
+            None, ChannelType.FRONTEND, SampleRate.NONE, disable_others=True,
+        )
+        nplay_session.set_sample_group(
+            [1, 3], ChannelType.FRONTEND, SampleRate.SR_30kHz,
+            disable_others=False,
+        )
+        nplay_session.sync()
+        ch_30k = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
+        assert 1 in ch_30k
+        assert 3 in ch_30k
+        assert 2 not in ch_30k
+
+    def test_disable_others_with_list(self, nplay_session):
+        """disable_others=True with an explicit list disables every FE chan
+        that isn't in the list."""
+        n_fe = nplay_session.num_fe_chans()
+        # Enable everything at 30kHz first.
+        nplay_session.set_sample_group(
+            None, ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=True,
+        )
+        # Now keep only chans 1, 2 at 1kHz; disable everything else.
+        nplay_session.set_sample_group(
+            [1, 2], ChannelType.FRONTEND, SampleRate.SR_1kHz, disable_others=True,
+        )
+        nplay_session.sync()
+        ch_1k = nplay_session.get_group_channels(int(SampleRate.SR_1kHz))
+        ch_30k = nplay_session.get_group_channels(int(SampleRate.SR_30kHz))
+        assert sorted(ch_1k) == [1, 2]
+        if n_fe > 2:
+            # The not-listed FE chans should be disabled (smpgroup=0).
+            for chan_id in range(3, n_fe + 1):
+                assert chan_id not in ch_30k
+
+    def test_list_with_set_ac_input_coupling(self, nplay_session):
+        """Explicit list works for set_ac_input_coupling — smoke test."""
+        nplay_session.set_ac_input_coupling(
+            [1, 3], ChannelType.FRONTEND, True,
+        )
+
+    def test_list_with_set_spike_extraction(self, nplay_session):
+        """Explicit list works for set_spike_extraction — smoke test."""
+        nplay_session.set_spike_extraction(
+            None, ChannelType.FRONTEND, True,
+        )
+        nplay_session.set_spike_extraction(
+            [1, 3], ChannelType.FRONTEND, False,
+        )
+
+    def test_empty_list_with_disable_others(self, nplay_session):
+        """Empty list + disable_others disables all FE chans."""
+        # Enable everything first
+        nplay_session.set_sample_group(
+            None, ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=True,
+        )
+        # Empty list with disable_others: nothing configured, all disabled.
+        nplay_session.set_sample_group(
+            [], ChannelType.FRONTEND, SampleRate.SR_1kHz, disable_others=True,
+        )
+        nplay_session.sync()
+        assert nplay_session.get_group_channels(int(SampleRate.SR_30kHz)) == []
+        assert nplay_session.get_group_channels(int(SampleRate.SR_1kHz)) == []
+
+    def test_tuple_and_range_accepted(self, nplay_session):
+        """chans accepts any iterable of ints, not just list."""
+        nplay_session.set_sample_group(
+            (1, 2), ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=False,
+        )
+        nplay_session.set_sample_group(
+            range(1, 3), ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=False,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Async wait_until_running
+# ---------------------------------------------------------------------------
+
+
+class TestWaitUntilRunning:
+    """Async runlevel-awaitable.
+
+    The fixture brings the device up to RUNNING before yielding the session,
+    so wait_until_running() returns immediately without registering a
+    listener; covering the registration path requires fault injection that
+    isn't worth the test complexity.
+    """
+
+    def test_returns_immediately_when_running(self, nplay_session):
+        import asyncio
+        from pycbsdk.session import RUNLEVEL_RUNNING
+
+        async def run() -> None:
+            assert nplay_session.runlevel >= RUNLEVEL_RUNNING
+            await nplay_session.wait_until_running(timeout=1.0)
+
+        asyncio.run(run())
+
+    def test_wait_for_runlevel_immediate(self, nplay_session):
+        import asyncio
+        from pycbsdk.session import RUNLEVEL_STANDBY
+
+        async def run() -> None:
+            await nplay_session.wait_for_runlevel(RUNLEVEL_STANDBY, timeout=1.0)
+
+        asyncio.run(run())
 
 
 # ---------------------------------------------------------------------------
@@ -872,6 +1021,54 @@ class TestCMP:
             pos, label = view[chan_id]
             assert pos == expected[chan_id].position
             assert label == expected[chan_id].label
+
+    def test_clear_channel_map_resets_labels(self, nplay_session, cmp_path):
+        """clear_channel_map() reverts labels to the device default ("chanN")."""
+        from pycbsdk.cmp import parse_cmp
+
+        nplay_session.load_channel_map(str(cmp_path), hs_id=11)
+        nplay_session.sync()
+
+        expected = parse_cmp(str(cmp_path), hs_id=11)
+        view_before = self._frontend_view(nplay_session)
+        loaded = sorted(set(expected) & set(view_before))
+        assert loaded
+        for chan_id in loaded:
+            _, label = view_before[chan_id]
+            assert label.startswith("hs11-")
+
+        nplay_session.clear_channel_map()
+        nplay_session.sync()
+
+        view_after = self._frontend_view(nplay_session)
+        for chan_id in loaded:
+            _, label = view_after[chan_id]
+            assert label == f"chan{chan_id}", (
+                f"chan {chan_id}: expected default label, got {label!r}"
+            )
+
+    def test_clear_channel_map_resets_positions(self, nplay_session, cmp_path):
+        """clear_channel_map() drops the position overlay; positions revert to zero."""
+        nplay_session.load_channel_map(str(cmp_path))
+        nplay_session.sync()
+
+        view_before = self._frontend_view(nplay_session)
+        loaded = [c for c, (pos, _) in view_before.items() if any(p != 0 for p in pos)]
+        assert loaded, "expected at least one frontend chan with non-zero position"
+
+        nplay_session.clear_channel_map()
+        nplay_session.sync()
+
+        view_after = self._frontend_view(nplay_session)
+        for chan_id in loaded:
+            pos, _ = view_after[chan_id]
+            assert all(p == 0 for p in pos), (
+                f"chan {chan_id}: expected zeroed position after clear, got {pos}"
+            )
+
+    def test_clear_channel_map_empty_is_noop(self, nplay_session):
+        """Calling clear_channel_map() with no map loaded is a no-op."""
+        nplay_session.clear_channel_map()  # must not raise
 
 
 # ---------------------------------------------------------------------------

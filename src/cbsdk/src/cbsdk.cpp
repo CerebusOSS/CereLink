@@ -578,6 +578,24 @@ cbsdk_callback_handle_t cbsdk_session_register_config_callback(
     }
 }
 
+cbsdk_callback_handle_t cbsdk_session_register_runlevel_callback(
+    cbsdk_session_t session,
+    cbsdk_runlevel_callback_fn callback,
+    void* user_data) {
+    if (!session || !session->cpp_session || !callback) {
+        return 0;
+    }
+    try {
+        return session->cpp_session->registerRunlevelChangeCallback(
+            [callback, user_data](uint32_t runlevel) {
+                callback(runlevel, user_data);
+            }
+        );
+    } catch (...) {
+        return 0;
+    }
+}
+
 void cbsdk_session_unregister_callback(cbsdk_session_t session,
                                         cbsdk_callback_handle_t handle) {
     if (!session || !session->cpp_session || handle == 0) {
@@ -890,7 +908,8 @@ cbsdk_result_t cbsdk_session_get_group_list(
 
 cbsdk_result_t cbsdk_session_set_sample_group(
     cbsdk_session_t session,
-    size_t n_chans,
+    uint32_t n_chans,
+    const uint32_t* chans,
     cbproto_channel_type_t chan_type,
     cbproto_group_rate_t rate,
     bool disable_others) {
@@ -899,7 +918,8 @@ cbsdk_result_t cbsdk_session_set_sample_group(
     }
     try {
         auto result = session->cpp_session->setSampleGroup(
-            n_chans, to_cpp_channel_type(chan_type), static_cast<cbsdk::SampleRate>(rate), disable_others);
+            n_chans, to_cpp_channel_type(chan_type),
+            static_cast<cbsdk::SampleRate>(rate), disable_others, chans);
         return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
     } catch (...) {
         return CBSDK_RESULT_INTERNAL_ERROR;
@@ -922,13 +942,20 @@ cbsdk_result_t cbsdk_session_set_channel_config(
 
 /// Helper: read-modify-write a channel config field
 /// Gets current chaninfo from shared memory, calls `modify` on a copy, sends the packet.
+/// If @p auto_sync is true, runs sync() first so the local cache reflects any
+/// in-flight CHANREP packets before this read-modify-write seeds from it.
 static cbsdk_result_t modify_and_send_chaninfo(
     cbsdk_session_t session,
     uint32_t chan_id,
     uint16_t pkt_type,
-    std::function<void(cbPKT_CHANINFO&)> modify) {
+    std::function<void(cbPKT_CHANINFO&)> modify,
+    bool auto_sync = false) {
     if (!session || !session->cpp_session) return CBSDK_RESULT_INVALID_PARAMETER;
     try {
+        if (auto_sync) {
+            auto sync_result = session->cpp_session->sync(5000);
+            if (sync_result.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
+        }
         const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
         if (!info) return CBSDK_RESULT_INVALID_PARAMETER;
         cbPKT_CHANINFO ci = *info;
@@ -945,22 +972,28 @@ static cbsdk_result_t modify_and_send_chaninfo(
 }
 
 cbsdk_result_t cbsdk_session_set_channel_label(
-    cbsdk_session_t session, uint32_t chan_id, const char* label) {
+    cbsdk_session_t session, uint32_t chan_id, const char* label, int auto_sync) {
     if (!label) return CBSDK_RESULT_INVALID_PARAMETER;
     return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETLABEL,
         [label](cbPKT_CHANINFO& ci) {
             std::strncpy(ci.label, label, sizeof(ci.label) - 1);
             ci.label[sizeof(ci.label) - 1] = '\0';
-        });
+        },
+        auto_sync != 0);
 }
 
 cbsdk_result_t cbsdk_session_set_channel_smpgroup(
-    const cbsdk_session_t session, const uint32_t chan_id, const cbproto_group_rate_t rate) {
+    const cbsdk_session_t session, const uint32_t chan_id, const cbproto_group_rate_t rate,
+    int auto_sync) {
     if (!session || !session->cpp_session) return CBSDK_RESULT_INVALID_PARAMETER;
     // Mirror the per-group logic from DeviceSession::setChannelsGroupByType.
     // The packet type varies by group because the device firmware only reads
     // specific fields depending on the type.
     try {
+        if (auto_sync) {
+            auto sync_result = session->cpp_session->sync(5000);
+            if (sync_result.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
+        }
         const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
         if (!info) return CBSDK_RESULT_INVALID_PARAMETER;
         cbPKT_CHANINFO ci = *info;
@@ -1002,47 +1035,57 @@ cbsdk_result_t cbsdk_session_set_channel_smpgroup(
 }
 
 cbsdk_result_t cbsdk_session_set_channel_smpfilter(
-    cbsdk_session_t session, uint32_t chan_id, uint32_t filter_id) {
+    cbsdk_session_t session, uint32_t chan_id, uint32_t filter_id, int auto_sync) {
     return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETSMP,
         [filter_id](cbPKT_CHANINFO& ci) {
             ci.smpfilter = filter_id;
-        });
+        },
+        auto_sync != 0);
 }
 
 cbsdk_result_t cbsdk_session_set_channel_spkfilter(
-    cbsdk_session_t session, uint32_t chan_id, uint32_t filter_id) {
+    cbsdk_session_t session, uint32_t chan_id, uint32_t filter_id, int auto_sync) {
     return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETSPK,
         [filter_id](cbPKT_CHANINFO& ci) {
             ci.spkfilter = filter_id;
-        });
+        },
+        auto_sync != 0);
 }
 
 cbsdk_result_t cbsdk_session_set_channel_ainpopts(
-    cbsdk_session_t session, uint32_t chan_id, uint32_t ainpopts) {
+    cbsdk_session_t session, uint32_t chan_id, uint32_t ainpopts, int auto_sync) {
     return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETAINP,
         [ainpopts](cbPKT_CHANINFO& ci) {
             ci.ainpopts = ainpopts;
-        });
+        },
+        auto_sync != 0);
 }
 
 cbsdk_result_t cbsdk_session_set_channel_lncrate(
-    cbsdk_session_t session, uint32_t chan_id, uint32_t lncrate) {
+    cbsdk_session_t session, uint32_t chan_id, uint32_t lncrate, int auto_sync) {
     return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETAINP,
         [lncrate](cbPKT_CHANINFO& ci) {
             ci.lncrate = lncrate;
-        });
+        },
+        auto_sync != 0);
 }
 
 cbsdk_result_t cbsdk_session_set_channel_spkopts(
-    cbsdk_session_t session, uint32_t chan_id, uint32_t spkopts) {
-    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETSPKTHR,
+    cbsdk_session_t session, uint32_t chan_id, uint32_t spkopts, int auto_sync) {
+    // Use CHANSETSPK (firmware reads spkopts+spkfilter for this type).
+    // CHANSETSPKTHR — used by older revisions of this code — only reads
+    // spkthrlevel and would silently ignore the spkopts update.
+    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETSPK,
         [spkopts](cbPKT_CHANINFO& ci) {
             ci.spkopts = spkopts;
-        });
+        },
+        auto_sync != 0);
 }
 
 cbsdk_result_t cbsdk_session_set_channel_spkthrlevel(
     cbsdk_session_t session, uint32_t chan_id, int32_t level) {
+    // CHANSETSPKTHR is "narrow": firmware reads only spkthrlevel and we
+    // overwrite it fully here, so no auto_sync flag is needed.
     return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETSPKTHR,
         [level](cbPKT_CHANINFO& ci) {
             ci.spkthrlevel = level;
@@ -1050,14 +1093,15 @@ cbsdk_result_t cbsdk_session_set_channel_spkthrlevel(
 }
 
 cbsdk_result_t cbsdk_session_set_channel_autothreshold(
-    cbsdk_session_t session, uint32_t chan_id, bool enabled) {
+    cbsdk_session_t session, uint32_t chan_id, bool enabled, int auto_sync) {
     return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETAUTOTHRESHOLD,
         [enabled](cbPKT_CHANINFO& ci) {
             if (enabled)
                 ci.spkopts |= cbAINPSPK_THRAUTO;
             else
                 ci.spkopts &= ~cbAINPSPK_THRAUTO;
-        });
+        },
+        auto_sync != 0);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1310,6 +1354,18 @@ cbsdk_result_t cbsdk_session_load_channel_map(
     }
 }
 
+cbsdk_result_t cbsdk_session_clear_channel_map(cbsdk_session_t session) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->clearChannelMap();
+        return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // CCF Configuration Files
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1490,7 +1546,8 @@ cbsdk_result_t cbsdk_session_close_central_file_dialog(cbsdk_session_t session) 
 
 cbsdk_result_t cbsdk_session_set_ac_input_coupling(
     cbsdk_session_t session,
-    size_t n_chans,
+    uint32_t n_chans,
+    const uint32_t* chans,
     cbproto_channel_type_t chan_type,
     bool enabled) {
     if (!session || !session->cpp_session) {
@@ -1498,7 +1555,7 @@ cbsdk_result_t cbsdk_session_set_ac_input_coupling(
     }
     try {
         auto result = session->cpp_session->setACInputCoupling(
-            n_chans, to_cpp_channel_type(chan_type), enabled);
+            n_chans, to_cpp_channel_type(chan_type), enabled, chans);
         return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
     } catch (...) {
         return CBSDK_RESULT_INTERNAL_ERROR;
@@ -1511,7 +1568,8 @@ cbsdk_result_t cbsdk_session_set_ac_input_coupling(
 
 cbsdk_result_t cbsdk_session_set_spike_sorting(
     cbsdk_session_t session,
-    size_t n_chans,
+    uint32_t n_chans,
+    const uint32_t* chans,
     cbproto_channel_type_t chan_type,
     uint32_t sort_options) {
     if (!session || !session->cpp_session) {
@@ -1519,7 +1577,7 @@ cbsdk_result_t cbsdk_session_set_spike_sorting(
     }
     try {
         auto result = session->cpp_session->setSpikeSorting(
-            n_chans, to_cpp_channel_type(chan_type), sort_options);
+            n_chans, to_cpp_channel_type(chan_type), sort_options, chans);
         return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
     } catch (...) {
         return CBSDK_RESULT_INTERNAL_ERROR;
@@ -1527,17 +1585,22 @@ cbsdk_result_t cbsdk_session_set_spike_sorting(
 }
 
 cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
-    cbsdk_session_t session, uint32_t chan_id, uint32_t sort_options) {
-    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETSPKTHR,
+    cbsdk_session_t session, uint32_t chan_id, uint32_t sort_options, int auto_sync) {
+    // Use CHANSETSPK (firmware reads spkopts+spkfilter).  Earlier revisions
+    // used CHANSETSPKTHR, which only reads spkthrlevel and would silently
+    // ignore the spkopts update we want here.
+    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETSPK,
         [sort_options](cbPKT_CHANINFO& ci) {
             ci.spkopts &= ~cbAINPSPK_ALLSORT;
             ci.spkopts |= sort_options;
-        });
+        },
+        auto_sync != 0);
 }
 
 cbsdk_result_t cbsdk_session_set_spike_extraction(
     cbsdk_session_t session,
-    size_t n_chans,
+    uint32_t n_chans,
+    const uint32_t* chans,
     cbproto_channel_type_t chan_type,
     bool enabled) {
     if (!session || !session->cpp_session) {
@@ -1545,7 +1608,7 @@ cbsdk_result_t cbsdk_session_set_spike_extraction(
     }
     try {
         auto result = session->cpp_session->setSpikeExtraction(
-            n_chans, to_cpp_channel_type(chan_type), enabled);
+            n_chans, to_cpp_channel_type(chan_type), enabled, chans);
         return result.isOk() ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_INTERNAL_ERROR;
     } catch (...) {
         return CBSDK_RESULT_INTERNAL_ERROR;

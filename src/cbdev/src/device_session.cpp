@@ -1220,9 +1220,13 @@ Result<void> DeviceSession::setChannelsSpikeSortingByType(const size_t nChans, c
             continue;
         }
 
-        // Create channel config packet
+        // Create channel config packet.
+        //
+        // Use CHANSET so the firmware applies the spkopts modification.
+        // CHANSETSPKTHR (used by older revisions) only reads spkthrlevel
+        // server-side, so the spkopts changes were silently dropped.
         cbPKT_CHANINFO pkt = chaninfo;  // Start with current config
-        pkt.cbpkt_header.type = cbPKTTYPE_CHANSETSPKTHR;  // Use spike threshold set command
+        pkt.cbpkt_header.type = cbPKTTYPE_CHANSET;
         pkt.chan = chan;
 
         // Clear all spike sorting flags and set new ones
@@ -1249,8 +1253,9 @@ Result<void> DeviceSession::setChannelsSpikeSortingSync(const size_t nChans, con
             return setChannelsSpikeSortingByType(nChans, chanType, sortOptions);
         },
         [](const cbPKT_HEADER* hdr) {
+            // CHANSET broadcasts a CHANREP echo (not CHANREPSPKTHR).
             return (hdr->chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION &&
-                   hdr->type == cbPKTTYPE_CHANREPSPKTHR;
+                   hdr->type == cbPKTTYPE_CHANREP;
         },
         timeout,
         total_matching

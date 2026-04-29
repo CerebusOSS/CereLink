@@ -340,6 +340,24 @@ CBSDK_API cbsdk_callback_handle_t cbsdk_session_register_config_callback(
     cbsdk_config_callback_fn callback,
     void* user_data);
 
+/// Callback type for device-runlevel transitions.
+typedef void (*cbsdk_runlevel_callback_fn)(uint32_t runlevel, void* user_data);
+
+/// Register a callback that fires whenever the device-reported runlevel
+/// transitions to a new value (driven by SYSREP packets).  Useful for
+/// awaiting cbRUNLEVEL_RUNNING after a reset.  The callback runs on the
+/// receive thread (STANDALONE) or shmem-receive thread (CLIENT) — keep it
+/// fast or post into a queue.
+/// @param session Session handle (must not be NULL)
+/// @param callback Function to call on each transition (must not be NULL)
+/// @param user_data Opaque user pointer passed to @p callback
+/// @return Callback handle for later cbsdk_session_unregister_callback,
+///         or 0 on error
+CBSDK_API cbsdk_callback_handle_t cbsdk_session_register_runlevel_callback(
+    cbsdk_session_t session,
+    cbsdk_runlevel_callback_fn callback,
+    void* user_data);
+
 /// Unregister a previously registered callback
 /// @param session Session handle (must not be NULL)
 /// @param handle Handle returned by a register_*_callback function
@@ -543,29 +561,55 @@ CBSDK_API cbsdk_result_t cbsdk_session_get_group_list(
 // Channel Configuration
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// Set sampling rate for channels of a specific type
+/// Set sampling rate for channels of a specific type (fire-and-forget).
+///
+/// Runs sync() before reading the local cache so any prior in-flight config
+/// from this process has landed before we seed CHANSET* packets from it.
+/// Does NOT sync after sending — the caller should call cbsdk_session_sync()
+/// before reading back state that depends on the new configuration.  Always
+/// sends a CHANSET* packet for every in-scope channel — no
+/// skip-if-already-correct optimization, since the local cache may be stale
+/// due to a dropped CHANREP.
+///
+/// Channel selection has two modes:
+/// - @p chans is NULL: configure the first @p n_chans channels of
+///   @p chan_type in channel-id order.  Use UINT32_MAX for all matching.
+/// - @p chans is non-NULL: configure the explicit list of @p n_chans
+///   1-based channel ids.  No type filtering on listed channels (caller
+///   is trusted), but @p chan_type still selects the "others" set for
+///   @p disable_others.
+///
 /// @param session Session handle (must not be NULL)
-/// @param n_chans Number of channels to configure (use cbMAXCHANS for all)
-/// @param chan_type Channel type filter
+/// @param n_chans When @p chans is NULL: count to configure (UINT32_MAX
+///        for all matching).  When @p chans is non-NULL: list length.
+/// @param chans Optional explicit list of 1-based channel ids; pass NULL
+///        for the count/UINT32_MAX-based mode.
+/// @param chan_type Channel type filter (matching when @p chans is NULL,
+///        "others" set when @p disable_others).
 /// @param rate Sample rate (CBPROTO_GROUP_RATE_NONE to disable, _500Hz through _RAW)
-/// @param disable_others If true, disable sampling on unselected channels of this type
+/// @param disable_others If true, disable sampling on unselected channels of @p chan_type.
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_sample_group(
     cbsdk_session_t session,
-    size_t n_chans,
+    uint32_t n_chans,
+    const uint32_t* chans,
     cbproto_channel_type_t chan_type,
     cbproto_group_rate_t rate,
     bool disable_others);
 
 /// Set AC input coupling (offset correction) for channels of a specific type
+/// (fire-and-forget).  See cbsdk_session_set_sample_group() for the
+/// channel-selection and pre-sync contract.
 /// @param session Session handle (must not be NULL)
-/// @param n_chans Number of channels to configure (use cbMAXCHANS for all)
+/// @param n_chans Count or list length (see cbsdk_session_set_sample_group)
+/// @param chans Optional explicit list of 1-based channel ids
 /// @param chan_type Channel type filter
 /// @param enabled true = AC coupling, false = DC coupling
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_ac_input_coupling(
     cbsdk_session_t session,
-    size_t n_chans,
+    uint32_t n_chans,
+    const uint32_t* chans,
     cbproto_channel_type_t chan_type,
     bool enabled);
 
@@ -577,15 +621,24 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_channel_config(
     cbsdk_session_t session,
     const cbPKT_CHANINFO* chaninfo);
 
-/// Set a channel's label
+/// Set a channel's label.
+///
+/// Per-channel CHANSET setters are read-modify-write: they seed the outgoing
+/// CHANINFO from the locally cached state. If a prior config command sent by
+/// this process is still in flight, the seed may be stale. Pass
+/// @p auto_sync != 0 to run an internal sync() barrier before reading the
+/// cache, at the cost of one round-trip to the device.
+///
 /// @param session Session handle (must not be NULL)
 /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
 /// @param label New label string (max 15 chars, null-terminated)
+/// @param auto_sync Non-zero to sync() before the read-modify-write
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_channel_label(
     cbsdk_session_t session,
     uint32_t chan_id,
-    const char* label);
+    const char* label,
+    int auto_sync);
 
 /// Set a single channel's sample group (fire-and-forget).
 /// Handles group-specific logic: RAWSTREAM flag for group 6, filter mapping
@@ -593,63 +646,79 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_channel_label(
 /// @param session Session handle (must not be NULL)
 /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
 /// @param rate Sample group (0=NONE, 1-5=filtered, 6=RAW)
+/// @param auto_sync Non-zero to sync() before the read-modify-write
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_channel_smpgroup(
     cbsdk_session_t session,
     uint32_t chan_id,
-    cbproto_group_rate_t rate);
+    cbproto_group_rate_t rate,
+    int auto_sync);
 
 /// Set a channel's continuous-time pathway filter
 /// @param session Session handle (must not be NULL)
 /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
 /// @param filter_id Filter ID (0 to cbMAXFILTS-1)
+/// @param auto_sync Non-zero to sync() before the read-modify-write
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_channel_smpfilter(
     cbsdk_session_t session,
     uint32_t chan_id,
-    uint32_t filter_id);
+    uint32_t filter_id,
+    int auto_sync);
 
 /// Set a channel's spike pathway filter
 /// @param session Session handle (must not be NULL)
 /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
 /// @param filter_id Filter ID (0 to cbMAXFILTS-1)
+/// @param auto_sync Non-zero to sync() before the read-modify-write
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_channel_spkfilter(
     cbsdk_session_t session,
     uint32_t chan_id,
-    uint32_t filter_id);
+    uint32_t filter_id,
+    int auto_sync);
 
 /// Set a channel's analog input options (LNC mode, reference electrode, etc.)
 /// @param session Session handle (must not be NULL)
 /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
 /// @param ainpopts Analog input option flags (cbAINP_* flags)
+/// @param auto_sync Non-zero to sync() before the read-modify-write
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_channel_ainpopts(
     cbsdk_session_t session,
     uint32_t chan_id,
-    uint32_t ainpopts);
+    uint32_t ainpopts,
+    int auto_sync);
 
 /// Set a channel's line noise cancellation adaptation rate
 /// @param session Session handle (must not be NULL)
 /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
 /// @param lncrate LNC rate
+/// @param auto_sync Non-zero to sync() before the read-modify-write
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_channel_lncrate(
     cbsdk_session_t session,
     uint32_t chan_id,
-    uint32_t lncrate);
+    uint32_t lncrate,
+    int auto_sync);
 
 /// Set a channel's spike processing options
 /// @param session Session handle (must not be NULL)
 /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
 /// @param spkopts Spike option flags (cbAINPSPK_* flags)
+/// @param auto_sync Non-zero to sync() before the read-modify-write
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_channel_spkopts(
     cbsdk_session_t session,
     uint32_t chan_id,
-    uint32_t spkopts);
+    uint32_t spkopts,
+    int auto_sync);
 
-/// Set a channel's spike threshold level
+/// Set a channel's spike threshold level.
+///
+/// CHANSETSPKTHR is narrow (firmware only reads spkthrlevel and the setter
+/// fully overwrites it), so no auto_sync flag is required.
+///
 /// @param session Session handle (must not be NULL)
 /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
 /// @param level Threshold level
@@ -663,11 +732,13 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_channel_spkthrlevel(
 /// @param session Session handle (must not be NULL)
 /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
 /// @param enabled true to enable, false to disable
+/// @param auto_sync Non-zero to sync() before the read-modify-write
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_channel_autothreshold(
     cbsdk_session_t session,
     uint32_t chan_id,
-    bool enabled);
+    bool enabled,
+    int auto_sync);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Bulk Channel Queries
@@ -846,6 +917,16 @@ CBSDK_API cbsdk_result_t cbsdk_session_load_channel_map(
     uint32_t start_chan,
     uint32_t hs_id);
 
+/// Clear all channel maps loaded via cbsdk_session_load_channel_map().
+///
+/// Drops the local position+label overlay and pushes default labels
+/// ("chan{N}") to the device for every previously-mapped channel so the
+/// device-side label state reverts.  Fire-and-forget.
+///
+/// @param session Session handle (must not be NULL)
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_clear_channel_map(cbsdk_session_t session);
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // CCF Configuration Files
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -970,14 +1051,18 @@ CBSDK_API cbsdk_result_t cbsdk_session_close_central_file_dialog(cbsdk_session_t
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Set spike sorting options for channels of a specific type
+/// (fire-and-forget).  See cbsdk_session_set_sample_group() for the
+/// channel-selection and pre-sync contract.
 /// @param session Session handle (must not be NULL)
-/// @param n_chans Number of channels to configure
+/// @param n_chans Count or list length (see cbsdk_session_set_sample_group)
+/// @param chans Optional explicit list of 1-based channel ids
 /// @param chan_type Channel type filter
 /// @param sort_options Spike sorting option flags (cbAINPSPK_*)
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_spike_sorting(
     cbsdk_session_t session,
-    size_t n_chans,
+    uint32_t n_chans,
+    const uint32_t* chans,
     cbproto_channel_type_t chan_type,
     uint32_t sort_options);
 
@@ -986,23 +1071,29 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_spike_sorting(
 /// @param session Session handle (must not be NULL)
 /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
 /// @param sort_options Spike sorting option flags (cbAINPSPK_*)
+/// @param auto_sync Non-zero to sync() before the read-modify-write
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_channel_spike_sorting(
     cbsdk_session_t session,
     uint32_t chan_id,
-    uint32_t sort_options);
+    uint32_t sort_options,
+    int auto_sync);
 
-/// Enable or disable spike extraction for channels of a specific type.
-/// Controls the cbAINPSPK_EXTRACT bit via cbPKTTYPE_CHANSETSPK.
-/// When enabled, the device emits spike event packets for matching channels.
+/// Enable or disable spike extraction for channels of a specific type
+/// (fire-and-forget).  Controls the cbAINPSPK_EXTRACT bit via
+/// cbPKTTYPE_CHANSETSPK.  When enabled, the device emits spike event
+/// packets for matching channels.  See cbsdk_session_set_sample_group()
+/// for the channel-selection and pre-sync contract.
 /// @param session Session handle (must not be NULL)
-/// @param n_chans Number of channels to configure
+/// @param n_chans Count or list length (see cbsdk_session_set_sample_group)
+/// @param chans Optional explicit list of 1-based channel ids
 /// @param chan_type Channel type filter
 /// @param enabled true = enable spike extraction, false = disable
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_set_spike_extraction(
     cbsdk_session_t session,
-    size_t n_chans,
+    uint32_t n_chans,
+    const uint32_t* chans,
     cbproto_channel_type_t chan_type,
     bool enabled);
 

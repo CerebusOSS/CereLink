@@ -269,6 +269,11 @@ using GroupBatchCallback = std::function<void(const int16_t* samples, size_t n_s
 /// @param pkt The received config packet
 using ConfigCallback = std::function<void(const cbPKT_GENERIC& pkt)>;
 
+/// Runlevel-change callback. Fired when the device runlevel reported in a
+/// SYSREP packet differs from the previously recorded value.
+/// @param runlevel The new runlevel (cbRUNLEVEL_*)
+using RunlevelCallback = std::function<void(uint32_t runlevel)>;
+
 /// Error callback for queue overflow and other errors
 /// @param error_message Description of the error
 using ErrorCallback = std::function<void(const std::string& error_message)>;
@@ -376,6 +381,16 @@ public:
     /// @param callback Function to call for matching config packets
     /// @return Handle for unregistration
     CallbackHandle registerConfigCallback(uint16_t packet_type, ConfigCallback callback) const;
+
+    /// Register callback for device-runlevel transitions.
+    /// Fires when the runlevel reported in a SYSREP packet differs from the
+    /// previously recorded value.  Useful for waiting on the device to reach
+    /// cbRUNLEVEL_RUNNING after a reset.  Callbacks run on the receive
+    /// thread (STANDALONE) or shmem-receive thread (CLIENT) — keep them fast,
+    /// or post to your own queue.
+    /// @param callback Function to call on each transition (receives new runlevel)
+    /// @return Handle for unregistration
+    CallbackHandle registerRunlevelChangeCallback(RunlevelCallback callback) const;
 
     /// Unregister a previously registered callback
     /// @param handle Handle returned by any register*Callback method
@@ -510,45 +525,73 @@ public:
     ///--------------------------------------------------------------------------------------------
 
     /// Set sampling rate for channels of a specific type (fire-and-forget).
-    /// The device will not have applied the new configuration when this call
-    /// returns.  Call sync() before reading back state (e.g., getGroupChannelList)
-    /// or registering callbacks that depend on the new configuration.
-    /// @param nChans Number of channels to configure (cbMAXCHANS for all)
-    /// @param chanType Channel type filter
+    ///
+    /// Runs sync() before reading the local cache so any prior in-flight
+    /// config from this process has landed before we seed CHANSET* packets
+    /// from it (the #177 contract).  Does NOT sync after sending — the
+    /// caller should call sync() before reading back state that depends on
+    /// the new configuration.  Always sends a CHANSET* packet for every
+    /// in-scope channel — never skips channels that look already configured,
+    /// since the local cache may be stale due to dropped CHANREP packets
+    /// from a concurrent client.
+    ///
+    /// Channel selection has two modes:
+    /// - @p chans is nullptr: configure the first @p nChans channels of
+    ///   @p chanType in channel-id order.  Use UINT32_MAX for all matching.
+    /// - @p chans is non-null: configure the explicit list of @p nChans
+    ///   1-based channel ids.  No type filtering is performed on the listed
+    ///   channels (caller is trusted), but @p chanType still selects the
+    ///   "others" set for @p disableOthers.
+    ///
+    /// @param nChans When @p chans is nullptr: count to configure (UINT32_MAX
+    ///        for all matching).  When @p chans is non-null: list length.
+    /// @param chanType Channel type filter (used for matching when @p chans
+    ///        is nullptr, and for the "others" set when @p disableOthers).
     /// @param rate Desired sample rate (NONE to disable, SR_500 through SR_RAW)
-    /// @param disableOthers Disable sampling on channels not in the first nChans of type
-    /// @return Result indicating success or error
-    Result<void> setSampleGroup(size_t nChans, ChannelType chanType,
-                                       SampleRate rate, bool disableOthers = false);
+    /// @param disableOthers Disable sampling on channels of @p chanType not
+    ///        in the configured set.
+    /// @param chans Optional explicit list of 1-based channel ids; must be
+    ///        non-null only when caller wants the explicit-list mode.
+    /// @return Result indicating success or error.
+    Result<void> setSampleGroup(uint32_t nChans, ChannelType chanType,
+                                SampleRate rate, bool disableOthers = false,
+                                const uint32_t* chans = nullptr);
 
-    /// Set spike sorting options for channels of a specific type (fire-and-forget).
-    /// Call sync() before reading back state that depends on this configuration.
-    /// @param nChans Number of channels to configure
+    /// Set spike sorting options for channels of a specific type
+    /// (fire-and-forget).  See setSampleGroup() for the channel-selection
+    /// and pre-sync contract.
+    /// @param nChans Count or list length (see setSampleGroup)
     /// @param chanType Channel type filter
     /// @param sortOptions Spike sorting option flags (cbAINPSPK_*)
-    /// @return Result indicating success or error
-    Result<void> setSpikeSorting(size_t nChans, ChannelType chanType,
-                                        uint32_t sortOptions);
+    /// @param chans Optional explicit list of 1-based channel ids
+    /// @return Result indicating success or error.
+    Result<void> setSpikeSorting(uint32_t nChans, ChannelType chanType,
+                                 uint32_t sortOptions,
+                                 const uint32_t* chans = nullptr);
 
     /// Enable or disable spike extraction (cbAINPSPK_EXTRACT) for channels
-    /// of a type (fire-and-forget).
-    /// This controls whether the device emits spike event packets for these channels.
-    /// Uses cbPKTTYPE_CHANSETSPK (not the threshold command).
-    /// Call sync() before reading back state that depends on this configuration.
-    /// @param nChans Number of channels to configure
+    /// of a type (fire-and-forget).  See setSampleGroup() for the
+    /// channel-selection and pre-sync contract.
+    /// @param nChans Count or list length (see setSampleGroup)
     /// @param chanType Channel type filter
     /// @param enabled true = enable spike extraction, false = disable
-    /// @return Result indicating success or error
-    Result<void> setSpikeExtraction(size_t nChans, ChannelType chanType, bool enabled);
+    /// @param chans Optional explicit list of 1-based channel ids
+    /// @return Result indicating success or error.
+    Result<void> setSpikeExtraction(uint32_t nChans, ChannelType chanType,
+                                    bool enabled,
+                                    const uint32_t* chans = nullptr);
 
     /// Set AC input coupling (offset correction) for channels of a specific
-    /// type (fire-and-forget).
-    /// Call sync() before reading back state that depends on this configuration.
-    /// @param nChans Number of channels to configure (cbMAXCHANS for all)
+    /// type (fire-and-forget).  See setSampleGroup() for the
+    /// channel-selection and pre-sync contract.
+    /// @param nChans Count or list length (see setSampleGroup)
     /// @param chanType Channel type filter
     /// @param enabled true = AC coupling (offset correction on), false = DC coupling
-    /// @return Result indicating success or error
-    Result<void> setACInputCoupling(size_t nChans, ChannelType chanType, bool enabled);
+    /// @param chans Optional explicit list of 1-based channel ids
+    /// @return Result indicating success or error.
+    Result<void> setACInputCoupling(uint32_t nChans, ChannelType chanType,
+                                    bool enabled,
+                                    const uint32_t* chans = nullptr);
 
     /// Set full channel configuration by packet (fire-and-forget).
     /// Call sync() before reading back state that depends on this configuration.
@@ -659,6 +702,17 @@ public:
         uint32_t start_chan = 1,
         uint32_t hs_id = 0);
 
+    /// Clear all channel maps loaded via loadChannelMap().
+    ///
+    /// Wipes the local position+label overlay (so positions revert) and pushes
+    /// default labels ("chan1", "chan2", ...) to the device for every channel
+    /// that was previously mapped, so the device-side label state matches.
+    /// Fire-and-forget: returns once labels are queued; the caller can call
+    /// sync() if it needs to read back state.
+    ///
+    /// @return Result indicating success or error
+    Result<void> clearChannelMap();
+
     ///--------------------------------------------------------------------------------------------
     /// CCF Configuration Files
     ///--------------------------------------------------------------------------------------------
@@ -739,6 +793,15 @@ public:
     /// @param pkt Packet to send
     /// @return Result indicating success or error
     Result<void> sendPacket(const cbPKT_GENERIC& pkt);
+
+    /// Bulk-send a vector of packets using the most efficient available path
+    /// (direct UDP via device_session in STANDALONE — coalesces with built-in
+    /// pacing — and per-packet shmem enqueue in CLIENT).  Used by the bulk
+    /// by-type setters; useful directly when the caller has already built
+    /// the packet vector.
+    /// @param packets Packets to send (may be empty, in which case this is a no-op)
+    /// @return Result indicating success or error
+    Result<void> sendBulkPackets(const std::vector<cbPKT_GENERIC>& packets);
 
     /// Send a runlevel command packet to the device
     /// @param runlevel Desired runlevel (cbRUNLEVEL_*)

@@ -4,6 +4,7 @@ Pythonic session wrapper for the CereLink SDK.
 
 from __future__ import annotations
 
+import asyncio
 import enum
 import time as _time
 import threading
@@ -11,6 +12,20 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from ._lib import ffi, load_library
+
+# Device runlevels (cbRUNLEVEL_*).  Mirrors values in cbproto types.h.
+RUNLEVEL_STARTUP = 10
+RUNLEVEL_HARDRESET = 20
+RUNLEVEL_STANDBY = 30
+RUNLEVEL_RESET = 40
+RUNLEVEL_RUNNING = 50
+RUNLEVEL_STRESSED = 60
+RUNLEVEL_ERROR = 70
+RUNLEVEL_UPDATE = 78
+RUNLEVEL_SHUTDOWN = 80
+
+# "All matching" sentinel for bulk channel-config setters.
+_ALL_CHANS = 0xFFFFFFFF
 
 lib = None  # Lazy-loaded
 
@@ -500,6 +515,31 @@ class Session:
         self._handles.append(handle)
         self._callback_refs.append(c_config_cb)
 
+    def _register_runlevel_callback(self, fn: Callable[[int], None]) -> int:
+        """Register a runlevel-change callback. Returns the callback handle.
+
+        The callback is invoked on the SDK's receive thread (or shmem-receive
+        thread in CLIENT mode), so ``fn`` must be fast and thread-safe.  For
+        async use, see :meth:`wait_for_runlevel`.
+        """
+        _lib = _get_lib()
+
+        @ffi.callback("void(uint32_t, void*)")
+        def c_runlevel_cb(runlevel, user_data):
+            try:
+                fn(int(runlevel))
+            except Exception:
+                pass  # Never let exceptions propagate into C
+
+        handle = _lib.cbsdk_session_register_runlevel_callback(
+            self._session, c_runlevel_cb, ffi.NULL
+        )
+        if handle == 0:
+            raise RuntimeError("Failed to register runlevel callback")
+        self._handles.append(handle)
+        self._callback_refs.append(c_runlevel_cb)
+        return handle
+
     def _register_packet_callback(self, fn):
         _lib = _get_lib()
 
@@ -553,6 +593,52 @@ class Session:
     def runlevel(self) -> int:
         """Get the current device run level."""
         return _get_lib().cbsdk_session_get_runlevel(self._session)
+
+    async def wait_for_runlevel(self, level: int, timeout: float = 10.0) -> None:
+        """Resolve when the device runlevel reaches ``level``.
+
+        Returns immediately if ``self.runlevel >= level`` at call time.
+        Otherwise registers a one-shot listener for the next runlevel
+        transition matching the predicate and resolves on its arrival.
+
+        Args:
+            level: Target runlevel (use one of the ``RUNLEVEL_*`` module
+                constants, e.g. :data:`RUNLEVEL_RUNNING`).
+            timeout: Seconds to wait before raising
+                :class:`asyncio.TimeoutError`.
+        """
+        if self.runlevel >= level:
+            return
+
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future = loop.create_future()
+
+        def _on_change(rl: int) -> None:
+            if rl >= level and not fut.done():
+                loop.call_soon_threadsafe(_resolve, rl)
+
+        def _resolve(_rl: int) -> None:
+            if not fut.done():
+                fut.set_result(None)
+
+        handle = self._register_runlevel_callback(_on_change)
+        try:
+            await asyncio.wait_for(fut, timeout)
+        finally:
+            _get_lib().cbsdk_session_unregister_callback(self._session, handle)
+            # Drop our local handle reference so close() doesn't double-free.
+            try:
+                self._handles.remove(handle)
+            except ValueError:
+                pass
+
+    async def wait_until_running(self, timeout: float = 10.0) -> None:
+        """Resolve when the device runlevel reaches ``RUNLEVEL_RUNNING``.
+
+        Thin wrapper over :meth:`wait_for_runlevel` for the common case of
+        gating boot-time configuration on device readiness.
+        """
+        await self.wait_for_runlevel(RUNLEVEL_RUNNING, timeout)
 
     @property
     def is_standalone(self) -> bool:
@@ -901,43 +987,65 @@ class Session:
 
     # --- Channel Configuration ---
 
+    @staticmethod
+    def _normalize_chans(chans):
+        """Resolve ``chans`` (``int | Iterable[int] | None``) for the C-API.
+
+        Returns ``(n_chans, c_arr)`` where ``c_arr`` is either ``ffi.NULL``
+        (count-based mode) or an ffi-owned ``uint32_t[]`` (explicit-list
+        mode).  Caller must keep ``c_arr`` alive across the C call.
+        """
+        if chans is None:
+            return _ALL_CHANS, ffi.NULL
+        if isinstance(chans, (bool,)):
+            raise TypeError("chans must be an int, an iterable of ints, or None")
+        if isinstance(chans, int):
+            return int(chans), ffi.NULL
+        chan_list = [int(c) for c in chans]
+        return len(chan_list), ffi.new("uint32_t[]", chan_list)
+
     def set_sample_group(
         self,
-        n_chans: int,
+        chans: "int | list[int] | None",
         channel_type: ChannelType,
         rate: SampleRate,
         disable_others: bool = False,
-    ):
+    ) -> None:
         """Set sampling rate for channels of a specific type (fire-and-forget).
 
-        Configures the first *n_chans* channels matching *channel_type*.
-        To configure a specific channel by ID, use :meth:`set_channel_smpgroup`.
+        ``chans`` selects the channels to configure:
 
-        The device will not have applied the new configuration when this
-        call returns.  Call :meth:`sync` before reading back state (e.g.,
-        :meth:`get_group_channels`) or registering callbacks that depend
-        on the new configuration.
+        - ``None``: every channel matching *channel_type*.
+        - ``int N``: the first N channels matching *channel_type* in
+          channel-id order.
+        - ``list[int]`` (or any iterable of ints): the explicit list of
+          1-based channel IDs.  Caller is trusted; no type filter is
+          applied to listed channels, but *channel_type* still defines
+          the "others" set for *disable_others*.
 
-        .. note::
-
-            The device does not update the ``smpgroup`` field for raw
-            channels.  After setting ``SampleRate.SR_RAW``,
-            :meth:`get_channel_config` will show ``smpgroup=0``.
-            Use ``get_group_channels(int(SampleRate.SR_RAW))`` to check
-            raw group membership.
+        Runs :meth:`sync` before reading the local cache so any prior
+        in-flight config from this process has landed before we seed
+        CHANSET* packets from it.  Does NOT sync after sending — call
+        :meth:`sync` before reading back state that depends on the new
+        configuration.  Always sends a CHANSET* packet for every in-scope
+        channel — never skips channels that look already configured
+        (the local cache may be stale due to a dropped CHANREP).
 
         Args:
-            n_chans: Number of channels to configure.
-            channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
+            chans: Channel selection (see above).
+            channel_type: Channel type filter.
             rate: Sample rate (e.g., ``SampleRate.SR_30kHz``, ``SampleRate.NONE``
                 to disable).
-            disable_others: Disable sampling on unselected channels.
+            disable_others: Disable sampling on channels of *channel_type*
+                that are not in the configured set.
         """
         _lib = _get_lib()
+        n_chans, c_arr = self._normalize_chans(chans)
         _check(
             _lib.cbsdk_session_set_sample_group(
                 self._session,
                 n_chans,
+                c_arr,
                 int(_coerce_enum(ChannelType, channel_type)),
                 int(_coerce_enum(SampleRate, rate, _RATE_ALIASES)),
                 disable_others,
@@ -947,48 +1055,62 @@ class Session:
 
     def set_ac_input_coupling(
         self,
-        n_chans: int,
+        chans: "int | list[int] | None",
         channel_type: ChannelType,
         enabled: bool,
-    ):
-        """Set AC/DC input coupling for channels of a specific type (fire-and-forget).
+    ) -> None:
+        """Set AC/DC input coupling for channels of a specific type
+        (fire-and-forget).
 
-        Call :meth:`sync` before reading back state that depends on this
-        configuration.
+        See :meth:`set_sample_group` for the channel selection and
+        pre-sync contract.
 
         Args:
-            n_chans: Number of channels to configure.
-            channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
+            chans: Channel selection (see :meth:`set_sample_group`).
+            channel_type: Channel type filter.
             enabled: ``True`` for AC coupling (offset correction on),
                 ``False`` for DC coupling.
         """
         _lib = _get_lib()
+        n_chans, c_arr = self._normalize_chans(chans)
         _check(
             _lib.cbsdk_session_set_ac_input_coupling(
                 self._session,
                 n_chans,
+                c_arr,
                 int(_coerce_enum(ChannelType, channel_type)),
                 enabled,
             ),
             "Failed to set AC input coupling",
         )
 
-    def set_channel_label(self, chan_id: int, label: str):
-        """Set a channel's label."""
+    def set_channel_label(self, chan_id: int, label: str, auto_sync: bool = False):
+        """Set a channel's label.
+
+        Per-channel CHANSET setters seed the outgoing CHANINFO from the
+        local cache, so a prior in-flight setter from this process can
+        leave the seed stale.  Pass ``auto_sync=True`` to run an internal
+        :meth:`sync` first (one round-trip latency cost).
+        """
         _check(
             _get_lib().cbsdk_session_set_channel_label(
-                self._session, chan_id, label.encode()
+                self._session, chan_id, label.encode(), 1 if auto_sync else 0
             ),
             "Failed to set channel label",
         )
 
-    def set_channel_smpgroup(self, chan_id: int, rate: SampleRate | int):
+    def set_channel_smpgroup(
+        self, chan_id: int, rate: SampleRate | int, auto_sync: bool = False
+    ):
         """Set a single channel's sample group (fire-and-forget).
 
         Handles group-specific logic: RAWSTREAM flag for group 6 (raw),
         filter mapping for groups 1-4, clearing conflicting flags.
         Groups 5 (30 kHz filtered) and 6 (raw) are mutually exclusive.
-        Call :meth:`sync` before reading back state that depends on this.
+
+        Pass ``auto_sync=True`` to internally sync before the read-modify-
+        write so the local cache reflects any in-flight config from this
+        process.
 
         .. note::
 
@@ -1002,61 +1124,76 @@ class Session:
             chan_id: 1-based channel ID.
             rate: Sample group (``SampleRate.NONE`` to disable, 1-5 for
                 filtered groups, ``SampleRate.SR_RAW`` for raw).
+            auto_sync: If True, sync before the read-modify-write.
         """
         _check(
             _get_lib().cbsdk_session_set_channel_smpgroup(
                 self._session,
                 chan_id,
                 int(_coerce_enum(SampleRate, rate, _RATE_ALIASES)),
+                1 if auto_sync else 0,
             ),
             "Failed to set channel smpgroup",
         )
 
-    def set_channel_smpfilter(self, chan_id: int, filter_id: int):
+    def set_channel_smpfilter(
+        self, chan_id: int, filter_id: int, auto_sync: bool = False
+    ):
         """Set a channel's continuous-time pathway filter."""
         _check(
             _get_lib().cbsdk_session_set_channel_smpfilter(
-                self._session, chan_id, filter_id
+                self._session, chan_id, filter_id, 1 if auto_sync else 0
             ),
             "Failed to set channel smpfilter",
         )
 
-    def set_channel_spkfilter(self, chan_id: int, filter_id: int):
+    def set_channel_spkfilter(
+        self, chan_id: int, filter_id: int, auto_sync: bool = False
+    ):
         """Set a channel's spike pathway filter."""
         _check(
             _get_lib().cbsdk_session_set_channel_spkfilter(
-                self._session, chan_id, filter_id
+                self._session, chan_id, filter_id, 1 if auto_sync else 0
             ),
             "Failed to set channel spkfilter",
         )
 
-    def set_channel_ainpopts(self, chan_id: int, ainpopts: int):
+    def set_channel_ainpopts(
+        self, chan_id: int, ainpopts: int, auto_sync: bool = False
+    ):
         """Set a channel's analog input options (cbAINP_* flags)."""
         _check(
             _get_lib().cbsdk_session_set_channel_ainpopts(
-                self._session, chan_id, ainpopts
+                self._session, chan_id, ainpopts, 1 if auto_sync else 0
             ),
             "Failed to set channel ainpopts",
         )
 
-    def set_channel_lncrate(self, chan_id: int, rate: int):
+    def set_channel_lncrate(self, chan_id: int, rate: int, auto_sync: bool = False):
         """Set a channel's line noise cancellation adaptation rate."""
         _check(
-            _get_lib().cbsdk_session_set_channel_lncrate(self._session, chan_id, rate),
+            _get_lib().cbsdk_session_set_channel_lncrate(
+                self._session, chan_id, rate, 1 if auto_sync else 0
+            ),
             "Failed to set channel lncrate",
         )
 
-    def set_channel_spkopts(self, chan_id: int, spkopts: int):
+    def set_channel_spkopts(self, chan_id: int, spkopts: int, auto_sync: bool = False):
         """Set a channel's spike processing options (cbAINPSPK_* flags)."""
         _check(
             _get_lib().cbsdk_session_set_channel_spkopts(
-                self._session, chan_id, spkopts
+                self._session, chan_id, spkopts, 1 if auto_sync else 0
             ),
             "Failed to set channel spkopts",
         )
 
     def set_channel_spkthrlevel(self, chan_id: int, level: int):
-        """Set a channel's spike threshold level."""
+        """Set a channel's spike threshold level.
+
+        Uses CHANSETSPKTHR which is "narrow" — the firmware only reads
+        ``spkthrlevel`` and the setter overwrites it fully, so no
+        ``auto_sync`` flag is needed.
+        """
         _check(
             _get_lib().cbsdk_session_set_channel_spkthrlevel(
                 self._session, chan_id, level
@@ -1064,23 +1201,30 @@ class Session:
             "Failed to set channel spkthrlevel",
         )
 
-    def set_channel_autothreshold(self, chan_id: int, enabled: bool):
+    def set_channel_autothreshold(
+        self, chan_id: int, enabled: bool, auto_sync: bool = False
+    ):
         """Enable or disable auto-thresholding for a channel."""
         _check(
             _get_lib().cbsdk_session_set_channel_autothreshold(
-                self._session, chan_id, enabled
+                self._session, chan_id, enabled, 1 if auto_sync else 0
             ),
             "Failed to set channel autothreshold",
         )
 
-    def configure_channel(self, chan_id: int, **kwargs):
+    def configure_channel(self, chan_id: int, *, auto_sync: bool = False, **kwargs):
         """Configure one or more attributes of a single channel.
 
         This is a convenience method that dispatches to the individual setters.
         Each keyword argument maps to a channel attribute.
 
+        When ``auto_sync=True``, the wrapper applies it to the **first**
+        dispatched setter only.  Subsequent setters skip the sync because the
+        local cache is already fresh after the first one.
+
         Args:
             chan_id: 1-based channel ID.
+            auto_sync: Sync once before the first dispatched setter.
 
         Keyword Args:
             label (str): Channel label (max 15 chars).
@@ -1101,6 +1245,17 @@ class Session:
                 autothreshold=True,
             )
         """
+        # All setters except set_channel_spkthrlevel accept an auto_sync kwarg.
+        _accepts_auto_sync = {
+            "label",
+            "smpgroup",
+            "smpfilter",
+            "spkfilter",
+            "ainpopts",
+            "lncrate",
+            "spkopts",
+            "autothreshold",
+        }
         _dispatch = {
             "label": self.set_channel_label,
             "smpfilter": self.set_channel_smpfilter,
@@ -1111,13 +1266,18 @@ class Session:
             "spkthrlevel": self.set_channel_spkthrlevel,
             "autothreshold": self.set_channel_autothreshold,
         }
+        first = True
         for key, value in kwargs.items():
+            sync_arg = auto_sync and first and key in _accepts_auto_sync
             if key == "smpgroup":
-                self.set_channel_smpgroup(chan_id, value)
-            elif key in _dispatch:
+                self.set_channel_smpgroup(chan_id, value, auto_sync=sync_arg)
+            elif key == "spkthrlevel":
                 _dispatch[key](chan_id, value)
+            elif key in _dispatch:
+                _dispatch[key](chan_id, value, auto_sync=sync_arg)
             else:
                 raise ValueError(f"Unknown channel attribute: {key!r}")
+            first = False
 
     # --- Channel Mapping (CMP) Files ---
 
@@ -1146,6 +1306,20 @@ class Session:
                 self._session, filepath.encode(), start_chan, hs_id
             ),
             "Failed to load channel map",
+        )
+
+    def clear_channel_map(self):
+        """Remove all channel maps loaded via :meth:`load_channel_map`.
+
+        Drops the local position+label overlay and pushes the device's
+        default labels (``"chan{N}"``) back to the device for every
+        previously-mapped channel so the device-side state matches.
+        Fire-and-forget; call :meth:`sync` if you need to read back state
+        before issuing further config calls.
+        """
+        _check(
+            _get_lib().cbsdk_session_clear_channel_map(self._session),
+            "Failed to clear channel map",
         )
 
     # --- CCF Configuration Files ---
@@ -1352,32 +1526,37 @@ class Session:
 
     def set_spike_sorting(
         self,
-        n_chans: int,
+        chans: "int | list[int] | None",
         channel_type: ChannelType,
         sort_options: int,
-    ):
-        """Set spike sorting options for channels of a specific type (fire-and-forget).
+    ) -> None:
+        """Set spike sorting options for channels of a specific type
+        (fire-and-forget).
 
-        Call :meth:`sync` before reading back state that depends on this
-        configuration.
+        See :meth:`set_sample_group` for the channel selection and
+        pre-sync contract.
 
         Args:
-            n_chans: Number of channels to configure.
+            chans: Channel selection (see :meth:`set_sample_group`).
             channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
             sort_options: Spike sorting option flags (cbAINPSPK_*).
         """
         _lib = _get_lib()
+        n_chans, c_arr = self._normalize_chans(chans)
         _check(
             _lib.cbsdk_session_set_spike_sorting(
                 self._session,
                 n_chans,
+                c_arr,
                 int(_coerce_enum(ChannelType, channel_type)),
                 sort_options,
             ),
             "Failed to set spike sorting",
         )
 
-    def set_channel_spike_sorting(self, chan_id: int, sort_options: int):
+    def set_channel_spike_sorting(
+        self, chan_id: int, sort_options: int, auto_sync: bool = False
+    ):
         """Set spike sorting options for a single channel (fire-and-forget).
 
         Clears ``cbAINPSPK_ALLSORT`` bits then sets *sort_options*.
@@ -1385,44 +1564,46 @@ class Session:
         ``spkopts`` field), this preserves non-sorting bits like
         ``cbAINPSPK_EXTRACT``.
 
-        Call :meth:`sync` before reading back state that depends on this
-        configuration.
-
         Args:
             chan_id: 1-based channel ID.
             sort_options: Spike sorting option flags (cbAINPSPK_*).
+            auto_sync: If True, sync before the read-modify-write so the
+                local cache reflects any in-flight config from this process.
         """
         _check(
             _get_lib().cbsdk_session_set_channel_spike_sorting(
-                self._session, chan_id, sort_options
+                self._session, chan_id, sort_options, 1 if auto_sync else 0
             ),
             "Failed to set channel spike sorting",
         )
 
     def set_spike_extraction(
         self,
-        n_chans: int,
+        chans: "int | list[int] | None",
         channel_type: ChannelType,
         enabled: bool,
-    ):
-        """Enable or disable spike extraction for channels of a specific type (fire-and-forget).
+    ) -> None:
+        """Enable or disable spike extraction for channels of a specific type
+        (fire-and-forget).
 
         Controls the ``cbAINPSPK_EXTRACT`` bit which determines whether the
         device emits spike event packets. Uses ``cbPKTTYPE_CHANSETSPK``.
 
-        Call :meth:`sync` before reading back state that depends on this
-        configuration.
+        See :meth:`set_sample_group` for the channel selection and
+        pre-sync contract.
 
         Args:
-            n_chans: Number of channels to configure.
+            chans: Channel selection (see :meth:`set_sample_group`).
             channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
             enabled: ``True`` to enable spike extraction, ``False`` to disable.
         """
         _lib = _get_lib()
+        n_chans, c_arr = self._normalize_chans(chans)
         _check(
             _lib.cbsdk_session_set_spike_extraction(
                 self._session,
                 n_chans,
+                c_arr,
                 int(_coerce_enum(ChannelType, channel_type)),
                 enabled,
             ),
