@@ -92,6 +92,23 @@ DeviceType parseDeviceType(const std::string& type_str) {
     std::exit(1);
 }
 
+/// Map runlevel value to name
+const char* getRunLevelName(uint32_t runlevel) {
+    switch (runlevel) {
+        case 0:                     return "UNKNOWN";
+        case cbRUNLEVEL_STARTUP:    return "STARTUP";
+        case cbRUNLEVEL_HARDRESET:  return "HARDRESET";
+        case cbRUNLEVEL_STANDBY:    return "STANDBY";
+        case cbRUNLEVEL_RESET:      return "RESET";
+        case cbRUNLEVEL_RUNNING:    return "RUNNING";
+        case cbRUNLEVEL_STRESSED:   return "STRESSED";
+        case cbRUNLEVEL_ERROR:      return "ERROR";
+        case cbRUNLEVEL_SHUTDOWN:   return "SHUTDOWN";
+        case cbRUNLEVEL_UPDATE:     return "UPDATE";
+        default:                    return "?";
+    }
+}
+
 /// Get device type name string
 const char* getDeviceTypeName(DeviceType type) {
     switch (type) {
@@ -111,14 +128,23 @@ int main(int argc, char* argv[]) {
     std::cout << "================================================\n\n";
 
     // Parse command line arguments
+    //   simple_device [device_type] [duration_seconds]
+    //   duration_seconds <= 0 means "run until Ctrl+C" (default).
     DeviceType device_type = DeviceType::LEGACY_NSP;  // Default to NSP
+    int duration_seconds = 0;
 
     if (argc >= 2) {
         device_type = parseDeviceType(argv[1]);
     }
+    if (argc >= 3) {
+        duration_seconds = std::atoi(argv[2]);
+    }
 
     std::cout << "Configuration:\n";
     std::cout << "  Device Type: " << getDeviceTypeName(device_type) << "\n";
+    if (duration_seconds > 0) {
+        std::cout << "  Duration:    " << duration_seconds << "s (auto-stop)\n";
+    }
 
     // Register signal handler for clean shutdown
     signal(SIGINT, signalHandler);
@@ -167,11 +193,30 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Packet callback registered.\n\n";
 
+    // Log runlevel transitions reported by the device.
+    session.registerRunlevelChangeCallback([](uint32_t rl) {
+        std::cout << "\n[runlevel change] -> " << rl
+                  << " (" << getRunLevelName(rl) << ")\n";
+    });
+
     // Step 4: Session is already running (auto-started by SDK)
-    std::cout << "SDK session is running and receiving packets...\n\n";
+    std::cout << "SDK session is running and receiving packets...\n";
+    std::cout << "  Standalone:  " << (session.isStandalone() ? "yes" : "no (CLIENT)") << "\n";
+    std::cout << "  Proto ver:   0x" << std::hex << session.getProtocolVersion() << std::dec << "\n";
+    std::cout << "  Proc ident:  " << session.getProcIdent() << "\n";
+    {
+        uint32_t rl = session.getRunLevel();
+        std::cout << "  Runlevel:    " << rl << " (" << getRunLevelName(rl) << ")\n";
+    }
+    std::cout << "\n";
 
     // Step 5: Run for specified duration, showing statistics
-    std::cout << "Receiving packets... (Press Ctrl+C to stop)\n\n";
+    if (duration_seconds > 0) {
+        std::cout << "Receiving packets for " << duration_seconds
+                  << "s (or Ctrl+C to stop early)...\n\n";
+    } else {
+        std::cout << "Receiving packets... (Press Ctrl+C to stop)\n\n";
+    }
     std::cout << "Statistics (updated every second):\n";
     std::cout << "-----------------------------------\n";
 
@@ -186,9 +231,17 @@ int main(int argc, char* argv[]) {
         auto now = std::chrono::steady_clock::now();
         seconds_elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
 
+        if (duration_seconds > 0 && seconds_elapsed >= duration_seconds) {
+            g_running = false;
+        }
+
+        uint32_t runlevel = session.getRunLevel();
+
         // Print statistics
         std::cout << "\r[" << std::setw(3) << seconds_elapsed << "s] "
-                  << "Total: " << std::setw(8) << packet_count.load()
+                  << "RL: " << std::setw(2) << runlevel << " (" << std::setw(9) << std::left
+                  << getRunLevelName(runlevel) << std::right << ")"
+                  << " | Total: " << std::setw(8) << packet_count.load()
                   << " | Config: " << std::setw(6) << config_count.load()
                   << " | Spikes: " << std::setw(8) << spike_count.load()
                   << " | RX: " << std::setw(10) << stats.packets_received_from_device

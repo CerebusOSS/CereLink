@@ -299,7 +299,23 @@ struct ShmemSession::Impl {
         is_open = false;
     }
 
-    /// @brief Write a packet to the receive buffer ring
+    /// @brief Write a packet to the receive buffer ring.
+    ///
+    /// Cross-process publication: the consumer (CLIENT) reads head_index and
+    /// then reads packet bytes up to that index.  On weak memory ordering
+    /// architectures (e.g. ARM/Apple Silicon) the head_index update must be
+    /// release-ordered with respect to the preceding memcpy and wrap update,
+    /// otherwise the consumer can observe an advanced head_index but stale
+    /// or partial bytes — which manifests as misaligned packets.
+    ///
+    /// Wrap padding: when a packet would not fit at @c head, the writer wraps
+    /// to offset 0.  The skipped bytes between the previous packet and
+    /// @c buflen would otherwise leave the consumer's tail stranded inside
+    /// random gap data after the wrap.  We pad the gap with a synthetic "wrap
+    /// marker" packet (chid=0, type=0, non-zero dlen) so the consumer can
+    /// advance tail through it cleanly and drop into the wrap.  Wrap policy
+    /// also ensures the gap left after each write is either 0 or large
+    /// enough (>= cbPKT_HEADER_32SIZE) to fit a marker.
     Result<void> writeToReceiveBuffer(const cbPKT_GENERIC& pkt) {
         if (!rec_buffer_raw) {
             return Result<void>::error("Receive buffer not initialized");
@@ -312,19 +328,49 @@ struct ShmemSession::Impl {
         }
 
         uint32_t head = recHeadindex();
+        uint32_t* buf = recBuffer();
 
-        if (head + pkt_size_words > rec_buffer_len) {
-            head = 0;
-            recHeadwrap()++;
+        // Decide whether to wrap.  Wrap if either (a) the packet would not
+        // fit, or (b) writing it would leave a 1..3 dword tail gap that we
+        // cannot mark with a wrap-marker header on the next wrap.
+        const uint32_t end_after = head + pkt_size_words;
+        bool need_wrap = false;
+        if (end_after > rec_buffer_len) {
+            need_wrap = true;
+        } else if (end_after < rec_buffer_len &&
+                   (rec_buffer_len - end_after) < cbPKT_HEADER_32SIZE) {
+            need_wrap = true;
         }
 
-        uint32_t* buf = recBuffer();
+        if (need_wrap) {
+            // Pad the gap [head, buflen) with a wrap marker so the consumer
+            // can step over it.  By the wrap-policy invariant above, gap is
+            // either 0 or >= cbPKT_HEADER_32SIZE.
+            uint32_t gap_dwords = rec_buffer_len - head;
+            if (gap_dwords >= cbPKT_HEADER_32SIZE) {
+                cbPKT_HEADER marker{};
+                marker.time = 0;
+                marker.chid = 0;
+                marker.type = 0;
+                marker.dlen = static_cast<uint16_t>(gap_dwords - cbPKT_HEADER_32SIZE);
+                marker.instrument = 0;
+                marker.reserved = 0;
+                std::memcpy(&buf[head], &marker, sizeof(cbPKT_HEADER));
+            }
+            head = 0;
+            __atomic_store_n(&recHeadwrap(), recHeadwrap() + 1, __ATOMIC_RELAXED);
+        }
+
         const uint32_t* pkt_data = reinterpret_cast<const uint32_t*>(&pkt);
         std::memcpy(&buf[head], pkt_data, pkt_size_words * sizeof(uint32_t));
 
-        recHeadindex() = head + pkt_size_words;
         recReceived()++;
         recLasttime() = pkt.cbpkt_header.time;
+
+        // Release fence: head_index store synchronizes-with the consumer's
+        // acquire load, ensuring all prior writes (marker, memcpy, wrap,
+        // lasttime) are visible before the consumer sees the new head_index.
+        __atomic_store_n(&recHeadindex(), head + pkt_size_words, __ATOMIC_RELEASE);
 
         return Result<void>::ok();
     }
@@ -505,9 +551,11 @@ struct ShmemSession::Impl {
 
         // In CLIENT mode, sync our read position to the current head so we only
         // read NEW packets, not stale data that was already in the ring buffer.
+        // Use acquire load on head_index to pair with the producer's release
+        // store (see writeToReceiveBuffer).
         if (mode == Mode::CLIENT) {
-            rec_tailindex = recHeadindex();
-            rec_tailwrap = recHeadwrap();
+            rec_tailindex = __atomic_load_n(&recHeadindex(), __ATOMIC_ACQUIRE);
+            rec_tailwrap = __atomic_load_n(&recHeadwrap(), __ATOMIC_RELAXED);
         }
 
         // Detect protocol version for CENTRAL_COMPAT mode
@@ -1843,8 +1891,12 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
     uint32_t* buf = m_impl->recBuffer();
     uint32_t buflen = m_impl->rec_buffer_len;
 
-    uint32_t head_index = m_impl->recHeadindex();
-    uint32_t head_wrap = m_impl->recHeadwrap();
+    // Acquire-load: pairs with the producer's release-store of head_index in
+    // writeToReceiveBuffer.  Without this, on weak memory architectures
+    // (ARM/Apple Silicon) we can observe an advanced head_index but stale or
+    // partial packet bytes, leading to misaligned reads of the ring buffer.
+    uint32_t head_index = __atomic_load_n(&m_impl->recHeadindex(), __ATOMIC_ACQUIRE);
+    uint32_t head_wrap = __atomic_load_n(&m_impl->recHeadwrap(), __ATOMIC_RELAXED);
 
     if (m_impl->rec_tailwrap == head_wrap && m_impl->rec_tailindex == head_index) {
         return Result<void>::ok();
@@ -1905,6 +1957,20 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             raw_header_32size = cbPKT_HEADER_32SIZE;  // 4
             auto* hdr = reinterpret_cast<const cbPKT_HEADER*>(&buf[m_impl->rec_tailindex]);
             raw_dlen = hdr->dlen;
+
+            // Wrap-marker packet inserted by the writer to fill the unused
+            // gap before a wrap-around (chid=0, type=0, dlen != 0).  Skip
+            // silently — advance tail past the marker without reporting it
+            // to the caller so it never reaches user callbacks.
+            if (hdr->chid == 0 && hdr->type == 0 && hdr->dlen != 0) {
+                uint32_t marker_size = cbPKT_HEADER_32SIZE + hdr->dlen;
+                m_impl->rec_tailindex += marker_size;
+                if (m_impl->rec_tailindex >= buflen) {
+                    m_impl->rec_tailindex -= buflen;
+                    m_impl->rec_tailwrap++;
+                }
+                continue;
+            }
         }
 
         uint32_t pkt_size_dwords = raw_header_32size + raw_dlen;

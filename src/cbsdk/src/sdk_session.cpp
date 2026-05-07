@@ -233,6 +233,11 @@ struct SdkSession::Impl {
     // Handshake state (for performStartupHandshake)
     std::atomic<uint32_t> device_runlevel{0};
     std::atomic<bool> received_sysrep{false};
+    // Sticky flag set when a SYSREPRUNLEV (0x12) is observed since the last
+    // reset.  Stays true even if a later SYSREP (0x10) heartbeat arrives, so
+    // sync()'s wait can't be raced by a heartbeat clobbering a "last type"
+    // field.  Reset alongside received_sysrep before each send.
+    std::atomic<bool> received_sysrepRunlev{false};
     std::mutex handshake_mutex;
     std::condition_variable handshake_cv;
 
@@ -892,6 +897,9 @@ Result<void> SdkSession::start() {
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
                     const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
                     impl->updateRunlevel(sysinfo->runlevel);
+                    if (pkt.cbpkt_header.type == cbPKTTYPE_SYSREPRUNLEV) {
+                        impl->received_sysrepRunlev.store(true, std::memory_order_release);
+                    }
                     impl->received_sysrep.store(true, std::memory_order_release);
                     impl->handshake_cv.notify_all();
                 }
@@ -1203,6 +1211,9 @@ Result<void> SdkSession::start() {
                             if ((packets[i].cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
                                 const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&packets[i]);
                                 impl->updateRunlevel(sysinfo->runlevel);
+                                if (packets[i].cbpkt_header.type == cbPKTTYPE_SYSREPRUNLEV) {
+                                    impl->received_sysrepRunlev.store(true, std::memory_order_release);
+                                }
                                 impl->received_sysrep.store(true, std::memory_order_release);
                                 impl->handshake_cv.notify_all();
                             }
@@ -1486,7 +1497,13 @@ const cbPKT_FILTINFO* SdkSession::getFilterInfo(const uint32_t filter_id) const 
 }
 
 uint32_t SdkSession::getRunLevel() const {
-    return m_impl->device_runlevel.load(std::memory_order_acquire);
+    uint32_t rl = m_impl->device_runlevel.load(std::memory_order_acquire);
+    if (rl != 0) return rl;
+    // Fall back to the SYSINFO mirrored into shmem by the STANDALONE owner.
+    // In CLIENT mode the device only emits SYSREP on runlevel-set commands,
+    // so this session's receive ring may never see one in steady state.
+    if (const auto* si = getSysInfo()) return si->runlevel;
+    return 0;
 }
 
 bool SdkSession::isStandalone() const {
@@ -2235,20 +2252,26 @@ Result<void> SdkSession::sync(uint32_t timeout_ms) {
     // Send a no-op runlevel SET (current runlevel) as a sync barrier.
     // The device processes packets in order, so the resulting SYSREPRUNLEV
     // confirms all prior configuration packets have been applied.
-    uint32_t current = m_impl->device_runlevel.load(std::memory_order_acquire);
+    //
+    // Use getRunLevel() (not the raw atomic): in CLIENT mode the SYSREP
+    // ring may be empty (the STANDALONE owner already handshook before we
+    // attached), so the atomic stays at 0.  getRunLevel() falls back to the
+    // SYSINFO mirror in shmem.  Sending runlevel=0 here would risk
+    // perturbing device state, so it must be the real current runlevel.
+    uint32_t current = getRunLevel();
 
     Result<void> result = Result<void>::error("No session available");
     if (m_impl->device_session) {
         // STANDALONE: use DeviceSession::setSystemRunLevelSync which matches
         // the specific SYSREPRUNLEV (type 0x12) response via sendAndWait.
-        // The old boolean waitForSysrep path matched any SYSREP (0x10-0x1F)
-        // and was falsely triggered by periodic SYSREP (0x10) heartbeats
-        // from nPlayServer.
         result = m_impl->device_session->setSystemRunLevelSync(
             current, 0, 0, std::chrono::milliseconds(timeout_ms));
     } else {
-        // CLIENT mode: route through shmem (uses the boolean waitForSysrep path)
-        result = setSystemRunLevel(current, 0, 0, 0, timeout_ms);
+        // CLIENT: route through shmem and wait for SYSREPRUNLEV (0x12)
+        // specifically — periodic SYSREP heartbeats (0x10) from
+        // nPlayServer would otherwise falsely satisfy the wait.
+        result = setSystemRunLevel(current, 0, 0, 0, timeout_ms,
+                                   cbPKTTYPE_SYSREPRUNLEV);
     }
     if (result.isError())
         return result;
@@ -2256,7 +2279,7 @@ Result<void> SdkSession::sync(uint32_t timeout_ms) {
     // The device also sends SYSREP on network error / reset.  If the
     // returned runlevel is HARDRESET or STANDBY the device dropped our
     // config packets and restarted.
-    uint32_t rl = m_impl->device_runlevel.load(std::memory_order_acquire);
+    uint32_t rl = getRunLevel();
     if (rl <= cbRUNLEVEL_STANDBY) {
         return Result<void>::error(
             "Device reset during configuration (runlevel " + std::to_string(rl) + ")");
@@ -2401,20 +2424,25 @@ Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {
 /// Helper: Wait for SYSREP packet
 ///--------------------------------------------------------------------------------------------
 
-bool SdkSession::waitForSysrep(uint32_t timeout_ms, uint32_t expected_runlevel) const {
-    // Wait for SYSREP packet with optional expected runlevel
-    // If expected_runlevel is 0, accept any SYSREP
-    // If expected_runlevel is non-zero, wait for that specific runlevel
+bool SdkSession::waitForSysrep(uint32_t timeout_ms, uint32_t expected_runlevel,
+                               uint16_t expected_type) const {
+    // Wait for SYSREP packet, optionally filtered by type and/or runlevel.
+    //   expected_type == 0:                    any 0x10..0x1F packet
+    //   expected_type == cbPKTTYPE_SYSREPRUNLEV (0x12):
+    //                                          requires the sticky 0x12 flag
+    //   expected_runlevel == 0:                accept any runlevel
     std::unique_lock<std::mutex> lock(m_impl->handshake_mutex);
     return m_impl->handshake_cv.wait_for(lock, std::chrono::milliseconds(timeout_ms),
-        [this, expected_runlevel] {
-            if (!m_impl->received_sysrep.load(std::memory_order_acquire)) {
-                return false;  // Haven't received SYSREP yet
+        [this, expected_runlevel, expected_type] {
+            if (expected_type == cbPKTTYPE_SYSREPRUNLEV) {
+                if (!m_impl->received_sysrepRunlev.load(std::memory_order_acquire))
+                    return false;
+            } else if (!m_impl->received_sysrep.load(std::memory_order_acquire)) {
+                return false;
             }
             if (expected_runlevel == 0) {
-                return true;  // Accept any SYSREP
+                return true;
             }
-            // Check if runlevel matches
             return m_impl->device_runlevel.load(std::memory_order_acquire) == expected_runlevel;
         });
 }
@@ -2428,9 +2456,11 @@ Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque,
 }
 
 Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags,
-                                           uint32_t wait_for_runlevel, uint32_t timeout_ms) {
+                                           uint32_t wait_for_runlevel, uint32_t timeout_ms,
+                                           uint16_t expected_type) {
     // Reset handshake state before sending
     m_impl->received_sysrep.store(false, std::memory_order_relaxed);
+    m_impl->received_sysrepRunlev.store(false, std::memory_order_relaxed);
 
     // Send the runlevel packet
     Result<void> send_result = Result<void>::error("No session available");
@@ -2452,7 +2482,7 @@ Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque,
         return send_result;
 
     // Wait for SYSREP response
-    if (!waitForSysrep(timeout_ms, wait_for_runlevel)) {
+    if (!waitForSysrep(timeout_ms, wait_for_runlevel, expected_type)) {
         if (wait_for_runlevel != 0)
             return Result<void>::error("No SYSREP response with expected runlevel " + std::to_string(wait_for_runlevel));
         return Result<void>::error("No SYSREP response received for setSystemRunLevel");
@@ -2500,6 +2530,7 @@ Result<void> SdkSession::performStartupHandshake(uint32_t timeout_ms) {
 
     // Reset handshake state
     m_impl->received_sysrep.store(false, std::memory_order_relaxed);
+    m_impl->received_sysrepRunlev.store(false, std::memory_order_relaxed);
     m_impl->device_runlevel.store(0, std::memory_order_relaxed);
 
     // Quick presence check - use shorter timeout to fail fast for non-existent devices
