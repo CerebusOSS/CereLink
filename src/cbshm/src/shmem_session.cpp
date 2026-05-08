@@ -29,10 +29,57 @@
 #include <cbshm/central_types.h>
 #include <cbshm/native_types.h>
 #include <cbproto/packet_translator.h>
+#include <atomic>
 #include <cstring>
 #include <numeric>  // std::gcd
 
 namespace cbshm {
+
+namespace {
+
+// Cross-process publication helpers for the shmem ring buffer head/tail
+// fields.  The underlying memory lives in a shared mmap'd region (not in a
+// std::atomic<>), so we use compiler-specific load/store + memory_order
+// semantics.  GCC/Clang have __atomic_*; MSVC needs the Interlocked
+// intrinsics, with a thread fence to provide acquire ordering on ARM64
+// (on x86/x64 aligned loads/stores already imply acquire/release).
+inline void shm_store_release_u32(uint32_t* p, uint32_t v) {
+#if defined(__GNUC__) || defined(__clang__)
+    __atomic_store_n(p, v, __ATOMIC_RELEASE);
+#else
+    // MSVC: ensure prior writes complete before publishing v.
+    std::atomic_thread_fence(std::memory_order_release);
+    *reinterpret_cast<volatile uint32_t*>(p) = v;
+#endif
+}
+
+inline void shm_store_relaxed_u32(uint32_t* p, uint32_t v) {
+#if defined(__GNUC__) || defined(__clang__)
+    __atomic_store_n(p, v, __ATOMIC_RELAXED);
+#else
+    *reinterpret_cast<volatile uint32_t*>(p) = v;
+#endif
+}
+
+inline uint32_t shm_load_acquire_u32(const uint32_t* p) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __atomic_load_n(p, __ATOMIC_ACQUIRE);
+#else
+    uint32_t v = *reinterpret_cast<const volatile uint32_t*>(p);
+    std::atomic_thread_fence(std::memory_order_acquire);
+    return v;
+#endif
+}
+
+inline uint32_t shm_load_relaxed_u32(const uint32_t* p) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __atomic_load_n(p, __ATOMIC_RELAXED);
+#else
+    return *reinterpret_cast<const volatile uint32_t*>(p);
+#endif
+}
+
+} // namespace
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Platform-specific implementation details (Pimpl idiom)
@@ -358,7 +405,7 @@ struct ShmemSession::Impl {
                 std::memcpy(&buf[head], &marker, sizeof(cbPKT_HEADER));
             }
             head = 0;
-            __atomic_store_n(&recHeadwrap(), recHeadwrap() + 1, __ATOMIC_RELAXED);
+            shm_store_relaxed_u32(&recHeadwrap(), recHeadwrap() + 1);
         }
 
         const uint32_t* pkt_data = reinterpret_cast<const uint32_t*>(&pkt);
@@ -370,7 +417,7 @@ struct ShmemSession::Impl {
         // Release fence: head_index store synchronizes-with the consumer's
         // acquire load, ensuring all prior writes (marker, memcpy, wrap,
         // lasttime) are visible before the consumer sees the new head_index.
-        __atomic_store_n(&recHeadindex(), head + pkt_size_words, __ATOMIC_RELEASE);
+        shm_store_release_u32(&recHeadindex(), head + pkt_size_words);
 
         return Result<void>::ok();
     }
@@ -554,8 +601,8 @@ struct ShmemSession::Impl {
         // Use acquire load on head_index to pair with the producer's release
         // store (see writeToReceiveBuffer).
         if (mode == Mode::CLIENT) {
-            rec_tailindex = __atomic_load_n(&recHeadindex(), __ATOMIC_ACQUIRE);
-            rec_tailwrap = __atomic_load_n(&recHeadwrap(), __ATOMIC_RELAXED);
+            rec_tailindex = shm_load_acquire_u32(&recHeadindex());
+            rec_tailwrap = shm_load_relaxed_u32(&recHeadwrap());
         }
 
         // Detect protocol version for CENTRAL_COMPAT mode
@@ -1895,8 +1942,8 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
     // writeToReceiveBuffer.  Without this, on weak memory architectures
     // (ARM/Apple Silicon) we can observe an advanced head_index but stale or
     // partial packet bytes, leading to misaligned reads of the ring buffer.
-    uint32_t head_index = __atomic_load_n(&m_impl->recHeadindex(), __ATOMIC_ACQUIRE);
-    uint32_t head_wrap = __atomic_load_n(&m_impl->recHeadwrap(), __ATOMIC_RELAXED);
+    uint32_t head_index = shm_load_acquire_u32(&m_impl->recHeadindex());
+    uint32_t head_wrap = shm_load_relaxed_u32(&m_impl->recHeadwrap());
 
     if (m_impl->rec_tailwrap == head_wrap && m_impl->rec_tailindex == head_index) {
         return Result<void>::ok();
