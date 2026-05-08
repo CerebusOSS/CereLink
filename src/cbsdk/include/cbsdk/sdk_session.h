@@ -842,19 +842,23 @@ private:
 
     /// Wait for SYSREP packet (helper for handshaking)
     /// @param timeout_ms Timeout in milliseconds
-    /// @param expected_runlevel Expected runlevel (0 = any SYSREP)
-    /// @return true if SYSREP received with expected runlevel, false if timeout
-    bool waitForSysrep(uint32_t timeout_ms, uint32_t expected_runlevel = 0) const;
+    /// @param expected_runlevel Expected runlevel (0 = any runlevel)
+    /// @param expected_type Expected SYSREP packet type (0 = any 0x10..0x1F)
+    /// @return true if matching SYSREP received, false if timeout
+    bool waitForSysrep(uint32_t timeout_ms, uint32_t expected_runlevel = 0,
+                       uint16_t expected_type = 0) const;
 
     /// Send a runlevel command packet to the device (internal version with wait_for_runlevel)
     /// @param runlevel Desired runlevel (cbRUNLEVEL_*)
     /// @param resetque Channel for reset to queue on
     /// @param runflags Lock recording after reset
-    /// @param wait_for_runlevel Runlevel to wait for (0 = any SYSREP)
+    /// @param wait_for_runlevel Runlevel to wait for (0 = any runlevel)
     /// @param timeout_ms Timeout in milliseconds
+    /// @param expected_type Expected SYSREP type to wait for (0 = any 0x10..0x1F)
     /// @return Result indicating success or error
     Result<void> setSystemRunLevel(uint32_t runlevel, uint32_t resetque, uint32_t runflags,
-                                   uint32_t wait_for_runlevel, uint32_t timeout_ms);
+                                   uint32_t wait_for_runlevel, uint32_t timeout_ms,
+                                   uint16_t expected_type = 0);
 
     /// Request configuration with custom timeout (internal version)
     /// @param timeout_ms Timeout in milliseconds
