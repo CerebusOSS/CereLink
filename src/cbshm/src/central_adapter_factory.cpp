@@ -7,17 +7,23 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Platform headers MUST be included first (before cbproto)
 #include "platform_first.h"
+
+#ifdef _WIN32
+    #include <winver.h>
+#endif
 
 #include <cbshm/central_adapter.h>
 #include <charconv>
 #include <vector>
 
+#include <iostream> // TODO: REMOVE THIS
+
 namespace cbshm {
 
-#ifdef _WIN32
-
 static Result<std::string> getCentralAppVersion() {
+#ifdef _WIN32
     // As of 2026-05-07, the 'version' field in Central's shared memory
     // configuration buffer is set to a magic number, 96, instead of a meaningful
     // value that indicates the application or protocol version.  The only other
@@ -62,9 +68,13 @@ static Result<std::string> getCentralAppVersion() {
     std::string app_version = std::string(value, value_size - 1); // strip trailing null byte
 
     return Result<std::string>::ok(app_version);
+#else
+    return Result<std::string>::error("The CentralAdapter is only usable on Windows");
+#endif
 }
 
 Result<CentralAdapter> makeCentralAdapter() {
+#ifdef _WIN32
     Result<std::string> app_version_result = getCentralAppVersion();
     if (! app_version_result.isOk()) {
         return Result<CentralAdapter>::error("Failed to extract the application version from Central");
@@ -74,7 +84,7 @@ Result<CentralAdapter> makeCentralAdapter() {
     // Get the indicies of both dots in the version string
     size_t ldot_idx = app_version.find("."); 
     size_t rdot_idx = app_version.rfind(".");
-    if (ldot_idx == std::string::npos or rdot_idx == std::string::npos) {
+    if (ldot_idx == std::string::npos || rdot_idx == std::string::npos) {
         return Result<CentralAdapter>::error("Failed to find both dots separating the major, minor, and patch version values in '" + app_version + "'");
     }
 
@@ -82,9 +92,11 @@ Result<CentralAdapter> makeCentralAdapter() {
     char* major_version_begin = app_version.data();
     char* major_version_end = app_version.data() + ldot_idx;
     uint32_t major_version;
-    std::from_chars_result result{ .ptr=nullptr, .ec=std::errc(0) };
+    std::from_chars_result result{};
+    result.ptr = nullptr;
+    result.ec = std::errc(0);
     result = std::from_chars(major_version_begin, major_version_end, major_version);
-    if (result.ec == std::errc(0) && result.ptr == major_version_end) {
+    if (result.ec != std::errc(0) || result.ptr != major_version_end) {
         return Result<CentralAdapter>::error("Failed to isolate the major version value from '" + app_version + "'");
     }
 
@@ -95,7 +107,7 @@ Result<CentralAdapter> makeCentralAdapter() {
     result.ptr = nullptr;
     result.ec = std::errc(0);
     result = std::from_chars(minor_version_begin, minor_version_end, minor_version);
-    if (result.ec == std::errc(0) && result.ptr == minor_version_end) {
+    if (result.ec != std::errc(0) || result.ptr != minor_version_end) {
         return Result<CentralAdapter>::error("Failed to isolate the minor version value from '" + app_version + "'");
     }
 
@@ -127,9 +139,14 @@ Result<CentralAdapter> makeCentralAdapter() {
     }
 
     return makeCentralAdapter(protocol_version);
+#else
+    return Result<CentralAdapter>::error("The CentralAdapter is only usable on Windows");
+#endif
 }
 
 Result<CentralAdapter> makeCentralAdapter(cbproto_protocol_version_t protocol_version) {
+#ifdef _WIN32
+    std::cout << protocol_version << std::endl;
     switch (protocol_version) {
         // // TODO: Implement legacy layouts
         // case CBPROTO_PROTOCOL_CURRENT:
@@ -145,9 +162,10 @@ Result<CentralAdapter> makeCentralAdapter(cbproto_protocol_version_t protocol_ve
         default:
             return Result<CentralAdapter>::error("Unrecognized protocol version, enum value: " + std::to_string(protocol_version));
     }
-}
-
+#else
+    return Result<CentralAdapter>::error("The CentralAdapter is only usable on Windows");
 #endif
+}
 
 } // namespace cbshm
 

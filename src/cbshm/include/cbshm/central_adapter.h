@@ -13,14 +13,11 @@
 #include <cbshm/shmem_session.h>
 #include <cbproto/connection.h>
 #include <cbutil/result.h>
-#include <memory>
 
 #ifndef CBSHM_CENTRAL_ADAPTER_H
 #define CBSHM_CENTRAL_ADAPTER_H
 
 namespace cbshm {
-
-#ifdef _WIN32
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Base-class adapter for Central-compatible shared memory access
@@ -46,8 +43,6 @@ cbutil::Result<CentralAdapter> makeCentralAdapter();
 /// a specific protocol version.
 ///
 cbutil::Result<CentralAdapter> makeCentralAdapter(cbproto_protocol_version_t protocol_version);
-
-#endif
 
 } // namespace cbshm
 
