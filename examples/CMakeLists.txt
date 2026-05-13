@@ -6,7 +6,6 @@ set(CBSDK_EXAMPLES
     "gemini_example:GeminiExample/gemini_example.cpp"
     "simple_device:SimpleDevice/simple_device.cpp"
     "central_client:CentralClient/central_client.cpp"
-    "central_adapter:CentralAdapter/central_adapter.cpp"
     "ccf_test:CCFTest/ccf_test.cpp"
     "recording_test:RecordingTest/recording_test.cpp"
 )
