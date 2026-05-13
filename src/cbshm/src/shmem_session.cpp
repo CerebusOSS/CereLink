@@ -616,20 +616,11 @@ struct ShmemSession::Impl {
 
         if (mode == Mode::CLIENT && layout == ShmemLayout::CENTRAL_COMPAT) {
             // Detect protocol version for CLIENT + CENTRAL_COMPAT mode
-            auto compat_central = detectCompatProtocolCentral(); // Try Central first
-            if (compat_central.isError()) {
-                // It's theoretically possible for CereLink to run in
-                // STANDALONE + CENTRAL_COMPAT, so it must be possible to
-                // connect as a client as well.
-                auto compat_cerelink = detectCompatProtocolCereLink();
-                if (compat_cerelink.isError()) {
-                    return Result<void>::error("Failed to detect the protocol version for compatibility with Central's shared memory layout:\n-- Central version detection returned: " + compat_central.error() + "\n-- CereLink version detection returned: " + compat_cerelink.error());
-                } else {
-                    compat_protocol = compat_cerelink.value();
-                }
-            } else {
-                compat_protocol = compat_central.value();
+            auto compat_result = detectCompatProtocol();
+            if (compat_result.isError()) {
+                return Result<void>::error("Failed to detect Central's shared memory: " + compat_result.error());
             }
+            compat_protocol = compat_result.value();
         } else {
             // The compatibility protocol is ignored for NATIVE or CENTRAL
             // layouts and is always current for STANDALONE mode.
@@ -809,16 +800,21 @@ struct ShmemSession::Impl {
     }
 
     /// @brief Detect the protocol version from Central's binary (CENTRAL_COMPAT only).
-    Result<cbproto_protocol_version_t> detectCompatProtocolCentral() {
+    Result<cbproto_protocol_version_t> detectCompatProtocol() {
 #ifdef _WIN32
         // The 'version' field in Central's shared memory configuration buffer
         // is set to a magic number, 96, instead of a meaningful value that
         // indicates the application or protocol version.  The only other field
-        // in Central's shared memory with version information is
-        // procinfo[].version, but it's byte offset changes between protocol versions
-        // so it is unusable.  This function infers Central's protocol version by
-        // inspecting VersionInfo.ProductVersion in Central.exe and converting from
-        // application version to protocol version.
+        // in Central's shared memory with version information is procinfo[].version,
+        // but it's byte offset changes between protocol versions so it is unusable.
+        // This function infers Central's protocol version by inspecting
+        // VersionInfo.ProductVersion in Central.exe and converting from application
+        // version to protocol version.
+        //
+        // This process for inferring the protocol version is indirect and brittle.
+        // If a future version of Central were to have a different executable name,
+        // version field name, or version format, then this detection method would
+        // fail to deduce the protocol version.
 
         // Get the path to Central's executable file from the running processes list.
 
@@ -955,32 +951,8 @@ struct ShmemSession::Impl {
                 return Result<cbproto_protocol_version_t>::error("Unrecognized major version number in version '" + app_version + "'" );
         }
 #else
-        return Result<cbproto_protocol_version_t>::error("Compatability with Central requires Windows");
+        return Result<cbproto_protocol_version_t>::error("Compatibility with Central requires Windows");
 #endif
-    }
-
-    /// @brief Detect the protocol version from CereLink's Central-compatible config buffer (CENTRAL_COMPAT only).
-    Result<cbproto_protocol_version_t> detectCompatProtocolCereLink() {
-        auto* cfg = legacyCfg();
-        if (!cfg) {
-            return Result<cbproto_protocol_version_t>::error("Failed to get the legacy configuration buffer");
-        }
-
-        // procinfo[0].version = MAKELONG(minor, major) = (major << 16) | minor
-        uint32_t ver = cfg->procinfo[0].version;
-        uint16_t major = (ver >> 16) & 0xFFFF;
-        uint16_t minor = ver & 0xFFFF;
-
-        if (major < 4) {
-            return Result<cbproto_protocol_version_t>::ok(CBPROTO_PROTOCOL_311);
-        } else if (major == 4 && minor == 0) {
-            return Result<cbproto_protocol_version_t>::ok(CBPROTO_PROTOCOL_400);
-        } else if (major == 4 && minor == 1) {
-            return Result<cbproto_protocol_version_t>::ok(CBPROTO_PROTOCOL_410);
-        } else {
-            // Higher versions default to the current up-to-date version.
-            return Result<cbproto_protocol_version_t>::ok(CBPROTO_PROTOCOL_CURRENT);
-        }
     }
 };
 
