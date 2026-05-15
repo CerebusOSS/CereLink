@@ -18,9 +18,7 @@
 
 #include <cbproto/types.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace cbshm {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Configuration Buffer Constants
@@ -28,71 +26,71 @@ extern "C" {
 
 /// Maximum number of instruments (NSPs) supported
 /// This matches Central's multi-instrument capability (up to 4 NSPs)
-#define cbCONFIG_MAXPROCS 4
+constexpr uint32_t cbCONFIG_MAXPROCS = 4;
 
 /// Maximum number of sample rate groups per instrument
-#define cbCONFIG_MAXGROUPS 8
+constexpr uint32_t cbCONFIG_MAXGROUPS = 8;
 
 /// Maximum number of digital filters per instrument
-#define cbCONFIG_MAXFILTS 32
+constexpr uint32_t cbCONFIG_MAXFILTS = 32;
 
 /// Number of front-end channels per instrument (Gemini = 768)
-#define cbCONFIG_NUM_FE_CHANS 768
+constexpr uint32_t cbCONFIG_NUM_FE_CHANS = 768;
 
 /// Number of analog input channels per instrument
-#define cbCONFIG_NUM_ANAIN_CHANS (16 * cbCONFIG_MAXPROCS)
+constexpr uint32_t cbCONFIG_NUM_ANAIN_CHANS = (16 * cbCONFIG_MAXPROCS);
 
 /// Total analog channels
-#define cbCONFIG_NUM_ANALOG_CHANS (cbCONFIG_NUM_FE_CHANS + cbCONFIG_NUM_ANAIN_CHANS)
+constexpr uint32_t cbCONFIG_NUM_ANALOG_CHANS = (cbCONFIG_NUM_FE_CHANS + cbCONFIG_NUM_ANAIN_CHANS);
 
 /// Number of analog output channels
-#define cbCONFIG_NUM_ANAOUT_CHANS (4 * cbCONFIG_MAXPROCS)
+constexpr uint32_t cbCONFIG_NUM_ANAOUT_CHANS = (4 * cbCONFIG_MAXPROCS);
 
 /// Number of audio output channels
-#define cbCONFIG_NUM_AUDOUT_CHANS (2 * cbCONFIG_MAXPROCS)
+constexpr uint32_t cbCONFIG_NUM_AUDOUT_CHANS = (2 * cbCONFIG_MAXPROCS);
 
 /// Total analog output channels
-#define cbCONFIG_NUM_ANALOGOUT_CHANS (cbCONFIG_NUM_ANAOUT_CHANS + cbCONFIG_NUM_AUDOUT_CHANS)
+constexpr uint32_t cbCONFIG_NUM_ANALOGOUT_CHANS = (cbCONFIG_NUM_ANAOUT_CHANS + cbCONFIG_NUM_AUDOUT_CHANS);
 
 /// Number of digital input channels
-#define cbCONFIG_NUM_DIGIN_CHANS (1 * cbCONFIG_MAXPROCS)
+constexpr uint32_t cbCONFIG_NUM_DIGIN_CHANS = (1 * cbCONFIG_MAXPROCS);
 
 /// Number of serial channels
-#define cbCONFIG_NUM_SERIAL_CHANS (1 * cbCONFIG_MAXPROCS)
+constexpr uint32_t cbCONFIG_NUM_SERIAL_CHANS = (1 * cbCONFIG_MAXPROCS);
 
 /// Number of digital output channels
-#define cbCONFIG_NUM_DIGOUT_CHANS (4 * cbCONFIG_MAXPROCS)
+constexpr uint32_t cbCONFIG_NUM_DIGOUT_CHANS = (4 * cbCONFIG_MAXPROCS);
 
 /// Total channels supported
-#define cbCONFIG_MAXCHANS (cbCONFIG_NUM_ANALOG_CHANS + cbCONFIG_NUM_ANALOGOUT_CHANS + \
+constexpr uint32_t cbCONFIG_MAXCHANS = (cbCONFIG_NUM_ANALOG_CHANS + cbCONFIG_NUM_ANALOGOUT_CHANS + \
                            cbCONFIG_NUM_DIGIN_CHANS + cbCONFIG_NUM_SERIAL_CHANS + \
-                           cbCONFIG_NUM_DIGOUT_CHANS)
+                           cbCONFIG_NUM_DIGOUT_CHANS);
 
 /// Channels per bank
-#define cbCONFIG_CHAN_PER_BANK 32
+constexpr uint32_t cbCONFIG_CHAN_PER_BANK = 32;
 
 /// Number of front-end banks
-#define cbCONFIG_NUM_FE_BANKS (cbCONFIG_NUM_FE_CHANS / cbCONFIG_CHAN_PER_BANK)
+constexpr uint32_t cbCONFIG_NUM_FE_BANKS = (cbCONFIG_NUM_FE_CHANS / cbCONFIG_CHAN_PER_BANK);
 
 /// Number of banks per type
-#define cbCONFIG_NUM_ANAIN_BANKS 1
-#define cbCONFIG_NUM_ANAOUT_BANKS 1
-#define cbCONFIG_NUM_AUDOUT_BANKS 1
-#define cbCONFIG_NUM_DIGIN_BANKS 1
-#define cbCONFIG_NUM_SERIAL_BANKS 1
-#define cbCONFIG_NUM_DIGOUT_BANKS 1
+constexpr uint32_t cbCONFIG_NUM_ANAIN_BANKS = 1;
+constexpr uint32_t cbCONFIG_NUM_ANAOUT_BANKS = 1;
+constexpr uint32_t cbCONFIG_NUM_AUDOUT_BANKS = 1;
+constexpr uint32_t cbCONFIG_NUM_DIGIN_BANKS = 1;
+constexpr uint32_t cbCONFIG_NUM_SERIAL_BANKS = 1;
+constexpr uint32_t cbCONFIG_NUM_DIGOUT_BANKS = 1;
 
 /// Total banks per instrument
-#define cbCONFIG_MAXBANKS (cbCONFIG_NUM_FE_BANKS + cbCONFIG_NUM_ANAIN_BANKS + \
+constexpr uint32_t cbCONFIG_MAXBANKS = (cbCONFIG_NUM_FE_BANKS + cbCONFIG_NUM_ANAIN_BANKS + \
                            cbCONFIG_NUM_ANAOUT_BANKS + cbCONFIG_NUM_AUDOUT_BANKS + \
                            cbCONFIG_NUM_DIGIN_BANKS + cbCONFIG_NUM_SERIAL_BANKS + \
-                           cbCONFIG_NUM_DIGOUT_BANKS)
+                           cbCONFIG_NUM_DIGOUT_BANKS);
 
 /// Maximum n-trodes (stereotrode minimum) for multi-instrument config buffer
-#define cbCONFIG_MAXNTRODES (cbCONFIG_NUM_FE_CHANS / 2)
+constexpr uint32_t cbCONFIG_MAXNTRODES = (cbCONFIG_NUM_FE_CHANS / 2);
 
 /// Analog output gain channels for multi-instrument config buffer
-#define cbCONFIG_AOUT_NUM_GAIN_CHANS (cbCONFIG_NUM_ANAOUT_CHANS + cbCONFIG_NUM_AUDOUT_CHANS)
+constexpr uint32_t cbCONFIG_AOUT_NUM_GAIN_CHANS = (cbCONFIG_NUM_ANAOUT_CHANS + cbCONFIG_NUM_AUDOUT_CHANS);
 
 /// @}
 
@@ -200,8 +198,19 @@ typedef struct {
     // Note: hwndCentral (HANDLE) is omitted - platform-specific and only used by Central
 } cbConfigBuffer;
 
-#ifdef __cplusplus
-}
-#endif
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Central-compatible configuration buffer
+///
+/// This is now an alias to cbConfigBuffer (defined in cbproto/config_buffer.h).
+/// The structure maintains Central's cbCFGBUFF layout compatibility.
+///
+/// The CENTRAL_* constants are kept for backward compatibility in this module,
+/// while cbConfigBuffer uses cbCONFIG_* constants (which have the same values).
+///
+/// Static asserts below verify the constants match.
+///
+using CentralConfigBuffer = cbConfigBuffer;
+
+} // namespace cbshm
 
 #endif // CBPROTO_CONFIG_BUFFER_H

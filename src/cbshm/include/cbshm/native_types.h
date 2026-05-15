@@ -25,7 +25,8 @@
 
 #include <cbproto/cbproto.h>
 #include <cbproto/config.h>       // For cbMAXBANKS
-#include <cbshm/central_types.h>  // For CentralSpikeCache reuse
+#include <cbshm/receive_buffer.h> // For cbRECBUFFLEN
+#include <cbshm/central_types/current.h>
 #include <cstdint>
 
 #pragma pack(push, 1)
@@ -55,7 +56,7 @@ constexpr uint32_t NATIVE_cbXMT_GLOBAL_BUFFLEN = (NATIVE_XMT_SLOT_WORDS * 5000 +
 constexpr uint32_t NATIVE_cbXMT_LOCAL_BUFFLEN = (NATIVE_XMT_SLOT_WORDS * 2000 + 2);
 
 /// Spike cache constants (one cache per native analog channel)
-constexpr uint32_t NATIVE_cbPKT_SPKCACHEPKTCNT = CENTRAL_cbPKT_SPKCACHEPKTCNT;  // 400
+constexpr uint32_t NATIVE_cbPKT_SPKCACHEPKTCNT = central::cbPKT_SPKCACHEPKTCNT;
 constexpr uint32_t NATIVE_cbPKT_SPKCACHELINECNT = NATIVE_NUM_ANALOG_CHANS;      // 272
 
 /// @}
@@ -190,7 +191,7 @@ struct NativePCStatus {
     uint32_t m_nNumSerialChans;                             ///< Number of serial channels
     uint32_t m_nNumDigoutChans;                             ///< Number of digital output channels
     uint32_t m_nNumTotalChans;                              ///< Total channel count
-    NSPStatus m_nNspStatus;                                 ///< NSP status (single instrument)
+    central::NSPStatus m_nNspStatus;                                 ///< NSP status (single instrument)
     uint32_t m_nNumNTrodesPerInstrument;                    ///< NTrode count (single instrument)
     uint32_t m_nGeminiSystem;                               ///< Gemini system flag
 };

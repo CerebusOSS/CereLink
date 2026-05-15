@@ -22,11 +22,6 @@
 /// @name Receive Buffer Constants
 /// @{
 
-/// Maximum number of frontend channels (used for buffer size calculation)
-#ifndef cbNUM_FE_CHANS
-#define cbNUM_FE_CHANS 256
-#endif
-
 /// Receive buffer length (matches Central's calculation)
 /// Formula: cbNUM_FE_CHANS * 65536 * 4 - 1
 /// This provides enough space for a ring buffer of packets from all FE channels

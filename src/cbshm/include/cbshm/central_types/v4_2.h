@@ -1,74 +1,75 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @file   central_types.h
-/// @author CereLink Development Team
-/// @date   2025-11-11
+/// @file   v4_2.h
+/// @author Caden Shmookler
+/// @date   2026-05-15
 ///
 /// @brief  Central-compatible shared memory structure definitions
 ///
-/// This file defines the shared memory structures using Central's constants (cbMAXPROCS=4,
-/// cbNUM_FE_CHANS=768) to ensure compatibility with Central when it creates shared memory.
+/// This file defines the shared memory structures using Central's constants to
+/// ensure compatibility with Central when it creates shared memory.
 ///
 /// CRITICAL: These structures MUST match Central's cbhwlib.h exactly!
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifndef CBSHM_CENTRAL_TYPES_H
-#define CBSHM_CENTRAL_TYPES_H
+#ifndef CBSHM_CENTRAL_TYPES_V4_2_H
+#define CBSHM_CENTRAL_TYPES_V4_2_H
+
+#include <cstdint>
 
 // Include InstrumentId from protocol module
 #include <cbproto/instrument_id.h>
-
-// Include packet structure definitions from cbproto
-#include <cbproto/cbproto.h>
-#include <cbshm/config_buffer.h>
-#include <cbshm/receive_buffer.h>
-
-#include <cstdint>
 
 // Ensure tight packing for shared memory structures
 #pragma pack(push, 1)
 
 namespace cbshm {
 
+namespace central_v4_2 {
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Central Constants
 /// @{
 
 // These MUST match Central's constants
-constexpr uint32_t CENTRAL_cbMAXPROCS = 4;          ///< Central supports up to 4 NSPs
-constexpr uint32_t CENTRAL_cbNUM_FE_CHANS = 768;    ///< Central supports 768 FE channels
-constexpr uint32_t CENTRAL_cbMAXGROUPS = 8;         ///< Sample rate groups
-constexpr uint32_t CENTRAL_cbMAXFILTS = 32;         ///< Digital filters
+constexpr uint32_t cbMAXPROCS = 4;          ///< Central supports up to 4 NSPs
+constexpr uint32_t cbNUM_FE_CHANS = 768;    ///< Central supports 768 FE channels
+constexpr uint32_t cbMAXGROUPS = 8;         ///< Sample rate groups
+constexpr uint32_t cbMAXFILTS = 32;         ///< Digital filters
+constexpr uint32_t cbMAXVIDEOSOURCE = 1;
+constexpr uint32_t cbMAXTRACKOBJ = 20;
+constexpr uint32_t cbMAXHOOPS = 4;
+constexpr uint32_t cbMAX_AOUT_TRIGGER = 5;
 
 // Channel counts
-constexpr uint32_t CENTRAL_cbNUM_ANAIN_CHANS = 16 * CENTRAL_cbMAXPROCS;
-constexpr uint32_t CENTRAL_cbNUM_ANALOG_CHANS = CENTRAL_cbNUM_FE_CHANS + CENTRAL_cbNUM_ANAIN_CHANS;
-constexpr uint32_t CENTRAL_cbNUM_ANAOUT_CHANS = 4 * CENTRAL_cbMAXPROCS;
-constexpr uint32_t CENTRAL_cbNUM_AUDOUT_CHANS = 2 * CENTRAL_cbMAXPROCS;
-constexpr uint32_t CENTRAL_cbNUM_ANALOGOUT_CHANS = CENTRAL_cbNUM_ANAOUT_CHANS + CENTRAL_cbNUM_AUDOUT_CHANS;
-constexpr uint32_t CENTRAL_cbNUM_DIGIN_CHANS = 1 * CENTRAL_cbMAXPROCS;
-constexpr uint32_t CENTRAL_cbNUM_SERIAL_CHANS = 1 * CENTRAL_cbMAXPROCS;
-constexpr uint32_t CENTRAL_cbNUM_DIGOUT_CHANS = 4 * CENTRAL_cbMAXPROCS;
+constexpr uint32_t cbNUM_ANAIN_CHANS = 16 * cbMAXPROCS;
+constexpr uint32_t cbNUM_ANALOG_CHANS = cbNUM_FE_CHANS + cbNUM_ANAIN_CHANS;
+constexpr uint32_t cbNUM_ANAOUT_CHANS = 4 * cbMAXPROCS;
+constexpr uint32_t cbNUM_AUDOUT_CHANS = 2 * cbMAXPROCS;
+constexpr uint32_t cbNUM_ANALOGOUT_CHANS = cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS;
+constexpr uint32_t cbNUM_DIGIN_CHANS = 1 * cbMAXPROCS;
+constexpr uint32_t cbNUM_SERIAL_CHANS = 1 * cbMAXPROCS;
+constexpr uint32_t cbNUM_DIGOUT_CHANS = 4 * cbMAXPROCS;
 
 // Total channels
-constexpr uint32_t CENTRAL_cbMAXCHANS = (CENTRAL_cbNUM_ANALOG_CHANS + CENTRAL_cbNUM_ANALOGOUT_CHANS +
-                                          CENTRAL_cbNUM_DIGIN_CHANS + CENTRAL_cbNUM_SERIAL_CHANS +
-                                          CENTRAL_cbNUM_DIGOUT_CHANS);
+constexpr uint32_t cbMAXCHANS = (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS +
+                                          cbNUM_DIGIN_CHANS + cbNUM_SERIAL_CHANS +
+                                          cbNUM_DIGOUT_CHANS);
 
 // Bank definitions
-constexpr uint32_t CENTRAL_cbCHAN_PER_BANK = 32;
-constexpr uint32_t CENTRAL_cbNUM_FE_BANKS = CENTRAL_cbNUM_FE_CHANS / CENTRAL_cbCHAN_PER_BANK;
-constexpr uint32_t CENTRAL_cbNUM_ANAIN_BANKS = 1;
-constexpr uint32_t CENTRAL_cbNUM_ANAOUT_BANKS = 1;
-constexpr uint32_t CENTRAL_cbNUM_AUDOUT_BANKS = 1;
-constexpr uint32_t CENTRAL_cbNUM_DIGIN_BANKS = 1;
-constexpr uint32_t CENTRAL_cbNUM_SERIAL_BANKS = 1;
-constexpr uint32_t CENTRAL_cbNUM_DIGOUT_BANKS = 1;
+constexpr uint32_t cbCHAN_PER_BANK = 32;
+constexpr uint32_t cbNUM_FE_BANKS = cbNUM_FE_CHANS / cbCHAN_PER_BANK;
+constexpr uint32_t cbNUM_ANAIN_BANKS = 1;
+constexpr uint32_t cbNUM_ANAOUT_BANKS = 1;
+constexpr uint32_t cbNUM_AUDOUT_BANKS = 1;
+constexpr uint32_t cbNUM_DIGIN_BANKS = 1;
+constexpr uint32_t cbNUM_SERIAL_BANKS = 1;
+constexpr uint32_t cbNUM_DIGOUT_BANKS = 1;
 
-constexpr uint32_t CENTRAL_cbMAXBANKS = (CENTRAL_cbNUM_FE_BANKS + CENTRAL_cbNUM_ANAIN_BANKS +
-                                          CENTRAL_cbNUM_ANAOUT_BANKS + CENTRAL_cbNUM_AUDOUT_BANKS +
-                                          CENTRAL_cbNUM_DIGIN_BANKS + CENTRAL_cbNUM_SERIAL_BANKS +
-                                          CENTRAL_cbNUM_DIGOUT_BANKS);
+constexpr uint32_t cbMAXBANKS = (cbNUM_FE_BANKS + cbNUM_ANAIN_BANKS +
+                                          cbNUM_ANAOUT_BANKS + cbNUM_AUDOUT_BANKS +
+                                          cbNUM_DIGIN_BANKS + cbNUM_SERIAL_BANKS +
+                                          cbNUM_DIGOUT_BANKS);
 
 /// @}
 
@@ -77,24 +78,24 @@ constexpr uint32_t CENTRAL_cbMAXBANKS = (CENTRAL_cbNUM_FE_BANKS + CENTRAL_cbNUM_
 /// @{
 
 /// Max UDP packet size (from Central)
-constexpr uint32_t CENTRAL_cbCER_UDP_SIZE_MAX = 58080;
+constexpr uint32_t cbCER_UDP_SIZE_MAX = 58080;
 
 /// Transmit buffer sizes (Central-compatible)
-constexpr uint32_t CENTRAL_cbXMT_GLOBAL_BUFFLEN = ((CENTRAL_cbCER_UDP_SIZE_MAX / 4) * 5000 + 2);  ///< Room for 5000 packet-sized slots
-constexpr uint32_t CENTRAL_cbXMT_LOCAL_BUFFLEN = ((CENTRAL_cbCER_UDP_SIZE_MAX / 4) * 2000 + 2);   ///< Room for 2000 packet-sized slots
+constexpr uint32_t cbXMT_GLOBAL_BUFFLEN = ((cbCER_UDP_SIZE_MAX / 4) * 5000 + 2);  ///< Room for 5000 packet-sized slots
+constexpr uint32_t cbXMT_LOCAL_BUFFLEN = ((cbCER_UDP_SIZE_MAX / 4) * 2000 + 2);   ///< Room for 2000 packet-sized slots
 
 /// N-Trode count (Central uses cbNUM_FE_CHANS / 2, not cbNUM_ANALOG_CHANS / 2)
-constexpr uint32_t CENTRAL_cbMAXNTRODES = CENTRAL_cbNUM_FE_CHANS / 2;  ///< = 384
+constexpr uint32_t cbMAXNTRODES = cbNUM_FE_CHANS / 2;  ///< = 384
 
 /// Analog output gain channels (Central's multi-instrument count)
-constexpr uint32_t CENTRAL_AOUT_NUM_GAIN_CHANS = CENTRAL_cbNUM_ANAOUT_CHANS + CENTRAL_cbNUM_AUDOUT_CHANS;  ///< = 24
+constexpr uint32_t AOUT_NUM_GAIN_CHANS = cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS;  ///< = 24
 
 /// Spike cache constants
-constexpr uint32_t CENTRAL_cbPKT_SPKCACHEPKTCNT = 400;                          ///< Packets per channel cache
-constexpr uint32_t CENTRAL_cbPKT_SPKCACHELINECNT = CENTRAL_cbMAXCHANS;          ///< One cache per channel (Central uses cbMAXCHANS, not cbNUM_ANALOG_CHANS)
+constexpr uint32_t cbPKT_SPKCACHEPKTCNT = 400;                          ///< Packets per channel cache
+constexpr uint32_t cbPKT_SPKCACHELINECNT = cbMAXCHANS;          ///< One cache per channel (Central uses cbMAXCHANS, not cbNUM_ANALOG_CHANS)
 
 /// Receive buffer size
-constexpr uint32_t CENTRAL_cbRECBUFFLEN = CENTRAL_cbNUM_FE_CHANS * 65536 * 4 - 1;
+constexpr uint32_t cbRECBUFFLEN = cbNUM_FE_CHANS * 65536 * 4 - 1;
 
 /// @}
 
@@ -110,6 +111,8 @@ enum class InstrumentStatus : uint32_t {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Central's actual binary layout (CentralLegacyCFGBUFF)
+///
+/// VER: 4.2+ (CURRENT)
 ///
 /// This struct matches Central's cbCFGBUFF field order EXACTLY (from cbhwlib.h).
 /// It is NOT the same as CereLink's cbConfigBuffer (which reorders fields and adds
@@ -128,17 +131,17 @@ struct CentralLegacyCFGBUFF {
     cbOPTIONTABLE     optiontable;
     cbCOLORTABLE      colortable;
     cbPKT_SYSINFO     sysinfo;
-    cbPKT_PROCINFO    procinfo[CENTRAL_cbMAXPROCS];
-    cbPKT_BANKINFO    bankinfo[CENTRAL_cbMAXPROCS][CENTRAL_cbMAXBANKS];
-    cbPKT_GROUPINFO   groupinfo[CENTRAL_cbMAXPROCS][CENTRAL_cbMAXGROUPS];
-    cbPKT_FILTINFO    filtinfo[CENTRAL_cbMAXPROCS][CENTRAL_cbMAXFILTS];
-    cbPKT_ADAPTFILTINFO adaptinfo[CENTRAL_cbMAXPROCS];
-    cbPKT_REFELECFILTINFO refelecinfo[CENTRAL_cbMAXPROCS];
-    cbPKT_CHANINFO    chaninfo[CENTRAL_cbMAXCHANS];
+    cbPKT_PROCINFO    procinfo[cbMAXPROCS];
+    cbPKT_BANKINFO    bankinfo[cbMAXPROCS][cbMAXBANKS];
+    cbPKT_GROUPINFO   groupinfo[cbMAXPROCS][cbMAXGROUPS];
+    cbPKT_FILTINFO    filtinfo[cbMAXPROCS][cbMAXFILTS];
+    cbPKT_ADAPTFILTINFO adaptinfo[cbMAXPROCS];
+    cbPKT_REFELECFILTINFO refelecinfo[cbMAXPROCS];
+    cbPKT_CHANINFO    chaninfo[cbMAXCHANS];
     cbSPIKE_SORTING   isSortingOptions;
-    cbPKT_NTRODEINFO  isNTrodeInfo[CENTRAL_cbMAXNTRODES];
-    cbPKT_AOUT_WAVEFORM isWaveform[CENTRAL_AOUT_NUM_GAIN_CHANS][cbMAX_AOUT_TRIGGER];
-    cbPKT_LNC         isLnc[CENTRAL_cbMAXPROCS];
+    cbPKT_NTRODEINFO  isNTrodeInfo[cbMAXNTRODES];
+    cbPKT_AOUT_WAVEFORM isWaveform[AOUT_NUM_GAIN_CHANS][cbMAX_AOUT_TRIGGER];
+    cbPKT_LNC         isLnc[cbMAXPROCS];
     cbPKT_NPLAY       isNPlay;
     cbVIDEOSOURCE     isVideoSource[cbMAXVIDEOSOURCE];
     cbTRACKOBJ        isTrackObj[cbMAXTRACKOBJ];
@@ -161,30 +164,8 @@ struct CentralTransmitBuffer {
     uint32_t tailindex;                                     ///< One past last emptied position (read index)
     uint32_t last_valid_index;                              ///< Greatest valid starting index
     uint32_t bufferlen;                                     ///< Number of indices in buffer
-    uint32_t buffer[CENTRAL_cbXMT_GLOBAL_BUFFLEN];          ///< Ring buffer for packet data
+    uint32_t buffer[cbXMT_GLOBAL_BUFFLEN];          ///< Ring buffer for packet data
 };
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Central-compatible configuration buffer
-///
-/// This is now an alias to cbConfigBuffer (defined in cbproto/config_buffer.h).
-/// The structure maintains Central's cbCFGBUFF layout compatibility.
-///
-/// The CENTRAL_* constants are kept for backward compatibility in this module,
-/// while cbConfigBuffer uses cbCONFIG_* constants (which have the same values).
-///
-/// Static asserts below verify the constants match.
-///
-using CentralConfigBuffer = cbConfigBuffer;
-
-// Verify that CENTRAL_* constants match cbCONFIG_* constants
-static_assert(CENTRAL_cbMAXPROCS == cbCONFIG_MAXPROCS, "CENTRAL_cbMAXPROCS must equal cbCONFIG_MAXPROCS");
-static_assert(CENTRAL_cbMAXGROUPS == cbCONFIG_MAXGROUPS, "CENTRAL_cbMAXGROUPS must equal cbCONFIG_MAXGROUPS");
-static_assert(CENTRAL_cbMAXFILTS == cbCONFIG_MAXFILTS, "CENTRAL_cbMAXFILTS must equal cbCONFIG_MAXFILTS");
-static_assert(CENTRAL_cbMAXCHANS == cbCONFIG_MAXCHANS, "CENTRAL_cbMAXCHANS must equal cbCONFIG_MAXCHANS");
-static_assert(CENTRAL_cbMAXBANKS == cbCONFIG_MAXBANKS, "CENTRAL_cbMAXBANKS must equal cbCONFIG_MAXBANKS");
-static_assert(CENTRAL_cbMAXNTRODES == cbCONFIG_MAXNTRODES, "CENTRAL_cbMAXNTRODES must equal cbCONFIG_MAXNTRODES");
-static_assert(CENTRAL_AOUT_NUM_GAIN_CHANS == cbCONFIG_AOUT_NUM_GAIN_CHANS, "CENTRAL_AOUT_NUM_GAIN_CHANS must equal cbCONFIG_AOUT_NUM_GAIN_CHANS");
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Local transmit buffer (IPC-only packets)
@@ -198,7 +179,7 @@ struct CentralTransmitBufferLocal {
     uint32_t tailindex;                                     ///< One past last emptied position (read index)
     uint32_t last_valid_index;                              ///< Greatest valid starting index
     uint32_t bufferlen;                                     ///< Number of indices in buffer
-    uint32_t buffer[CENTRAL_cbXMT_LOCAL_BUFFLEN];           ///< Ring buffer for packet data
+    uint32_t buffer[cbXMT_LOCAL_BUFFLEN];           ///< Ring buffer for packet data
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -213,7 +194,7 @@ struct CentralSpikeCache {
     uint32_t pktsize;                                       ///< Size of individual packet
     uint32_t head;                                          ///< Where to place next packet (circular)
     uint32_t valid;                                         ///< How many packets since last config
-    cbPKT_SPK spkpkt[CENTRAL_cbPKT_SPKCACHEPKTCNT];        ///< Circular buffer of cached spikes
+    cbPKT_SPK spkpkt[cbPKT_SPKCACHEPKTCNT];        ///< Circular buffer of cached spikes
 };
 
 struct CentralSpikeBuffer {
@@ -221,7 +202,7 @@ struct CentralSpikeBuffer {
     uint32_t chidmax;                                       ///< Maximum channel ID
     uint32_t linesize;                                      ///< Size of each cache line
     uint32_t spkcount;                                      ///< Total spike count
-    CentralSpikeCache cache[CENTRAL_cbPKT_SPKCACHELINECNT]; ///< Per-channel spike caches
+    CentralSpikeCache cache[cbPKT_SPKCACHELINECNT]; ///< Per-channel spike caches
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -243,7 +224,7 @@ enum class NSPStatus : uint32_t {
 /// Central uses `enLaunchView` (C++ enum, sizeof(int) = 4 bytes) for the application field.
 /// We use uint32_t for ABI compatibility.
 ///
-constexpr uint32_t CENTRAL_cbMAXAPPWORKSPACES = 10;
+constexpr uint32_t cbMAXAPPWORKSPACES = 10;
 
 struct CentralAppWorkspace {
     uint32_t m_nWorkspace;          ///< Workspace number (1-based)
@@ -257,7 +238,7 @@ struct CentralAppWorkspace {
 
 struct CentralPCStatus {
     // Public data
-    cbPKT_UNIT_SELECTION isSelection[CENTRAL_cbMAXPROCS];   ///< Unit selection per instrument
+    cbPKT_UNIT_SELECTION isSelection[cbMAXPROCS];   ///< Unit selection per instrument
 
     // Status fields (was private in cbPcStatus)
     int32_t  m_iBlockRecording;                             ///< Recording block counter
@@ -272,10 +253,10 @@ struct CentralPCStatus {
     uint32_t m_nNumSerialChans;                             ///< Number of serial channels
     uint32_t m_nNumDigoutChans;                             ///< Number of digital output channels
     uint32_t m_nNumTotalChans;                              ///< Total channel count
-    NSPStatus m_nNspStatus[CENTRAL_cbMAXPROCS];             ///< NSP status per instrument
-    uint32_t m_nNumNTrodesPerInstrument[CENTRAL_cbMAXPROCS];///< NTrode count per instrument
+    NSPStatus m_nNspStatus[cbMAXPROCS];             ///< NSP status per instrument
+    uint32_t m_nNumNTrodesPerInstrument[cbMAXPROCS];///< NTrode count per instrument
     uint32_t m_nGeminiSystem;                               ///< Gemini system flag
-    CentralAppWorkspace m_icAppWorkspace[CENTRAL_cbMAXAPPWORKSPACES]; ///< App workspace config
+    CentralAppWorkspace m_icAppWorkspace[cbMAXAPPWORKSPACES]; ///< App workspace config
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -286,11 +267,13 @@ struct CentralReceiveBuffer {
     PROCTIME lasttime;                          ///< Last timestamp
     uint32_t headwrap;                          ///< Head wrap counter
     uint32_t headindex;                         ///< Current head index
-    uint32_t buffer[CENTRAL_cbRECBUFFLEN];      ///< Packet buffer
+    uint32_t buffer[cbRECBUFFLEN];      ///< Packet buffer
 };
+
+} // namespace central_v4_2 
 
 } // namespace cbshm
 
 #pragma pack(pop)
 
-#endif // CBSHMEM_CENTRAL_TYPES_H
+#endif // CBSHMEM_CENTRAL_TYPES_V4_2_H
