@@ -18,12 +18,6 @@
 
 #include <cbproto/cbproto.h>
 
-// Constants not yet in types.h but needed for config structure
-// TODO: Move these to types.h when updating from upstream
-#ifndef cbMAXBANKS
-#define cbMAXBANKS  15  ///< cbNUM_FE_BANKS(8) + ANAIN(1) + ANAOUT(1) + AUDOUT(1) + DIGIN(1) + SERIAL(1) + DIGOUT(1)
-#endif
-
 namespace cbproto {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

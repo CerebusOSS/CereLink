@@ -24,10 +24,6 @@
 
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Device Type Enumeration
 /// @brief Enumeration of supported Cerebus device types
@@ -107,9 +103,5 @@ typedef enum cbproto_group_rate {
 } cbproto_group_rate_t;
 
 /// @}
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // CBPROTO_CONNECTION_H
