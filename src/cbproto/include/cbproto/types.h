@@ -14,6 +14,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+// TODO: Move version annotations to src/cbshm/include/cbshm/central_types/
+
 #ifndef CBPROTO_TYPES_H
 #define CBPROTO_TYPES_H
 
@@ -38,6 +40,7 @@ constexpr uint32_t cbVERSION_MINOR = 2;
 /// @{
 
 /// @brief Processor time type
+/// VER: 4.0+ 64-bit processor time
 /// Protocol 4.0+ uses 64-bit timestamps
 /// Protocol 3.x uses 32-bit timestamps (compile with CBPROTO_311)
 #ifdef CBPROTO_311
@@ -237,7 +240,7 @@ constexpr uint32_t cbRESULT_SYSLOCK = 26;   ///< Cannot (un)lock the system reso
 typedef struct {
     PROCTIME time;        ///< System clock timestamp
     uint16_t chid;        ///< Channel identifier
-    uint16_t type;        ///< Packet type // VER: 4.1+, type is uint16_t instead of uint8_t
+    uint16_t type;        ///< Packet type // VER: 4.1+, type changed to uint16_t from uint8_t
     uint16_t dlen;        ///< Length of data field in 32-bit chunks
     uint8_t  instrument;  ///< Instrument number (0-based in packet, despite cbNSP1=1!)
     uint8_t  reserved;    ///< Reserved for future use
@@ -431,7 +434,7 @@ constexpr uint32_t cbPKTTYPE_SYSHEARTBEAT = 0x00;    ///< System heartbeat packe
 constexpr uint32_t cbPKTTYPE_SYSPROTOCOLMONITOR = 0x01;    ///< Protocol monitoring packet
 constexpr uint32_t cbPKTTYPE_PREVREPSTREAM = 0x02;    ///< Preview reply stream
 constexpr uint32_t cbPKTTYPE_PREVREP = 0x03;    ///< Preview reply
-constexpr uint32_t cbPKTTYPE_PREVREPLNC = 0x04;    ///< Preview reply LNC
+constexpr uint32_t cbPKTTYPE_PREVREPLNC = 0x04;    ///< Preview reply LNC // VER: 4.2+, changed to 0x04 from 0x01
 constexpr uint32_t cbPKTTYPE_REPCONFIGALL = 0x08;    ///< Response that NSP got your request
 constexpr uint32_t cbPKTTYPE_SYSREP = 0x10;    ///< System reply
 constexpr uint32_t cbPKTTYPE_SYSREPSPKLEN = 0x11;    ///< System reply spike length
@@ -506,7 +509,7 @@ constexpr uint32_t cbPKTTYPE_UPDATEREP = 0x71;    ///< Update reply
 // Preview packets - Set
 constexpr uint32_t cbPKTTYPE_PREVSETSTREAM = 0x82;    ///< Preview set stream
 constexpr uint32_t cbPKTTYPE_PREVSET = 0x83;    ///< Preview set
-constexpr uint32_t cbPKTTYPE_PREVSETLNC = 0x84;    ///< Preview set LNC
+constexpr uint32_t cbPKTTYPE_PREVSETLNC = 0x84;    ///< Preview set LNC // VER: 4.2+, changed to 0x84 from 0x81
 
 // System packets - Request (0x88-0x9F)
 constexpr uint32_t cbPKTTYPE_REQCONFIGALL = 0x88;    ///< Request for ALL configuration information
@@ -964,7 +967,7 @@ typedef struct {
     uint32_t sortcount;   ///< number of channels supported for spike sorting (reserved for future)
     uint32_t unitcount;   ///< number of supported units for spike sorting    (reserved for future)
     uint32_t hoopcount;   ///< number of supported units for spike sorting    (reserved for future)
-    uint32_t reserved;    ///< reserved for future use, set to 0
+    uint32_t reserved;    ///< reserved for future use, set to 0 // VER: 4.2+, renamed to reserved from sortmethod
     uint32_t version;     ///< current version of libraries
 } cbPKT_PROCINFO;
 
@@ -1063,7 +1066,7 @@ typedef struct {
     uint32_t     eopchar;        ///< digital input capablities (given by cbDINP_* flags)
     union {
         struct {    // separate system channel to instrument specific channel number
-            // VER: 4.2+, monsource is split into moninst and monchan
+            // VER: 4.1+, monsource is split into moninst and monchan
             uint16_t  moninst;        ///< instrument of channel to monitor
             uint16_t  monchan;        ///< channel to monitor
             int32_t   outvalue;       ///< output value
@@ -1216,7 +1219,7 @@ typedef struct
     cbPKT_HEADER cbpkt_header;  ///< packet header
 
     int32_t  lastchan;         ///< Which channel was clicked last.
-    uint16_t   abyUnitSelections[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - sizeof(int32_t))];     ///< one for each channel, channels are 0 based here, shows units selected
+    uint16_t   abyUnitSelections[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - sizeof(int32_t))];     ///< one for each channel, channels are 0 based here, shows units selected // VER: 4.0+, changed from cbMAXCHANS
 } cbPKT_UNIT_SELECTION;
 
 constexpr uint32_t cbPKTDLEN_UNITSELECTION = ((sizeof(cbPKT_UNIT_SELECTION) / 4) - cbPKT_HEADER_32SIZE);
@@ -1251,8 +1254,8 @@ typedef struct {
     uint8_t  dinpopts;       ///< digital input options (composed of cbDINP_* flags)
     uint8_t  aoutopts;       ///< analog output options
     uint8_t  eopchar;        ///< the end of packet character
-    uint8_t  moninst;        ///< instrument number of channel to monitor
-    uint8_t  monchan;        ///< channel to monitor
+    uint8_t  moninst;        ///< instrument number of channel to monitor // VER: 4.2+, renamed from monsource
+    uint8_t  monchan;        ///< channel to monitor // VER: 4.2+ ONLY
     uint8_t  outvalue;       ///< output value
     uint8_t  ainpopts;       ///< analog input options (composed of cbAINP_* flags)
     uint8_t  lncrate;        ///< line noise cancellation filter adaptation rate
@@ -1441,7 +1444,7 @@ constexpr uint32_t cbLOG_MODE_UPLOAD_RES = 9;   ///< NSP->PC: Upload result
 constexpr uint32_t cbLOG_MODE_ENDPLUGIN = 10;   ///< PC->NSP: Signal the plugin to end
 constexpr uint32_t cbLOG_MODE_NSP_REBOOT = 11;   ///< PC->NSP: Reboot the NSP
 
-constexpr uint32_t cbMAX_LOG = 130;  ///< Maximum log description
+constexpr uint32_t cbMAX_LOG = 130;  ///< Maximum log description // VER: 4.2+, changed to 130 from 128
 
 /// @brief PKT Set:0xE3 Rep:0x63 - Log packet
 ///
@@ -1943,8 +1946,11 @@ typedef struct {
     /// Waveform parameter information
     uint16_t  mode;              ///< Can be any of cbWAVEFORM_MODE_*
     uint32_t  repeats;           ///< Number of repeats (0 means forever)
+    // VER: 4.1+, uint16_t trig split into trig and trigInst
+    // ---------
     uint8_t   trig;              ///< Can be any of cbWAVEFORM_TRIGGER_*
     uint8_t   trigInst;          ///< Instrument the trigChan belongs
+    // ---------
     uint16_t  trigChan;          ///< Depends on trig:
                                  ///  for cbWAVEFORM_TRIGGER_DINP* 1-based trigChan (1-16) is digin1, (17-32) is digin2, ...
                                  ///  for cbWAVEFORM_TRIGGER_SPIKEUNIT 1-based trigChan (1-156) is channel number
@@ -2179,7 +2185,7 @@ typedef struct {
     uint8_t  block[512];      ///< block data
 } cbPKT_UPDATE_OLD;
 
-constexpr uint32_t cbPKTDLEN_UPDATE_OLD = (sizeof(cbPKT_UPDATE_OLD)/4)-2;
+constexpr uint32_t cbPKTDLEN_UPDATE_OLD = (sizeof(cbPKT_UPDATE_OLD)/4)-2; // VER: 4.2+ ONLY
 
 /// @}
 

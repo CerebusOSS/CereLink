@@ -35,7 +35,7 @@ struct SpikeSorting {
     // Spike sorting parameters
     cbPKT_SS_DETECT         detect;                                 ///< Detection parameters
     cbPKT_SS_ARTIF_REJECT   artifact_reject;                        ///< Artifact rejection parameters
-    cbPKT_SS_NOISE_BOUNDARY noise_boundary[cbMAXCHANS];             ///< Noise boundaries per channel
+    cbPKT_SS_NOISE_BOUNDARY noise_boundary[cbMAXCHANS];             ///< Noise boundaries per channel // VER: 4.0+, changed to cbMAXCHANS from cbNUM_ANALOG_CHANS 
     cbPKT_SS_STATISTICS     statistics;                             ///< Spike statistics
     cbPKT_SS_STATUS         status;                                 ///< Spike sorting status
 };
