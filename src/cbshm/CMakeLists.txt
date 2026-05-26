@@ -9,6 +9,14 @@ project(cbshm
 # Library sources
 set(CBSHMEM_SOURCES
     src/shmem_session.cpp
+    src/central_translators/v4_2.cpp
+    src/central_translators/v4_1.cpp
+    src/central_translators/v4_0.cpp
+    src/central_translators/v3_11.cpp
+    src/central_adapters/v4_2.cpp
+    src/central_adapters/v4_1.cpp
+    src/central_adapters/v4_0.cpp
+    src/central_adapters/v3_11.cpp
 )
 
 # Build as STATIC library

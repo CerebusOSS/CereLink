@@ -20,8 +20,8 @@
 #define CBSHM_SHMEM_SESSION_H
 
 // Include Central-compatible types which bring in protocol definitions
-#include <cbshm/central_types.h>
 #include <cbshm/native_types.h>
+#include <cbshm/config_buffer.h>
 #include <cbproto/connection.h>
 #include <cbutil/result.h>
 #include <memory>
@@ -231,13 +231,16 @@ public:
     /// @return Const pointer to native configuration buffer, or nullptr if not NATIVE layout
     const NativeConfigBuffer* getNativeConfigBuffer() const;
 
-    /// @brief Get direct pointer to Central legacy configuration buffer
-    /// @return Pointer to legacy config buffer, or nullptr if not CENTRAL_COMPAT layout
-    CentralLegacyCFGBUFF* getLegacyConfigBuffer();
+    // TODO: REMOVE getLegacyConfigBuffer due to fundamental incompatibility with multi-version-central-compat
 
-    /// @brief Get direct pointer to Central legacy configuration buffer (const version)
-    /// @return Const pointer to legacy config buffer, or nullptr if not CENTRAL_COMPAT layout
-    const CentralLegacyCFGBUFF* getLegacyConfigBuffer() const;
+    // /// @brief Get direct pointer to Central legacy configuration buffer
+    // /// @return Pointer to legacy config buffer, or nullptr if not CENTRAL_COMPAT layout
+    // CentralLegacyCFGBUFF* getLegacyConfigBuffer();
+    //
+    // /// @brief Get direct pointer to Central legacy configuration buffer (const version)
+    // /// @deprecated since multi-version-central-compat merged with master.
+    // /// @return Const pointer to legacy config buffer, or nullptr if not CENTRAL_COMPAT layout
+    // const CentralLegacyCFGBUFF* getLegacyConfigBuffer() const;
 
     /// @}
 
@@ -363,13 +366,13 @@ public:
     /// @brief Get NSP status for specified instrument
     /// @param id Instrument ID (1-based)
     /// @return NSP status (INIT, NOIPADDR, NOREPLY, FOUND, INVALID)
-    Result<NSPStatus> getNspStatus(cbproto::InstrumentId id) const;
+    Result<central::NSPStatus> getNspStatus(cbproto::InstrumentId id) const;
 
     /// @brief Set NSP status for specified instrument
     /// @param id Instrument ID (1-based)
     /// @param status NSP status to set
     /// @return Result indicating success or failure
-    Result<void> setNspStatus(cbproto::InstrumentId id, NSPStatus status);
+    Result<void> setNspStatus(cbproto::InstrumentId id, central::NSPStatus status);
 
     /// @brief Check if system is configured as Gemini
     /// @return true if Gemini system, false otherwise
@@ -395,7 +398,7 @@ public:
     /// @param channel Channel number (0-based)
     /// @param cache Output parameter to receive spike cache
     /// @return Result indicating success or failure
-    Result<void> getSpikeCache(uint32_t channel, CentralSpikeCache& cache) const;
+    Result<void> getSpikeCache(uint32_t channel, central::CentralSpikeCache& cache) const;
 
     /// @brief Get most recent spike packet from cache
     ///
