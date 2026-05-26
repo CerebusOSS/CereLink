@@ -17,9 +17,6 @@
 
 #include <cstdint>
 
-// Include InstrumentId from protocol module
-#include <cbproto/instrument_id.h>
-
 // Ensure tight packing for shared memory structures
 #pragma pack(push, 1)
 
@@ -281,6 +278,18 @@ typedef struct {
     uint32_t nRefChan;       ///< The reference channel (1 based).
 } cbPKT_REFELECFILTINFO;
 
+/// @brief Scaling structure
+///
+/// Structure used in cbPKT_CHANINFO
+typedef struct {
+    int16_t   digmin;     ///< digital value that cooresponds with the anamin value
+    int16_t   digmax;     ///< digital value that cooresponds with the anamax value
+    int32_t   anamin;     ///< the minimum analog value present in the signal
+    int32_t   anamax;     ///< the maximum analog value present in the signal
+    int32_t   anagain;    ///< the gain applied to the default analog values to get the analog values
+    char    anaunit[cbLEN_STR_UNIT]; ///< the unit for the analog signal (eg, "uV" or "MPa")
+} cbSCALING;
+
 /// @brief Filter description structure
 ///
 /// Filter description used in cbPKT_CHANINFO
@@ -293,18 +302,6 @@ typedef struct {
     uint32_t  lporder;    ///< low-pass filter order
     uint32_t  lptype;     ///< low-pass filter type
 } cbFILTDESC;
-
-/// @brief Scaling structure
-///
-/// Structure used in cbPKT_CHANINFO
-typedef struct {
-    int16_t   digmin;     ///< digital value that cooresponds with the anamin value
-    int16_t   digmax;     ///< digital value that cooresponds with the anamax value
-    int32_t   anamin;     ///< the minimum analog value present in the signal
-    int32_t   anamax;     ///< the maximum analog value present in the signal
-    int32_t   anagain;    ///< the gain applied to the default analog values to get the analog values
-    char    anaunit[cbLEN_STR_UNIT]; ///< the unit for the analog signal (eg, "uV" or "MPa")
-} cbSCALING;
 
 /// @brief Manual Unit Mapping structure
 ///
