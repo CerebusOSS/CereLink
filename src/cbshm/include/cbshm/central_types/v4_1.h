@@ -657,7 +657,7 @@ typedef struct {
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Central's actual binary layout (CentralLegacyCFGBUFF)
+/// @brief Central's actual binary layout
 ///
 /// This struct matches Central's cbCFGBUFF field order EXACTLY (from cbhwlib.h).
 /// It is NOT the same as CereLink's cbConfigBuffer (which reorders fields and adds
@@ -670,7 +670,7 @@ typedef struct {
 /// - isLnc: after isWaveform here, before chaninfo in CereLink
 /// - hwndCentral: omitted (at end, variable size, not needed)
 ///
-struct CentralLegacyCFGBUFF {
+struct cbCFGBUFF {
     uint32_t          version;
     uint32_t          sysflags;
     cbOPTIONTABLE     optiontable;
@@ -703,7 +703,7 @@ struct CentralLegacyCFGBUFF {
 /// This is stored in a separate shared memory segment (not embedded in config buffer)
 /// to match Central's architecture.
 ///
-struct CentralTransmitBuffer {
+struct cbXMTBUFF {
     uint32_t transmitted;                                   ///< How many packets have been sent
     uint32_t headindex;                                     ///< First empty position (write index)
     uint32_t tailindex;                                     ///< One past last emptied position (read index)
@@ -718,7 +718,7 @@ struct CentralTransmitBuffer {
 /// Smaller than Global buffer, used for cbSendLoopbackPacket() - packets meant only for
 /// local processes, not sent to device.
 ///
-struct CentralTransmitBufferLocal {
+struct cbXMTBUFFLOCAL {
     uint32_t transmitted;                                   ///< How many packets have been sent
     uint32_t headindex;                                     ///< First empty position (write index)
     uint32_t tailindex;                                     ///< One past last emptied position (read index)
@@ -751,7 +751,7 @@ typedef struct {
 /// Caches recent spike packets for each channel to allow quick access without
 /// scanning the entire receive buffer.
 ///
-struct CentralSpikeCache {
+struct cbSPKCACHE {
     uint32_t chid;                                          ///< Channel ID
     uint32_t pktcnt;                                        ///< Number of packets that can be saved
     uint32_t pktsize;                                       ///< Size of individual packet
@@ -760,12 +760,12 @@ struct CentralSpikeCache {
     cbPKT_SPK spkpkt[cbPKT_SPKCACHEPKTCNT];        ///< Circular buffer of cached spikes
 };
 
-struct CentralSpikeBuffer {
+struct cbSPKBUFF {
     uint32_t flags;                                         ///< Status flags
     uint32_t chidmax;                                       ///< Maximum channel ID
     uint32_t linesize;                                      ///< Size of each cache line
     uint32_t spkcount;                                      ///< Total spike count
-    CentralSpikeCache cache[cbPKT_SPKCACHELINECNT]; ///< Per-channel spike caches
+    cbSPKCACHE cache[cbPKT_SPKCACHELINECNT]; ///< Per-channel spike caches
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -804,7 +804,7 @@ typedef struct
     uint16_t   abyUnitSelections[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - sizeof(int32_t))];     ///< one for each channel, channels are 0 based here, shows units selected
 } cbPKT_UNIT_SELECTION;
 
-struct CentralPCStatus {
+struct cbPcStatus {
     // Public data
     cbPKT_UNIT_SELECTION isSelection[cbMAXPROCS];   ///< Unit selection per instrument
 
@@ -829,7 +829,7 @@ struct CentralPCStatus {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Receive buffer for incoming packets (simplified for Phase 2)
 ///
-struct CentralReceiveBuffer {
+struct cbRECBUFF {
     uint32_t received;                          ///< Number of packets received
     PROCTIME lasttime;                          ///< Last timestamp
     uint32_t headwrap;                          ///< Head wrap counter
