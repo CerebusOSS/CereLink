@@ -19,6 +19,19 @@
 
 namespace cbshm {
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Additional context for the translation functions
+///
+/// Not all translators need this context, but it's provided to all functions so the signatures
+/// remain the same.
+///
+/// TODO: Move all translations to within the adapter classes as well as the translation context.
+///
+struct TranslationContext {
+    // cbCFGBUFF
+    uint8_t instrument_idx;
+};
+
 namespace central_v4_2 {
 
 ::cbPKT_HEADER fromLegacy(const cbPKT_HEADER& leg);
