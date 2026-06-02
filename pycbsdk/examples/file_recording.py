@@ -13,7 +13,6 @@ import sys
 import time
 
 from pycbsdk import Session
-from pycbsdk.src.pycbsdk import Session
 
 device_type = sys.argv[1] if len(sys.argv) > 1 else "HUB1"
 
