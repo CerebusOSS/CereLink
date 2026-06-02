@@ -12,8 +12,8 @@ Usage:
 import sys
 import time
 
-sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1] / "pycbsdk" / "src"))
 from pycbsdk import Session
+from pycbsdk.src.pycbsdk import Session
 
 device_type = sys.argv[1] if len(sys.argv) > 1 else "HUB1"
 
@@ -23,7 +23,7 @@ time.sleep(2)
 print(f"Connected. running={session.running}\n")
 
 # Start recording
-filename = "cerelink_test"
+filename = "C:\\Blackrock Microsystems\\cerelink_test"
 comment = "CereLink recording test"
 print(f"Starting Central recording: filename='{filename}', comment='{comment}'")
 session.start_central_recording(filename, comment)
@@ -39,6 +39,8 @@ print("Stopping Central recording...")
 session.stop_central_recording()
 print("  -> stop_central_recording() returned OK")
 print("  Check Central: file.exe should have stopped.\n")
+
+session.close_central_file_dialog()
 
 session.close()
 print("Done.")
