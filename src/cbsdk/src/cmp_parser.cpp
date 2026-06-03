@@ -99,10 +99,11 @@ bool parseRow(const std::string& line, const std::vector<Column>& columns, RawEn
     return got_col && got_row && got_bank && got_elec;
 }
 
-/// True if every non-zero delta among the distinct col and row values is
-/// exactly 1 — i.e. a contiguous, unit-spaced index grid (the manufacturer
-/// default), as opposed to values already in physical units.
-bool isUnitSpacedGrid(const std::vector<RawEntry>& raw) {
+/// True if the smallest non-zero delta among the distinct col and row values is
+/// 1 — i.e. a unit-indexed electrode grid, as opposed to values already in
+/// physical units. Larger deltas are allowed (e.g. the gap between two arrays
+/// in a multi-array map), so a single unit step anywhere is enough.
+bool isUnitIndexedGrid(const std::vector<RawEntry>& raw) {
     std::set<int32_t> cols, rows;
     for (const auto& r : raw) { cols.insert(r.col); rows.insert(r.row); }
     std::set<int32_t> deltas;
@@ -115,7 +116,7 @@ bool isUnitSpacedGrid(const std::vector<RawEntry>& raw) {
             first = false;
         }
     }
-    return deltas.size() == 1 && *deltas.begin() == 1;
+    return deltas.count(1) > 0;
 }
 
 } // namespace
@@ -175,11 +176,11 @@ cbutil::Result<CmpEntries> parseCmpFile(
         return cbutil::Result<CmpEntries>::error("No valid entries found in CMP file: " + filepath);
     }
 
-    // When no size column is supplied and the col/row values form a unit-spaced
-    // index grid, treat them as electrode indices: size is 1 and all of
-    // x/y/size scale by the 400 µm electrode pitch. Otherwise take col/row (and
-    // any supplied size) at face value.
-    const bool scale = !has_size && isUnitSpacedGrid(raw);
+    // When no size column is supplied and the col/row values form a unit-indexed
+    // grid (some adjacent electrodes are 1 apart), treat them as electrode
+    // indices: size is 1 and all of x/y/size scale by the 400 µm electrode
+    // pitch. Otherwise take col/row (and any supplied size) at face value.
+    const bool scale = !has_size && isUnitIndexedGrid(raw);
     const int32_t factor = scale ? kElectrodePitchUm : 1;
 
     // start_chan selects the target banks: shift every CMP bank by this many

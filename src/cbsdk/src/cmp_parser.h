@@ -20,11 +20,13 @@
 ///     - label: free-form label (optional)
 ///
 /// Units: when no size column is supplied and the col/row values form a
-/// unit-spaced index grid (every non-zero delta among the distinct col/row
-/// values is exactly 1 — the manufacturer default), they are interpreted as
-/// electrode indices: size becomes 1 and x/y/size are scaled by the 400 µm
-/// Utah-array electrode pitch. Otherwise (a size column is present, or the
-/// spacing is non-uniform) col/row/size are taken at face value.
+/// unit-indexed grid (the smallest non-zero delta among the distinct col/row
+/// values is 1 — so some electrodes are adjacent, the manufacturer default),
+/// they are interpreted as electrode indices: size becomes 1 and x/y/size are
+/// scaled by the 400 µm Utah-array electrode pitch. Larger deltas (e.g. the
+/// gap between two arrays in a multi-array map) are allowed and scale through.
+/// Otherwise (a size column is present, or no two electrodes are unit-spaced)
+/// col/row/size are taken at face value.
 ///
 /// Each parsed row carries the electrode geometry plus the device (bank, term)
 /// it belongs to. Entries are matched to live channels by (bank, term) — read

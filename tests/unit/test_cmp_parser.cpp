@@ -125,17 +125,17 @@ TEST(CmpParser, HeaderDrivenColumnOrder) {
     EXPECT_EQ(e.size, 2);
 }
 
-TEST(CmpParser, NonUniformGridTakesFaceValue) {
-    // No size column, but the row spacing is non-uniform (delta 4, not 1), so
-    // it is not a default index grid → values taken at face value, size 0.
-    auto path = (std::filesystem::temp_directory_path() / "cmp_nonuniform_tmp.cmp").string();
+TEST(CmpParser, NoUnitStepTakesFaceValue) {
+    // No size column and no two electrodes are unit-spaced (only delta is 4),
+    // so it is not a unit-indexed grid → values taken at face value, size 0.
+    auto path = (std::filesystem::temp_directory_path() / "cmp_nounit_tmp.cmp").string();
     {
         std::ofstream out(path);
         out << "// scratch file\n"
-            << "non-uniform grid map\n"
+            << "no unit step map\n"
             << "//col row bank elec label\n"
             << "0 0 A 1 e1\n"
-            << "0 4 A 2 e2\n";  // row delta 4 → not unit-spaced
+            << "0 4 A 2 e2\n";  // only delta is 4 → no unit step
     }
 
     auto result = cbsdk::parseCmpFile(path);
@@ -147,6 +147,35 @@ TEST(CmpParser, NonUniformGridTakesFaceValue) {
     EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 2)).y, 4);
     EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 2)).size, 0);
     EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 1)).size, 0);
+}
+
+TEST(CmpParser, MultiArrayGapStillScales) {
+    // A unit-indexed grid with an inter-array gap (rows 0,1,2 then 6 → deltas
+    // {1,4}). The unit step means it's still electrode indices, so it scales by
+    // 400 µm; the gap scales through (row 6 → 2400 µm).
+    auto path = (std::filesystem::temp_directory_path() / "cmp_gap_tmp.cmp").string();
+    {
+        std::ofstream out(path);
+        out << "// scratch file\n"
+            << "multi-array gap map\n"
+            << "//col row bank elec label\n"
+            << "0 0 A 1 e1\n"
+            << "0 1 A 2 e2\n"
+            << "0 2 A 3 e3\n"
+            << "0 6 A 4 e4\n";  // gap of 4 between the two arrays
+    }
+
+    auto result = cbsdk::parseCmpFile(path);
+    ASSERT_TRUE(result.isOk()) << result.error();
+
+    const auto& entries = result.value();
+    ASSERT_EQ(entries.size(), 4u);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 1)).y, 0);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 2)).y, 400);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 4)).y, 2400);  // gap scaled through
+    for (const auto& [_, entry] : entries) EXPECT_EQ(entry.size, 400);
+
+    std::filesystem::remove(path);
 }
 
 TEST(CmpParser, HsIdSetsHeadstageNotLabel) {
