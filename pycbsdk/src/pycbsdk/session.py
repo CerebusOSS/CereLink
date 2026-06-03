@@ -952,16 +952,16 @@ class Session:
     ) -> list[tuple[int, int, int, int]]:
         """Get positions from all channels matching a type.
 
-        Each position is a 4-tuple ``(x, y, z, w)`` of ``int32`` values,
-        corresponding to the ``cbPKT_CHANINFO.position[4]`` field.
+        Each position is a 4-tuple of ``int32`` values from the
+        ``cbPKT_CHANINFO.position[4]`` field. For channels configured from a
+        CMP the slots are ``(x, y, size, headstage_id)``.
 
         Args:
             channel_type: Channel type filter (e.g., ``ChannelType.FRONTEND``).
             n_chans: Max channels to query (0 or omit for all).
 
         Returns:
-            List of ``(x, y, z, w)`` tuples (same order as
-            :meth:`get_matching_channel_ids`).
+            List of 4-tuples (same order as :meth:`get_matching_channel_ids`).
         """
         _lib = _get_lib()
         max_chans = _lib.cbsdk_get_max_chans()
@@ -1284,22 +1284,24 @@ class Session:
     def load_channel_map(self, filepath: str, start_chan: int = 1, hs_id: int = 0):
         """Load a channel mapping file (.cmp) for one headstage.
 
-        CMP files describe one headstage's electrode layout. The file's rows
-        are sorted by (bank, electrode) and assigned absolute channel IDs
-        starting at ``start_chan``. Positions are stored locally and overlaid
-        onto chaninfo; labels are prefixed ``"hs{hs_id}-"`` and pushed to the
-        device so they persist in chaninfo.
+        CMP files describe one headstage's electrode layout. Rows are matched
+        to live channels by device ``(bank, term)``; ``start_chan`` shifts the
+        file's bank letters by ``start_chan // 32`` banks to select the target
+        headstage's banks (1 → banks A…, 129 → banks E…). The geometry is
+        stored locally and overlaid onto chaninfo as
+        ``position = (x, y, size, headstage_id)``; labels are taken verbatim
+        and pushed to the device so they persist in chaninfo.
 
         Call once per headstage — subsequent calls merge into the overlay,
         so multiple headstages can coexist on one device.
 
         Args:
             filepath: Path to the .cmp file.
-            start_chan: 1-based channel to assign the first sorted row.
-                Typical: 1 for the first headstage, 129 for the second of a
+            start_chan: 1-based channel selecting the target banks. Typical:
+                1 for the first headstage, 129 for the second of a
                 128-channel headstage, etc.
-            hs_id: Headstage identifier used to prefix labels. Pass ``0``
-                (the default) to leave labels un-prefixed.
+            hs_id: Headstage identifier stored in the ``headstage`` slot of
+                ``position`` (0 = none). Does not affect labels.
         """
         _check(
             _get_lib().cbsdk_session_load_channel_map(
