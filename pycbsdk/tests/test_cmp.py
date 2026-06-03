@@ -121,13 +121,13 @@ def test_header_driven_column_order(tmp_path: Path):
     assert (e.x, e.y, e.size) == (7, 9, 2)
 
 
-def test_non_uniform_grid_takes_face_value(tmp_path: Path):
-    # No size column, but non-uniform spacing (row delta 4) → not a default
-    # index grid → face value, size 0.
-    f = tmp_path / "nonuniform.cmp"
+def test_no_unit_step_takes_face_value(tmp_path: Path):
+    # No size column and no two electrodes unit-spaced (only delta is 4) → not
+    # a unit-indexed grid → face value, size 0.
+    f = tmp_path / "nounit.cmp"
     f.write_text(
         "// scratch\n"
-        "non-uniform\n"
+        "no unit step\n"
         "//col row bank elec label\n"
         "0 0 A 1 e1\n"
         "0 4 A 2 e2\n"
@@ -151,6 +151,27 @@ def test_default_grid_scales_to_microns(tmp_path: Path):
     entries = parse_cmp(f)
     assert entries[(1, 2)].x == 400  # col 1 → 400 µm
     assert entries[(1, 3)].y == 400  # row 1 → 400 µm
+    assert all(e.size == 400 for e in entries.values())
+
+
+def test_multi_array_gap_still_scales(tmp_path: Path):
+    # Unit-indexed grid with an inter-array gap (rows 0,1,2 then 6 → deltas
+    # {1,4}). The unit step means it's still indices → scales ×400; the gap
+    # scales through (row 6 → 2400 µm). Mirrors a real two-array .cmp.
+    f = tmp_path / "gap.cmp"
+    f.write_text(
+        "// scratch\n"
+        "multi-array gap\n"
+        "//col row bank elec label\n"
+        "0 0 A 1 e1\n"
+        "0 1 A 2 e2\n"
+        "0 2 A 3 e3\n"
+        "0 6 A 4 e4\n"
+    )
+    entries = parse_cmp(f)
+    assert entries[(1, 1)].y == 0
+    assert entries[(1, 2)].y == 400
+    assert entries[(1, 4)].y == 2400  # gap scaled through
     assert all(e.size == 400 for e in entries.values())
 
 

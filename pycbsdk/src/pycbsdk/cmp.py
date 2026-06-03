@@ -9,11 +9,13 @@ label/l), so the order is not assumed.  With no header the legacy positional
 order ``col row bank electrode [label]`` is used.
 
 Units: when no size column is supplied and the col/row values form a
-unit-spaced index grid (every non-zero delta among the distinct col/row values
-is exactly 1 — the manufacturer default), they are interpreted as electrode
-indices: ``size`` becomes 1 and x/y/size are scaled by the 400 µm Utah-array
-electrode pitch.  Otherwise (a size column is present, or the spacing is
-non-uniform) col/row/size are taken at face value.
+unit-indexed grid (the smallest non-zero delta among the distinct col/row
+values is 1 — so some electrodes are adjacent, the manufacturer default), they
+are interpreted as electrode indices: ``size`` becomes 1 and x/y/size are
+scaled by the 400 µm Utah-array electrode pitch.  Larger deltas (e.g. the gap
+between two arrays in a multi-array map) are allowed and scale through.
+Otherwise (a size column is present, or no two electrodes are unit-spaced)
+col/row/size are taken at face value.
 
 Entries are keyed by device ``(bank, term)`` — the same join key the C++ SDK
 uses to match rows to live channels — not by an ordinal channel ID.  Each
@@ -133,13 +135,17 @@ def _parse_row(tokens: list[str], columns: list[str]) -> dict | None:
     return out
 
 
-def _is_unit_spaced_grid(raw: list[dict]) -> bool:
-    """True if every non-zero delta among distinct col and row values is 1."""
+def _is_unit_indexed_grid(raw: list[dict]) -> bool:
+    """True if the smallest non-zero delta among distinct col/row values is 1.
+
+    A single unit step is enough — larger deltas (e.g. the gap between two
+    arrays in a multi-array map) are allowed and scale through.
+    """
     deltas: set[int] = set()
     for key in ("col", "row"):
         vals = sorted({r[key] for r in raw})
         deltas.update(b - a for a, b in zip(vals, vals[1:]))
-    return deltas == {1}
+    return 1 in deltas
 
 
 def parse_cmp(
@@ -194,9 +200,9 @@ def parse_cmp(
     if not raw:
         raise ValueError(f"{filepath}: no valid entries")
 
-    # No size column + a unit-spaced index grid → electrode indices: size is 1
-    # and x/y/size scale by the 400 µm pitch. Otherwise take values at face value.
-    scale = not has_size and _is_unit_spaced_grid(raw)
+    # No size column + a unit-indexed grid → electrode indices: size is 1 and
+    # x/y/size scale by the 400 µm pitch. Otherwise take values at face value.
+    scale = not has_size and _is_unit_indexed_grid(raw)
     factor = _PITCH_UM if scale else 1
 
     bank_offset = start_chan // 32
