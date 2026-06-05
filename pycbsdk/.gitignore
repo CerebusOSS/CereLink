@@ -1,1 +1,6 @@
 src/pycbsdk/_version.py
+*.dylib
+*.dll
+*.bin
+*.so
+*.a

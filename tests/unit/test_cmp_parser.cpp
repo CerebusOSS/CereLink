@@ -27,10 +27,27 @@ TEST(CmpParser, Parse8Channel) {
     const auto& entries = result.value();
     EXPECT_EQ(entries.size(), 8u);
 
-    // Defaults: start_chan=1, hs_id=0 → chans 1..8, no label prefix.
-    std::set<uint32_t> chans;
-    for (const auto& [chan_id, _] : entries) chans.insert(chan_id);
-    EXPECT_EQ(chans, std::set<uint32_t>({1, 2, 3, 4, 5, 6, 7, 8}));
+    // 8ch file is bank A, electrodes 1..8. Default start_chan=1 → bank offset 0,
+    // so entries are keyed by (bank 1, term 1..8).
+    for (int32_t term = 1; term <= 8; ++term) {
+        auto it = entries.find(cbsdk::cmpKey(1, term));
+        ASSERT_NE(it, entries.end()) << "missing (bank 1, term " << term << ")";
+        EXPECT_EQ(it->second.bank, 1);
+        EXPECT_EQ(it->second.term, term);
+    }
+
+    // No size column + unit-spaced index grid → scaled by the 400 µm pitch.
+    // Row "0 1 A 1" → x=0, y=400; row "0 0 A 5" → x=0, y=0.
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 1)).x, 0);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 1)).y, 400);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 5)).x, 0);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 5)).y, 0);
+
+    // Default index grid → size is 1 electrode-pitch (400 µm); hs_id=0 → headstage 0.
+    for (const auto& [_, entry] : entries) {
+        EXPECT_EQ(entry.size, 400);
+        EXPECT_EQ(entry.headstage, 0);
+    }
 
     // hs_id=0 leaves labels un-prefixed.
     for (const auto& [_, entry] : entries) {
@@ -38,17 +55,145 @@ TEST(CmpParser, Parse8Channel) {
     }
 }
 
-TEST(CmpParser, HsIdZeroLeavesLabelsUnprefixed) {
-    // Same file, default hs_id=0 vs explicit hs_id=3, comparing stripped labels.
+TEST(CmpParser, HeaderDeclaredSizeColumnTakesFaceValue) {
+    // A header naming a size column → columns parsed by name; with size present
+    // the col/row/size values are taken at face value (no µm scaling).
+    auto path = (std::filesystem::temp_directory_path() / "cmp_size_tmp.cmp").string();
+    {
+        std::ofstream out(path);
+        out << "// scratch file\n"
+            << "size column test map\n"
+            << "//col row bank elec size label\n"
+            << "0 0 A 1 4 elec_a1\n"   // size=4, label=elec_a1
+            << "1 0 A 2 7 elec_a2\n"   // size=7, label=elec_a2
+            << "2 0 A 3 0 elec_a3\n"   // size=0, label=elec_a3
+            << "3 0 A 4 9\n";          // size=9, no label
+    }
+
+    auto result = cbsdk::parseCmpFile(path, /*start_chan=*/1, /*hs_id=*/5);
+    ASSERT_TRUE(result.isOk()) << result.error();
+
+    const auto& entries = result.value();
+    ASSERT_EQ(entries.size(), 4u);
+
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 1)).size, 4);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 1)).label, "elec_a1");
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 2)).size, 7);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 2)).label, "elec_a2");
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 3)).size, 0);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 3)).label, "elec_a3");
+
+    // Size present, no label → empty label.
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 4)).size, 9);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 4)).label, "");
+
+    // Face value: x is the raw col (no ×400) because a size column was supplied.
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 4)).x, 3);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 4)).y, 0);
+
+    // hs_id seeds the headstage field (→ position[3]).
+    for (const auto& [_, entry] : entries) {
+        EXPECT_EQ(entry.headstage, 5);
+    }
+
+    std::filesystem::remove(path);
+}
+
+TEST(CmpParser, HeaderDrivenColumnOrder) {
+    // The header determines column order — here columns are reordered and a
+    // size column is present, so values are taken at face value.
+    auto path = (std::filesystem::temp_directory_path() / "cmp_reorder_tmp.cmp").string();
+    {
+        std::ofstream out(path);
+        out << "// scratch file\n"
+            << "reordered columns map\n"
+            << "//label bank elec col row size\n"
+            << "foo A 1 7 9 2\n";
+    }
+
+    auto result = cbsdk::parseCmpFile(path);
+    ASSERT_TRUE(result.isOk()) << result.error();
+
+    const auto& entries = result.value();
+    ASSERT_EQ(entries.size(), 1u);
+    const auto& e = entries.at(cbsdk::cmpKey(1, 1));
+    EXPECT_EQ(e.label, "foo");
+    EXPECT_EQ(e.bank, 1);
+    EXPECT_EQ(e.term, 1);
+    EXPECT_EQ(e.x, 7);
+    EXPECT_EQ(e.y, 9);
+    EXPECT_EQ(e.size, 2);
+}
+
+TEST(CmpParser, NoUnitStepTakesFaceValue) {
+    // No size column and no two electrodes are unit-spaced (only delta is 4),
+    // so it is not a unit-indexed grid → values taken at face value, size 0.
+    auto path = (std::filesystem::temp_directory_path() / "cmp_nounit_tmp.cmp").string();
+    {
+        std::ofstream out(path);
+        out << "// scratch file\n"
+            << "no unit step map\n"
+            << "//col row bank elec label\n"
+            << "0 0 A 1 e1\n"
+            << "0 4 A 2 e2\n";  // only delta is 4 → no unit step
+    }
+
+    auto result = cbsdk::parseCmpFile(path);
+    ASSERT_TRUE(result.isOk()) << result.error();
+
+    const auto& entries = result.value();
+    ASSERT_EQ(entries.size(), 2u);
+    // Face value: y is the raw row (4), not scaled; size stays unspecified (0).
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 2)).y, 4);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 2)).size, 0);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 1)).size, 0);
+}
+
+TEST(CmpParser, MultiArrayGapStillScales) {
+    // A unit-indexed grid with an inter-array gap (rows 0,1,2 then 6 → deltas
+    // {1,4}). The unit step means it's still electrode indices, so it scales by
+    // 400 µm; the gap scales through (row 6 → 2400 µm).
+    auto path = (std::filesystem::temp_directory_path() / "cmp_gap_tmp.cmp").string();
+    {
+        std::ofstream out(path);
+        out << "// scratch file\n"
+            << "multi-array gap map\n"
+            << "//col row bank elec label\n"
+            << "0 0 A 1 e1\n"
+            << "0 1 A 2 e2\n"
+            << "0 2 A 3 e3\n"
+            << "0 6 A 4 e4\n";  // gap of 4 between the two arrays
+    }
+
+    auto result = cbsdk::parseCmpFile(path);
+    ASSERT_TRUE(result.isOk()) << result.error();
+
+    const auto& entries = result.value();
+    ASSERT_EQ(entries.size(), 4u);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 1)).y, 0);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 2)).y, 400);
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 4)).y, 2400);  // gap scaled through
+    for (const auto& [_, entry] : entries) EXPECT_EQ(entry.size, 400);
+
+    std::filesystem::remove(path);
+}
+
+TEST(CmpParser, HsIdSetsHeadstageNotLabel) {
+    // hs_id is stored in the headstage field, never mixed into the label.
+    // The same file parsed with hs_id=0 vs hs_id=3 yields identical labels,
+    // differing only in the headstage value.
     auto bare = cbsdk::parseCmpFile(testFile("8ChannelDefaultMapping.cmp"));
     auto with_hs = cbsdk::parseCmpFile(testFile("8ChannelDefaultMapping.cmp"), 1, 3);
     ASSERT_TRUE(bare.isOk());
     ASSERT_TRUE(with_hs.isOk());
 
-    for (const auto& [chan_id, prefixed] : with_hs.value()) {
-        const auto it = bare.value().find(chan_id);
+    for (const auto& [key, entry] : with_hs.value()) {
+        const auto it = bare.value().find(key);
         ASSERT_NE(it, bare.value().end());
-        EXPECT_EQ(prefixed.label, "hs3-" + it->second.label);
+        EXPECT_EQ(entry.label, it->second.label);  // label unchanged by hs_id
+        EXPECT_EQ(entry.headstage, 3);
+        EXPECT_EQ(it->second.headstage, 0);
+        EXPECT_NE(entry.label.substr(0, 2), "hs");  // no "hs3-" prefix
     }
 }
 
@@ -59,23 +204,22 @@ TEST(CmpParser, Parse128Channel) {
     const auto& entries = result.value();
     EXPECT_EQ(entries.size(), 128u);
 
-    // 128 contiguous channel IDs starting at 1.
-    for (uint32_t ch = 1; ch <= 128; ++ch) {
-        ASSERT_TRUE(entries.count(ch)) << "missing chan " << ch;
+    // 128ch = banks A..D (1..4), each electrodes 1..32. start_chan=1 → offset 0.
+    for (int32_t bank = 1; bank <= 4; ++bank) {
+        for (int32_t term = 1; term <= 32; ++term) {
+            auto it = entries.find(cbsdk::cmpKey(bank, term));
+            ASSERT_NE(it, entries.end())
+                << "missing (bank " << bank << ", term " << term << ")";
+            EXPECT_EQ(it->second.bank, bank);
+            EXPECT_EQ(it->second.term, term);
+        }
     }
-
-    // Bank layout after sort: chan 1 → (bank 1, elec 1), chan 33 → (bank 2, elec 1),
-    // chan 65 → (bank 3, elec 1), chan 128 → (bank 4, elec 32).
-    EXPECT_EQ(entries.at(1).position[2], 1);
-    EXPECT_EQ(entries.at(1).position[3], 1);
-    EXPECT_EQ(entries.at(33).position[2], 2);
-    EXPECT_EQ(entries.at(33).position[3], 1);
-    EXPECT_EQ(entries.at(128).position[2], 4);
-    EXPECT_EQ(entries.at(128).position[3], 32);
 }
 
-TEST(CmpParser, StartChanOffsetsChanIds) {
-    // Second headstage: same 96-channel CMP mapped to chans 129..224.
+TEST(CmpParser, StartChanOffsetsBanks) {
+    // Second headstage: same 96-channel CMP (banks A,B,C) mapped onto the
+    // device's second set of banks. start_chan=129 → offset 129/32 = 4, so
+    // CMP bank A→E (5), B→F (6), C→G (7).
     auto result = cbsdk::parseCmpFile(
         testFile("96ChannelDefaultMapping.cmp"), /*start_chan=*/129, /*hs_id=*/2);
     ASSERT_TRUE(result.isOk()) << result.error();
@@ -83,24 +227,39 @@ TEST(CmpParser, StartChanOffsetsChanIds) {
     const auto& entries = result.value();
     EXPECT_EQ(entries.size(), 96u);
 
-    std::set<uint32_t> chans;
-    for (const auto& [chan_id, _] : entries) chans.insert(chan_id);
-    EXPECT_EQ(*chans.begin(), 129u);
-    EXPECT_EQ(*chans.rbegin(), 129u + 95u);
+    // Every entry sits in device banks 5, 6 or 7.
+    std::set<int32_t> banks;
+    for (const auto& [_, entry] : entries) banks.insert(entry.bank);
+    EXPECT_EQ(banks, std::set<int32_t>({5, 6, 7}));
 
+    // chan1 row "0 5 A 1" → device (bank 5, term 1). Default index grid → ×400,
+    // so x=0, y=2000, size=400.
+    auto first = entries.find(cbsdk::cmpKey(5, 1));
+    ASSERT_NE(first, entries.end());
+    EXPECT_EQ(first->second.x, 0);
+    EXPECT_EQ(first->second.y, 2000);
+    EXPECT_EQ(first->second.size, 400);
+
+    // chan96 row "15 0 C 32" → device (bank 7, term 32).
+    ASSERT_TRUE(entries.count(cbsdk::cmpKey(7, 32)));
+
+    // Labels are verbatim from the file (no "hs2-" prefix); hs_id lands in
+    // the headstage field instead.
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(5, 1)).label, "chan1");
     for (const auto& [_, entry] : entries) {
-        EXPECT_EQ(entry.label.substr(0, 4), "hs2-");
+        EXPECT_NE(entry.label.substr(0, 2), "hs");
+        EXPECT_EQ(entry.headstage, 2);  // hs_id → headstage (position[3])
     }
 }
 
-TEST(CmpParser, SortsOutOfOrderRows) {
-    // Synthesize a tiny CMP whose rows are deliberately out of (bank, elec) order.
+TEST(CmpParser, MatchesRowsByBankAndTerm) {
+    // Rows given out of (bank, elec) order — order no longer matters since
+    // entries are keyed by (bank, term), not an ordinal channel id.
     auto path = (std::filesystem::temp_directory_path() / "cmp_unsorted_tmp.cmp").string();
     {
         std::ofstream out(path);
         out << "// scratch file\n"
             << "unsorted test map\n"
-            // Rows given in reverse electrode order within bank A, then bank B first.
             << "0 0 B 1 label_b1\n"
             << "0 0 A 3 label_a3\n"
             << "0 0 A 1 label_a1\n"
@@ -114,11 +273,10 @@ TEST(CmpParser, SortsOutOfOrderRows) {
     const auto& entries = result.value();
     ASSERT_EQ(entries.size(), 4u);
 
-    // Sort puts (A,1), (A,2), (A,3), (B,1) at chans 1..4.
-    EXPECT_EQ(entries.at(1).label, "hs1-label_a1");
-    EXPECT_EQ(entries.at(2).label, "hs1-label_a2");
-    EXPECT_EQ(entries.at(3).label, "hs1-label_a3");
-    EXPECT_EQ(entries.at(4).label, "hs1-label_b1");
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 1)).label, "label_a1");
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 2)).label, "label_a2");
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(1, 3)).label, "label_a3");
+    EXPECT_EQ(entries.at(cbsdk::cmpKey(2, 1)).label, "label_b1");
 
     std::filesystem::remove(path);
 }
