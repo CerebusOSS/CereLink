@@ -395,7 +395,7 @@ struct SdkSession::Impl {
                 const auto* p = device_session->getChanInfo(chan_id);
                 if (p && p->chan > 0) { ci = *p; valid = true; }
             } else if (shmem_session) {
-                auto r = shmem_session->getChanInfo(chan_id - 1);
+                auto r = shmem_session->getChanInfo(chan_id);
                 if (r.isOk() && r.value().chan > 0) { ci = r.value(); valid = true; }
             }
             if (!valid) continue;
