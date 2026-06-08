@@ -288,14 +288,11 @@ struct SdkSession::Impl {
 
     void rebuildChannelTypeCache() {
         for (uint32_t ch = 0; ch < cbMAXCHANS; ++ch) {
-            const auto* ci = getChanInfoPtr(ch);
-            channel_type_cache[ch] = ci ? classifyChannelByCaps(*ci) : ChannelType::ANY;
+            auto ci = getChanInfo(ch + 1);
+            channel_type_cache[ch] = ci.isOk() ? classifyChannelByCaps(ci.value()) : ChannelType::ANY;
         }
         channel_cache_valid = true;
     }
-
-    /// Get chaninfo pointer for a 0-based channel index (works for both STANDALONE and CLIENT)
-    const cbPKT_CHANINFO* getChanInfoPtr(uint32_t idx) const;
 
     // Clock sync periodic probing
     std::chrono::steady_clock::time_point last_clock_probe_time{};
@@ -369,6 +366,19 @@ struct SdkSession::Impl {
     // (e.g., during the handshake phase in start()).
     std::atomic<bool> shutting_down{false};
 
+    Result<cbPKT_CHANINFO> getChanInfo(const uint32_t chan_id) const {
+        // Prefer shmem over device_config because CMP position overlays are
+        // written to shmem (device_config is owned by the receive thread and
+        // we avoid writing to it from other threads).
+        if (shmem_session && chan_id >= 1 && chan_id <= cbMAXCHANS) {
+            return shmem_session->getChanInfo(chan_id);
+        }
+        // Fallback to device_config (no shmem available)
+        if (device_session)
+            return Result<cbPKT_CHANINFO>::ok(*device_session->getChanInfo(chan_id));
+        return Result<cbPKT_CHANINFO>::error("Channel information not available");
+    }
+
     /// Apply CMP overlay (position + label) to all existing chaninfo entries.
     /// Called after loading a CMP file. Writes the updated chaninfo to shmem.
     /// Label push to the device is done separately by SdkSession::loadChannelMap.
@@ -386,7 +396,7 @@ struct SdkSession::Impl {
                 const auto* p = device_session->getChanInfo(chan_id);
                 if (p && p->chan > 0) { ci = *p; valid = true; }
             } else if (shmem_session) {
-                auto r = shmem_session->getChanInfo(chan_id - 1);
+                auto r = shmem_session->getChanInfo(chan_id);
                 if (r.isOk() && r.value().chan > 0) { ci = r.value(); valid = true; }
             }
             if (!valid) continue;
@@ -712,7 +722,7 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     auto shmem_result = cbshm::ShmemSession::create(
         central_cfg, central_rec, central_xmt, central_xmt_local,
         central_status, central_spk, central_signal,
-        cbshm::Mode::CLIENT, cbshm::ShmemLayout::CENTRAL_COMPAT);
+        cbshm::Mode::CLIENT, cbshm::ShmemLayout::CENTRAL);
 
     if (shmem_result.isOk()) {
         // Set instrument filter for CENTRAL_COMPAT mode (Central's receive buffer
@@ -1391,57 +1401,39 @@ const SdkConfig& SdkSession::getConfig() const {
     return m_impl->config;
 }
 
-const cbPKT_SYSINFO* SdkSession::getSysInfo() const {
+Result<cbPKT_SYSINFO> SdkSession::getSysInfo() const {
     if (m_impl->device_session)
-        return &m_impl->device_session->getSysInfo();
-    if (m_impl->shmem_session) {
-        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
-        if (native)
-            return &native->sysinfo;
-        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
-        if (legacy)
-            return &legacy->sysinfo;
-    }
-    return nullptr;
+        return Result<cbPKT_SYSINFO>::ok(m_impl->device_session->getSysInfo());
+    if (m_impl->shmem_session)
+        return m_impl->shmem_session->getSysInfo();
+    return Result<cbPKT_SYSINFO>::error("System information not available");
 }
 
-const cbPKT_CHANINFO* SdkSession::getChanInfo(const uint32_t chan_id) const {
+Result<cbPKT_CHANINFO> SdkSession::getChanInfo(const uint32_t chan_id) const {
     // Prefer shmem over device_config because CMP position overlays are
     // written to shmem (device_config is owned by the receive thread and
     // we avoid writing to it from other threads).
     if (m_impl->shmem_session && chan_id >= 1 && chan_id <= cbMAXCHANS) {
-        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
-        if (native)
-            return &native->chaninfo[chan_id - 1];
-        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
-        if (legacy)
-            return &legacy->chaninfo[chan_id - 1];
+        return m_impl->shmem_session->getChanInfo(chan_id - 1);
     }
     // Fallback to device_config (no shmem available)
     if (m_impl->device_session)
-        return m_impl->device_session->getChanInfo(chan_id);
-    return nullptr;
+        return Result<cbPKT_CHANINFO>::ok(*m_impl->device_session->getChanInfo(chan_id - 1));
+    return Result<cbPKT_CHANINFO>::error("Channel information not available");
 }
 
-const cbPKT_GROUPINFO* SdkSession::getGroupInfo(uint32_t group_id) const {
+Result<cbPKT_GROUPINFO> SdkSession::getGroupInfo(uint32_t group_id) const {
     if (group_id == 0 || group_id > cbMAXGROUPS)
-        return nullptr;
+        return Result<cbPKT_GROUPINFO>::error("Invalid group ID");
     if (m_impl->device_session) {
         const auto& config = m_impl->device_session->getDeviceConfig();
-        return &config.groupinfo[group_id - 1];
+        return Result<cbPKT_GROUPINFO>::ok(config.groupinfo[group_id - 1]);
     }
     if (m_impl->shmem_session) {
-        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
-        if (native)
-            return &native->groupinfo[group_id - 1];
-        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
-        if (legacy) {
-            int32_t inst = getCentralInstrumentIndex(m_impl->config.device_type);
-            if (inst >= 0)
-                return &legacy->groupinfo[inst][group_id - 1];
-        }
+        auto inst = cbproto::InstrumentId::fromIndex(getCentralInstrumentIndex(m_impl->config.device_type));
+        return m_impl->shmem_session->getGroupInfo(inst, group_id);
     }
-    return nullptr;
+    return Result<cbPKT_GROUPINFO>::error("Group information not available");
 }
 
 uint32_t SdkSession::getGroupChannelList(uint32_t group_id, uint16_t* list, uint32_t max_count) const {
@@ -1455,19 +1447,22 @@ uint32_t SdkSession::getGroupChannelList(uint32_t group_id, uint16_t* list, uint
         // Prefer device_config (updated in updateConfigFromBuffer before the
         // sendAndWait / SYSREP sync barrier fires).  shmem chaninfo may lag
         // slightly because SDK callbacks run after the sync notification.
-        const cbPKT_CHANINFO* ci = nullptr;
-        if (m_impl->device_session)
-            ci = m_impl->device_session->getChanInfo(chan);
-        else
-            ci = getChanInfo(chan);
-
-        if (!ci) continue;
+        const cbPKT_CHANINFO& ci{};
+        if (m_impl->device_session) {
+            const auto* res = m_impl->device_session->getChanInfo(chan - 1);
+            if (!res) continue;
+            const auto& ci = *res;
+        } else {
+            auto res = getChanInfo(chan);
+            if (res.isError()) continue;
+            const auto& ci = res.value();
+        }
 
         bool in_group;
         if (is_raw)
-            in_group = (ci->ainpopts & cbAINP_RAWSTREAM) != 0;
+            in_group = (ci.ainpopts & cbAINP_RAWSTREAM) != 0;
         else
-            in_group = (ci->smpgroup == group_id);
+            in_group = (ci.smpgroup == group_id);
 
         if (in_group)
             list[count++] = static_cast<uint16_t>(chan);
@@ -1475,25 +1470,18 @@ uint32_t SdkSession::getGroupChannelList(uint32_t group_id, uint16_t* list, uint
     return count;
 }
 
-const cbPKT_FILTINFO* SdkSession::getFilterInfo(const uint32_t filter_id) const {
+Result<cbPKT_FILTINFO> SdkSession::getFilterInfo(const uint32_t filter_id) const {
     if (filter_id >= cbMAXFILTS)
-        return nullptr;
+        return Result<cbPKT_FILTINFO>::error("Invalid filter ID");
     if (m_impl->device_session) {
         const auto& config = m_impl->device_session->getDeviceConfig();
-        return &config.filtinfo[filter_id];
+        return Result<cbPKT_FILTINFO>::ok(config.filtinfo[filter_id]);
     }
     if (m_impl->shmem_session) {
-        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
-        if (native)
-            return &native->filtinfo[filter_id];
-        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
-        if (legacy) {
-            int32_t inst = getCentralInstrumentIndex(m_impl->config.device_type);
-            if (inst >= 0)
-                return &legacy->filtinfo[inst][filter_id];
-        }
+        auto inst = cbproto::InstrumentId::fromIndex(getCentralInstrumentIndex(m_impl->config.device_type));
+        return m_impl->shmem_session->getFilterInfo(inst, filter_id);
     }
-    return nullptr;
+    return Result<cbPKT_FILTINFO>::error("Filter information not available");
 }
 
 uint32_t SdkSession::getRunLevel() const {
@@ -1502,7 +1490,8 @@ uint32_t SdkSession::getRunLevel() const {
     // Fall back to the SYSINFO mirrored into shmem by the STANDALONE owner.
     // In CLIENT mode the device only emits SYSREP on runlevel-set commands,
     // so this session's receive ring may never see one in steady state.
-    if (const auto* si = getSysInfo()) return si->runlevel;
+    auto si = getSysInfo();
+    if (si.isOk()) return si.value().runlevel;
     return 0;
 }
 
@@ -1517,12 +1506,8 @@ uint32_t SdkSession::getProtocolVersion() const {
         const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
         if (native)
             return CBPROTO_PROTOCOL_CURRENT;  // NATIVE layout always uses current protocol
-        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
-        if (legacy) {
-            int32_t inst = getCentralInstrumentIndex(m_impl->config.device_type);
-            if (inst >= 0)
-                return legacy->procinfo[inst].version;
-        }
+        else
+            return m_impl->shmem_session->getCompatProtocolVersion();
     }
     return 0;
 }
@@ -1535,35 +1520,38 @@ std::string SdkSession::getProcIdent() const {
     }
     if (m_impl->shmem_session) {
         const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
-        if (native)
+        if (native) {
             return std::string(native->procinfo.ident,
                 strnlen(native->procinfo.ident, sizeof(native->procinfo.ident)));
-        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
-        if (legacy) {
-            int32_t inst = getCentralInstrumentIndex(m_impl->config.device_type);
-            if (inst >= 0)
-                return std::string(legacy->procinfo[inst].ident,
-                    strnlen(legacy->procinfo[inst].ident, sizeof(legacy->procinfo[inst].ident)));
+        } else {
+            int32_t inst_idx = getCentralInstrumentIndex(m_impl->config.device_type);
+            auto inst = cbproto::InstrumentId::fromIndex(inst_idx);
+            // TODO: Check if inst >= 0?
+            auto procinfo = m_impl->shmem_session->getProcInfo(inst);
+            if (procinfo.isError()) {
+                return {};
+            }
+            return std::string(procinfo.value().ident, strnlen(procinfo.value().ident, sizeof(procinfo.value().ident)));
         }
     }
     return {};
 }
 
 uint32_t SdkSession::getSpikeLength() const {
-    const auto* si = getSysInfo();
-    return si ? si->spikelen : 0;
+    auto si = getSysInfo();
+    return si.isOk() ? si.value().spikelen : 0;
 }
 
 uint32_t SdkSession::getSpikePretrigger() const {
-    const auto* si = getSysInfo();
-    return si ? si->spikepre : 0;
+    auto si = getSysInfo();
+    return si.isOk() ? si.value().spikepre : 0;
 }
 
 Result<void> SdkSession::setSpikeLength(uint32_t spikelen, uint32_t spikepre) {
-    const auto* si = getSysInfo();
-    if (!si)
-        return Result<void>::error("System info not available");
-    cbPKT_SYSINFO pkt = *si;
+    auto si = getSysInfo();
+    if (si.isError())
+        return Result<void>::error(si.error());
+    cbPKT_SYSINFO pkt = si.value();
     pkt.cbpkt_header.type = cbPKTTYPE_SYSSETSPKLEN;
     pkt.spikelen = spikelen;
     pkt.spikepre = spikepre;
@@ -1608,29 +1596,13 @@ static int64_t extractChanInfoField(const cbPKT_CHANINFO& ci, ChanInfoField fiel
     }
 }
 
-/// Helper: get chaninfo pointer for a 0-based channel index
-const cbPKT_CHANINFO* SdkSession::Impl::getChanInfoPtr(uint32_t idx) const {
-    // Prefer shmem: CMP position overlays are written there.
-    // device_config is owned by the receive thread and doesn't have positions.
-    if (shmem_session) {
-        const auto* native = shmem_session->getNativeConfigBuffer();
-        if (native) return &native->chaninfo[idx];
-        const auto* legacy = shmem_session->getLegacyConfigBuffer();
-        if (legacy) return &legacy->chaninfo[idx];
-    }
-    if (device_session) {
-        return device_session->getChanInfo(idx + 1);
-    }
-    return nullptr;
-}
-
 Result<int64_t> SdkSession::getChannelField(uint32_t chanId, ChanInfoField field) const {
     if (chanId == 0 || chanId > cbMAXCHANS)
         return Result<int64_t>::error("Invalid channel ID");
-    const auto* ci = m_impl->getChanInfoPtr(chanId - 1);
-    if (!ci)
+    auto ci = getChanInfo(chanId);
+    if (ci.isError())
         return Result<int64_t>::error("Channel info unavailable");
-    return Result<int64_t>::ok(extractChanInfoField(*ci, field));
+    return Result<int64_t>::ok(extractChanInfoField(ci.value(), field));
 }
 
 Result<std::vector<uint32_t>> SdkSession::getMatchingChannelIds(
@@ -1638,9 +1610,9 @@ Result<std::vector<uint32_t>> SdkSession::getMatchingChannelIds(
     std::vector<uint32_t> ids;
     size_t count = 0;
     for (uint32_t ch = 0; ch < cbMAXCHANS && count < nChans; ++ch) {
-        const auto* ci = m_impl->getChanInfoPtr(ch);
-        if (!ci) continue;
-        if (classifyChannelByCaps(*ci) != chanType) continue;
+        auto ci = getChanInfo(ch + 1);
+        if (ci.isError()) continue;
+        if (classifyChannelByCaps(ci.value()) != chanType) continue;
         ids.push_back(ch + 1);
         count++;
     }
@@ -1652,10 +1624,10 @@ Result<std::vector<int64_t>> SdkSession::getChannelField(
     std::vector<int64_t> values;
     size_t count = 0;
     for (uint32_t ch = 0; ch < cbMAXCHANS && count < nChans; ++ch) {
-        const auto* ci = m_impl->getChanInfoPtr(ch);
-        if (!ci) continue;
-        if (classifyChannelByCaps(*ci) != chanType) continue;
-        values.push_back(extractChanInfoField(*ci, field));
+        auto ci = getChanInfo(ch + 1);
+        if (ci.isError()) continue;
+        if (classifyChannelByCaps(ci.value()) != chanType) continue;
+        values.push_back(extractChanInfoField(ci.value(), field));
         count++;
     }
     return Result<std::vector<int64_t>>::ok(std::move(values));
@@ -1666,10 +1638,10 @@ Result<std::vector<std::string>> SdkSession::getChannelLabels(
     std::vector<std::string> labels;
     size_t count = 0;
     for (uint32_t ch = 0; ch < cbMAXCHANS && count < nChans; ++ch) {
-        const auto* ci = m_impl->getChanInfoPtr(ch);
-        if (!ci) continue;
-        if (classifyChannelByCaps(*ci) != chanType) continue;
-        labels.emplace_back(ci->label);
+        auto ci = getChanInfo(ch + 1);
+        if (ci.isError()) continue;
+        if (classifyChannelByCaps(ci.value()) != chanType) continue;
+        labels.emplace_back(ci.value().label);
         count++;
     }
     return Result<std::vector<std::string>>::ok(std::move(labels));
@@ -1680,13 +1652,13 @@ Result<std::vector<int32_t>> SdkSession::getChannelPositions(
     std::vector<int32_t> positions;
     size_t count = 0;
     for (uint32_t ch = 0; ch < cbMAXCHANS && count < nChans; ++ch) {
-        const auto* ci = m_impl->getChanInfoPtr(ch);
-        if (!ci) continue;
-        if (classifyChannelByCaps(*ci) != chanType) continue;
-        positions.push_back(ci->position[0]);
-        positions.push_back(ci->position[1]);
-        positions.push_back(ci->position[2]);
-        positions.push_back(ci->position[3]);
+        auto ci = getChanInfo(ch + 1);
+        if (ci.isError()) continue;
+        if (classifyChannelByCaps(ci.value()) != chanType) continue;
+        positions.push_back(ci.value().position[0]);
+        positions.push_back(ci.value().position[1]);
+        positions.push_back(ci.value().position[2]);
+        positions.push_back(ci.value().position[3]);
         count++;
     }
     return Result<std::vector<int32_t>>::ok(std::move(positions));
@@ -1723,8 +1695,8 @@ static std::vector<uint32_t> resolveTargetChans(
         result.reserve(std::min<uint32_t>(nChans, cbMAXCHANS));
     }
     for (uint32_t chan = 1; chan <= cbMAXCHANS && result.size() < nChans; ++chan) {
-        const cbPKT_CHANINFO* ci = session.getChanInfo(chan);
-        if (ci && classifyChannelByCaps(*ci) == chanType) {
+        auto ci = session.getChanInfo(chan);
+        if (ci.isOk() && classifyChannelByCaps(ci.value()) == chanType) {
             result.push_back(chan);
         }
     }
@@ -1746,9 +1718,9 @@ Result<void> SdkSession::setSampleGroup(
     // Always sends the full chaninfo (seeded from local cache), so a stale
     // CHANREP can't leave us stuck against a concurrent change.
     auto build_packet = [this](uint32_t chan, uint32_t grp) -> std::optional<cbPKT_CHANINFO> {
-        const cbPKT_CHANINFO* base = getChanInfo(chan);
-        if (!base || base->chan == 0) return std::nullopt;
-        cbPKT_CHANINFO chaninfo = *base;
+        auto base = getChanInfo(chan);
+        if (base.isError() || base.value().chan == 0) return std::nullopt;
+        cbPKT_CHANINFO& chaninfo = base.value();
         chaninfo.chan = chan;
         if (grp > 0 && grp < 6) {
             chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSETSMP;
@@ -1783,8 +1755,8 @@ Result<void> SdkSession::setSampleGroup(
         std::set<uint32_t> target_set(targets.begin(), targets.end());
         for (uint32_t chan = 1; chan <= cbMAXCHANS; ++chan) {
             if (target_set.count(chan)) continue;
-            const cbPKT_CHANINFO* ci = getChanInfo(chan);
-            if (!ci || classifyChannelByCaps(*ci) != chanType) continue;
+            auto ci = getChanInfo(chan);
+            if (ci.isError() || classifyChannelByCaps(ci.value()) != chanType) continue;
             if (auto pkt = build_packet(chan, 0u); pkt) {
                 packets.push_back(reinterpret_cast<const cbPKT_GENERIC&>(*pkt));
             }
@@ -1829,9 +1801,9 @@ static Result<void> applyBulkSetter(
     std::vector<cbPKT_GENERIC> packets;
     packets.reserve(targets.size());
     for (uint32_t chan : targets) {
-        const cbPKT_CHANINFO* base = session.getChanInfo(chan);
-        if (!base || base->chan == 0) continue;
-        cbPKT_CHANINFO chaninfo = *base;
+        auto base = session.getChanInfo(chan);
+        if (base.isError() || base.value().chan == 0) continue;
+        cbPKT_CHANINFO& chaninfo = base.value();
         chaninfo.chan = chan;
         mutate(chaninfo);
         packets.push_back(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
@@ -1998,12 +1970,12 @@ Result<void> SdkSession::setAnalogOutputMonitor(uint32_t aout_chan_id, uint32_t 
     if (aout_chan_id < 1 || aout_chan_id > cbMAXCHANS)
         return Result<void>::error("Invalid analog output channel ID");
 
-    const cbPKT_CHANINFO* info = getChanInfo(aout_chan_id);
-    if (!info)
+    auto info = getChanInfo(aout_chan_id);
+    if (info.isError())
         return Result<void>::error("Channel info not available for channel " + std::to_string(aout_chan_id));
 
     // Copy current config and modify analog output fields
-    cbPKT_CHANINFO chaninfo = *info;
+    cbPKT_CHANINFO& chaninfo = info.value();
 
     // Set monitor channel
     chaninfo.monchan = static_cast<uint16_t>(monitor_chan_id);
@@ -2123,9 +2095,9 @@ Result<void> SdkSession::loadChannelMap(
     // device, so no analogous push for position.
     if (m_impl->device_session || m_impl->shmem_session) {
         for (const auto& [chan_id, label] : labels_to_push) {
-            const cbPKT_CHANINFO* info = getChanInfo(chan_id);
-            if (!info) continue;
-            cbPKT_CHANINFO ci = *info;
+            auto info = getChanInfo(chan_id);
+            if (info.isError()) continue;
+            cbPKT_CHANINFO& ci = info.value();
             ci.chan = chan_id;
             ci.cbpkt_header.type = cbPKTTYPE_CHANSETLABEL;
             std::strncpy(ci.label, label.c_str(), sizeof(ci.label) - 1);
@@ -2170,9 +2142,9 @@ Result<void> SdkSession::clearChannelMap() {
     // local-only.
     if (m_impl->device_session || m_impl->shmem_session) {
         for (uint32_t chan_id : mapped_chans) {
-            const cbPKT_CHANINFO* info = getChanInfo(chan_id);
-            if (!info) continue;
-            cbPKT_CHANINFO ci = *info;
+            auto info = getChanInfo(chan_id);
+            if (info.isError()) continue;
+            cbPKT_CHANINFO& ci = info.value();
             ci.chan = chan_id;
             ci.cbpkt_header.type = cbPKTTYPE_CHANSETLABEL;
             char default_label[16];

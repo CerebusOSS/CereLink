@@ -699,8 +699,8 @@ const char* cbsdk_session_get_channel_label(cbsdk_session_t session, uint32_t ch
         return nullptr;
     }
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->label : nullptr;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().label : nullptr;
     } catch (...) {
         return nullptr;
     }
@@ -711,8 +711,8 @@ uint32_t cbsdk_session_get_channel_smpgroup(cbsdk_session_t session, uint32_t ch
         return 0;
     }
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->smpgroup : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().smpgroup : 0;
     } catch (...) {
         return 0;
     }
@@ -723,8 +723,8 @@ uint32_t cbsdk_session_get_channel_chancaps(cbsdk_session_t session, uint32_t ch
         return 0;
     }
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->chancaps : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().chancaps : 0;
     } catch (...) {
         return 0;
     }
@@ -735,10 +735,11 @@ cbproto_channel_type_t cbsdk_session_get_channel_type(cbsdk_session_t session, u
         return static_cast<cbproto_channel_type_t>(-1);
     }
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        if (!info) return static_cast<cbproto_channel_type_t>(-1);
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        if (info.isError()) return static_cast<cbproto_channel_type_t>(-1);
+        cbPKT_CHANINFO& ci = info.value();
 
-        const uint32_t caps = info->chancaps;
+        const uint32_t caps = ci.chancaps;
         if ((cbCHAN_EXISTS | cbCHAN_CONNECTED) != (caps & (cbCHAN_EXISTS | cbCHAN_CONNECTED)))
             return static_cast<cbproto_channel_type_t>(-1);
 
@@ -747,12 +748,12 @@ cbproto_channel_type_t cbsdk_session_get_channel_type(cbsdk_session_t session, u
         if (cbCHAN_AINP == (caps & (cbCHAN_AINP | cbCHAN_ISOLATED)))
             return CBPROTO_CHANNEL_TYPE_ANALOG_IN;
         if (cbCHAN_AOUT == (caps & cbCHAN_AOUT)) {
-            if (cbAOUT_AUDIO == (info->aoutcaps & cbAOUT_AUDIO))
+            if (cbAOUT_AUDIO == (ci.aoutcaps & cbAOUT_AUDIO))
                 return CBPROTO_CHANNEL_TYPE_AUDIO;
             return CBPROTO_CHANNEL_TYPE_ANALOG_OUT;
         }
         if (cbCHAN_DINP == (caps & cbCHAN_DINP)) {
-            if (info->dinpcaps & cbDINP_SERIALMASK)
+            if (ci.dinpcaps & cbDINP_SERIALMASK)
                 return CBPROTO_CHANNEL_TYPE_SERIAL;
             return CBPROTO_CHANNEL_TYPE_DIGITAL_IN;
         }
@@ -768,72 +769,72 @@ cbproto_channel_type_t cbsdk_session_get_channel_type(cbsdk_session_t session, u
 uint32_t cbsdk_session_get_channel_smpfilter(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->smpfilter : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().smpfilter : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_channel_spkfilter(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->spkfilter : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().spkfilter : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_channel_spkopts(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->spkopts : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().spkopts : 0;
     } catch (...) { return 0; }
 }
 
 int32_t cbsdk_session_get_channel_spkthrlevel(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->spkthrlevel : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().spkthrlevel : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_channel_ainpopts(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->ainpopts : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().ainpopts : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_channel_lncrate(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->lncrate : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().lncrate : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_channel_refelecchan(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->refelecchan : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().refelecchan : 0;
     } catch (...) { return 0; }
 }
 
 int16_t cbsdk_session_get_channel_amplrejpos(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->amplrejpos : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().amplrejpos : 0;
     } catch (...) { return 0; }
 }
 
 int16_t cbsdk_session_get_channel_amplrejneg(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->amplrejneg : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().amplrejneg : 0;
     } catch (...) { return 0; }
 }
 
@@ -843,14 +844,15 @@ cbsdk_result_t cbsdk_session_get_channel_scaling(
         return CBSDK_RESULT_INVALID_PARAMETER;
     }
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        if (!info) return CBSDK_RESULT_INVALID_PARAMETER;
-        scaling->digmin  = info->scalin.digmin;
-        scaling->digmax  = info->scalin.digmax;
-        scaling->anamin  = info->scalin.anamin;
-        scaling->anamax  = info->scalin.anamax;
-        scaling->anagain = info->scalin.anagain;
-        std::memcpy(scaling->anaunit, info->scalin.anaunit, sizeof(scaling->anaunit));
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        if (info.isError()) return CBSDK_RESULT_INVALID_PARAMETER;
+        cbPKT_CHANINFO& ci = info.value();
+        scaling->digmin  = ci.scalin.digmin;
+        scaling->digmax  = ci.scalin.digmax;
+        scaling->anamin  = ci.scalin.anamin;
+        scaling->anamax  = ci.scalin.anamax;
+        scaling->anagain = ci.scalin.anagain;
+        std::memcpy(scaling->anaunit, ci.scalin.anaunit, sizeof(scaling->anaunit));
         return CBSDK_RESULT_SUCCESS;
     } catch (...) {
         std::memset(scaling, 0, sizeof(cbsdk_channel_scaling_t));
@@ -875,8 +877,8 @@ const char* cbsdk_session_get_group_label(cbsdk_session_t session, uint32_t grou
         return nullptr;
     }
     try {
-        const cbPKT_GROUPINFO* info = session->cpp_session->getGroupInfo(group_id);
-        return info ? info->label : nullptr;
+        auto info = session->cpp_session->getGroupInfo(group_id);
+        return info.isOk() ? info.value().label : nullptr;
     } catch (...) {
         return nullptr;
     }
@@ -956,9 +958,9 @@ static cbsdk_result_t modify_and_send_chaninfo(
             auto sync_result = session->cpp_session->sync(5000);
             if (sync_result.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
         }
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        if (!info) return CBSDK_RESULT_INVALID_PARAMETER;
-        cbPKT_CHANINFO ci = *info;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        if (info.isError()) return CBSDK_RESULT_INVALID_PARAMETER;
+        cbPKT_CHANINFO& ci = info.value();
         ci.chan = chan_id;
         ci.cbpkt_header.type = pkt_type;
         modify(ci);
@@ -994,9 +996,9 @@ cbsdk_result_t cbsdk_session_set_channel_smpgroup(
             auto sync_result = session->cpp_session->sync(5000);
             if (sync_result.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
         }
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        if (!info) return CBSDK_RESULT_INVALID_PARAMETER;
-        cbPKT_CHANINFO ci = *info;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        if (info.isError()) return CBSDK_RESULT_INVALID_PARAMETER;
+        cbPKT_CHANINFO& ci = info.value();
         ci.chan = chan_id;
 
         if (rate == 0) {
@@ -1225,8 +1227,8 @@ cbsdk_result_t cbsdk_session_get_channels_positions(
 uint32_t cbsdk_session_get_sysfreq(cbsdk_session_t session) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_SYSINFO* info = session->cpp_session->getSysInfo();
-        return info ? info->sysfreq : 0;
+        auto info = session->cpp_session->getSysInfo();
+        return info.isOk() ? info.value().sysfreq : 0;
     } catch (...) { return 0; }
 }
 
@@ -1237,40 +1239,40 @@ uint32_t cbsdk_get_num_filters(void) {
 const char* cbsdk_session_get_filter_label(cbsdk_session_t session, uint32_t filter_id) {
     if (!session || !session->cpp_session) return nullptr;
     try {
-        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
-        return info ? info->label : nullptr;
+        auto info = session->cpp_session->getFilterInfo(filter_id);
+        return info.isOk() ? info.value().label : nullptr;
     } catch (...) { return nullptr; }
 }
 
 uint32_t cbsdk_session_get_filter_hpfreq(cbsdk_session_t session, uint32_t filter_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
-        return info ? info->hpfreq : 0;
+        auto info = session->cpp_session->getFilterInfo(filter_id);
+        return info.isOk() ? info.value().hpfreq : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_filter_hporder(cbsdk_session_t session, uint32_t filter_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
-        return info ? info->hporder : 0;
+        auto info = session->cpp_session->getFilterInfo(filter_id);
+        return info.isOk() ? info.value().hporder : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_filter_lpfreq(cbsdk_session_t session, uint32_t filter_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
-        return info ? info->lpfreq : 0;
+        auto info = session->cpp_session->getFilterInfo(filter_id);
+        return info.isOk() ? info.value().lpfreq : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_filter_lporder(cbsdk_session_t session, uint32_t filter_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
-        return info ? info->lporder : 0;
+        auto info = session->cpp_session->getFilterInfo(filter_id);
+        return info.isOk() ? info.value().lporder : 0;
     } catch (...) { return 0; }
 }
 
