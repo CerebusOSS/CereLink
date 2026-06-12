@@ -59,6 +59,19 @@
 
 namespace cbdev {
 
+/// Format the last socket error as " (errno N: description)" (POSIX) or
+/// " (winsock err N)" (Windows). Captures the error code immediately, so call
+/// at the very first opportunity after the failing syscall.
+static std::string lastSocketErrorSuffix() {
+#ifdef _WIN32
+    const int err = WSAGetLastError();
+    return " (winsock err " + std::to_string(err) + ")";
+#else
+    const int err = errno;
+    return " (errno " + std::to_string(err) + ": " + std::strerror(err) + ")";
+#endif
+}
+
 /// State shared between main thread and receive thread
 struct DetectionState {
     std::atomic<bool> send_config{false};
@@ -355,11 +368,12 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
     }
 
     if (bind(sock, reinterpret_cast<sockaddr *>(&client_sockaddr), sizeof(client_sockaddr)) == SOCKET_ERROR_VALUE) {
+        const std::string err_suffix = lastSocketErrorSuffix();
         closesocket(sock);
 #ifdef _WIN32
         WSACleanup();
 #endif
-        return Result<ProtocolVersion>::error("Failed to bind probe socket");
+        return Result<ProtocolVersion>::error("Failed to bind probe socket" + err_suffix);
     }
 
     // Set socket timeout for receive (for the thread)
@@ -447,28 +461,34 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
     // Send the runlev packets
     if (sendto(sock, reinterpret_cast<const char *>(&runlev), sizeof(cbPKT_SYSINFO), 0,
                reinterpret_cast<sockaddr *>(&device_sockaddr), sizeof(device_sockaddr)) == SOCKET_ERROR_VALUE) {
+        const std::string err_suffix = lastSocketErrorSuffix();
         state.done = true;
         recv_thread.join();
         closesocket(sock);
-        return Result<ProtocolVersion>::error("Failed to send 4.1 runlev packet");
+        return Result<ProtocolVersion>::error("Failed to send 4.1 runlev packet to " +
+            std::string(device_addr) + ":" + std::to_string(send_port) + err_suffix);
     }
 
     std::this_thread::sleep_for(std::chrono::microseconds(50));
     if (sendto(sock, reinterpret_cast<const char *>(runlev_400), sizeof(runlev_400), 0,
                reinterpret_cast<sockaddr *>(&device_sockaddr), sizeof(device_sockaddr)) == SOCKET_ERROR_VALUE) {
+        const std::string err_suffix = lastSocketErrorSuffix();
         state.done = true;
         recv_thread.join();
         closesocket(sock);
-        return Result<ProtocolVersion>::error("Failed to send 4.0 runlev packet");
+        return Result<ProtocolVersion>::error("Failed to send 4.0 runlev packet to " +
+            std::string(device_addr) + ":" + std::to_string(send_port) + err_suffix);
     }
 
     std::this_thread::sleep_for(std::chrono::microseconds(50));
     if (sendto(sock, reinterpret_cast<const char *>(runlev_311), sizeof(runlev_311), 0,
                reinterpret_cast<sockaddr *>(&device_sockaddr), sizeof(device_sockaddr)) == SOCKET_ERROR_VALUE) {
+        const std::string err_suffix = lastSocketErrorSuffix();
         state.done = true;
         recv_thread.join();
         closesocket(sock);
-        return Result<ProtocolVersion>::error("Failed to send 3.11 runlev packet");
+        return Result<ProtocolVersion>::error("Failed to send 3.11 runlev packet to " +
+            std::string(device_addr) + ":" + std::to_string(send_port) + err_suffix);
     }
 
     // Wait for receive thread to detect protocol or timeout
