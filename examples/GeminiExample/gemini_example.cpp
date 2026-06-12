@@ -150,6 +150,11 @@ int main(int argc, char* argv[]) {
     hub3->type = cbsdk::DeviceType::HUB3;
     devices.push_back(std::move(hub3));
 
+    auto nplay = std::make_unique<DeviceInfo>();
+    nplay->name = "NPlay";
+    nplay->type = cbsdk::DeviceType::NPLAY;
+    devices.push_back(std::move(nplay));
+
     try {
         // === Clean up any stale shared memory segments ===
 #ifndef _WIN32

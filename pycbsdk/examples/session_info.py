@@ -9,7 +9,7 @@ Usage:
 import sys
 import time
 
-sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1] / "pycbsdk" / "src"))
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1] / "src"))
 from pycbsdk import Session, DeviceType, ProtocolVersion
 device_type = sys.argv[1] if len(sys.argv) > 1 else "NPLAY"
 
@@ -47,3 +47,12 @@ with Session(device_type=device_type) as session:
     print(f"  clock_offset_ns:    {session.clock_offset_ns}")
     print(f"  clock_uncertainty:  {session.clock_uncertainty_ns}")
     print(f"  stats:              {session.stats}")
+
+    print("\nChannel config:")
+    n = session.num_analog_chans()
+    active = {ch: session.get_channel_smpgroup(ch) for ch in range(1, n + 1)}
+    active = {ch: g for ch, g in active.items() if g > 0}
+    print(f"  {len(active)}/{n} analog channels in a sample group")
+    for ch, g in active.items():
+        print(f"    ch {ch:3d} ({session.get_channel_label(ch)}): "
+              f"group {g}, spkopts 0x{session.get_channel_spkopts(ch):x}")
