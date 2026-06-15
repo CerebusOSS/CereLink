@@ -34,7 +34,6 @@
 
 #include <cbshm/shmem_session.h>
 #include <cbshm/central_types/adapters.h>
-#include <cbshm/central_types/translators.h> // TODO: Remove; should be hidden within the adapter
 #include <cbshm/central_types/current.h>
 #include <cbshm/central_types/v4_2.h>
 #include <cbshm/central_types/v4_1.h>
@@ -99,6 +98,7 @@ inline uint32_t shm_load_relaxed_u32(const uint32_t* p) {
 /// @brief Platform-specific implementation details (Pimpl idiom)
 ///
 struct ShmemSession::Impl {
+    cbproto::InstrumentId inst;
     Mode mode;
     ShmemLayout layout;
     std::unique_ptr<CentralBootstrapAdapterBase> bootstrap_adapter;
@@ -154,10 +154,7 @@ struct ShmemSession::Impl {
     uint32_t rec_tailindex;      // Our read position in receive buffer
     uint32_t rec_tailwrap;       // Our wrap counter
 
-    // Instrument filter for CENTRAL_COMPAT mode (-1 = no filter)
-    int32_t instrument_filter;
-
-    // Detected protocol version for CENTRAL_COMPAT mode
+    // Detected protocol version for CENTRAL mode
     cbproto_protocol_version_t compat_protocol;
 
     // Typed accessor for config buffer
@@ -166,7 +163,8 @@ struct ShmemSession::Impl {
     }
 
     Impl()
-        : mode(Mode::STANDALONE)
+        : inst(cbproto::InstrumentId::fromIndex(0))
+        , mode(Mode::STANDALONE)
         , layout(ShmemLayout::NATIVE)
         , adapter(nullptr)
         , is_open(false)
@@ -202,7 +200,6 @@ struct ShmemSession::Impl {
         , rec_buffer_len(0)
         , rec_tailindex(0)
         , rec_tailwrap(0)
-        , instrument_filter(-1)
         , compat_protocol(CBPROTO_PROTOCOL_CURRENT)
     {}
 
@@ -338,6 +335,10 @@ struct ShmemSession::Impl {
     Result<void> open() {
         if (is_open) {
             return Result<void>::error("Session already open");
+        }
+
+        if (!inst.isValid()) {
+            return Result<void>::error("Invalid instrument ID");
         }
 
         if (mode == Mode::CLIENT && layout == ShmemLayout::CENTRAL) {
@@ -519,16 +520,16 @@ struct ShmemSession::Impl {
             default:
                 /* fallthrough */
             case CBPROTO_PROTOCOL_CURRENT:
-                adapter = std::make_unique<central_v4_2::Adapter>(cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
+                adapter = std::make_unique<central_v4_2::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
                 break;
             case CBPROTO_PROTOCOL_410:
-                adapter = std::make_unique<central_v4_1::Adapter>(cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
+                adapter = std::make_unique<central_v4_1::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
                 break;
             case CBPROTO_PROTOCOL_400:
-                adapter = std::make_unique<central_v4_0::Adapter>(cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
+                adapter = std::make_unique<central_v4_0::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
                 break;
             case CBPROTO_PROTOCOL_311:
-                adapter = std::make_unique<central_v3_11::Adapter>(cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
+                adapter = std::make_unique<central_v3_11::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
                 break;
         }
 
@@ -678,7 +679,7 @@ struct ShmemSession::Impl {
         return Result<void>::ok();
     }
 
-    /// @brief Detect the protocol version from Central's binary (CENTRAL_COMPAT only).
+    /// @brief Detect the protocol version from Central's binary (CENTRAL only).
     Result<cbproto_protocol_version_t> detectCompatProtocol() {
 #ifdef _WIN32
         // The 'version' field in Central's shared memory configuration buffer
@@ -847,12 +848,13 @@ ShmemSession::~ShmemSession() = default;
 ShmemSession::ShmemSession(ShmemSession&& other) noexcept = default;
 ShmemSession& ShmemSession::operator=(ShmemSession&& other) noexcept = default;
 
-Result<ShmemSession> ShmemSession::create(const std::string& cfg_name, const std::string& rec_name,
+Result<ShmemSession> ShmemSession::create(cbproto::InstrumentId id, const std::string& cfg_name, const std::string& rec_name,
                                            const std::string& xmt_name, const std::string& xmt_local_name,
                                            const std::string& status_name, const std::string& spk_name,
                                            const std::string& signal_event_name, Mode mode,
                                            ShmemLayout layout) {
     ShmemSession session;
+    session.m_impl->inst = id;
     session.m_impl->cfg_name = cfg_name;
     session.m_impl->rec_name = rec_name;
     session.m_impl->xmt_name = xmt_name;
@@ -883,23 +885,27 @@ ShmemLayout ShmemSession::getLayout() const {
     return m_impl->layout;
 }
 
+uint32_t ShmemSession::getMaxProcs() const {
+    if (m_impl->layout == ShmemLayout::NATIVE) {
+        return cbMAXPROCS;
+    } else {
+        return m_impl->adapter->getMaxProcs();
+    }
+}
+
+cbproto_protocol_version_t ShmemSession::getCompatProtocolVersion() const {
+    return m_impl->compat_protocol;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Instrument Status Management
 
-Result<bool> ShmemSession::isInstrumentActive(cbproto::InstrumentId id) const {
+Result<bool> ShmemSession::isInstrumentActive() const {
     if (!isOpen()) {
         return Result<bool>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<bool>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<bool>::error("Native mode: single instrument only (index 0)");
-        }
         bool active = (m_impl->nativeCfg()->instrument_status == static_cast<uint32_t>(InstrumentStatus::ACTIVE));
         return Result<bool>::ok(active);
     } else {
@@ -909,112 +915,64 @@ Result<bool> ShmemSession::isInstrumentActive(cbproto::InstrumentId id) const {
     }
 }
 
-Result<void> ShmemSession::setInstrumentActive(cbproto::InstrumentId id, bool active) {
+Result<void> ShmemSession::setInstrumentActive(bool active) {
     if (!isOpen()) {
         return Result<void>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<void>::error("Invalid instrument ID");
-    }
 
-    uint8_t idx = id.toIndex();
     uint32_t val = active ? static_cast<uint32_t>(InstrumentStatus::ACTIVE) : static_cast<uint32_t>(InstrumentStatus::INACTIVE);
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<void>::error("Native mode: single instrument only (index 0)");
-        }
         m_impl->nativeCfg()->instrument_status = val;
     } else {
-        return Result<void>::error("CENTRAL_COMPAT mode: instrument status is read-only (no instrument_status field in Central's layout)");
+        return Result<void>::error("CENTRAL mode: instrument status is read-only (no instrument_status field in Central's layout)");
     }
 
     return Result<void>::ok();
 }
 
-Result<cbproto::InstrumentId> ShmemSession::getFirstActiveInstrument() const {
-    if (!isOpen()) {
-        return Result<cbproto::InstrumentId>::error("Session not open");
-    }
-
-    if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (m_impl->nativeCfg()->instrument_status == static_cast<uint32_t>(InstrumentStatus::ACTIVE)) {
-            return Result<cbproto::InstrumentId>::ok(cbproto::InstrumentId::fromIndex(0));
-        }
-    } else {
-        // No instrument_status in legacy layout; return first instrument (always "active")
-        return Result<cbproto::InstrumentId>::ok(cbproto::InstrumentId::fromIndex(0));
-    }
-
-    return Result<cbproto::InstrumentId>::error("No active instruments");
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Configuration Read Operations
 
-Result<cbPKT_PROCINFO> ShmemSession::getProcInfo(cbproto::InstrumentId id) const {
+Result<cbPKT_PROCINFO> ShmemSession::getProcInfo() const {
     if (!isOpen()) {
         return Result<cbPKT_PROCINFO>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<cbPKT_PROCINFO>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<cbPKT_PROCINFO>::error("Native mode: single instrument only");
-        }
         return Result<cbPKT_PROCINFO>::ok(m_impl->nativeCfg()->procinfo);
     } else {
-        return m_impl->adapter->getProcInfo(idx);
+        return m_impl->adapter->getProcInfo();
     }
 }
 
-Result<cbPKT_BANKINFO> ShmemSession::getBankInfo(cbproto::InstrumentId id, uint32_t bank) const {
+Result<cbPKT_BANKINFO> ShmemSession::getBankInfo(uint32_t bank) const {
     if (!isOpen()) {
         return Result<cbPKT_BANKINFO>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<cbPKT_BANKINFO>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<cbPKT_BANKINFO>::error("Native mode: single instrument only");
-        }
         if (bank == 0 || bank > NATIVE_MAXBANKS) {
             return Result<cbPKT_BANKINFO>::error("Bank number out of range");
         }
         return Result<cbPKT_BANKINFO>::ok(m_impl->nativeCfg()->bankinfo[bank - 1]);
     } else {
-        return m_impl->adapter->getBankInfo(idx, bank);
+        return m_impl->adapter->getBankInfo(bank);
     }
 }
 
-Result<cbPKT_FILTINFO> ShmemSession::getFilterInfo(cbproto::InstrumentId id, uint32_t filter) const {
+Result<cbPKT_FILTINFO> ShmemSession::getFilterInfo(uint32_t filter) const {
     if (!isOpen()) {
         return Result<cbPKT_FILTINFO>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<cbPKT_FILTINFO>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<cbPKT_FILTINFO>::error("Native mode: single instrument only");
-        }
         if (filter == 0 || filter > NATIVE_MAXFILTS) {
             return Result<cbPKT_FILTINFO>::error("Filter number out of range");
         }
         return Result<cbPKT_FILTINFO>::ok(m_impl->nativeCfg()->filtinfo[filter - 1]);
     } else {
-        return m_impl->adapter->getFilterInfo(idx, filter);
+        return m_impl->adapter->getFilterInfo(filter);
     }
 }
 
@@ -1045,26 +1003,18 @@ Result<cbPKT_SYSINFO> ShmemSession::getSysInfo() const {
     }
 }
 
-Result<cbPKT_GROUPINFO> ShmemSession::getGroupInfo(cbproto::InstrumentId id, uint32_t group) const {
+Result<cbPKT_GROUPINFO> ShmemSession::getGroupInfo(uint32_t group) const {
     if (!isOpen()) {
         return Result<cbPKT_GROUPINFO>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<cbPKT_GROUPINFO>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<cbPKT_GROUPINFO>::error("Native mode: single instrument only");
-        }
         if (group >= NATIVE_MAXGROUPS) {
             return Result<cbPKT_GROUPINFO>::error("Group index out of range");
         }
         return Result<cbPKT_GROUPINFO>::ok(m_impl->nativeCfg()->groupinfo[group]);
     } else {
-        return m_impl->adapter->getGroupInfo(idx, group);
+        return m_impl->adapter->getGroupInfo(group);
     }
 }
 
@@ -1072,72 +1022,48 @@ Result<cbPKT_GROUPINFO> ShmemSession::getGroupInfo(cbproto::InstrumentId id, uin
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Configuration Write Operations
 
-Result<void> ShmemSession::setProcInfo(cbproto::InstrumentId id, const cbPKT_PROCINFO& info) {
+Result<void> ShmemSession::setProcInfo(const cbPKT_PROCINFO& info) {
     if (!isOpen()) {
         return Result<void>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<void>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<void>::error("Native mode: single instrument only");
-        }
         m_impl->nativeCfg()->procinfo = info;
         return Result<void>::ok();
     } else {
-        return m_impl->adapter->setProcInfo(idx, info);
+        return m_impl->adapter->setProcInfo(info);
     }
 }
 
-Result<void> ShmemSession::setBankInfo(cbproto::InstrumentId id, uint32_t bank, const cbPKT_BANKINFO& info) {
+Result<void> ShmemSession::setBankInfo(uint32_t bank, const cbPKT_BANKINFO& info) {
     if (!isOpen()) {
         return Result<void>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<void>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<void>::error("Native mode: single instrument only");
-        }
         if (bank == 0 || bank > NATIVE_MAXBANKS) {
             return Result<void>::error("Bank number out of range");
         }
         m_impl->nativeCfg()->bankinfo[bank - 1] = info;
         return Result<void>::ok();
     } else {
-        return m_impl->adapter->setBankInfo(idx, bank, info);
+        return m_impl->adapter->setBankInfo(bank, info);
     }
 }
 
-Result<void> ShmemSession::setFilterInfo(cbproto::InstrumentId id, uint32_t filter, const cbPKT_FILTINFO& info) {
+Result<void> ShmemSession::setFilterInfo(uint32_t filter, const cbPKT_FILTINFO& info) {
     if (!isOpen()) {
         return Result<void>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<void>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<void>::error("Native mode: single instrument only");
-        }
         if (filter == 0 || filter > NATIVE_MAXFILTS) {
             return Result<void>::error("Filter number out of range");
         }
         m_impl->nativeCfg()->filtinfo[filter - 1] = info;
         return Result<void>::ok();
     } else {
-        return m_impl->adapter->setFilterInfo(idx, filter, info);
+        return m_impl->adapter->setFilterInfo( filter, info);
     }
 }
 
@@ -1170,27 +1096,19 @@ Result<void> ShmemSession::setSysInfo(const cbPKT_SYSINFO& info) {
     }
 }
 
-Result<void> ShmemSession::setGroupInfo(cbproto::InstrumentId id, uint32_t group, const cbPKT_GROUPINFO& info) {
+Result<void> ShmemSession::setGroupInfo(uint32_t group, const cbPKT_GROUPINFO& info) {
     if (!isOpen()) {
         return Result<void>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<void>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<void>::error("Native mode: single instrument only");
-        }
         if (group >= NATIVE_MAXGROUPS) {
             return Result<void>::error("Group index out of range");
         }
         m_impl->nativeCfg()->groupinfo[group] = info;
         return Result<void>::ok();
     } else {
-        return m_impl->adapter->setGroupInfo(idx, group, info);
+        return m_impl->adapter->setGroupInfo(group, info);
     }
 
 }
@@ -1212,12 +1130,11 @@ const NativeConfigBuffer* ShmemSession::getNativeConfigBuffer() const {
     return m_impl->nativeCfg();
 }
 
-Result<NativeConfigBuffer> ShmemSession::getLegacyConfigBuffer(cbproto::InstrumentId id) {
+Result<NativeConfigBuffer> ShmemSession::getLegacyConfigBuffer() {
     if (!isOpen() || m_impl->layout != ShmemLayout::CENTRAL) {
         return Result<NativeConfigBuffer>::error("Not open or invalid layout");
     }
-    uint8_t idx = id.toIndex();
-    return m_impl->adapter->getConfigBuffer(idx);
+    return m_impl->adapter->getConfigBuffer();
 }
 
 Result<void> ShmemSession::storePacket(const cbPKT_GENERIC& pkt) {
@@ -1266,7 +1183,7 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
         return Result<void>::error("Transmit buffer not initialized");
     }
 
-    // In CENTRAL_COMPAT mode with an older protocol, translate to the legacy format
+    // In CENTRAL mode with an older protocol, translate to the legacy format
     const bool needs_translation = (m_impl->layout == ShmemLayout::CENTRAL &&
                                      m_impl->compat_protocol != CBPROTO_PROTOCOL_CURRENT);
 
@@ -1586,7 +1503,7 @@ Result<uint32_t> ShmemSession::getNumTotalChans() const {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         return Result<uint32_t>::ok(static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nNumTotalChans);
     } else {
-        auto status = m_impl->adapter->getPcStatus(0); // instrument idx doesn't matter for m_nNumTotalChans (brittle)
+        auto status = m_impl->adapter->getPcStatus();
         if (status.isError()) {
             return Result<uint32_t>::error("Unable to fetch PC status");
         }
@@ -1594,7 +1511,7 @@ Result<uint32_t> ShmemSession::getNumTotalChans() const {
     }
 }
 
-Result<NativeNSPStatus> ShmemSession::getNspStatus(cbproto::InstrumentId id) const {
+Result<NativeNSPStatus> ShmemSession::getNspStatus() const {
     if (!m_impl || !m_impl->is_open) {
         return Result<NativeNSPStatus>::error("Session is not open");
     }
@@ -1602,18 +1519,10 @@ Result<NativeNSPStatus> ShmemSession::getNspStatus(cbproto::InstrumentId id) con
         return Result<NativeNSPStatus>::error("Status buffer not initialized");
     }
 
-    uint32_t index = id.toIndex();
-
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (index != 0) {
-            return Result<NativeNSPStatus>::error("Native mode: single instrument only");
-        }
         return Result<NativeNSPStatus>::ok(static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nNspStatus);
     } else {
-        if (index >= central::cbMAXPROCS) {
-            return Result<NativeNSPStatus>::error("Invalid instrument ID");
-        }
-        auto status = m_impl->adapter->getPcStatus(index);
+        auto status = m_impl->adapter->getPcStatus();
         if (status.isError()) {
             return Result<NativeNSPStatus>::error("Unable to fetch PC status");
         }
@@ -1621,7 +1530,7 @@ Result<NativeNSPStatus> ShmemSession::getNspStatus(cbproto::InstrumentId id) con
     }
 }
 
-Result<void> ShmemSession::setNspStatus(cbproto::InstrumentId id, NativeNSPStatus status) {
+Result<void> ShmemSession::setNspStatus(NativeNSPStatus status) {
     if (!m_impl || !m_impl->is_open) {
         return Result<void>::error("Session is not open");
     }
@@ -1629,23 +1538,15 @@ Result<void> ShmemSession::setNspStatus(cbproto::InstrumentId id, NativeNSPStatu
         return Result<void>::error("Status buffer not initialized");
     }
 
-    uint32_t index = id.toIndex();
-
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (index != 0) {
-            return Result<void>::error("Native mode: single instrument only");
-        }
         static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nNspStatus = status;
     } else {
-        if (index >= central::cbMAXPROCS) {
-            return Result<void>::error("Invalid instrument ID");
-        }
-        auto pc_status = m_impl->adapter->getPcStatus(index);
+        auto pc_status = m_impl->adapter->getPcStatus();
         if (pc_status.isError()) {
             return Result<void>::error("Unable to fetch PC status");
         }
         pc_status.value().m_nNspStatus = status;
-        return m_impl->adapter->setPcStatus(index, pc_status.value());
+        return m_impl->adapter->setPcStatus(pc_status.value());
     }
 
     return Result<void>::ok();
@@ -1662,7 +1563,7 @@ Result<bool> ShmemSession::isGeminiSystem() const {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         return Result<bool>::ok(static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nGeminiSystem != 0);
     } else {
-        auto status = m_impl->adapter->getPcStatus(0); // instrument idx doesn't matter for m_nGeminiSystem (brittle)
+        auto status = m_impl->adapter->getPcStatus();
         if (status.isError()) {
             return Result<bool>::error("Unable to fetch PC status");
         }
@@ -1681,12 +1582,12 @@ Result<void> ShmemSession::setGeminiSystem(bool is_gemini) {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nGeminiSystem = is_gemini ? 1 : 0;
     } else {
-        auto status = m_impl->adapter->getPcStatus(0); // instrument idx doesn't matter for m_nGeminiSystem (brittle)
+        auto status = m_impl->adapter->getPcStatus();
         if (status.isError()) {
             return Result<void>::error("Unable to fetch PC status");
         }
         status.value().m_nGeminiSystem = is_gemini ? 1 : 0;
-        return m_impl->adapter->setPcStatus(0, status.value()); // instrument idx doesn't matter for m_nGeminiSystem (brittle)
+        return m_impl->adapter->setPcStatus(status.value());
     }
 
     return Result<void>::ok();
@@ -1885,7 +1786,7 @@ PROCTIME ShmemSession::getLastTime() const {
         return 0;
     }
     PROCTIME t = m_impl->adapter->getRecLasttime();
-    // In CENTRAL_COMPAT mode, Central writes lasttime using the device's native
+    // In CENTRAL mode, Central writes lasttime using the device's native
     // timestamp unit.  Non-Gemini devices use clock ticks; convert to nanoseconds
     // for consistency with readReceiveBuffer() which translates packet timestamps.
     if (t != 0 && m_impl->layout == ShmemLayout::CENTRAL) {
@@ -1898,21 +1799,6 @@ PROCTIME ShmemSession::getLastTime() const {
         }
     }
     return t;
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-// Instrument Filtering
-
-void ShmemSession::setInstrumentFilter(int32_t instrument_index) {
-    m_impl->instrument_filter = instrument_index;
-}
-
-int32_t ShmemSession::getInstrumentFilter() const {
-    return m_impl->instrument_filter;
-}
-
-cbproto_protocol_version_t ShmemSession::getCompatProtocolVersion() const {
-    return m_impl->compat_protocol;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2097,7 +1983,7 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             }
         }
 
-        // Non-Gemini CENTRAL_COMPAT: convert header timestamp from clock ticks to nanoseconds.
+        // Non-Gemini CENTRAL: convert header timestamp from clock ticks to nanoseconds.
         // Applied after both translation and non-translation paths.
         if (needs_ts_conversion) {
             packets[packets_read].cbpkt_header.time =
@@ -2111,12 +1997,9 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             m_impl->rec_tailwrap++;
         }
 
-        // Apply instrument filter: skip packets not matching our instrument
-        if (m_impl->instrument_filter >= 0) {
-            uint8_t pkt_instrument = packets[packets_read].cbpkt_header.instrument;
-            if (pkt_instrument != static_cast<uint8_t>(m_impl->instrument_filter)) {
-                continue;  // Skip this packet, don't increment packets_read
-            }
+        uint8_t pkt_instrument = packets[packets_read].cbpkt_header.instrument;
+        if (pkt_instrument != m_impl->inst.toIndex()) {
+            continue;  // Skip this packet, don't increment packets_read
         }
 
         packets_read++;
@@ -2167,7 +2050,7 @@ void ShmemSession::setClockSync(int64_t offset_ns, int64_t uncertainty_ns) {
         cfg->clock_uncertainty_ns = uncertainty_ns;
         cfg->clock_sync_valid = 1;
     }
-    // CENTRAL and CENTRAL_COMPAT layouts don't have clock sync fields
+    // The CENTRAL layout doesn't have clock sync fields
 }
 
 std::optional<int64_t> ShmemSession::getClockOffsetNs() const {

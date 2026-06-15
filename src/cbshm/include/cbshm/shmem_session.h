@@ -67,6 +67,7 @@ public:
     /// @{
 
     /// @brief Create a new shared memory session
+    /// @param id Instrument ID (1-based)
     /// @param cfg_name Config buffer shared memory name (e.g., "cbCFGbuffer")
     /// @param rec_name Receive buffer shared memory name (e.g., "cbRECbuffer")
     /// @param xmt_name Transmit buffer shared memory name (e.g., "XmtGlobal")
@@ -77,7 +78,7 @@ public:
     /// @param mode Operating mode (STANDALONE or CLIENT)
     /// @param layout Buffer layout (CENTRAL or NATIVE, default CENTRAL for backward compat)
     /// @return Result containing ShmemSession on success, error message on failure
-    static Result<ShmemSession> create(const std::string& cfg_name, const std::string& rec_name,
+    static Result<ShmemSession> create(cbproto::InstrumentId id, const std::string& cfg_name, const std::string& rec_name,
                                         const std::string& xmt_name, const std::string& xmt_local_name,
                                         const std::string& status_name, const std::string& spk_name,
                                         const std::string& signal_event_name, Mode mode,
@@ -110,26 +111,28 @@ public:
     /// @return CENTRAL or NATIVE
     ShmemLayout getLayout() const;
 
+    /// @brief Get the maximum number of instruments
+    ///
+    /// With the NATIVE layout, always returns 1.
+    /// With the CENTRAL layout, returns the value of cbMAXPROCS.
+    ///
+    /// @return the maximum instrument count
+    uint32_t getMaxProcs() const;
+
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
-    /// @name Instrument Status (CRITICAL for multi-instrument)
+    /// @name Instrument Status
     /// @{
 
     /// @brief Get instrument active status
-    /// @param id Instrument ID (1-based)
     /// @return true if instrument is active in shared memory
-    Result<bool> isInstrumentActive(cbproto::InstrumentId id) const;
+    Result<bool> isInstrumentActive() const;
 
     /// @brief Set instrument active status
-    /// @param id Instrument ID (1-based)
     /// @param active true to mark active, false to mark inactive
     /// @return Result indicating success or failure
-    Result<void> setInstrumentActive(cbproto::InstrumentId id, bool active);
-
-    /// @brief Get first active instrument ID
-    /// @return InstrumentId of first active instrument, or error if none active
-    Result<cbproto::InstrumentId> getFirstActiveInstrument() const;
+    Result<void> setInstrumentActive(bool active);
 
     /// @}
 
@@ -137,22 +140,19 @@ public:
     /// @name Configuration Read Operations
     /// @{
 
-    /// @brief Get processor information for specified instrument
-    /// @param id Instrument ID (1-based, e.g., cbNSP1)
+    /// @brief Get processor information
     /// @return cbPKT_PROCINFO structure on success
-    Result<cbPKT_PROCINFO> getProcInfo(cbproto::InstrumentId id) const;
+    Result<cbPKT_PROCINFO> getProcInfo() const;
 
     /// @brief Get bank information
-    /// @param id Instrument ID (1-based)
     /// @param bank Bank number (1-based, as used in cbPKT_BANKINFO)
     /// @return cbPKT_BANKINFO structure on success
-    Result<cbPKT_BANKINFO> getBankInfo(cbproto::InstrumentId id, uint32_t bank) const;
+    Result<cbPKT_BANKINFO> getBankInfo(uint32_t bank) const;
 
     /// @brief Get filter information
-    /// @param id Instrument ID (1-based)
     /// @param filter Filter number (1-based, as used in cbPKT_FILTINFO)
     /// @return cbPKT_FILTINFO structure on success
-    Result<cbPKT_FILTINFO> getFilterInfo(cbproto::InstrumentId id, uint32_t filter) const;
+    Result<cbPKT_FILTINFO> getFilterInfo(uint32_t filter) const;
 
     /// @brief Get channel information
     /// @param channel Channel number (0-based, global across all instruments)
@@ -164,11 +164,10 @@ public:
     Result<cbPKT_SYSINFO> getSysInfo() const;
     
     /// @brief Get sample group information
-    /// @param id Instrument ID (1-based)
     /// @param group Group number (0-based, 0 to cbMAXGROUPS-1)
     /// @param info cbPKT_GROUPINFO structure to write
     /// @return Result indicating success or failure
-    Result<cbPKT_GROUPINFO> getGroupInfo(cbproto::InstrumentId id, uint32_t group) const;
+    Result<cbPKT_GROUPINFO> getGroupInfo(uint32_t group) const;
 
     /// @}
 
@@ -176,25 +175,22 @@ public:
     /// @name Configuration Write Operations
     /// @{
 
-    /// @brief Set processor information for specified instrument
-    /// @param id Instrument ID (1-based)
+    /// @brief Set processor information
     /// @param info cbPKT_PROCINFO structure to write
     /// @return Result indicating success or failure
-    Result<void> setProcInfo(cbproto::InstrumentId id, const cbPKT_PROCINFO& info);
+    Result<void> setProcInfo(const cbPKT_PROCINFO& info);
 
     /// @brief Set bank information
-    /// @param id Instrument ID (1-based)
     /// @param bank Bank number (0-based)
     /// @param info cbPKT_BANKINFO structure to write
     /// @return Result indicating success or failure
-    Result<void> setBankInfo(cbproto::InstrumentId id, uint32_t bank, const cbPKT_BANKINFO& info);
+    Result<void> setBankInfo(uint32_t bank, const cbPKT_BANKINFO& info);
 
     /// @brief Set filter information
-    /// @param id Instrument ID (1-based)
     /// @param filter Filter number (0-based)
     /// @param info cbPKT_FILTINFO structure to write
     /// @return Result indicating success or failure
-    Result<void> setFilterInfo(cbproto::InstrumentId id, uint32_t filter, const cbPKT_FILTINFO& info);
+    Result<void> setFilterInfo(uint32_t filter, const cbPKT_FILTINFO& info);
 
     /// @brief Set channel information
     /// @param channel Channel number (0-based)
@@ -208,11 +204,10 @@ public:
     Result<void> setSysInfo(const cbPKT_SYSINFO& info);
 
     /// @brief Set sample group information
-    /// @param id Instrument ID (1-based)
     /// @param group Group number (0-based, 0 to cbMAXGROUPS-1)
     /// @param info cbPKT_GROUPINFO structure to write
     /// @return Result indicating success or failure
-    Result<void> setGroupInfo(cbproto::InstrumentId id, uint32_t group, const cbPKT_GROUPINFO& info);
+    Result<void> setGroupInfo(uint32_t group, const cbPKT_GROUPINFO& info);
 
     /// @}
 
@@ -229,9 +224,8 @@ public:
     const NativeConfigBuffer* getNativeConfigBuffer() const;
 
     /// @brief Get a translated copy of Central's configuration buffer
-    /// @param id Instrument ID (1-based)
     /// @return Result::value containing the configuration buffer, or Result::error if not CENTRAL layout
-    Result<NativeConfigBuffer> getLegacyConfigBuffer(cbproto::InstrumentId id);
+    Result<NativeConfigBuffer> getLegacyConfigBuffer();
 
     /// @}
 
@@ -354,16 +348,14 @@ public:
     /// @return Total channel count
     Result<uint32_t> getNumTotalChans() const;
 
-    /// @brief Get NSP status for specified instrument
-    /// @param id Instrument ID (1-based)
+    /// @brief Get NSP status
     /// @return NSP status (INIT, NOIPADDR, NOREPLY, FOUND, INVALID)
-    Result<NativeNSPStatus> getNspStatus(cbproto::InstrumentId id) const;
+    Result<NativeNSPStatus> getNspStatus() const;
 
-    /// @brief Set NSP status for specified instrument
-    /// @param id Instrument ID (1-based)
+    /// @brief Set NSP status
     /// @param status NSP status to set
     /// @return Result indicating success or failure
-    Result<void> setNspStatus(cbproto::InstrumentId id, NativeNSPStatus status);
+    Result<void> setNspStatus(NativeNSPStatus status);
 
     /// @brief Check if system is configured as Gemini
     /// @return true if Gemini system, false otherwise
@@ -403,33 +395,14 @@ public:
 
     /// @}
 
-    ///////////////////////////////////////////////////////////////////////////
-    /// @name Instrument Filtering (CENTRAL_COMPAT mode)
-    /// @{
-
-    /// @brief Set instrument filter for receive buffer reads
+    /// @brief Get detected protocol version for CENTRAL mode
     ///
-    /// In CENTRAL_COMPAT mode, Central's receive buffer contains packets from ALL
-    /// instruments. This filter causes readReceiveBuffer() to only return packets
-    /// matching the specified instrument index.
-    ///
-    /// @param instrument_index 0-based instrument index to filter for, or -1 for no filter (default)
-    void setInstrumentFilter(int32_t instrument_index);
-
-    /// @brief Get current instrument filter
-    /// @return Current filter (-1 = no filter)
-    int32_t getInstrumentFilter() const;
-
-    /// @brief Get detected protocol version for CENTRAL_COMPAT mode
-    ///
-    /// In CENTRAL_COMPAT mode, Central may store packets in an older protocol format.
-    /// This returns the detected protocol version based on procinfo[0].version.
-    /// Returns CBPROTO_PROTOCOL_CURRENT for CENTRAL and NATIVE layouts.
+    /// In CENTRAL mode, Central may store packets in an older protocol format.
+    /// This returns the detected protocol version based on Central's executable
+    /// file. Returns CBPROTO_PROTOCOL_CURRENT for the NATIVE layout.
     ///
     /// @return Detected protocol version
     cbproto_protocol_version_t getCompatProtocolVersion() const;
-
-    /// @}
 
     ///////////////////////////////////////////////////////////////////////////
     /// @name Receive Buffer Access (Ring Buffer for Incoming Packets)
@@ -495,9 +468,9 @@ public:
     /// @brief Get last timestamp from receive buffer (always nanoseconds)
     ///
     /// Returns the most recent packet timestamp written to the receive buffer.
-    /// In CENTRAL_COMPAT mode with a non-Gemini device the raw value (clock
-    /// ticks) is converted to nanoseconds using sysfreq, so callers always
-    /// receive a uniform nanosecond timestamp.
+    /// In CENTRAL mode with a non-Gemini device the raw value (clock ticks)
+    /// is converted to nanoseconds using sysfreq, so callers always receive a
+    /// uniform nanosecond timestamp.
     ///
     /// @return Last timestamp in nanoseconds, or 0 if receive buffer not initialized
     PROCTIME getLastTime() const;

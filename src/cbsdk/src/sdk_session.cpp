@@ -396,7 +396,7 @@ struct SdkSession::Impl {
                 const auto* p = device_session->getChanInfo(chan_id);
                 if (p && p->chan > 0) { ci = *p; valid = true; }
             } else if (shmem_session) {
-                auto r = shmem_session->getChanInfo(chan_id);
+                auto r = shmem_session->getChanInfo(chan_id - 1);
                 if (r.isOk() && r.value().chan > 0) { ci = r.value(); valid = true; }
             }
             if (!valid) continue;
@@ -406,7 +406,7 @@ struct SdkSession::Impl {
             ci.label[sizeof(ci.label) - 1] = '\0';
 
             if (shmem_session) {
-                shmem_session->setChanInfo(chan_id - 1, ci);
+                shmem_session->setChanInfo(chan_id, ci);
             }
         }
     }
@@ -719,17 +719,11 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     std::string central_spk = getCentralSpikeBufferName(config.device_type);
     std::string central_signal = getCentralSignalEventName(config.device_type);
 
+    auto inst = cbproto::InstrumentId::fromIndex(getCentralInstrumentIndex(config.device_type));
     auto shmem_result = cbshm::ShmemSession::create(
-        central_cfg, central_rec, central_xmt, central_xmt_local,
+        inst, central_cfg, central_rec, central_xmt, central_xmt_local,
         central_status, central_spk, central_signal,
         cbshm::Mode::CLIENT, cbshm::ShmemLayout::CENTRAL);
-
-    if (shmem_result.isOk()) {
-        // Set instrument filter for CENTRAL_COMPAT mode (Central's receive buffer
-        // contains packets from ALL instruments; we only want our device's packets)
-        int32_t inst_idx = getCentralInstrumentIndex(config.device_type);
-        shmem_result.value().setInstrumentFilter(inst_idx);
-    }
 
     if (shmem_result.isError()) {
         // --- Attempt 2: Native CLIENT mode ---
@@ -743,6 +737,7 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
         std::string native_signal = getNativeSegmentName(config.device_type, "signal");
 
         shmem_result = cbshm::ShmemSession::create(
+            cbproto::InstrumentId::fromIndex(0),
             native_cfg, native_rec, native_xmt, native_xmt_local,
             native_status, native_spk, native_signal,
             cbshm::Mode::CLIENT, cbshm::ShmemLayout::NATIVE);
@@ -759,6 +754,7 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
             // --- Attempt 3: Native STANDALONE mode ---
             // No existing shared memory found, create new native-mode segments
             shmem_result = cbshm::ShmemSession::create(
+                cbproto::InstrumentId::fromIndex(0),
                 native_cfg, native_rec, native_xmt, native_xmt_local,
                 native_status, native_spk, native_signal,
                 cbshm::Mode::STANDALONE, cbshm::ShmemLayout::NATIVE);
@@ -921,9 +917,7 @@ Result<void> SdkSession::start() {
                 // can read device configuration (chaninfo, procinfo, sysinfo, groupinfo).
                 if (pkt.cbpkt_header.type == cbPKTTYPE_PROCREP) {
                     const auto* procinfo = reinterpret_cast<const cbPKT_PROCINFO*>(&pkt);
-                    impl->shmem_session->setProcInfo(
-                        cbproto::InstrumentId::fromPacketField(pkt.cbpkt_header.instrument),
-                        *procinfo);
+                    impl->shmem_session->setProcInfo(*procinfo);
                 }
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
                     const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
@@ -932,9 +926,7 @@ Result<void> SdkSession::start() {
                 if (pkt.cbpkt_header.type == cbPKTTYPE_GROUPREP) {
                     const auto* groupinfo = reinterpret_cast<const cbPKT_GROUPINFO*>(&pkt);
                     if (groupinfo->group >= 1 && groupinfo->group <= cbMAXGROUPS) {
-                        impl->shmem_session->setGroupInfo(
-                            cbproto::InstrumentId::fromPacketField(pkt.cbpkt_header.instrument),
-                            groupinfo->group - 1, *groupinfo);
+                        impl->shmem_session->setGroupInfo(groupinfo->group - 1, *groupinfo);
                     }
                 }
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
@@ -1430,8 +1422,7 @@ Result<cbPKT_GROUPINFO> SdkSession::getGroupInfo(uint32_t group_id) const {
         return Result<cbPKT_GROUPINFO>::ok(config.groupinfo[group_id - 1]);
     }
     if (m_impl->shmem_session) {
-        auto inst = cbproto::InstrumentId::fromIndex(getCentralInstrumentIndex(m_impl->config.device_type));
-        return m_impl->shmem_session->getGroupInfo(inst, group_id);
+        return m_impl->shmem_session->getGroupInfo(group_id - 1);
     }
     return Result<cbPKT_GROUPINFO>::error("Group information not available");
 }
@@ -1478,8 +1469,7 @@ Result<cbPKT_FILTINFO> SdkSession::getFilterInfo(const uint32_t filter_id) const
         return Result<cbPKT_FILTINFO>::ok(config.filtinfo[filter_id]);
     }
     if (m_impl->shmem_session) {
-        auto inst = cbproto::InstrumentId::fromIndex(getCentralInstrumentIndex(m_impl->config.device_type));
-        return m_impl->shmem_session->getFilterInfo(inst, filter_id);
+        return m_impl->shmem_session->getFilterInfo(filter_id);
     }
     return Result<cbPKT_FILTINFO>::error("Filter information not available");
 }
@@ -1524,10 +1514,7 @@ std::string SdkSession::getProcIdent() const {
             return std::string(native->procinfo.ident,
                 strnlen(native->procinfo.ident, sizeof(native->procinfo.ident)));
         } else {
-            int32_t inst_idx = getCentralInstrumentIndex(m_impl->config.device_type);
-            auto inst = cbproto::InstrumentId::fromIndex(inst_idx);
-            // TODO: Check if inst >= 0?
-            auto procinfo = m_impl->shmem_session->getProcInfo(inst);
+            auto procinfo = m_impl->shmem_session->getProcInfo();
             if (procinfo.isError()) {
                 return {};
             }
