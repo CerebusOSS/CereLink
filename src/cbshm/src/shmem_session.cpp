@@ -1598,7 +1598,7 @@ Result<void> ShmemSession::getSpikeCache(uint32_t channel, NativeSpikeCache& cac
         if (channel >= NATIVE_cbPKT_SPKCACHELINECNT) {
             return Result<void>::error("Invalid channel number");
         }
-        // Copy from NativeSpikeCache to CentralSpikeCache (same field layout)
+        // Copy from the buffer (same field layout)
         auto* spike = static_cast<NativeSpikeBuffer*>(m_impl->spike_buffer_raw);
         auto& src = spike->cache[channel];
         cache.chid = src.chid;
@@ -1608,13 +1608,12 @@ Result<void> ShmemSession::getSpikeCache(uint32_t channel, NativeSpikeCache& cac
         cache.valid = src.valid;
         std::memcpy(cache.spkpkt, src.spkpkt, sizeof(cbPKT_SPK) * src.pktcnt);
     } else {
-        // TODO: Use adapter instead
-        if (channel >= central::cbPKT_SPKCACHELINECNT) {
-            return Result<void>::error("Invalid channel number");
+        auto res = m_impl->adapter->getSpikeCache(channel);
+        if (res.isError()) {
+            return Result<void>::error(res.error());
         }
-        auto* spike = static_cast<central::cbSPKBUFF*>(m_impl->spike_buffer_raw);
-        // // TODO: Implement fromLegacy for cbSPKCACHE
-        // cache = fromLegacy(spike->cache[channel]);
+        cache = res.value();
+        return Result<void>::ok();
     }
 
     return Result<void>::ok();
@@ -1641,19 +1640,17 @@ Result<bool> ShmemSession::getRecentSpike(uint32_t channel, cbPKT_SPK& spike) co
         spike = cache.spkpkt[recent_idx];
         return Result<bool>::ok(true);
     } else {
-        // TODO: Use adapter instead
-        if (channel >= central::cbPKT_SPKCACHELINECNT) {
-            return Result<bool>::error("Invalid channel number");
+        // TODO: Duplicate logic
+        auto res = m_impl->adapter->getSpikeCache(channel);
+        if (res.isError()) {
+            return Result<bool>::error(res.error());
         }
-        auto* buf = static_cast<central::cbSPKBUFF*>(m_impl->spike_buffer_raw);
-        const auto& cache = buf->cache[channel];
+        const auto& cache = res.value();
         if (cache.valid == 0) {
             return Result<bool>::ok(false);
         }
         uint32_t recent_idx = (cache.head == 0) ? (cache.pktcnt - 1) : (cache.head - 1);
-        // TODO: Use adapter instead
-        // TODO: Implement fromLegacy
-        // spike = central::fromLegacy(cache.spkpkt[recent_idx]);
+        spike = cache.spkpkt[recent_idx];
         return Result<bool>::ok(true);
     }
 }
@@ -1820,7 +1817,6 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
         return Result<void>::ok();
     }
 
-    // TODO: Use the Central adapter instead
     const bool needs_translation = (m_impl->layout == ShmemLayout::CENTRAL &&
                                      m_impl->compat_protocol != CBPROTO_PROTOCOL_CURRENT);
 
@@ -1835,7 +1831,7 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
         m_impl->status_buffer_raw) {
         auto gemini = isGeminiSystem();
         if (gemini.isOk() && !gemini.value()) {
-            uint32_t sysfreq = m_impl->adapter->getSysInfo().value().sysfreq; // TODO: Check
+            uint32_t sysfreq = m_impl->adapter->getSysInfo().value().sysfreq; // TODO: Check the return value
             if (sysfreq == 0) sysfreq = 30000;
             uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
             ts_num = 1000000000 / g;

@@ -550,6 +550,37 @@ NativeTransmitBufferLocal Adapter::fromLegacy(const cbXMTBUFFLOCAL& leg) const {
     return cur;
 }
 
+::cbPKT_SPK Adapter::fromLegacy(const cbPKT_SPK& leg) const {
+    ::cbPKT_SPK cur{};
+    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+    copyArr(cur.fPattern, leg.fPattern);
+    cur.nPeak = leg.nPeak;
+    cur.nValley = leg.nValley;
+    copyArr(cur.wave, leg.wave);
+    return cur;
+}
+
+NativeSpikeCache Adapter::fromLegacy(const cbSPKCACHE& leg) const {
+    NativeSpikeCache cur{};
+    cur.chid = leg.chid;
+    cur.pktcnt = leg.pktcnt;
+    cur.pktsize = leg.pktsize;
+    cur.head = leg.head;
+    cur.valid = leg.valid;
+    copyArr(cur.spkpkt, leg.spkpkt, this, &Adapter::fromLegacy);
+    return cur;
+}
+
+NativeSpikeBuffer Adapter::fromLegacy(const cbSPKBUFF& leg) const {
+    NativeSpikeBuffer cur{};
+    cur.flags = leg.flags;
+    cur.chidmax = leg.chidmax;
+    cur.linesize = leg.linesize;
+    cur.spkcount = leg.spkcount;
+    copyArr(cur.cache, leg.cache, this, &Adapter::fromLegacy);
+    return cur;
+}
+
 cbPKT_HEADER Adapter::toLegacy(const ::cbPKT_HEADER& cur) const {
     cbPKT_HEADER leg{};
     leg.time = cur.time;
@@ -1005,6 +1036,16 @@ cbXMTBUFFLOCAL Adapter::toLegacy(const NativeTransmitBufferLocal& cur) const {
     return leg;
 }
 
+cbPKT_SPK Adapter::toLegacy(const ::cbPKT_SPK& cur) const {
+    cbPKT_SPK leg{};
+    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+    copyArr(leg.fPattern, leg.fPattern);
+    leg.nPeak = cur.nPeak;
+    leg.nValley = cur.nValley;
+    copyArr(leg.wave, cur.wave);
+    return leg;
+}
+
 Adapter::Adapter(uint8_t instrument_idx, void* cfg_ptr, void* rec_ptr, void* xmt_ptr, void* xmt_local_ptr, void* status_ptr, void* spike_ptr)
     : instrument_idx(instrument_idx)
     , cfg(static_cast<cbCFGBUFF*>(cfg_ptr))
@@ -1153,6 +1194,13 @@ Result<NativePCStatus> Adapter::getPcStatus() const {
         return Result<NativePCStatus>::error("Instrument index out of range");
     }
     return Result<NativePCStatus>::ok(fromLegacy(*status));
+}
+
+Result<NativeSpikeCache> Adapter::getSpikeCache(uint32_t channel_idx) const {
+    if (channel_idx >= std::size(spike->cache)) {
+        return Result<NativeSpikeCache>::error("Channel index out of range");
+    }
+    return Result<NativeSpikeCache>::ok(fromLegacy(spike->cache[channel_idx]));
 }
 
 Result<void> Adapter::setProcInfo(const ::cbPKT_PROCINFO& info) {

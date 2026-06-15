@@ -147,6 +147,7 @@ public:
     virtual Result<::cbPKT_GROUPINFO> getGroupInfo(uint32_t group_idx) const = 0;
     virtual Result<NativeConfigBuffer> getConfigBuffer() const = 0;
     virtual Result<NativePCStatus> getPcStatus() const = 0;
+    virtual Result<NativeSpikeCache> getSpikeCache(uint32_t channel_idx) const = 0;
 
     /// Config write operations
     virtual Result<void> setProcInfo(const ::cbPKT_PROCINFO& info) = 0;
@@ -227,6 +228,9 @@ private:
     NativeReceiveBuffer fromLegacy(const cbRECBUFF& leg) const;
     NativeTransmitBuffer fromLegacy(const cbXMTBUFF& leg) const;
     NativeTransmitBufferLocal fromLegacy(const cbXMTBUFFLOCAL& leg) const;
+    ::cbPKT_SPK fromLegacy(const cbPKT_SPK& leg) const;
+    NativeSpikeCache fromLegacy(const cbSPKCACHE& leg) const;
+    NativeSpikeBuffer fromLegacy(const cbSPKBUFF& leg) const;
 
     cbPKT_HEADER toLegacy(const ::cbPKT_HEADER& cur) const;
     cbPKT_SYSINFO toLegacy(const ::cbPKT_SYSINFO& cur) const;
@@ -263,6 +267,7 @@ private:
     cbRECBUFF toLegacy(const NativeReceiveBuffer& cur) const;
     cbXMTBUFF toLegacy(const NativeTransmitBuffer& cur) const;
     cbXMTBUFFLOCAL toLegacy(const NativeTransmitBufferLocal& cur) const;
+    cbPKT_SPK toLegacy(const ::cbPKT_SPK& cur) const;
 
 public:
     Adapter(
@@ -311,6 +316,7 @@ public:
     Result<::cbPKT_GROUPINFO> getGroupInfo(uint32_t group_idx) const override;
     Result<NativeConfigBuffer> getConfigBuffer() const override;
     Result<NativePCStatus> getPcStatus() const override;
+    Result<NativeSpikeCache> getSpikeCache(uint32_t channel_idx) const override;
 
     /// Config write operations
     Result<void> setProcInfo(const ::cbPKT_PROCINFO& info) override;
@@ -393,6 +399,9 @@ private:
     NativeReceiveBuffer fromLegacy(const cbRECBUFF& leg) const;
     NativeTransmitBuffer fromLegacy(const cbXMTBUFF& leg) const;
     NativeTransmitBufferLocal fromLegacy(const cbXMTBUFFLOCAL& leg) const;
+    ::cbPKT_SPK fromLegacy(const cbPKT_SPK& leg) const;
+    NativeSpikeCache fromLegacy(const cbSPKCACHE& leg) const;
+    NativeSpikeBuffer fromLegacy(const cbSPKBUFF& leg) const;
 
     cbPKT_HEADER toLegacy(const ::cbPKT_HEADER& cur) const;
     cbPKT_SYSINFO toLegacy(const ::cbPKT_SYSINFO& cur) const;
@@ -429,6 +438,7 @@ private:
     cbRECBUFF toLegacy(const NativeReceiveBuffer& cur) const;
     cbXMTBUFF toLegacy(const NativeTransmitBuffer& cur) const;
     cbXMTBUFFLOCAL toLegacy(const NativeTransmitBufferLocal& cur) const;
+    cbPKT_SPK toLegacy(const ::cbPKT_SPK& cur) const;
 
 public:
     Adapter(
@@ -477,6 +487,7 @@ public:
     Result<::cbPKT_GROUPINFO> getGroupInfo(uint32_t group_idx) const override;
     Result<NativeConfigBuffer> getConfigBuffer() const override;
     Result<NativePCStatus> getPcStatus() const override;
+    Result<NativeSpikeCache> getSpikeCache(uint32_t channel_idx) const override;
 
     /// Config write operations
     Result<void> setProcInfo(const ::cbPKT_PROCINFO& info) override;
@@ -559,6 +570,9 @@ private:
     NativeReceiveBuffer fromLegacy(const cbRECBUFF& leg) const;
     NativeTransmitBuffer fromLegacy(const cbXMTBUFF& leg) const;
     NativeTransmitBufferLocal fromLegacy(const cbXMTBUFFLOCAL& leg) const;
+    ::cbPKT_SPK fromLegacy(const cbPKT_SPK& leg) const;
+    NativeSpikeCache fromLegacy(const cbSPKCACHE& leg) const;
+    NativeSpikeBuffer fromLegacy(const cbSPKBUFF& leg) const;
 
     cbPKT_HEADER toLegacy(const ::cbPKT_HEADER& cur) const;
     cbPKT_SYSINFO toLegacy(const ::cbPKT_SYSINFO& cur) const;
@@ -595,6 +609,7 @@ private:
     cbRECBUFF toLegacy(const NativeReceiveBuffer& cur) const;
     cbXMTBUFF toLegacy(const NativeTransmitBuffer& cur) const;
     cbXMTBUFFLOCAL toLegacy(const NativeTransmitBufferLocal& cur) const;
+    cbPKT_SPK toLegacy(const ::cbPKT_SPK& cur) const;
 
 public:
     Adapter(
@@ -643,6 +658,7 @@ public:
     Result<::cbPKT_GROUPINFO> getGroupInfo(uint32_t group_idx) const override;
     Result<NativeConfigBuffer> getConfigBuffer() const override;
     Result<NativePCStatus> getPcStatus() const override;
+    Result<NativeSpikeCache> getSpikeCache(uint32_t channel_idx) const override;
 
     /// Config write operations
     Result<void> setProcInfo(const ::cbPKT_PROCINFO& info) override;
@@ -725,6 +741,9 @@ private:
     NativeReceiveBuffer fromLegacy(const cbRECBUFF& leg) const;
     NativeTransmitBuffer fromLegacy(const cbXMTBUFF& leg) const;
     NativeTransmitBufferLocal fromLegacy(const cbXMTBUFFLOCAL& leg) const;
+    ::cbPKT_SPK fromLegacy(const cbPKT_SPK& leg) const;
+    NativeSpikeCache fromLegacy(const cbSPKCACHE& leg) const;
+    NativeSpikeBuffer fromLegacy(const cbSPKBUFF& leg) const;
 
     cbPKT_HEADER toLegacy(const ::cbPKT_HEADER& cur) const;
     cbPKT_SYSINFO toLegacy(const ::cbPKT_SYSINFO& cur) const;
@@ -761,6 +780,7 @@ private:
     cbRECBUFF toLegacy(const NativeReceiveBuffer& cur) const;
     cbXMTBUFF toLegacy(const NativeTransmitBuffer& cur) const;
     cbXMTBUFFLOCAL toLegacy(const NativeTransmitBufferLocal& cur) const;
+    cbPKT_SPK toLegacy(const ::cbPKT_SPK& cur) const;
 
 public:
     Adapter(
@@ -809,6 +829,7 @@ public:
     Result<::cbPKT_GROUPINFO> getGroupInfo(uint32_t group_idx) const override;
     Result<NativeConfigBuffer> getConfigBuffer() const override;
     Result<NativePCStatus> getPcStatus() const override;
+    Result<NativeSpikeCache> getSpikeCache(uint32_t channel_idx) const override;
 
     /// Config write operations
     Result<void> setProcInfo(const ::cbPKT_PROCINFO& info) override;
