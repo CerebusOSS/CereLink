@@ -516,7 +516,6 @@ NativePCStatus Adapter::fromLegacy(const cbPcStatus& leg) const {
     cur.m_nNspStatus = NativeNSPStatus::NSP_FOUND; // TODO: VERIFY
     cur.m_nNumNTrodesPerInstrument = cbMAXNTRODES; // TODO: VERIFY
     cur.m_nGeminiSystem = 1; // TODO: VERIFY
-    // ignore APP_WORKSPACE
     return cur;
 }
 
@@ -969,25 +968,6 @@ cbPKT_UNIT_SELECTION Adapter::toLegacy(const ::cbPKT_UNIT_SELECTION& cur) const 
     return leg;
 }
 
-cbPcStatus Adapter::toLegacy(const NativePCStatus& cur) const {
-    cbPcStatus leg{};
-    leg.isSelection[instrument_idx] = toLegacy(cur.isSelection);
-    leg.m_iBlockRecording = cur.m_iBlockRecording;
-    leg.m_nPCStatusFlags = cur.m_nPCStatusFlags;
-    leg.m_nNumFEChans = cur.m_nNumFEChans;
-    leg.m_nNumAnainChans = cur.m_nNumAnainChans;
-    leg.m_nNumAnalogChans = cur.m_nNumAnalogChans;
-    leg.m_nNumAoutChans = cur.m_nNumAoutChans;
-    leg.m_nNumAudioChans = cur.m_nNumAudioChans;
-    leg.m_nNumAnalogoutChans = cur.m_nNumAnalogoutChans;
-    leg.m_nNumDiginChans = cur.m_nNumDiginChans;
-    leg.m_nNumSerialChans = cur.m_nNumSerialChans;
-    leg.m_nNumDigoutChans = cur.m_nNumDigoutChans;
-    leg.m_nNumTotalChans = cur.m_nNumTotalChans;
-    // ignore APP_WORKSPACE
-    return leg;
-}
-
 cbRECBUFF Adapter::toLegacy(const NativeReceiveBuffer& cur) const {
     cbRECBUFF leg{};
     leg.received = cur.received;
@@ -1226,12 +1206,12 @@ Result<void> Adapter::setGroupInfo(uint32_t group_idx, const ::cbPKT_GROUPINFO& 
     return Result<void>::ok();
 }
 
-Result<void> Adapter::setPcStatus(const NativePCStatus& status) const {
-    if (instrument_idx >= std::size(this->status->isSelection)) {
-        return Result<void>::error("Instrument index out of range");
-    }
-    *(this->status) = toLegacy(status);
-    return Result<void>::ok();
+Result<void> Adapter::setNspStatus(const NativeNSPStatus& status) const {
+    return Result<void>::error("Central v3.11 does not have fields for NSP status");
+}
+
+Result<void> Adapter::setGeminiSystem(bool is_gemini) const {
+    return Result<void>::error("Central v3.11 does not recognize Gemini systems");
 }
 
 } // namespace central_v3_11

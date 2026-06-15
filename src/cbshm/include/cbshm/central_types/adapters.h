@@ -155,7 +155,8 @@ public:
     virtual Result<void> setChanInfo(uint32_t channel_idx, const ::cbPKT_CHANINFO& info) = 0;
     virtual Result<void> setSysInfo(const ::cbPKT_SYSINFO& info) = 0;
     virtual Result<void> setGroupInfo(uint32_t group_idx, const ::cbPKT_GROUPINFO& info) = 0;
-    virtual Result<void> setPcStatus(const NativePCStatus& status) const = 0; // TODO: currently single-instrument only!  needs to be multi-instrument safe
+    virtual Result<void> setNspStatus(const NativeNSPStatus& status) const = 0;
+    virtual Result<void> setGeminiSystem(bool is_gemini) const = 0;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -257,10 +258,8 @@ private:
     cbVIDEOSOURCE toLegacy(const ::cbVIDEOSOURCE& cur) const;
     cbTRACKOBJ toLegacy(const ::cbTRACKOBJ& cur) const;
     cbPKT_FILECFG toLegacy(const ::cbPKT_FILECFG& cur) const;
-    // cbCFGBUFF -> NativeConfigBuffer is a lossy translation and cannot be reversed
     NSPStatus toLegacy(const NativeNSPStatus& cur) const;
     cbPKT_UNIT_SELECTION toLegacy(const ::cbPKT_UNIT_SELECTION& cur) const;
-    cbPcStatus toLegacy(const NativePCStatus& cur) const;
     cbRECBUFF toLegacy(const NativeReceiveBuffer& cur) const;
     cbXMTBUFF toLegacy(const NativeTransmitBuffer& cur) const;
     cbXMTBUFFLOCAL toLegacy(const NativeTransmitBufferLocal& cur) const;
@@ -320,7 +319,8 @@ public:
     Result<void> setChanInfo(uint32_t channel_idx, const ::cbPKT_CHANINFO& info) override;
     Result<void> setSysInfo(const ::cbPKT_SYSINFO& info) override;
     Result<void> setGroupInfo(uint32_t group_idx, const ::cbPKT_GROUPINFO& info) override;
-    Result<void> setPcStatus(const NativePCStatus& status) const override;
+    Result<void> setNspStatus(const NativeNSPStatus& status) const override;
+    Result<void> setGeminiSystem(bool is_gemini) const override;
 };
 
 } // namespace central_v4_2
@@ -424,10 +424,8 @@ private:
     cbVIDEOSOURCE toLegacy(const ::cbVIDEOSOURCE& cur) const;
     cbTRACKOBJ toLegacy(const ::cbTRACKOBJ& cur) const;
     cbPKT_FILECFG toLegacy(const ::cbPKT_FILECFG& cur) const;
-    // cbCFGBUFF -> NativeConfigBuffer is a lossy translation and cannot be reversed
     NSPStatus toLegacy(const NativeNSPStatus& cur) const;
     cbPKT_UNIT_SELECTION toLegacy(const ::cbPKT_UNIT_SELECTION& cur) const;
-    cbPcStatus toLegacy(const NativePCStatus& cur) const;
     cbRECBUFF toLegacy(const NativeReceiveBuffer& cur) const;
     cbXMTBUFF toLegacy(const NativeTransmitBuffer& cur) const;
     cbXMTBUFFLOCAL toLegacy(const NativeTransmitBufferLocal& cur) const;
@@ -487,7 +485,8 @@ public:
     Result<void> setChanInfo(uint32_t channel_idx, const ::cbPKT_CHANINFO& info) override;
     Result<void> setSysInfo(const ::cbPKT_SYSINFO& info) override;
     Result<void> setGroupInfo(uint32_t group_idx, const ::cbPKT_GROUPINFO& info) override;
-    Result<void> setPcStatus(const NativePCStatus& status) const override;
+    Result<void> setNspStatus(const NativeNSPStatus& status) const override;
+    Result<void> setGeminiSystem(bool is_gemini) const override;
 };
 
 } // namespace central_v4_1
@@ -591,10 +590,8 @@ private:
     cbVIDEOSOURCE toLegacy(const ::cbVIDEOSOURCE& cur) const;
     cbTRACKOBJ toLegacy(const ::cbTRACKOBJ& cur) const;
     cbPKT_FILECFG toLegacy(const ::cbPKT_FILECFG& cur) const;
-    // cbCFGBUFF -> NativeConfigBuffer is a lossy translation and cannot be reversed
     NSPStatus toLegacy(const NativeNSPStatus& cur) const;
     cbPKT_UNIT_SELECTION toLegacy(const ::cbPKT_UNIT_SELECTION& cur) const;
-    cbPcStatus toLegacy(const NativePCStatus& cur) const;
     cbRECBUFF toLegacy(const NativeReceiveBuffer& cur) const;
     cbXMTBUFF toLegacy(const NativeTransmitBuffer& cur) const;
     cbXMTBUFFLOCAL toLegacy(const NativeTransmitBufferLocal& cur) const;
@@ -654,7 +651,8 @@ public:
     Result<void> setChanInfo(uint32_t channel_idx, const ::cbPKT_CHANINFO& info) override;
     Result<void> setSysInfo(const ::cbPKT_SYSINFO& info) override;
     Result<void> setGroupInfo(uint32_t group_idx, const ::cbPKT_GROUPINFO& info) override;
-    Result<void> setPcStatus(const NativePCStatus& status) const override;
+    Result<void> setNspStatus(const NativeNSPStatus& status) const override;
+    Result<void> setGeminiSystem(bool is_gemini) const override;
 };
 
 } // namespace central_v4_0
@@ -758,10 +756,8 @@ private:
     cbVIDEOSOURCE toLegacy(const ::cbVIDEOSOURCE& cur) const;
     cbTRACKOBJ toLegacy(const ::cbTRACKOBJ& cur) const;
     cbPKT_FILECFG toLegacy(const ::cbPKT_FILECFG& cur) const;
-    // cbCFGBUFF -> NativeConfigBuffer is a lossy translation and cannot be reversed
     NSPStatus toLegacy(const NativeNSPStatus& cur) const;
     cbPKT_UNIT_SELECTION toLegacy(const ::cbPKT_UNIT_SELECTION& cur) const;
-    cbPcStatus toLegacy(const NativePCStatus& cur) const;
     cbRECBUFF toLegacy(const NativeReceiveBuffer& cur) const;
     cbXMTBUFF toLegacy(const NativeTransmitBuffer& cur) const;
     cbXMTBUFFLOCAL toLegacy(const NativeTransmitBufferLocal& cur) const;
@@ -821,7 +817,8 @@ public:
     Result<void> setChanInfo(uint32_t channel_idx, const ::cbPKT_CHANINFO& info) override;
     Result<void> setSysInfo(const ::cbPKT_SYSINFO& info) override;
     Result<void> setGroupInfo(uint32_t group_idx, const ::cbPKT_GROUPINFO& info) override;
-    Result<void> setPcStatus(const NativePCStatus& status) const override;
+    Result<void> setNspStatus(const NativeNSPStatus& status) const override;
+    Result<void> setGeminiSystem(bool is_gemini) const override;
 };
 
 } // namespace central_v3_11

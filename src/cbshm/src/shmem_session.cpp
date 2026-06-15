@@ -1541,12 +1541,7 @@ Result<void> ShmemSession::setNspStatus(NativeNSPStatus status) {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nNspStatus = status;
     } else {
-        auto pc_status = m_impl->adapter->getPcStatus();
-        if (pc_status.isError()) {
-            return Result<void>::error("Unable to fetch PC status");
-        }
-        pc_status.value().m_nNspStatus = status;
-        return m_impl->adapter->setPcStatus(pc_status.value());
+        return m_impl->adapter->setNspStatus(status);
     }
 
     return Result<void>::ok();
@@ -1582,12 +1577,7 @@ Result<void> ShmemSession::setGeminiSystem(bool is_gemini) {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nGeminiSystem = is_gemini ? 1 : 0;
     } else {
-        auto status = m_impl->adapter->getPcStatus();
-        if (status.isError()) {
-            return Result<void>::error("Unable to fetch PC status");
-        }
-        status.value().m_nGeminiSystem = is_gemini ? 1 : 0;
-        return m_impl->adapter->setPcStatus(status.value());
+        return m_impl->adapter->setGeminiSystem(is_gemini);
     }
 
     return Result<void>::ok();

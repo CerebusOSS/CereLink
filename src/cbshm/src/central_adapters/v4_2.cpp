@@ -470,7 +470,6 @@ NativeConfigBuffer Adapter::fromLegacy(const cbCFGBUFF& leg) const {
     copyArr(cur.isVideoSource, leg.isVideoSource, this, &Adapter::fromLegacy);
     copyArr(cur.isTrackObj, leg.isTrackObj, this, &Adapter::fromLegacy);
     cur.fileinfo = fromLegacy(leg.fileinfo);
-
     return cur;
 }
 
@@ -975,28 +974,6 @@ cbPKT_UNIT_SELECTION Adapter::toLegacy(const ::cbPKT_UNIT_SELECTION& cur) const 
     return leg;
 }
 
-cbPcStatus Adapter::toLegacy(const NativePCStatus& cur) const {
-    cbPcStatus leg{};
-    leg.isSelection[instrument_idx] = toLegacy(cur.isSelection);
-    leg.m_iBlockRecording = cur.m_iBlockRecording;
-    leg.m_nPCStatusFlags = cur.m_nPCStatusFlags;
-    leg.m_nNumFEChans = cur.m_nNumFEChans;
-    leg.m_nNumAnainChans = cur.m_nNumAnainChans;
-    leg.m_nNumAnalogChans = cur.m_nNumAnalogChans;
-    leg.m_nNumAoutChans = cur.m_nNumAoutChans;
-    leg.m_nNumAudioChans = cur.m_nNumAudioChans;
-    leg.m_nNumAnalogoutChans = cur.m_nNumAnalogoutChans;
-    leg.m_nNumDiginChans = cur.m_nNumDiginChans;
-    leg.m_nNumSerialChans = cur.m_nNumSerialChans;
-    leg.m_nNumDigoutChans = cur.m_nNumDigoutChans;
-    leg.m_nNumTotalChans = cur.m_nNumTotalChans;
-    leg.m_nNspStatus[instrument_idx] = toLegacy(cur.m_nNspStatus);
-    leg.m_nNumNTrodesPerInstrument[instrument_idx] = cur.m_nNumNTrodesPerInstrument;
-    leg.m_nGeminiSystem = cur.m_nGeminiSystem;
-    // ignore APP_WORKSPACE
-    return leg;
-}
-
 cbRECBUFF Adapter::toLegacy(const NativeReceiveBuffer& cur) const {
     cbRECBUFF leg{};
     leg.received = cur.received;
@@ -1236,11 +1213,16 @@ Result<void> Adapter::setGroupInfo(uint32_t group_idx, const ::cbPKT_GROUPINFO& 
     return Result<void>::ok();
 }
 
-Result<void> Adapter::setPcStatus(const NativePCStatus& status) const {
+Result<void> Adapter::setNspStatus(const NativeNSPStatus& status) const {
     if (instrument_idx >= std::size(this->status->isSelection)) {
         return Result<void>::error("Instrument index out of range");
     }
-    *(this->status) = toLegacy(status);
+    this->status->m_nNspStatus[instrument_idx] = toLegacy(status);
+    return Result<void>::ok();
+}
+
+Result<void> Adapter::setGeminiSystem(bool is_gemini) const {
+    status->m_nGeminiSystem = is_gemini ? 1 : 0;
     return Result<void>::ok();
 }
 
