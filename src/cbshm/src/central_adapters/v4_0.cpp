@@ -42,32 +42,27 @@ size_t BootstrapAdapter::getReceiveBufferLen() const {
     return sizeof(cbRECBUFFLEN);
 }
 
-::cbPKT_HEADER Adapter::fromLegacy(const cbPKT_HEADER& leg) const {
-    ::cbPKT_HEADER cur{};
+void Adapter::fromLegacy(::cbPKT_HEADER& cur, const cbPKT_HEADER& leg) const {
     cur.time = leg.time;
     cur.chid = leg.chid;
     cur.type = static_cast<uint16_t>(leg.type);
     cur.dlen = leg.dlen;
     cur.instrument = leg.instrument;
     cur.reserved = leg.reserved;
-    return cur;
 }
 
-::cbPKT_SYSINFO Adapter::fromLegacy(const cbPKT_SYSINFO& leg) const {
-    ::cbPKT_SYSINFO cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_SYSINFO& cur, const cbPKT_SYSINFO& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.sysfreq = leg.sysfreq;
     cur.spikelen = leg.spikelen;
     cur.spikepre = leg.spikepre;
     cur.resetque = leg.resetque;
     cur.runlevel = leg.runlevel;
     cur.runflags = leg.runflags;
-    return cur;
 }
 
-::cbPKT_PROCINFO Adapter::fromLegacy(const cbPKT_PROCINFO& leg) const {
-    ::cbPKT_PROCINFO cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_PROCINFO& cur, const cbPKT_PROCINFO& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.proc = leg.proc;
     cur.idcode = leg.idcode;
     cur.idcode = leg.idcode;
@@ -82,12 +77,10 @@ size_t BootstrapAdapter::getReceiveBufferLen() const {
     cur.hoopcount = leg.hoopcount;
     cur.reserved = leg.reserved;
     cur.version = leg.version;
-    return cur;
 }
 
-::cbPKT_BANKINFO Adapter::fromLegacy(const cbPKT_BANKINFO& leg) const {
-    ::cbPKT_BANKINFO cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_BANKINFO& cur, const cbPKT_BANKINFO& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.proc = leg.proc;
     cur.bank = leg.bank;
     cur.idcode = leg.idcode;
@@ -95,24 +88,20 @@ size_t BootstrapAdapter::getReceiveBufferLen() const {
     copyArr(cur.label, leg.label);
     cur.chanbase = leg.chanbase;
     cur.chancount = leg.chancount;
-    return cur;
 }
 
-::cbPKT_GROUPINFO Adapter::fromLegacy(const cbPKT_GROUPINFO& leg) const {
-    ::cbPKT_GROUPINFO cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_GROUPINFO& cur, const cbPKT_GROUPINFO& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.proc = leg.proc;
     cur.group = leg.group;
     copyArr(cur.label, leg.label);
     cur.period = leg.period;
     cur.length = leg.length;
     copyArr(cur.list, leg.list);
-    return cur;
 }
 
-::cbPKT_FILTINFO Adapter::fromLegacy(const cbPKT_FILTINFO& leg) const {
-    ::cbPKT_FILTINFO cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_FILTINFO& cur, const cbPKT_FILTINFO& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.proc = leg.proc;
     cur.filt = leg.filt;
     copyArr(cur.label, leg.label);
@@ -131,73 +120,59 @@ size_t BootstrapAdapter::getReceiveBufferLen() const {
     cur.sos2a2 = leg.sos2a2;
     cur.sos2b1 = leg.sos2b1;
     cur.sos2b2 = leg.sos2b2;
-    return cur;
 }
 
-::cbPKT_ADAPTFILTINFO Adapter::fromLegacy(const cbPKT_ADAPTFILTINFO& leg) const {
-    ::cbPKT_ADAPTFILTINFO cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_ADAPTFILTINFO& cur, const cbPKT_ADAPTFILTINFO& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.chan = leg.chan;
     cur.nMode = leg.nMode;
     cur.dLearningRate = leg.dLearningRate;
     cur.nRefChan1 = leg.nRefChan1;
     cur.nRefChan2 = leg.nRefChan2;
-    return cur;
 }
 
-::cbPKT_REFELECFILTINFO Adapter::fromLegacy(const cbPKT_REFELECFILTINFO& leg) const {
-    ::cbPKT_REFELECFILTINFO cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_REFELECFILTINFO& cur, const cbPKT_REFELECFILTINFO& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.chan = leg.chan;
     cur.nMode = leg.nMode;
     cur.nRefChan = leg.nRefChan;
-    return cur;
 }
 
-::cbSCALING Adapter::fromLegacy(const cbSCALING& leg) const {
-    ::cbSCALING cur{};
+void Adapter::fromLegacy(::cbSCALING& cur, const cbSCALING& leg) const {
     cur.digmin = leg.digmin;
     cur.digmax = leg.digmax;
     cur.anamin = leg.anamin;
     cur.anamax = leg.anamax;
     cur.anagain = leg.anagain;
     copyArr(cur.anaunit, leg.anaunit);
-    return cur;
 }
 
-::cbFILTDESC Adapter::fromLegacy(const cbFILTDESC& leg) const {
-    ::cbFILTDESC cur{};
+void Adapter::fromLegacy(::cbFILTDESC& cur, const cbFILTDESC& leg) const {
     cur.hpfreq = leg.hpfreq;
     cur.hporder = leg.hporder;
     cur.hptype = leg.hptype;
     cur.lpfreq = leg.lpfreq;
     cur.lporder = leg.lporder;
     cur.lptype = leg.lptype;
-    return cur;
 }
 
-::cbMANUALUNITMAPPING Adapter::fromLegacy(const cbMANUALUNITMAPPING& leg) const {
-    ::cbMANUALUNITMAPPING cur{};
+void Adapter::fromLegacy(::cbMANUALUNITMAPPING& cur, const cbMANUALUNITMAPPING& leg) const {
     cur.nOverride = leg.nOverride;
     copyArr(cur.afOrigin, leg.afOrigin);
     copyArr2D(cur.afShape, leg.afShape);
     cur.aPhi = leg.aPhi;
     cur.bValid = leg.bValid;
-    return cur;
 }
 
-::cbHOOP Adapter::fromLegacy(const cbHOOP& leg) const {
-    ::cbHOOP cur{};
+void Adapter::fromLegacy(::cbHOOP& cur, const cbHOOP& leg) const {
     cur.valid = leg.valid;
     cur.time = leg.time;
     cur.min = leg.min;
     cur.max = leg.max;
-    return cur;
 }
 
-::cbPKT_CHANINFO Adapter::fromLegacy(const cbPKT_CHANINFO& leg) const {
-    ::cbPKT_CHANINFO cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_CHANINFO& cur, const cbPKT_CHANINFO& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.chan = leg.chan;
     cur.proc = leg.proc;
     cur.bank = leg.bank;
@@ -208,15 +183,15 @@ size_t BootstrapAdapter::getReceiveBufferLen() const {
     cur.aoutcaps = leg.aoutcaps;
     cur.ainpcaps = leg.ainpcaps;
     cur.spkcaps = leg.spkcaps;
-    cur.physcalin = fromLegacy(leg.physcalin);
-    cur.phyfiltin = fromLegacy(leg.phyfiltin);
-    cur.physcalout = fromLegacy(leg.physcalout);
-    cur.phyfiltout = fromLegacy(leg.phyfiltout);
+    fromLegacy(cur.physcalin, leg.physcalin);
+    fromLegacy(cur.phyfiltin, leg.phyfiltin);
+    fromLegacy(cur.physcalout, leg.physcalout);
+    fromLegacy(cur.phyfiltout, leg.phyfiltout);
     copyArr(cur.label, leg.label);
     cur.userflags = leg.userflags;
     copyArr(cur.position, leg.position);
-    cur.scalin = fromLegacy(leg.scalin);
-    cur.scalout = fromLegacy(leg.scalout);
+    fromLegacy(cur.scalin, leg.scalin);
+    fromLegacy(cur.scalout, leg.scalout);
     cur.doutopts = leg.doutopts;
     cur.dinpopts = leg.dinpopts;
     cur.aoutopts = leg.aoutopts;
@@ -247,22 +222,18 @@ size_t BootstrapAdapter::getReceiveBufferLen() const {
     cur.refelecchan = leg.refelecchan;
     copyArr(cur.unitmapping, leg.unitmapping, this, &Adapter::fromLegacy);
     copyArr2D(cur.spkhoops, leg.spkhoops, this, &Adapter::fromLegacy);
-    return cur;
 }
 
-::cbPKT_FS_BASIS Adapter::fromLegacy(const cbPKT_FS_BASIS& leg) const {
-    ::cbPKT_FS_BASIS cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_FS_BASIS& cur, const cbPKT_FS_BASIS& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.chan = leg.chan;
     cur.mode = leg.mode;
     cur.fs = leg.fs;
     copyArr2D(cur.basis, leg.basis);
-    return cur;
 }
 
-::cbPKT_SS_MODELSET Adapter::fromLegacy(const cbPKT_SS_MODELSET& leg) const {
-    ::cbPKT_SS_MODELSET cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_SS_MODELSET& cur, const cbPKT_SS_MODELSET& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.chan = leg.chan;
     cur.unit_number = leg.unit_number;
     cur.valid = leg.valid;
@@ -277,37 +248,29 @@ size_t BootstrapAdapter::getReceiveBufferLen() const {
     cur.subcluster_spread_factor_denominator = leg.subcluster_spread_factor_denominator;
     cur.mu_e = leg.mu_e;
     cur.sigma_e_squared = leg.sigma_e_squared;
-    return cur;
 }
 
-::cbPKT_SS_DETECT Adapter::fromLegacy(const cbPKT_SS_DETECT& leg) const {
-    ::cbPKT_SS_DETECT cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_SS_DETECT& cur, const cbPKT_SS_DETECT& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.fThreshold = leg.fThreshold;
     cur.fMultiplier = leg.fMultiplier;
-    return cur;
 }
 
-::cbPKT_SS_ARTIF_REJECT Adapter::fromLegacy(const cbPKT_SS_ARTIF_REJECT& leg) const {
-    ::cbPKT_SS_ARTIF_REJECT cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_SS_ARTIF_REJECT& cur, const cbPKT_SS_ARTIF_REJECT& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.nMaxSimulChans = leg.nMaxSimulChans;
     cur.nRefractoryCount = leg.nRefractoryCount;
-    return cur;
 }
 
-::cbPKT_SS_NOISE_BOUNDARY Adapter::fromLegacy(const cbPKT_SS_NOISE_BOUNDARY& leg) const {
-    ::cbPKT_SS_NOISE_BOUNDARY cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_SS_NOISE_BOUNDARY& cur, const cbPKT_SS_NOISE_BOUNDARY& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.chan = leg.chan;
     copyArr(cur.afc, leg.afc);
     copyArr2D(cur.afS, leg.afS);
-    return cur;
 }
 
-::cbPKT_SS_STATISTICS Adapter::fromLegacy(const cbPKT_SS_STATISTICS& leg) const {
-    ::cbPKT_SS_STATISTICS cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_SS_STATISTICS& cur, const cbPKT_SS_STATISTICS& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.nUpdateSpikes = leg.nUpdateSpikes;
     cur.nAutoalg = leg.nAutoalg;
     cur.nMode = leg.nMode;
@@ -320,63 +283,51 @@ size_t BootstrapAdapter::getReceiveBufferLen() const {
     cur.fClusterHistMinPeakPercentage = leg.fClusterHistMinPeakPercentage;
     cur.nWaveBasisSize = leg.nWaveBasisSize;
     cur.nWaveSampleSize = leg.nWaveSampleSize;
-    return cur;
 }
 
-::cbAdaptControl Adapter::fromLegacy(const cbAdaptControl& leg) const {
-    ::cbAdaptControl cur{};
+void Adapter::fromLegacy(::cbAdaptControl& cur, const cbAdaptControl& leg) const {
     cur.nMode = leg.nMode;
     cur.fTimeOutMinutes = leg.fTimeOutMinutes;
     cur.fElapsedMinutes = leg.fElapsedMinutes;
-    return cur;
 }
 
-::cbPKT_SS_STATUS Adapter::fromLegacy(const cbPKT_SS_STATUS& leg) const {
-    ::cbPKT_SS_STATUS cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
-    cur.cntlUnitStats = fromLegacy(leg.cntlUnitStats);
-    cur.cntlNumUnits = fromLegacy(leg.cntlNumUnits);
-    return cur;
+void Adapter::fromLegacy(::cbPKT_SS_STATUS& cur, const cbPKT_SS_STATUS& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
+    fromLegacy(cur.cntlUnitStats, leg.cntlUnitStats);
+    fromLegacy(cur.cntlNumUnits, leg.cntlNumUnits);
 }
 
-::cbproto::SpikeSorting Adapter::fromLegacy(const cbSPIKE_SORTING& leg) const {
-    ::cbproto::SpikeSorting cur{};
+void Adapter::fromLegacy(::cbproto::SpikeSorting& cur, const cbSPIKE_SORTING& leg) const {
     copyArr(cur.basis, leg.asBasis, this, &Adapter::fromLegacy);
     copyArr2D(cur.models, leg.asSortModel, this, &Adapter::fromLegacy);
-    cur.detect = fromLegacy(leg.pktDetect);
-    cur.artifact_reject = fromLegacy(leg.pktArtifReject);
+    fromLegacy(cur.detect, leg.pktDetect);
+    fromLegacy(cur.artifact_reject, leg.pktArtifReject);
     copyArr(cur.noise_boundary, leg.pktNoiseBoundary, this, &Adapter::fromLegacy);
-    cur.statistics = fromLegacy(leg.pktStatistics);
-    cur.status = fromLegacy(leg.pktStatus);
-    return cur;
+    fromLegacy(cur.statistics, leg.pktStatistics);
+    fromLegacy(cur.status, leg.pktStatus);
 }
 
-::cbPKT_NTRODEINFO Adapter::fromLegacy(const cbPKT_NTRODEINFO& leg) const {
-    ::cbPKT_NTRODEINFO cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_NTRODEINFO& cur, const cbPKT_NTRODEINFO& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.ntrode = leg.ntrode;
     copyArr(cur.label, leg.label);
     copyArr2D(cur.ellipses, leg.ellipses, this, &Adapter::fromLegacy);
     cur.nSite = leg.nSite;
     cur.fs = leg.fs;
     copyArr(cur.nChan, leg.nChan);
-    return cur;
 }
 
-::cbWaveformData Adapter::fromLegacy(const cbWaveformData& leg) const {
-    ::cbWaveformData cur{};
+void Adapter::fromLegacy(::cbWaveformData& cur, const cbWaveformData& leg) const {
     cur.offset = leg.offset; // aka sineFrequency
     cur.seq = leg.seq; // aka sineAmplitude
     cur.seqTotal = leg.seqTotal;
     cur.phases = leg.phases;
     copyArr(cur.duration, leg.duration);
     copyArr(cur.amplitude, leg.amplitude);
-    return cur;
 }
 
-::cbPKT_AOUT_WAVEFORM Adapter::fromLegacy(const cbPKT_AOUT_WAVEFORM& leg) const {
-    ::cbPKT_AOUT_WAVEFORM cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_AOUT_WAVEFORM& cur, const cbPKT_AOUT_WAVEFORM& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.chan = leg.chan;
     cur.mode = leg.mode;
     cur.repeats = leg.repeats;
@@ -386,22 +337,18 @@ size_t BootstrapAdapter::getReceiveBufferLen() const {
     cur.trigValue = leg.trigValue;
     cur.trigNum = leg.trigNum;
     cur.active = leg.active;
-    cur.wave = fromLegacy(leg.wave);
-    return cur;
+    fromLegacy(cur.wave, leg.wave);
 }
 
-::cbPKT_LNC Adapter::fromLegacy(const cbPKT_LNC& leg) const {
-    ::cbPKT_LNC cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_LNC& cur, const cbPKT_LNC& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.lncFreq = leg.lncFreq;
     cur.lncRefChan = leg.lncRefChan;
     cur.lncGlobalMode = leg.lncGlobalMode;
-    return cur;
 }
 
-::cbPKT_NPLAY Adapter::fromLegacy(const cbPKT_NPLAY& leg) const {
-    ::cbPKT_NPLAY cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_NPLAY& cur, const cbPKT_NPLAY& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.ftime = leg.ftime; // aka opt
     cur.stime = leg.stime;
     cur.etime = leg.etime;
@@ -410,27 +357,21 @@ size_t BootstrapAdapter::getReceiveBufferLen() const {
     cur.flags = leg.flags;
     cur.speed = leg.speed;
     copyArr(cur.fname, leg.fname);
-    return cur;
 }
 
-::cbVIDEOSOURCE Adapter::fromLegacy(const cbVIDEOSOURCE& leg) const {
-    ::cbVIDEOSOURCE cur{};
+void Adapter::fromLegacy(::cbVIDEOSOURCE& cur, const cbVIDEOSOURCE& leg) const {
     copyArr(cur.name, leg.name);
     cur.fps = leg.fps;
-    return cur;
 }
 
-::cbTRACKOBJ Adapter::fromLegacy(const cbTRACKOBJ& leg) const {
-    ::cbTRACKOBJ cur{};
+void Adapter::fromLegacy(::cbTRACKOBJ& cur, const cbTRACKOBJ& leg) const {
     copyArr(cur.name, leg.name);
     cur.type = leg.type;
     cur.pointCount = leg.pointCount;
-    return cur;
 }
 
-::cbPKT_FILECFG Adapter::fromLegacy(const cbPKT_FILECFG& leg) const {
-    ::cbPKT_FILECFG cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_FILECFG& cur, const cbPKT_FILECFG& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.options = leg.options;
     cur.duration = leg.duration;
     cur.recording = leg.recording;
@@ -438,69 +379,68 @@ size_t BootstrapAdapter::getReceiveBufferLen() const {
     copyArr(cur.username, leg.username);
     copyArr(cur.filename, leg.filename); // aka datetime
     copyArr(cur.comment, leg.comment);
-    return cur;
 }
 
-NativeConfigBuffer Adapter::fromLegacy(const cbCFGBUFF& leg) const {
+void Adapter::fromLegacy(NativeConfigBuffer& cur, const cbCFGBUFF& leg) const {
     // TODO: VERIFY that each list that's assumed to be instrument-independent is in fact independent from any particular instrument.
-    NativeConfigBuffer cur{};
-    cur.version = leg.version;
+    cur.version = cbVERSION_MAJOR * 100 + cbVERSION_MINOR; // Central's version field contains garbage data, so replace it with the protocol version
     cur.sysflags = leg.sysflags;
-    cur.instrument_status = static_cast<typeof(cur.instrument_status)>(InstrumentStatus::ACTIVE);
-    cur.sysinfo = fromLegacy(leg.sysinfo);
-    cur.procinfo = fromLegacy(leg.procinfo[instrument_idx]);
+    cur.instrument_status = static_cast<decltype(cur.instrument_status)>(InstrumentStatus::ACTIVE);
+    fromLegacy(cur.sysinfo, leg.sysinfo);
+    fromLegacy(cur.procinfo, leg.procinfo[instrument_idx]);
     copyArr(cur.bankinfo, leg.bankinfo[instrument_idx], this, &Adapter::fromLegacy);
     copyArr(cur.groupinfo, leg.groupinfo[instrument_idx], this, &Adapter::fromLegacy);
     copyArr(cur.filtinfo, leg.filtinfo[instrument_idx], this, &Adapter::fromLegacy);
-    cur.adaptinfo = fromLegacy(leg.adaptinfo[instrument_idx]);
-    cur.refelecinfo = fromLegacy(leg.refelecinfo[instrument_idx]);
+    fromLegacy(cur.adaptinfo, leg.adaptinfo[instrument_idx]);
+    fromLegacy(cur.refelecinfo, leg.refelecinfo[instrument_idx]);
     copyArr(cur.chaninfo, leg.chaninfo, this, &Adapter::fromLegacy);
     copyArr(cur.asBasis, leg.isSortingOptions.asBasis, this, &Adapter::fromLegacy);
-    copyArr2D(cur.asSortModel, leg.isSortingOptions.asSortModel, this, &Adapter::fromLegacy);
+    // copyArr2D(cur.asSortModel, leg.isSortingOptions.asSortModel, this, &Adapter::fromLegacy); // TODO: For some reason, this contains memory that's innaccessible
     // TODO: Move native isSortingOptions fields into a struct
-    cur.pktDetect = fromLegacy(leg.isSortingOptions.pktDetect);
-    cur.pktArtifReject = fromLegacy(leg.isSortingOptions.pktArtifReject);
+    fromLegacy(cur.pktDetect, leg.isSortingOptions.pktDetect);
+    fromLegacy(cur.pktArtifReject, leg.isSortingOptions.pktArtifReject);
     copyArr(cur.pktNoiseBoundary, leg.isSortingOptions.pktNoiseBoundary, this, &Adapter::fromLegacy);
-    cur.pktStatistics = fromLegacy(leg.isSortingOptions.pktStatistics);
-    cur.pktStatus = fromLegacy(leg.isSortingOptions.pktStatus);
+    fromLegacy(cur.pktStatistics, leg.isSortingOptions.pktStatistics);
+    fromLegacy(cur.pktStatus, leg.isSortingOptions.pktStatus);
     copyArr(cur.isNTrodeInfo, leg.isNTrodeInfo, this, &Adapter::fromLegacy);
     copyArr2D(cur.isWaveform, leg.isWaveform, this, &Adapter::fromLegacy);
-    cur.isLnc = fromLegacy(leg.isLnc[instrument_idx]);
-    cur.isNPlay = fromLegacy(leg.isNPlay);
+    fromLegacy(cur.isLnc, leg.isLnc[instrument_idx]);
+    fromLegacy(cur.isNPlay, leg.isNPlay);
     copyArr(cur.isVideoSource, leg.isVideoSource, this, &Adapter::fromLegacy);
     copyArr(cur.isTrackObj, leg.isTrackObj, this, &Adapter::fromLegacy);
-    cur.fileinfo = fromLegacy(leg.fileinfo);
-
-    return cur;
+    fromLegacy(cur.fileinfo, leg.fileinfo);
 }
 
-NativeNSPStatus Adapter::fromLegacy(const NSPStatus& leg) const {
+void Adapter::fromLegacy(NativeNSPStatus& cur, const NSPStatus& leg) const {
     switch(leg) {
         case NSPStatus::NSP_INIT:
-            return NativeNSPStatus::NSP_INIT;
+            cur = NativeNSPStatus::NSP_INIT;
+            break;
         case NSPStatus::NSP_NOIPADDR:
-            return NativeNSPStatus::NSP_NOIPADDR;
+            cur = NativeNSPStatus::NSP_NOIPADDR;
+            break;
         case NSPStatus::NSP_NOREPLY:
-            return NativeNSPStatus::NSP_NOREPLY;
+            cur = NativeNSPStatus::NSP_NOREPLY;
+            break;
         case NSPStatus::NSP_FOUND:
-            return NativeNSPStatus::NSP_FOUND;
+            cur = NativeNSPStatus::NSP_FOUND;
+            break;
         case NSPStatus::NSP_INVALID:
+            /* fallthrough */
         default:
-            return NativeNSPStatus::NSP_INVALID;
+            cur = NativeNSPStatus::NSP_INVALID;
+            break;
     }
 }
 
-::cbPKT_UNIT_SELECTION Adapter::fromLegacy(const cbPKT_UNIT_SELECTION& leg) const {
-    ::cbPKT_UNIT_SELECTION cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_UNIT_SELECTION& cur, const cbPKT_UNIT_SELECTION& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.lastchan = leg.lastchan;
     copyArr(cur.abyUnitSelections, leg.abyUnitSelections);
-    return cur;
 }
 
-NativePCStatus Adapter::fromLegacy(const cbPcStatus& leg) const {
-    NativePCStatus cur{};
-    cur.isSelection = fromLegacy(leg.isSelection[instrument_idx]);
+void Adapter::fromLegacy(NativePCStatus& cur, const cbPcStatus& leg) const {
+    fromLegacy(cur.isSelection, leg.isSelection[instrument_idx]);
     cur.m_iBlockRecording = leg.m_iBlockRecording;
     cur.m_nPCStatusFlags = leg.m_nPCStatusFlags;
     cur.m_nNumFEChans = leg.m_nNumFEChans;
@@ -513,101 +453,83 @@ NativePCStatus Adapter::fromLegacy(const cbPcStatus& leg) const {
     cur.m_nNumSerialChans = leg.m_nNumSerialChans;
     cur.m_nNumDigoutChans = leg.m_nNumDigoutChans;
     cur.m_nNumTotalChans = leg.m_nNumTotalChans;
-    cur.m_nNspStatus = fromLegacy(leg.m_nNspStatus[instrument_idx]);
+    fromLegacy(cur.m_nNspStatus, leg.m_nNspStatus[instrument_idx]);
     cur.m_nNumNTrodesPerInstrument = leg.m_nNumNTrodesPerInstrument[instrument_idx];
     cur.m_nGeminiSystem = leg.m_nGeminiSystem;
-    return cur;
 }
 
-NativeReceiveBuffer Adapter::fromLegacy(const cbRECBUFF& leg) const {
-    NativeReceiveBuffer cur{};
+void Adapter::fromLegacy(NativeReceiveBuffer& cur, const cbRECBUFF& leg) const {
     cur.received = leg.received;
     cur.lasttime = leg.lasttime;
     cur.headwrap = leg.headwrap;
     cur.headindex = leg.headindex;
     copyArr(cur.buffer, leg.buffer);
-    return cur;
 }
 
-NativeTransmitBuffer Adapter::fromLegacy(const cbXMTBUFF& leg) const {
-    NativeTransmitBuffer cur{};
+void Adapter::fromLegacy(NativeTransmitBuffer& cur, const cbXMTBUFF& leg) const {
     cur.transmitted = leg.transmitted;
     cur.headindex = leg.headindex;
     cur.tailindex = leg.tailindex;
     cur.last_valid_index = leg.last_valid_index;
     cur.bufferlen = leg.bufferlen;
     copyArr(cur.buffer, leg.buffer);
-    return cur;
 }
 
-NativeTransmitBufferLocal Adapter::fromLegacy(const cbXMTBUFFLOCAL& leg) const {
-    NativeTransmitBufferLocal cur{};
+void Adapter::fromLegacy(NativeTransmitBufferLocal& cur, const cbXMTBUFFLOCAL& leg) const {
     cur.transmitted = leg.transmitted;
     cur.headindex = leg.headindex;
     cur.tailindex = leg.tailindex;
     cur.last_valid_index = leg.last_valid_index;
     cur.bufferlen = leg.bufferlen;
     copyArr(cur.buffer, leg.buffer);
-    return cur;
 }
 
-::cbPKT_SPK Adapter::fromLegacy(const cbPKT_SPK& leg) const {
-    ::cbPKT_SPK cur{};
-    cur.cbpkt_header = fromLegacy(leg.cbpkt_header);
+void Adapter::fromLegacy(::cbPKT_SPK& cur, const cbPKT_SPK& leg) const {
+    fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     copyArr(cur.fPattern, leg.fPattern);
     cur.nPeak = leg.nPeak;
     cur.nValley = leg.nValley;
     copyArr(cur.wave, leg.wave);
-    return cur;
 }
 
-NativeSpikeCache Adapter::fromLegacy(const cbSPKCACHE& leg) const {
-    NativeSpikeCache cur{};
+void Adapter::fromLegacy(NativeSpikeCache& cur, const cbSPKCACHE& leg) const {
     cur.chid = leg.chid;
     cur.pktcnt = leg.pktcnt;
     cur.pktsize = leg.pktsize;
     cur.head = leg.head;
     cur.valid = leg.valid;
     copyArr(cur.spkpkt, leg.spkpkt, this, &Adapter::fromLegacy);
-    return cur;
 }
 
-NativeSpikeBuffer Adapter::fromLegacy(const cbSPKBUFF& leg) const {
-    NativeSpikeBuffer cur{};
+void Adapter::fromLegacy(NativeSpikeBuffer& cur, const cbSPKBUFF& leg) const {
     cur.flags = leg.flags;
     cur.chidmax = leg.chidmax;
     cur.linesize = leg.linesize;
     cur.spkcount = leg.spkcount;
     copyArr(cur.cache, leg.cache, this, &Adapter::fromLegacy);
-    return cur;
 }
 
-cbPKT_HEADER Adapter::toLegacy(const ::cbPKT_HEADER& cur) const {
-    cbPKT_HEADER leg{};
+void Adapter::toLegacy(cbPKT_HEADER& leg, const ::cbPKT_HEADER& cur) const {
     leg.time = cur.time;
     leg.chid = cur.chid;
     leg.type = static_cast<uint8_t>(cur.type);
     leg.dlen = cur.dlen;
     leg.instrument = cur.instrument;
     leg.reserved = cur.reserved;
-    return leg;
 }
 
-cbPKT_SYSINFO Adapter::toLegacy(const ::cbPKT_SYSINFO& cur) const {
-    cbPKT_SYSINFO leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_SYSINFO& leg, const ::cbPKT_SYSINFO& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.sysfreq = cur.sysfreq;
     leg.spikelen = cur.spikelen;
     leg.spikepre = cur.spikepre;
     leg.resetque = cur.resetque;
     leg.runlevel = cur.runlevel;
     leg.runflags = cur.runflags;
-    return leg;
 }
 
-cbPKT_PROCINFO Adapter::toLegacy(const ::cbPKT_PROCINFO& cur) const {
-    cbPKT_PROCINFO leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_PROCINFO& leg, const ::cbPKT_PROCINFO& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.proc = cur.proc;
     leg.idcode = cur.idcode;
     leg.idcode = cur.idcode;
@@ -622,12 +544,10 @@ cbPKT_PROCINFO Adapter::toLegacy(const ::cbPKT_PROCINFO& cur) const {
     leg.hoopcount = cur.hoopcount;
     leg.reserved = cur.reserved;
     leg.version = cur.version;
-    return leg;
 }
 
-cbPKT_BANKINFO Adapter::toLegacy(const ::cbPKT_BANKINFO& cur) const {
-    cbPKT_BANKINFO leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_BANKINFO& leg, const ::cbPKT_BANKINFO& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.proc = cur.proc;
     leg.bank = cur.bank;
     leg.idcode = cur.idcode;
@@ -635,24 +555,20 @@ cbPKT_BANKINFO Adapter::toLegacy(const ::cbPKT_BANKINFO& cur) const {
     copyArr(leg.label, cur.label);
     leg.chanbase = cur.chanbase;
     leg.chancount = cur.chancount;
-    return leg;
 }
 
-cbPKT_GROUPINFO Adapter::toLegacy(const ::cbPKT_GROUPINFO& cur) const {
-    cbPKT_GROUPINFO leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_GROUPINFO& leg, const ::cbPKT_GROUPINFO& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.proc = cur.proc;
     leg.group = cur.group;
     copyArr(leg.label, cur.label);
     leg.period = cur.period;
     leg.length = cur.length;
     copyArr(leg.list, cur.list);
-    return leg;
 }
 
-cbPKT_FILTINFO Adapter::toLegacy(const ::cbPKT_FILTINFO& cur) const {
-    cbPKT_FILTINFO leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_FILTINFO& leg, const ::cbPKT_FILTINFO& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.proc = cur.proc;
     leg.filt = cur.filt;
     copyArr(leg.label, cur.label);
@@ -671,73 +587,59 @@ cbPKT_FILTINFO Adapter::toLegacy(const ::cbPKT_FILTINFO& cur) const {
     leg.sos2a2 = cur.sos2a2;
     leg.sos2b1 = cur.sos2b1;
     leg.sos2b2 = cur.sos2b2;
-    return leg;
 }
 
-cbPKT_ADAPTFILTINFO Adapter::toLegacy(const ::cbPKT_ADAPTFILTINFO& cur) const {
-    cbPKT_ADAPTFILTINFO leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_ADAPTFILTINFO& leg, const ::cbPKT_ADAPTFILTINFO& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.chan = cur.chan;
     leg.nMode = cur.nMode;
     leg.dLearningRate = cur.dLearningRate;
     leg.nRefChan1 = cur.nRefChan1;
     leg.nRefChan2 = cur.nRefChan2;
-    return leg;
 }
 
-cbPKT_REFELECFILTINFO Adapter::toLegacy(const ::cbPKT_REFELECFILTINFO& cur) const {
-    cbPKT_REFELECFILTINFO leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_REFELECFILTINFO& leg, const ::cbPKT_REFELECFILTINFO& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.chan = cur.chan;
     leg.nMode = cur.nMode;
     leg.nRefChan = cur.nRefChan;
-    return leg;
 }
 
-cbSCALING Adapter::toLegacy(const ::cbSCALING& cur) const {
-    cbSCALING leg{};
+void Adapter::toLegacy(cbSCALING& leg, const ::cbSCALING& cur) const {
     leg.digmin = cur.digmin;
     leg.digmax = cur.digmax;
     leg.anamin = cur.anamin;
     leg.anamax = cur.anamax;
     leg.anagain = cur.anagain;
     copyArr(leg.anaunit, cur.anaunit);
-    return leg;
 }
 
-cbFILTDESC Adapter::toLegacy(const ::cbFILTDESC& cur) const {
-    cbFILTDESC leg{};
+void Adapter::toLegacy(cbFILTDESC& leg, const ::cbFILTDESC& cur) const {
     leg.hpfreq = cur.hpfreq;
     leg.hporder = cur.hporder;
     leg.hptype = cur.hptype;
     leg.lpfreq = cur.lpfreq;
     leg.lporder = cur.lporder;
     leg.lptype = cur.lptype;
-    return leg;
 }
 
-cbMANUALUNITMAPPING Adapter::toLegacy(const ::cbMANUALUNITMAPPING& cur) const {
-    cbMANUALUNITMAPPING leg{};
+void Adapter::toLegacy(cbMANUALUNITMAPPING& leg, const ::cbMANUALUNITMAPPING& cur) const {
     leg.nOverride = cur.nOverride;
     copyArr(leg.afOrigin, cur.afOrigin);
     copyArr2D(leg.afShape, cur.afShape);
     leg.aPhi = cur.aPhi;
     leg.bValid = cur.bValid;
-    return leg;
 }
 
-cbHOOP Adapter::toLegacy(const ::cbHOOP& cur) const {
-    cbHOOP leg{};
+void Adapter::toLegacy(cbHOOP& leg, const ::cbHOOP& cur) const {
     leg.valid = cur.valid;
     leg.time = cur.time;
     leg.min = cur.min;
     leg.max = cur.max;
-    return leg;
 }
 
-cbPKT_CHANINFO Adapter::toLegacy(const ::cbPKT_CHANINFO& cur) const {
-    cbPKT_CHANINFO leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_CHANINFO& leg, const ::cbPKT_CHANINFO& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.chan = cur.chan;
     leg.proc = cur.proc;
     leg.bank = cur.bank;
@@ -748,15 +650,15 @@ cbPKT_CHANINFO Adapter::toLegacy(const ::cbPKT_CHANINFO& cur) const {
     leg.aoutcaps = cur.aoutcaps;
     leg.ainpcaps = cur.ainpcaps;
     leg.spkcaps = cur.spkcaps;
-    leg.physcalin = toLegacy(cur.physcalin);
-    leg.phyfiltin = toLegacy(cur.phyfiltin);
-    leg.physcalout = toLegacy(cur.physcalout);
-    leg.phyfiltout = toLegacy(cur.phyfiltout);
+    toLegacy(leg.physcalin, cur.physcalin);
+    toLegacy(leg.phyfiltin, cur.phyfiltin);
+    toLegacy(leg.physcalout, cur.physcalout);
+    toLegacy(leg.phyfiltout, cur.phyfiltout);
     copyArr(leg.label, cur.label);
     leg.userflags = cur.userflags;
     copyArr(leg.position, cur.position);
-    leg.scalin = toLegacy(cur.scalin);
-    leg.scalout = toLegacy(cur.scalout);
+    toLegacy(leg.scalin, cur.scalin);
+    toLegacy(leg.scalout, cur.scalout);
     leg.doutopts = cur.doutopts;
     leg.dinpopts = cur.dinpopts;
     leg.aoutopts = cur.aoutopts;
@@ -784,22 +686,18 @@ cbPKT_CHANINFO Adapter::toLegacy(const ::cbPKT_CHANINFO& cur) const {
     leg.refelecchan = cur.refelecchan;
     copyArr(leg.unitmapping, cur.unitmapping, this, &Adapter::toLegacy);
     copyArr2D(leg.spkhoops, cur.spkhoops, this, &Adapter::toLegacy);
-    return leg;
 }
 
-cbPKT_FS_BASIS Adapter::toLegacy(const ::cbPKT_FS_BASIS& cur) const {
-    cbPKT_FS_BASIS leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_FS_BASIS& leg, const ::cbPKT_FS_BASIS& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.chan = cur.chan;
     leg.mode = cur.mode;
     leg.fs = cur.fs;
     copyArr2D(leg.basis, cur.basis);
-    return leg;
 }
 
-cbPKT_SS_MODELSET Adapter::toLegacy(const ::cbPKT_SS_MODELSET& cur) const {
-    cbPKT_SS_MODELSET leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_SS_MODELSET& leg, const ::cbPKT_SS_MODELSET& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.chan = cur.chan;
     leg.unit_number = cur.unit_number;
     leg.valid = cur.valid;
@@ -814,37 +712,29 @@ cbPKT_SS_MODELSET Adapter::toLegacy(const ::cbPKT_SS_MODELSET& cur) const {
     leg.subcluster_spread_factor_denominator = cur.subcluster_spread_factor_denominator;
     leg.mu_e = cur.mu_e;
     leg.sigma_e_squared = cur.sigma_e_squared;
-    return leg;
 }
 
-cbPKT_SS_DETECT Adapter::toLegacy(const ::cbPKT_SS_DETECT& cur) const {
-    cbPKT_SS_DETECT leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_SS_DETECT& leg, const ::cbPKT_SS_DETECT& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.fThreshold = cur.fThreshold;
     leg.fMultiplier = cur.fMultiplier;
-    return leg;
 }
 
-cbPKT_SS_ARTIF_REJECT Adapter::toLegacy(const ::cbPKT_SS_ARTIF_REJECT& cur) const {
-    cbPKT_SS_ARTIF_REJECT leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_SS_ARTIF_REJECT& leg, const ::cbPKT_SS_ARTIF_REJECT& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.nMaxSimulChans = cur.nMaxSimulChans;
     leg.nRefractoryCount = cur.nRefractoryCount;
-    return leg;
 }
 
-cbPKT_SS_NOISE_BOUNDARY Adapter::toLegacy(const ::cbPKT_SS_NOISE_BOUNDARY& cur) const {
-    cbPKT_SS_NOISE_BOUNDARY leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_SS_NOISE_BOUNDARY& leg, const ::cbPKT_SS_NOISE_BOUNDARY& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.chan = cur.chan;
     copyArr(leg.afc, cur.afc);
     copyArr2D(leg.afS, cur.afS);
-    return leg;
 }
 
-cbPKT_SS_STATISTICS Adapter::toLegacy(const ::cbPKT_SS_STATISTICS& cur) const {
-    cbPKT_SS_STATISTICS leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_SS_STATISTICS& leg, const ::cbPKT_SS_STATISTICS& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.nUpdateSpikes = cur.nUpdateSpikes;
     leg.nAutoalg = cur.nAutoalg;
     leg.nMode = cur.nMode;
@@ -857,63 +747,51 @@ cbPKT_SS_STATISTICS Adapter::toLegacy(const ::cbPKT_SS_STATISTICS& cur) const {
     leg.fClusterHistMinPeakPercentage = cur.fClusterHistMinPeakPercentage;
     leg.nWaveBasisSize = cur.nWaveBasisSize;
     leg.nWaveSampleSize = cur.nWaveSampleSize;
-    return leg;
 }
 
-cbAdaptControl Adapter::toLegacy(const ::cbAdaptControl& cur) const {
-    cbAdaptControl leg{};
+void Adapter::toLegacy(cbAdaptControl& leg, const ::cbAdaptControl& cur) const {
     leg.nMode = cur.nMode;
     leg.fTimeOutMinutes = cur.fTimeOutMinutes;
     leg.fElapsedMinutes = cur.fElapsedMinutes;
-    return leg;
 }
 
-cbPKT_SS_STATUS Adapter::toLegacy(const ::cbPKT_SS_STATUS& cur) const {
-    cbPKT_SS_STATUS leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
-    leg.cntlUnitStats = toLegacy(cur.cntlUnitStats);
-    leg.cntlNumUnits = toLegacy(cur.cntlNumUnits);
-    return leg;
+void Adapter::toLegacy(cbPKT_SS_STATUS& leg, const ::cbPKT_SS_STATUS& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
+    toLegacy(leg.cntlUnitStats, cur.cntlUnitStats);
+    toLegacy(leg.cntlNumUnits, cur.cntlNumUnits);
 }
 
-cbSPIKE_SORTING Adapter::toLegacy(const ::cbproto::SpikeSorting& cur) const {
-    cbSPIKE_SORTING leg{};
+void Adapter::toLegacy(cbSPIKE_SORTING& leg, const ::cbproto::SpikeSorting& cur) const {
     copyArr(leg.asBasis, cur.basis, this, &Adapter::toLegacy);
     copyArr2D(leg.asSortModel, cur.models, this, &Adapter::toLegacy);
-    leg.pktDetect = toLegacy(cur.detect);
-    leg.pktArtifReject = toLegacy(cur.artifact_reject);
+    toLegacy(leg.pktDetect, cur.detect);
+    toLegacy(leg.pktArtifReject, cur.artifact_reject);
     copyArr(leg.pktNoiseBoundary, cur.noise_boundary, this, &Adapter::toLegacy);
-    leg.pktStatistics = toLegacy(cur.statistics);
-    leg.pktStatus = toLegacy(cur.status);
-    return leg;
+    toLegacy(leg.pktStatistics, cur.statistics);
+    toLegacy(leg.pktStatus, cur.status);
 }
 
-cbPKT_NTRODEINFO Adapter::toLegacy(const ::cbPKT_NTRODEINFO& cur) const {
-    cbPKT_NTRODEINFO leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_NTRODEINFO& leg, const ::cbPKT_NTRODEINFO& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.ntrode = cur.ntrode;
     copyArr(leg.label, cur.label);
     copyArr2D(leg.ellipses, cur.ellipses, this, &Adapter::toLegacy);
     leg.nSite = cur.nSite;
     leg.fs = cur.fs;
     copyArr(leg.nChan, cur.nChan);
-    return leg;
 }
 
-cbWaveformData Adapter::toLegacy(const ::cbWaveformData& cur) const {
-    cbWaveformData leg{};
+void Adapter::toLegacy(cbWaveformData& leg, const ::cbWaveformData& cur) const {
     leg.offset = cur.offset; // aka sineFrequency
     leg.seq = cur.seq; // aka sineAmplitude
     leg.seqTotal = cur.seqTotal;
     leg.phases = cur.phases;
     copyArr(leg.duration, cur.duration);
     copyArr(leg.amplitude, cur.amplitude);
-    return leg;
 }
 
-cbPKT_AOUT_WAVEFORM Adapter::toLegacy(const ::cbPKT_AOUT_WAVEFORM& cur) const {
-    cbPKT_AOUT_WAVEFORM leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_AOUT_WAVEFORM& leg, const ::cbPKT_AOUT_WAVEFORM& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.chan = cur.chan;
     leg.mode = cur.mode;
     leg.repeats = cur.repeats;
@@ -922,22 +800,18 @@ cbPKT_AOUT_WAVEFORM Adapter::toLegacy(const ::cbPKT_AOUT_WAVEFORM& cur) const {
     leg.trigValue = cur.trigValue;
     leg.trigNum = cur.trigNum;
     leg.active = cur.active;
-    leg.wave = toLegacy(cur.wave);
-    return leg;
+    toLegacy(leg.wave, cur.wave);
 }
 
-cbPKT_LNC Adapter::toLegacy(const ::cbPKT_LNC& cur) const {
-    cbPKT_LNC leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_LNC& leg, const ::cbPKT_LNC& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.lncFreq = cur.lncFreq;
     leg.lncRefChan = cur.lncRefChan;
     leg.lncGlobalMode = cur.lncGlobalMode;
-    return leg;
 }
 
-cbPKT_NPLAY Adapter::toLegacy(const ::cbPKT_NPLAY& cur) const {
-    cbPKT_NPLAY leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_NPLAY& leg, const ::cbPKT_NPLAY& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.ftime = cur.ftime; // aka opt
     leg.stime = cur.stime;
     leg.etime = cur.etime;
@@ -946,27 +820,21 @@ cbPKT_NPLAY Adapter::toLegacy(const ::cbPKT_NPLAY& cur) const {
     leg.flags = cur.flags;
     leg.speed = cur.speed;
     copyArr(leg.fname, cur.fname);
-    return leg;
 }
 
-cbVIDEOSOURCE Adapter::toLegacy(const ::cbVIDEOSOURCE& cur) const {
-    cbVIDEOSOURCE leg{};
+void Adapter::toLegacy(cbVIDEOSOURCE& leg, const ::cbVIDEOSOURCE& cur) const {
     copyArr(leg.name, cur.name);
     leg.fps = cur.fps;
-    return leg;
 }
 
-cbTRACKOBJ Adapter::toLegacy(const ::cbTRACKOBJ& cur) const {
-    cbTRACKOBJ leg{};
+void Adapter::toLegacy(cbTRACKOBJ& leg, const ::cbTRACKOBJ& cur) const {
     copyArr(leg.name, cur.name);
     leg.type = cur.type;
     leg.pointCount = cur.pointCount;
-    return leg;
 }
 
-cbPKT_FILECFG Adapter::toLegacy(const ::cbPKT_FILECFG& cur) const {
-    cbPKT_FILECFG leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_FILECFG& leg, const ::cbPKT_FILECFG& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.options = cur.options;
     leg.duration = cur.duration;
     leg.recording = cur.recording;
@@ -974,73 +842,68 @@ cbPKT_FILECFG Adapter::toLegacy(const ::cbPKT_FILECFG& cur) const {
     copyArr(leg.username, cur.username);
     copyArr(leg.filename, cur.filename); // aka datetime
     copyArr(leg.comment, cur.comment);
-    return leg;
 }
 
-NSPStatus Adapter::toLegacy(const NativeNSPStatus& cur) const {
+void Adapter::toLegacy(NSPStatus& leg, const NativeNSPStatus& cur) const {
     switch(cur) {
         case NativeNSPStatus::NSP_INIT:
-            return NSPStatus::NSP_INIT;
+            leg = NSPStatus::NSP_INIT;
+            break;
         case NativeNSPStatus::NSP_NOIPADDR:
-            return NSPStatus::NSP_NOIPADDR;
+            leg = NSPStatus::NSP_NOIPADDR;
+            break;
         case NativeNSPStatus::NSP_NOREPLY:
-            return NSPStatus::NSP_NOREPLY;
+            leg = NSPStatus::NSP_NOREPLY;
+            break;
         case NativeNSPStatus::NSP_FOUND:
-            return NSPStatus::NSP_FOUND;
+            leg = NSPStatus::NSP_FOUND;
+            break;
         case NativeNSPStatus::NSP_INVALID:
+            /* fallthrough */
         default:
-            return NSPStatus::NSP_INVALID;
+            leg = NSPStatus::NSP_INVALID;
+            break;
     }
 }
 
-cbPKT_UNIT_SELECTION Adapter::toLegacy(const ::cbPKT_UNIT_SELECTION& cur) const {
-    cbPKT_UNIT_SELECTION leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_UNIT_SELECTION& leg, const ::cbPKT_UNIT_SELECTION& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.lastchan = cur.lastchan;
     copyArr(leg.abyUnitSelections, cur.abyUnitSelections);
-    return leg;
 }
 
-cbRECBUFF Adapter::toLegacy(const NativeReceiveBuffer& cur) const {
-    cbRECBUFF leg{};
+void Adapter::toLegacy(cbRECBUFF& leg, const NativeReceiveBuffer& cur) const {
     leg.received = cur.received;
     leg.lasttime = cur.lasttime;
     leg.headwrap = cur.headwrap;
     leg.headindex = cur.headindex;
     copyArr(leg.buffer, cur.buffer);
-    return leg;
 }
 
-cbXMTBUFF Adapter::toLegacy(const NativeTransmitBuffer& cur) const {
-    cbXMTBUFF leg{};
+void Adapter::toLegacy(cbXMTBUFF& leg, const NativeTransmitBuffer& cur) const {
     leg.transmitted = cur.transmitted;
     leg.headindex = cur.headindex;
     leg.tailindex = cur.tailindex;
     leg.last_valid_index = cur.last_valid_index;
     leg.bufferlen = cur.bufferlen;
     copyArr(leg.buffer, cur.buffer);
-    return leg;
 }
 
-cbXMTBUFFLOCAL Adapter::toLegacy(const NativeTransmitBufferLocal& cur) const {
-    cbXMTBUFFLOCAL leg{};
+void Adapter::toLegacy(cbXMTBUFFLOCAL& leg, const NativeTransmitBufferLocal& cur) const {
     leg.transmitted = cur.transmitted;
     leg.headindex = cur.headindex;
     leg.tailindex = cur.tailindex;
     leg.last_valid_index = cur.last_valid_index;
     leg.bufferlen = cur.bufferlen;
     copyArr(leg.buffer, cur.buffer);
-    return leg;
 }
 
-cbPKT_SPK Adapter::toLegacy(const ::cbPKT_SPK& cur) const {
-    cbPKT_SPK leg{};
-    leg.cbpkt_header = toLegacy(cur.cbpkt_header);
+void Adapter::toLegacy(cbPKT_SPK& leg, const ::cbPKT_SPK& cur) const {
+    toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     copyArr(leg.fPattern, leg.fPattern);
     leg.nPeak = cur.nPeak;
     leg.nValley = cur.nValley;
     copyArr(leg.wave, cur.wave);
-    return leg;
 }
 
 Adapter::Adapter(uint8_t instrument_idx, void* cfg_ptr, void* rec_ptr, void* xmt_ptr, void* xmt_local_ptr, void* status_ptr, void* spike_ptr)
@@ -1129,106 +992,88 @@ uint32_t* Adapter::getLocalXmtBufferPtr() {
     return xmt->buffer;
 }
 
-Result<::cbPKT_PROCINFO> Adapter::getProcInfo() const {
-    if (instrument_idx >= std::size(cfg->procinfo)) {
-        return Result<::cbPKT_PROCINFO>::error("Instrument index out of range");
-    }
-    return Result<::cbPKT_PROCINFO>::ok(fromLegacy(cfg->procinfo[instrument_idx]));
-}
-
-Result<::cbPKT_BANKINFO> Adapter::getBankInfo(uint32_t bank_num) const {
-    if (instrument_idx >= std::size(cfg->bankinfo)) {
-        return Result<::cbPKT_BANKINFO>::error("Instrument index out of range");
-    }
-    uint32_t bank_idx = bank_num - 1;
-    if (bank_idx >= std::size(cfg->bankinfo[0])) {
-        return Result<::cbPKT_BANKINFO>::error("Bank number out of range");
-    }
-    return Result<::cbPKT_BANKINFO>::ok(fromLegacy(cfg->bankinfo[instrument_idx][bank_idx]));
-}
-
-Result<::cbPKT_FILTINFO> Adapter::getFilterInfo(uint32_t filter_num) const {
-    if (instrument_idx >= std::size(cfg->filtinfo)) {
-        return Result<::cbPKT_FILTINFO>::error("Instrument index out of range");
-    }
-    uint32_t filter_idx = filter_num - 1;
-    if (filter_idx >= std::size(cfg->filtinfo[0])) {
-        return Result<::cbPKT_FILTINFO>::error("Filter number out of range");
-    }
-    return Result<::cbPKT_FILTINFO>::ok(fromLegacy(cfg->filtinfo[instrument_idx][filter_idx]));
-}
-
-Result<::cbPKT_CHANINFO> Adapter::getChanInfo(uint32_t channel_idx) const {
-    if (channel_idx >= std::size(cfg->chaninfo)) {
-        return Result<::cbPKT_CHANINFO>::error("Channel number out of range");
-    }
-    return Result<::cbPKT_CHANINFO>::ok(fromLegacy(cfg->chaninfo[channel_idx]));
-}
-
-Result<::cbPKT_SYSINFO> Adapter::getSysInfo() const {
-    return Result<::cbPKT_SYSINFO>::ok(fromLegacy(cfg->sysinfo));
-}
-
-Result<::cbPKT_GROUPINFO> Adapter::getGroupInfo(uint32_t group_idx) const {
-    if (instrument_idx >= std::size(cfg->groupinfo)) {
-        return Result<::cbPKT_GROUPINFO>::error("Instrument index out of range");
-    }
-    if (group_idx >= std::size(cfg->groupinfo[0])) {
-        return Result<::cbPKT_GROUPINFO>::error("Group index out of range");
-    }
-    return Result<::cbPKT_GROUPINFO>::ok(fromLegacy(cfg->groupinfo[instrument_idx][group_idx]));
-}
-
-Result<NativeConfigBuffer> Adapter::getConfigBuffer() const {
-    if (instrument_idx >= std::size(cfg->procinfo)) {
-        return Result<NativeConfigBuffer>::error("Instrument index out of range");
-    }
-    return Result<NativeConfigBuffer>::ok(fromLegacy(*cfg));
-}
-
-Result<NativePCStatus> Adapter::getPcStatus() const {
-    if (instrument_idx >= std::size(status->isSelection)) {
-        return Result<NativePCStatus>::error("Instrument index out of range");
-    }
-    return Result<NativePCStatus>::ok(fromLegacy(*status));
-}
-
-Result<NativeSpikeCache> Adapter::getSpikeCache(uint32_t channel_idx) const {
-    if (channel_idx >= std::size(spike->cache)) {
-        return Result<NativeSpikeCache>::error("Channel index out of range");
-    }
-    return Result<NativeSpikeCache>::ok(fromLegacy(spike->cache[channel_idx]));
-}
-
-Result<void> Adapter::setProcInfo(const ::cbPKT_PROCINFO& info) {
-    if (instrument_idx >= std::size(cfg->procinfo)) {
-        return Result<void>::error("Instrument index out of range");
-    }
-    cfg->procinfo[instrument_idx] = toLegacy(info);
+Result<void> Adapter::getProcInfo(::cbPKT_PROCINFO& buf) const {
+    fromLegacy(buf, cfg->procinfo[instrument_idx]);
     return Result<void>::ok();
 }
 
-Result<void> Adapter::setBankInfo(uint32_t bank_num, const ::cbPKT_BANKINFO& info) {
-    if (instrument_idx >= std::size(cfg->bankinfo)) {
-        return Result<void>::error("Instrument index out of range");
-    }
+Result<void> Adapter::getBankInfo(::cbPKT_BANKINFO& buf, uint32_t bank_num) const {
     uint32_t bank_idx = bank_num - 1;
     if (bank_idx >= std::size(cfg->bankinfo[0])) {
         return Result<void>::error("Bank number out of range");
     }
-    cfg->bankinfo[instrument_idx][bank_idx] = toLegacy(info);
+    fromLegacy(buf, cfg->bankinfo[instrument_idx][bank_idx]);
     return Result<void>::ok();
 }
 
-Result<void> Adapter::setFilterInfo(uint32_t filter_num, const ::cbPKT_FILTINFO& info) {
-    if (instrument_idx >= std::size(cfg->filtinfo)) {
-        return Result<void>::error("Instrument index out of range");
-    }
+Result<void> Adapter::getFilterInfo(::cbPKT_FILTINFO& buf, uint32_t filter_num) const {
     uint32_t filter_idx = filter_num - 1;
     if (filter_idx >= std::size(cfg->filtinfo[0])) {
         return Result<void>::error("Filter number out of range");
     }
-    cfg->filtinfo[instrument_idx][filter_idx] = toLegacy(info);
+    fromLegacy(buf, cfg->filtinfo[instrument_idx][filter_idx]);
+    return Result<void>::ok();
+}
+
+Result<void> Adapter::getChanInfo(::cbPKT_CHANINFO& buf, uint32_t channel_idx) const {
+    if (channel_idx >= std::size(cfg->chaninfo)) {
+        return Result<void>::error("Channel number out of range");
+    }
+    fromLegacy(buf, cfg->chaninfo[channel_idx]);
+    return Result<void>::ok();
+}
+
+Result<void> Adapter::getSysInfo(::cbPKT_SYSINFO& buf) const {
+    fromLegacy(buf, cfg->sysinfo);
+    return Result<void>::ok();
+}
+
+Result<void> Adapter::getGroupInfo(::cbPKT_GROUPINFO& buf, uint32_t group_idx) const {
+    if (group_idx >= std::size(cfg->groupinfo[0])) {
+        return Result<void>::error("Group index out of range");
+    }
+    fromLegacy(buf, cfg->groupinfo[instrument_idx][group_idx]);
+    return Result<void>::ok();
+}
+
+Result<void> Adapter::getConfigBuffer(NativeConfigBuffer& buf) const {
+    fromLegacy(buf, *cfg);
+    return Result<void>::ok();
+}
+
+Result<void> Adapter::getPcStatus(NativePCStatus& buf) const {
+    fromLegacy(buf, *status);
+    return Result<void>::ok();
+}
+
+Result<void> Adapter::getSpikeCache(NativeSpikeCache& buf, uint32_t channel_idx) const {
+    if (channel_idx >= std::size(spike->cache)) {
+        return Result<void>::error("Channel index out of range");
+    }
+    fromLegacy(buf, spike->cache[channel_idx]);
+    return Result<void>::ok();
+}
+
+Result<void> Adapter::setProcInfo(const ::cbPKT_PROCINFO& info) {
+    toLegacy(cfg->procinfo[instrument_idx], info);
+    return Result<void>::ok();
+}
+
+Result<void> Adapter::setBankInfo(uint32_t bank_num, const ::cbPKT_BANKINFO& info) {
+    uint32_t bank_idx = bank_num - 1;
+    if (bank_idx >= std::size(cfg->bankinfo[0])) {
+        return Result<void>::error("Bank number out of range");
+    }
+    toLegacy(cfg->bankinfo[instrument_idx][bank_idx], info);
+    return Result<void>::ok();
+}
+
+Result<void> Adapter::setFilterInfo(uint32_t filter_num, const ::cbPKT_FILTINFO& info) {
+    uint32_t filter_idx = filter_num - 1;
+    if (filter_idx >= std::size(cfg->filtinfo[0])) {
+        return Result<void>::error("Filter number out of range");
+    }
+    toLegacy(cfg->filtinfo[instrument_idx][filter_idx], info);
     return Result<void>::ok();
 }
 
@@ -1236,31 +1081,25 @@ Result<void> Adapter::setChanInfo(uint32_t channel_idx, const ::cbPKT_CHANINFO& 
     if (channel_idx >= std::size(cfg->chaninfo)) {
         return Result<void>::error("Channel number out of range");
     }
-    cfg->chaninfo[channel_idx] = toLegacy(info);
+    toLegacy(cfg->chaninfo[channel_idx], info);
     return Result<void>::ok();
 }
 
 Result<void> Adapter::setSysInfo(const ::cbPKT_SYSINFO& info) {
-    cfg->sysinfo = toLegacy(info);
+    toLegacy(cfg->sysinfo, info);
     return Result<void>::ok();
 }
 
 Result<void> Adapter::setGroupInfo(uint32_t group_idx, const ::cbPKT_GROUPINFO& info) {
-    if (instrument_idx >= std::size(cfg->groupinfo)) {
-        return Result<void>::error("Instrument index out of range");
-    }
     if (group_idx >= std::size(cfg->groupinfo[0])) {
         return Result<void>::error("Group index out of range");
     }
-    cfg->groupinfo[instrument_idx][group_idx] = toLegacy(info);
+    toLegacy(cfg->groupinfo[instrument_idx][group_idx], info);
     return Result<void>::ok();
 }
 
 Result<void> Adapter::setNspStatus(const NativeNSPStatus& status) const {
-    if (instrument_idx >= std::size(this->status->isSelection)) {
-        return Result<void>::error("Instrument index out of range");
-    }
-    this->status->m_nNspStatus[instrument_idx] = toLegacy(status);
+    toLegacy(this->status->m_nNspStatus[instrument_idx], status);
     return Result<void>::ok();
 }
 

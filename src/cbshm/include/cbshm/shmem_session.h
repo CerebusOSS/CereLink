@@ -224,8 +224,9 @@ public:
     const NativeConfigBuffer* getNativeConfigBuffer() const;
 
     /// @brief Get a translated copy of Central's configuration buffer
+    /// @param buf Output parameter to receive the configuration buffer (very large, allocate on the heap!)
     /// @return Result::value containing the configuration buffer, or Result::error if not CENTRAL layout
-    Result<NativeConfigBuffer> getLegacyConfigBuffer();
+    Result<void> getLegacyConfigBuffer(NativeConfigBuffer& buf);
 
     /// @}
 

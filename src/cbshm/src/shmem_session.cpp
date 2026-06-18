@@ -834,6 +834,18 @@ struct ShmemSession::Impl {
         return Result<cbproto_protocol_version_t>::error("Compatibility with Central requires Windows");
 #endif
     }
+
+    // Helper: get sysfreq from cbPKT_SYSINFO
+    // Guaranteed to provide a frequency greater than or equal to 1
+    // or the default frequency if the true value is unavailable.
+    decltype(cbPKT_SYSINFO::sysfreq) getSysFreq() {
+        cbPKT_SYSINFO sysinfo;
+        auto res = adapter->getSysInfo(sysinfo);
+        if (res.isError() || sysinfo.sysfreq == 0) {
+            return 30000; // default
+        }
+        return sysinfo.sysfreq;
+    }
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -942,7 +954,12 @@ Result<cbPKT_PROCINFO> ShmemSession::getProcInfo() const {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         return Result<cbPKT_PROCINFO>::ok(m_impl->nativeCfg()->procinfo);
     } else {
-        return m_impl->adapter->getProcInfo();
+        auto info = Result<cbPKT_PROCINFO>::ok({});
+        auto res = m_impl->adapter->getProcInfo(info.value());
+        if (res.isError()) {
+            return Result<cbPKT_PROCINFO>::error(res.error());
+        }
+        return info;
     }
 }
 
@@ -957,7 +974,12 @@ Result<cbPKT_BANKINFO> ShmemSession::getBankInfo(uint32_t bank) const {
         }
         return Result<cbPKT_BANKINFO>::ok(m_impl->nativeCfg()->bankinfo[bank - 1]);
     } else {
-        return m_impl->adapter->getBankInfo(bank);
+        auto info = Result<cbPKT_BANKINFO>::ok({});
+        auto res = m_impl->adapter->getBankInfo(info.value(), bank);
+        if (res.isError()) {
+            return Result<cbPKT_BANKINFO>::error(res.error());
+        }
+        return info;
     }
 }
 
@@ -972,7 +994,12 @@ Result<cbPKT_FILTINFO> ShmemSession::getFilterInfo(uint32_t filter) const {
         }
         return Result<cbPKT_FILTINFO>::ok(m_impl->nativeCfg()->filtinfo[filter - 1]);
     } else {
-        return m_impl->adapter->getFilterInfo(filter);
+        auto info = Result<cbPKT_FILTINFO>::ok({});
+        auto res = m_impl->adapter->getFilterInfo(info.value(), filter);
+        if (res.isError()) {
+            return Result<cbPKT_FILTINFO>::error(res.error());
+        }
+        return info;
     }
 }
 
@@ -987,7 +1014,12 @@ Result<cbPKT_CHANINFO> ShmemSession::getChanInfo(uint32_t channel) const {
         }
         return Result<cbPKT_CHANINFO>::ok(m_impl->nativeCfg()->chaninfo[channel]);
     } else {
-        return m_impl->adapter->getChanInfo(channel);
+        auto info = Result<cbPKT_CHANINFO>::ok({});
+        auto res = m_impl->adapter->getChanInfo(info.value(), channel);
+        if (res.isError()) {
+            return Result<cbPKT_CHANINFO>::error(res.error());
+        }
+        return info;
     }
 }
 
@@ -999,7 +1031,12 @@ Result<cbPKT_SYSINFO> ShmemSession::getSysInfo() const {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         return Result<cbPKT_SYSINFO>::ok(m_impl->nativeCfg()->sysinfo);
     } else {
-        return m_impl->adapter->getSysInfo();
+        auto info = Result<cbPKT_SYSINFO>::ok({});
+        auto res = m_impl->adapter->getSysInfo(info.value());
+        if (res.isError()) {
+            return Result<cbPKT_SYSINFO>::error(res.error());
+        }
+        return info;
     }
 }
 
@@ -1014,7 +1051,12 @@ Result<cbPKT_GROUPINFO> ShmemSession::getGroupInfo(uint32_t group) const {
         }
         return Result<cbPKT_GROUPINFO>::ok(m_impl->nativeCfg()->groupinfo[group]);
     } else {
-        return m_impl->adapter->getGroupInfo(group);
+        auto info = Result<cbPKT_GROUPINFO>::ok({});
+        auto res = m_impl->adapter->getGroupInfo(info.value(), group);
+        if (res.isError()) {
+            return Result<cbPKT_GROUPINFO>::error(res.error());
+        }
+        return info;
     }
 }
 
@@ -1130,11 +1172,11 @@ const NativeConfigBuffer* ShmemSession::getNativeConfigBuffer() const {
     return m_impl->nativeCfg();
 }
 
-Result<NativeConfigBuffer> ShmemSession::getLegacyConfigBuffer() {
+Result<void> ShmemSession::getLegacyConfigBuffer(NativeConfigBuffer& buf) {
     if (!isOpen() || m_impl->layout != ShmemLayout::CENTRAL) {
-        return Result<NativeConfigBuffer>::error("Not open or invalid layout");
+        return Result<void>::error("Not open or invalid layout");
     }
-    return m_impl->adapter->getConfigBuffer();
+    return m_impl->adapter->getConfigBuffer(buf);
 }
 
 Result<void> ShmemSession::storePacket(const cbPKT_GENERIC& pkt) {
@@ -1212,8 +1254,7 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
             // Central's xmt consumer expects device-native format.
             auto gemini = isGeminiSystem();
             if (gemini.isOk() && !gemini.value() && dest_hdr.time != 0) {
-                uint32_t sysfreq = m_impl->adapter->getSysInfo().value().sysfreq; // TODO: Check the return value
-                if (sysfreq == 0) sysfreq = 30000;
+                uint32_t sysfreq = m_impl->getSysFreq();
                 uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
                 dest_hdr.time = dest_hdr.time * (sysfreq / g) / (1000000000 / g);
             }
@@ -1235,8 +1276,7 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
             // Non-Gemini: convert nanosecond timestamp back to device clock ticks.
             auto gemini = isGeminiSystem();
             if (gemini.isOk() && !gemini.value() && dest_hdr.time != 0) {
-                uint32_t sysfreq = m_impl->adapter->getSysInfo().value().sysfreq; // TODO: Check the return value
-                if (sysfreq == 0) sysfreq = 30000;
+                uint32_t sysfreq = m_impl->getSysFreq();
                 uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
                 dest_hdr.time = dest_hdr.time * (sysfreq / g) / (1000000000 / g);
             }
@@ -1250,8 +1290,7 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
             std::memcpy(translated_buf, &pkt,
                         (cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen) * sizeof(uint32_t));
             auto& dest_hdr = *reinterpret_cast<cbPKT_HEADER*>(translated_buf);
-            uint32_t sysfreq = m_impl->adapter->getSysInfo().value().sysfreq; // TODO: Check the return value
-            if (sysfreq == 0) sysfreq = 30000;
+            uint32_t sysfreq = m_impl->getSysFreq();
             uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
             dest_hdr.time = dest_hdr.time * (sysfreq / g) / (1000000000 / g);
             write_data = translated_buf;
@@ -1503,11 +1542,12 @@ Result<uint32_t> ShmemSession::getNumTotalChans() const {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         return Result<uint32_t>::ok(static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nNumTotalChans);
     } else {
-        auto status = m_impl->adapter->getPcStatus();
-        if (status.isError()) {
-            return Result<uint32_t>::error("Unable to fetch PC status");
+        NativePCStatus status;
+        auto res = m_impl->adapter->getPcStatus(status);
+        if (res.isError()) {
+            return Result<uint32_t>::error(res.error());
         }
-        return Result<uint32_t>::ok(status.value().m_nNumTotalChans);
+        return Result<uint32_t>::ok(status.m_nNumTotalChans);
     }
 }
 
@@ -1522,11 +1562,12 @@ Result<NativeNSPStatus> ShmemSession::getNspStatus() const {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         return Result<NativeNSPStatus>::ok(static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nNspStatus);
     } else {
-        auto status = m_impl->adapter->getPcStatus();
-        if (status.isError()) {
-            return Result<NativeNSPStatus>::error("Unable to fetch PC status");
+        NativePCStatus status;
+        auto res = m_impl->adapter->getPcStatus(status);
+        if (res.isError()) {
+            return Result<NativeNSPStatus>::error(res.error());
         }
-        return Result<NativeNSPStatus>::ok(status.value().m_nNspStatus);
+        return Result<NativeNSPStatus>::ok(status.m_nNspStatus);
     }
 }
 
@@ -1558,11 +1599,12 @@ Result<bool> ShmemSession::isGeminiSystem() const {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         return Result<bool>::ok(static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nGeminiSystem != 0);
     } else {
-        auto status = m_impl->adapter->getPcStatus();
-        if (status.isError()) {
-            return Result<bool>::error("Unable to fetch PC status");
+        NativePCStatus status;
+        auto res = m_impl->adapter->getPcStatus(status);
+        if (res.isError()) {
+            return Result<bool>::error(res.error());
         }
-        return Result<bool>::ok(status.value().m_nGeminiSystem);
+        return Result<bool>::ok(status.m_nGeminiSystem);
     }
 }
 
@@ -1608,12 +1650,10 @@ Result<void> ShmemSession::getSpikeCache(uint32_t channel, NativeSpikeCache& cac
         cache.valid = src.valid;
         std::memcpy(cache.spkpkt, src.spkpkt, sizeof(cbPKT_SPK) * src.pktcnt);
     } else {
-        auto res = m_impl->adapter->getSpikeCache(channel);
+        auto res = m_impl->adapter->getSpikeCache(cache, channel);
         if (res.isError()) {
             return Result<void>::error(res.error());
         }
-        cache = res.value();
-        return Result<void>::ok();
     }
 
     return Result<void>::ok();
@@ -1640,17 +1680,16 @@ Result<bool> ShmemSession::getRecentSpike(uint32_t channel, cbPKT_SPK& spike) co
         spike = cache.spkpkt[recent_idx];
         return Result<bool>::ok(true);
     } else {
-        // TODO: Duplicate logic
-        auto res = m_impl->adapter->getSpikeCache(channel);
+        auto cache = std::make_unique<NativeSpikeCache>();
+        auto res = m_impl->adapter->getSpikeCache(*cache, channel);
         if (res.isError()) {
             return Result<bool>::error(res.error());
         }
-        const auto& cache = res.value();
-        if (cache.valid == 0) {
+        if (cache->valid == 0) {
             return Result<bool>::ok(false);
         }
-        uint32_t recent_idx = (cache.head == 0) ? (cache.pktcnt - 1) : (cache.head - 1);
-        spike = cache.spkpkt[recent_idx];
+        uint32_t recent_idx = (cache->head == 0) ? (cache->pktcnt - 1) : (cache->head - 1);
+        spike = cache->spkpkt[recent_idx];
         return Result<bool>::ok(true);
     }
 }
@@ -1779,8 +1818,7 @@ PROCTIME ShmemSession::getLastTime() const {
     if (t != 0 && m_impl->layout == ShmemLayout::CENTRAL) {
         auto gemini = isGeminiSystem();
         if (gemini.isOk() && !gemini.value()) {
-            uint32_t sysfreq = m_impl->adapter->getSysInfo().value().sysfreq; // TODO: Check return value
-            if (sysfreq == 0) sysfreq = 30000;
+            uint32_t sysfreq = m_impl->getSysFreq();
             uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
             t = t * (1000000000 / g) / (sysfreq / g);
         }
@@ -1831,8 +1869,7 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
         m_impl->status_buffer_raw) {
         auto gemini = isGeminiSystem();
         if (gemini.isOk() && !gemini.value()) {
-            uint32_t sysfreq = m_impl->adapter->getSysInfo().value().sysfreq; // TODO: Check the return value
-            if (sysfreq == 0) sysfreq = 30000;
+            uint32_t sysfreq = m_impl->getSysFreq();
             uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
             ts_num = 1000000000 / g;
             ts_den = sysfreq / g;

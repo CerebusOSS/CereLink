@@ -294,6 +294,20 @@ struct SdkSession::Impl {
         channel_cache_valid = true;
     }
 
+    // Helper: get chaninfo for a 1-based channel ID
+    Result<cbPKT_CHANINFO> getChanInfo(const uint32_t chan_id) const {
+        // Prefer shmem over device_config because CMP position overlays are
+        // written to shmem (device_config is owned by the receive thread and
+        // we avoid writing to it from other threads).
+        if (shmem_session && chan_id >= 1 && chan_id <= cbMAXCHANS) {
+            return shmem_session->getChanInfo(chan_id);
+        }
+        // Fallback to device_config (no shmem available)
+        if (device_session)
+            return Result<cbPKT_CHANINFO>::ok(*device_session->getChanInfo(chan_id));
+        return Result<cbPKT_CHANINFO>::error("Channel information not available");
+    }
+
     // Clock sync periodic probing
     std::chrono::steady_clock::time_point last_clock_probe_time{};
 
@@ -365,19 +379,6 @@ struct SdkSession::Impl {
     // Separate from is_running because callbacks must work before is_running is set
     // (e.g., during the handshake phase in start()).
     std::atomic<bool> shutting_down{false};
-
-    Result<cbPKT_CHANINFO> getChanInfo(const uint32_t chan_id) const {
-        // Prefer shmem over device_config because CMP position overlays are
-        // written to shmem (device_config is owned by the receive thread and
-        // we avoid writing to it from other threads).
-        if (shmem_session && chan_id >= 1 && chan_id <= cbMAXCHANS) {
-            return shmem_session->getChanInfo(chan_id);
-        }
-        // Fallback to device_config (no shmem available)
-        if (device_session)
-            return Result<cbPKT_CHANINFO>::ok(*device_session->getChanInfo(chan_id));
-        return Result<cbPKT_CHANINFO>::error("Channel information not available");
-    }
 
     /// Apply CMP overlay (position + label) to every channel whose device
     /// (bank, term) matches a loaded CMP entry. Called after loading a CMP
@@ -1410,16 +1411,7 @@ Result<cbPKT_SYSINFO> SdkSession::getSysInfo() const {
 }
 
 Result<cbPKT_CHANINFO> SdkSession::getChanInfo(const uint32_t chan_id) const {
-    // Prefer shmem over device_config because CMP position overlays are
-    // written to shmem (device_config is owned by the receive thread and
-    // we avoid writing to it from other threads).
-    if (m_impl->shmem_session && chan_id >= 1 && chan_id <= cbMAXCHANS) {
-        return m_impl->shmem_session->getChanInfo(chan_id - 1);
-    }
-    // Fallback to device_config (no shmem available)
-    if (m_impl->device_session)
-        return Result<cbPKT_CHANINFO>::ok(*m_impl->device_session->getChanInfo(chan_id - 1));
-    return Result<cbPKT_CHANINFO>::error("Channel information not available");
+    return m_impl->getChanInfo(chan_id);
 }
 
 Result<cbPKT_GROUPINFO> SdkSession::getGroupInfo(uint32_t group_id) const {
