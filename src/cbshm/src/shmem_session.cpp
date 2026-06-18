@@ -802,9 +802,9 @@ struct ShmemSession::Impl {
             case 7:
                 switch (minor_version) {
                     case 8:
-                        /* fallthrough */
-                    case 7:
                         return Result<cbproto_protocol_version_t>::ok(CBPROTO_PROTOCOL_CURRENT);
+                    case 7:
+                        /* fallthrough */
                     case 6:
                         return Result<cbproto_protocol_version_t>::ok(CBPROTO_PROTOCOL_410);
                     case 5:
