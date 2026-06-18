@@ -20,7 +20,7 @@
 #define CBSHM_SHMEM_SESSION_H
 
 // Include Central-compatible types which bring in protocol definitions
-#include <cbshm/central_types/current.h>
+#include <cbshm/central_current.h>
 #include <cbshm/native_types.h>
 #include <cbproto/connection.h>
 #include <cbutil/result.h>

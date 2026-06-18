@@ -33,8 +33,11 @@
 #endif
 
 #include <cbshm/shmem_session.h>
-#include <cbshm/central_types/adapters.h>
-#include <cbshm/central_types/current.h>
+#include <cbshm/central_adapters/base.h>
+#include <cbshm/central_adapters/v4_2.h>
+#include <cbshm/central_adapters/v4_1.h>
+#include <cbshm/central_adapters/v4_0.h>
+#include <cbshm/central_adapters/v3_11.h>
 #include <cbshm/central_types/v4_2.h>
 #include <cbshm/central_types/v4_1.h>
 #include <cbshm/central_types/v4_0.h>

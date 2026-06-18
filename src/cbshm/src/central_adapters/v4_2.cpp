@@ -7,7 +7,7 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include <cbshm/central_types/adapters.h>
+#include <cbshm/central_adapters/v4_2.h>
 #include <cbshm/central_types/v4_2.h>
 
 namespace cbshm {
@@ -997,120 +997,120 @@ uint32_t* Adapter::getLocalXmtBufferPtr() {
     return xmt->buffer;
 }
 
-Result<void> Adapter::getProcInfo(::cbPKT_PROCINFO& buf) const {
+cbutil::Result<void> Adapter::getProcInfo(::cbPKT_PROCINFO& buf) const {
     fromLegacy(buf, cfg->procinfo[instrument_idx]);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::getBankInfo(::cbPKT_BANKINFO& buf, uint32_t bank_num) const {
+cbutil::Result<void> Adapter::getBankInfo(::cbPKT_BANKINFO& buf, uint32_t bank_num) const {
     uint32_t bank_idx = bank_num - 1;
     if (bank_idx >= std::size(cfg->bankinfo[0])) {
-        return Result<void>::error("Bank number out of range");
+        return cbutil::Result<void>::error("Bank number out of range");
     }
     fromLegacy(buf, cfg->bankinfo[instrument_idx][bank_idx]);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::getFilterInfo(::cbPKT_FILTINFO& buf, uint32_t filter_num) const {
+cbutil::Result<void> Adapter::getFilterInfo(::cbPKT_FILTINFO& buf, uint32_t filter_num) const {
     uint32_t filter_idx = filter_num - 1;
     if (filter_idx >= std::size(cfg->filtinfo[0])) {
-        return Result<void>::error("Filter number out of range");
+        return cbutil::Result<void>::error("Filter number out of range");
     }
     fromLegacy(buf, cfg->filtinfo[instrument_idx][filter_idx]);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::getChanInfo(::cbPKT_CHANINFO& buf, uint32_t channel_idx) const {
+cbutil::Result<void> Adapter::getChanInfo(::cbPKT_CHANINFO& buf, uint32_t channel_idx) const {
     if (channel_idx >= std::size(cfg->chaninfo)) {
-        return Result<void>::error("Channel number out of range");
+        return cbutil::Result<void>::error("Channel number out of range");
     }
     fromLegacy(buf, cfg->chaninfo[channel_idx]);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::getSysInfo(::cbPKT_SYSINFO& buf) const {
+cbutil::Result<void> Adapter::getSysInfo(::cbPKT_SYSINFO& buf) const {
     fromLegacy(buf, cfg->sysinfo);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::getGroupInfo(::cbPKT_GROUPINFO& buf, uint32_t group_idx) const {
+cbutil::Result<void> Adapter::getGroupInfo(::cbPKT_GROUPINFO& buf, uint32_t group_idx) const {
     if (group_idx >= std::size(cfg->groupinfo[0])) {
-        return Result<void>::error("Group index out of range");
+        return cbutil::Result<void>::error("Group index out of range");
     }
     fromLegacy(buf, cfg->groupinfo[instrument_idx][group_idx]);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::getConfigBuffer(NativeConfigBuffer& buf) const {
+cbutil::Result<void> Adapter::getConfigBuffer(NativeConfigBuffer& buf) const {
     fromLegacy(buf, *cfg);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::getPcStatus(NativePCStatus& buf) const {
+cbutil::Result<void> Adapter::getPcStatus(NativePCStatus& buf) const {
     fromLegacy(buf, *status);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::getSpikeCache(NativeSpikeCache& buf, uint32_t channel_idx) const {
+cbutil::Result<void> Adapter::getSpikeCache(NativeSpikeCache& buf, uint32_t channel_idx) const {
     if (channel_idx >= std::size(spike->cache)) {
-        return Result<void>::error("Channel index out of range");
+        return cbutil::Result<void>::error("Channel index out of range");
     }
     fromLegacy(buf, spike->cache[channel_idx]);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::setProcInfo(const ::cbPKT_PROCINFO& info) {
+cbutil::Result<void> Adapter::setProcInfo(const ::cbPKT_PROCINFO& info) {
     toLegacy(cfg->procinfo[instrument_idx], info);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::setBankInfo(uint32_t bank_num, const ::cbPKT_BANKINFO& info) {
+cbutil::Result<void> Adapter::setBankInfo(uint32_t bank_num, const ::cbPKT_BANKINFO& info) {
     uint32_t bank_idx = bank_num - 1;
     if (bank_idx >= std::size(cfg->bankinfo[0])) {
-        return Result<void>::error("Bank number out of range");
+        return cbutil::Result<void>::error("Bank number out of range");
     }
     toLegacy(cfg->bankinfo[instrument_idx][bank_idx], info);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::setFilterInfo(uint32_t filter_num, const ::cbPKT_FILTINFO& info) {
+cbutil::Result<void> Adapter::setFilterInfo(uint32_t filter_num, const ::cbPKT_FILTINFO& info) {
     uint32_t filter_idx = filter_num - 1;
     if (filter_idx >= std::size(cfg->filtinfo[0])) {
-        return Result<void>::error("Filter number out of range");
+        return cbutil::Result<void>::error("Filter number out of range");
     }
     toLegacy(cfg->filtinfo[instrument_idx][filter_idx], info);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::setChanInfo(uint32_t channel_idx, const ::cbPKT_CHANINFO& info) {
+cbutil::Result<void> Adapter::setChanInfo(uint32_t channel_idx, const ::cbPKT_CHANINFO& info) {
     if (channel_idx >= std::size(cfg->chaninfo)) {
-        return Result<void>::error("Channel number out of range");
+        return cbutil::Result<void>::error("Channel number out of range");
     }
     toLegacy(cfg->chaninfo[channel_idx], info);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::setSysInfo(const ::cbPKT_SYSINFO& info) {
+cbutil::Result<void> Adapter::setSysInfo(const ::cbPKT_SYSINFO& info) {
     toLegacy(cfg->sysinfo, info);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::setGroupInfo(uint32_t group_idx, const ::cbPKT_GROUPINFO& info) {
+cbutil::Result<void> Adapter::setGroupInfo(uint32_t group_idx, const ::cbPKT_GROUPINFO& info) {
     if (group_idx >= std::size(cfg->groupinfo[0])) {
-        return Result<void>::error("Group index out of range");
+        return cbutil::Result<void>::error("Group index out of range");
     }
     toLegacy(cfg->groupinfo[instrument_idx][group_idx], info);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::setNspStatus(const NativeNSPStatus& status) const {
+cbutil::Result<void> Adapter::setNspStatus(const NativeNSPStatus& status) const {
     toLegacy(this->status->m_nNspStatus[instrument_idx], status);
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
-Result<void> Adapter::setGeminiSystem(bool is_gemini) const {
+cbutil::Result<void> Adapter::setGeminiSystem(bool is_gemini) const {
     status->m_nGeminiSystem = is_gemini ? 1 : 0;
-    return Result<void>::ok();
+    return cbutil::Result<void>::ok();
 }
 
 } // namespace central_v4_2
