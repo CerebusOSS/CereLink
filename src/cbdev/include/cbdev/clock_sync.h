@@ -50,6 +50,17 @@ public:
         // wrong-epoch / raw-PTP-clock value (off by ~1.77e18 ns).
         int64_t external_plausibility_band_ns = 1'000'000'000; // 1 s
         double  external_unc_k = 4.0;
+
+        // Offset-commit discipline for the internal (probe/data) estimate, to
+        // damp per-sample jitter and transient jumps.  A change within
+        // commit_deadband_ns is applied as-is; a larger change up to slew_max_ns
+        // is slewed by slew_gain of the residual per sample; a change beyond
+        // slew_max_ns is treated as a step and applied only after it persists
+        // for step_persist consecutive samples.
+        int64_t commit_deadband_ns = 1'000'000;   // 1 ms
+        int64_t slew_max_ns        = 50'000'000;  // 50 ms
+        double  slew_gain          = 0.2;
+        int     step_persist       = 3;
     };
 
     ClockSync();
@@ -121,6 +132,8 @@ private:
 
     std::optional<int64_t> m_current_offset_ns;
     std::optional<int64_t> m_current_uncertainty_ns;
+    int m_pending_step_count = 0;       // consecutive large-jump samples seen
+    bool m_committed_from_external = false;  // committed value came from a peer offset
 
     // External offset injected by setExternalOffset() — takes priority
     // over internal estimates when set.
@@ -134,6 +147,7 @@ private:
     };
 
     void recomputeEstimate();              // called with lock held
+    void commitDisciplined(int64_t target_offset_ns, int64_t uncertainty_ns);  // lock held
     InternalEstimate computeInternalEstimate() const;  // called with lock held
     bool externalPlausible(int64_t external_ns,
                            const InternalEstimate& internal) const;  // lock held

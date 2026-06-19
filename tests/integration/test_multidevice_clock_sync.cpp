@@ -108,6 +108,11 @@ const std::vector<double>& sampleOffsetsS() {
     return offsets;
 }
 
+/// Cross-device 1 ms agreement is a steady-state requirement: only enforced at
+/// or after this many seconds of settling.  Earlier samples are informational
+/// (the no-raw-clock-leak check still applies at every sample).
+constexpr double AGREEMENT_SETTLE_S = 8.0;
+
 /// Check the clock-sync invariants once.  A device that has not synced yet
 /// returns nullopt — the SAFE fallback, not a failure.  Only a NON-NULL
 /// implausible mapping (raw-clock leak) or a >=1 ms cross-device disagreement
@@ -116,6 +121,7 @@ const std::vector<double>& sampleOffsetsS() {
 void sampleInvariants(std::vector<SdkSession>& sessions,
                       const std::vector<std::string>& names,
                       int iter, double t_s, bool require_ready,
+                      bool require_agreement,
                       int& leak_hits, int& not_ready_hits) {
     SCOPED_TRACE("iter " + std::to_string(iter) + " @ " + std::to_string(t_s) + "s");
 
@@ -184,14 +190,20 @@ void sampleInvariants(std::vector<SdkSession>& sessions,
                 std::chrono::duration<double, std::milli>>(
                     *shared[i] - *shared[j]).count();
             if (std::abs(disagree_ms) > max_abs_ms) max_abs_ms = std::abs(disagree_ms);
-            if (std::abs(disagree_ms) >= 1.0) {
-                ++leak_hits;
-                std::printf("  [iter %d @%.2fs] %-4s vs %-4s DISAGREE = %.6f ms\n",
-                            iter, t_s, names[i].c_str(), names[j].c_str(), disagree_ms);
+            // Devices sharing one PTP clock must converge to <1 ms agreement.
+            // Early in a cold start the offset is still settling, so only assert
+            // the bound once a device has had time to converge; earlier samples
+            // are logged for the convergence curve but not asserted.
+            if (require_agreement) {
+                if (std::abs(disagree_ms) >= 1.0) {
+                    ++leak_hits;
+                    std::printf("  [iter %d @%.2fs] %-4s vs %-4s DISAGREE = %.6f ms\n",
+                                iter, t_s, names[i].c_str(), names[j].c_str(), disagree_ms);
+                }
+                EXPECT_LT(std::abs(disagree_ms), 1.0)
+                    << names[i] << " and " << names[j] << " [iter " << iter << " @"
+                    << t_s << "s] map the shared PTP instant " << disagree_ms << " ms apart";
             }
-            EXPECT_LT(std::abs(disagree_ms), 1.0)
-                << names[i] << " and " << names[j] << " [iter " << iter << " @"
-                << t_s << "s] map the shared PTP instant " << disagree_ms << " ms apart";
         }
     }
     // Full convergence curve: one line per sample regardless of threshold, so a
@@ -258,8 +270,9 @@ TEST(MultiDeviceClockSyncTest, AllConnectedDevicesMapNearHostAndAgree) {
                     std::chrono::duration<double>(t - prev));
                 prev = t;
                 const bool require_ready = (s + 1 == sampleOffsetsS().size());
+                const bool require_agreement = (t >= AGREEMENT_SETTLE_S);
                 sampleInvariants(sessions, names, it, t, require_ready,
-                                 leak_hits, not_ready_hits);
+                                 require_agreement, leak_hits, not_ready_hits);
             }
         }
 

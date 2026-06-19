@@ -51,7 +51,12 @@ void ClockSync::addProbeSample(time_point t1_local, uint64_t t3_device_ns, time_
     if (m_current_offset_ns) {
         const int64_t drift = offset_ns - *m_current_offset_ns;
         if (std::abs(drift) > 1'000'000'000LL) {
+            // Device clock jumped (e.g. nPlay file loop) — old estimate is
+            // stale.  Drop history and force an immediate re-acquire so the
+            // commit discipline doesn't lag the jump.
             m_probe_samples.clear();
+            m_current_offset_ns = std::nullopt;
+            m_pending_step_count = 0;
         }
     }
 
@@ -78,6 +83,8 @@ void ClockSync::reset() {
     m_data_floor_ns = std::nullopt;
     m_current_offset_ns = std::nullopt;
     m_current_uncertainty_ns = std::nullopt;
+    m_pending_step_count = 0;
+    m_committed_from_external = false;
 }
 
 std::optional<ClockSync::time_point> ClockSync::toLocalTime(uint64_t device_time_ns) const {
@@ -138,6 +145,8 @@ void ClockSync::addDataPacketSample(const uint64_t device_time_ns, const time_po
     if (m_current_offset_ns && std::abs(offset_ns - *m_current_offset_ns) > 1'000'000'000LL) {
         m_data_samples.clear();
         m_data_floor_ns = std::nullopt;
+        m_current_offset_ns = std::nullopt;  // re-acquire immediately past a jump
+        m_pending_step_count = 0;
     }
 
     DataSample ds;
@@ -261,17 +270,72 @@ void ClockSync::recomputeEstimate() {
     // (e.g. a wrong-epoch value that would leak the raw device clock) is
     // rejected and the internal estimate is used instead.
     if (m_external_offset_ns && externalPlausible(*m_external_offset_ns, internal)) {
+        // A plausible peer offset is authoritative (and already disciplined at
+        // its source), so adopt it directly.
         m_current_offset_ns = m_external_offset_ns;
         m_current_uncertainty_ns = m_external_uncertainty_ns
             ? m_external_uncertainty_ns
             : std::optional<int64_t>(internal.uncertainty_ns);
+        m_pending_step_count = 0;
+        m_committed_from_external = true;
         return;
     }
 
-    m_current_offset_ns = internal.offset_ns;
-    m_current_uncertainty_ns = internal.offset_ns
-        ? std::optional<int64_t>(internal.uncertainty_ns)
-        : std::nullopt;
+    if (internal.offset_ns) {
+        // A change of source (external->internal, or first acquisition) is a
+        // deliberate event, not jitter — re-acquire directly.  Only the same
+        // (internal) source's drift is run through the commit discipline.
+        if (m_committed_from_external || !m_current_offset_ns.has_value()) {
+            m_current_offset_ns = *internal.offset_ns;
+            m_current_uncertainty_ns = internal.uncertainty_ns;
+            m_pending_step_count = 0;
+        } else {
+            commitDisciplined(*internal.offset_ns, internal.uncertainty_ns);
+        }
+        m_committed_from_external = false;
+    } else {
+        m_current_offset_ns = std::nullopt;
+        m_current_uncertainty_ns = std::nullopt;
+        m_pending_step_count = 0;
+        m_committed_from_external = false;
+    }
+}
+
+void ClockSync::commitDisciplined(int64_t target_offset_ns, int64_t uncertainty_ns) {
+    // Cold start: nothing committed yet — accept the target as-is.
+    if (!m_current_offset_ns) {
+        m_current_offset_ns = target_offset_ns;
+        m_current_uncertainty_ns = uncertainty_ns;
+        m_pending_step_count = 0;
+        return;
+    }
+
+    const int64_t residual = target_offset_ns - *m_current_offset_ns;
+    const int64_t mag = std::llabs(residual);
+
+    if (mag <= m_config.commit_deadband_ns) {
+        // Small change: apply exactly.
+        m_current_offset_ns = target_offset_ns;
+        m_current_uncertainty_ns = uncertainty_ns;
+        m_pending_step_count = 0;
+    } else if (mag <= m_config.slew_max_ns) {
+        // Medium change: slew a fraction of the residual toward the target.
+        // A transient spike is damped; a sustained change is tracked over
+        // several samples.
+        m_current_offset_ns = *m_current_offset_ns
+            + static_cast<int64_t>(m_config.slew_gain * static_cast<double>(residual));
+        m_current_uncertainty_ns = uncertainty_ns;
+        m_pending_step_count = 0;
+    } else {
+        // Large jump: only accept once it persists, so a one-off outlier does
+        // not move the committed offset.
+        if (++m_pending_step_count >= m_config.step_persist) {
+            m_current_offset_ns = target_offset_ns;
+            m_current_uncertainty_ns = uncertainty_ns;
+            m_pending_step_count = 0;
+        }
+        // else: hold the current offset, ignore this sample.
+    }
 }
 
 bool ClockSync::probeSpreadOk() const {
