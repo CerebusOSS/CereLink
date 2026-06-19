@@ -303,11 +303,16 @@ struct SdkSession::Impl {
     // CLIENT-mode clock sync (used when no device_session is available)
     cbdev::ClockSync client_clock_sync;
 
-    // Peer-device clock sync reader.  When this device (NSP) has
-    // unreliable probes, we try to read a peer HUB's clock offset
-    // from its shared memory config segment instead.
-    PeerClockReader peer_clock;
-    bool peer_clock_attempted = false;  // only try once
+    // Peer-device clock sync readers.  When this device (NSP) has unreliable
+    // probes, it borrows a peer HUB's clock offset from the HUB's shared memory
+    // config segment.  All known HUB segments are kept open and refreshed each
+    // cycle; the borrowed offset is sanity-checked inside ClockSync before use.
+    struct PeerHub {
+        std::string segment;
+        std::unique_ptr<PeerClockReader> reader;
+    };
+    std::vector<PeerHub> peer_hubs;
+    bool peer_hubs_init = false;
     struct PendingClockProbe {
         std::chrono::steady_clock::time_point t1_local;
         bool active = false;
@@ -1004,29 +1009,42 @@ Result<void> SdkSession::start() {
                     impl->last_clock_probe_time = now;
                 }
 
-                // If this NSP is using data-packet fallback, try to inject
-                // a peer HUB's probe-based offset into the ClockSync so
-                // that toLocalTime() uses it on the hot path.
-                constexpr int64_t DATA_FALLBACK_UNCERT = 700'000;
-                auto own_uncert = impl->device_session->getUncertaintyNs();
-                if (own_uncert && *own_uncert == DATA_FALLBACK_UNCERT &&
-                    (impl->config.device_type == DeviceType::NSP ||
-                     impl->config.device_type == DeviceType::LEGACY_NSP)) {
-                    if (!impl->peer_clock_attempted) {
-                        impl->peer_clock_attempted = true;
+                // An NSP's own probe timing is unreliable, so it borrows a
+                // peer HUB's probe-based offset.  Open every HUB config segment
+                // (retrying segments not yet available), read each HUB's
+                // published offset, and inject the lowest-uncertainty one.
+                // ClockSync rejects the borrowed offset if it disagrees with
+                // the NSP's own data evidence, so a stale/implausible HUB value
+                // is ignored rather than latched.
+                if (impl->config.device_type == DeviceType::NSP ||
+                    impl->config.device_type == DeviceType::LEGACY_NSP) {
+                    if (!impl->peer_hubs_init) {
+                        impl->peer_hubs_init = true;
                         for (auto hub : {DeviceType::HUB1, DeviceType::HUB2, DeviceType::HUB3}) {
-                            std::string name = getNativeSegmentName(hub, "config");
-                            if (impl->peer_clock.tryOpen(name))
-                                break;
+                            impl->peer_hubs.push_back(
+                                {getNativeSegmentName(hub, "config"),
+                                 std::make_unique<PeerClockReader>()});
                         }
                     }
-                    auto peer_offset = impl->peer_clock.getClockOffsetNs();
-                    auto peer_uncert = impl->peer_clock.getClockUncertaintyNs();
-                    if (peer_offset) {
-                        impl->device_session->setExternalClockOffset(peer_offset, peer_uncert);
-                    } else {
-                        impl->device_session->setExternalClockOffset(std::nullopt);
+
+                    std::optional<int64_t> best_offset;
+                    std::optional<int64_t> best_uncert;
+                    int64_t best_uncert_val = INT64_MAX;
+                    for (auto& ph : impl->peer_hubs) {
+                        if (!ph.reader->isOpen())
+                            ph.reader->tryOpen(ph.segment);
+                        auto offset = ph.reader->getClockOffsetNs();
+                        if (!offset)
+                            continue;
+                        auto uncert = ph.reader->getClockUncertaintyNs();
+                        const int64_t uncert_val = uncert ? *uncert : INT64_MAX;
+                        if (!best_offset || uncert_val < best_uncert_val) {
+                            best_offset = offset;
+                            best_uncert = uncert;
+                            best_uncert_val = uncert_val;
+                        }
                     }
+                    impl->device_session->setExternalClockOffset(best_offset, best_uncert);
                 }
 
                 // Propagate clock sync offset to shmem for CLIENT mode readers
