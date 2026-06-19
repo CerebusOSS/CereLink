@@ -61,6 +61,13 @@ public:
         int64_t slew_max_ns        = 50'000'000;  // 50 ms
         double  slew_gain          = 0.2;
         int     step_persist       = 3;
+
+        // Backstop: if the committed offset stays more than commit_deadband_ns
+        // away from incoming evidence for this many consecutive samples (slew
+        // and step having failed to reconcile it), re-acquire to the current
+        // estimate.  Recovers a committed offset that would otherwise stay
+        // stuck when there is no peer to break the tie.
+        int     stepout_samples    = 25;
     };
 
     ClockSync();
@@ -133,6 +140,7 @@ private:
     std::optional<int64_t> m_current_offset_ns;
     std::optional<int64_t> m_current_uncertainty_ns;
     int m_pending_step_count = 0;       // consecutive large-jump samples seen
+    int m_nonconverged_streak = 0;      // consecutive samples not within deadband
     bool m_committed_from_external = false;  // committed value came from a peer offset
 
     // External offset injected by setExternalOffset() — takes priority
@@ -148,6 +156,7 @@ private:
 
     void recomputeEstimate();              // called with lock held
     void commitDisciplined(int64_t target_offset_ns, int64_t uncertainty_ns);  // lock held
+    void resetDiscipline();                // zero the commit-discipline counters
     InternalEstimate computeInternalEstimate() const;  // called with lock held
     bool externalPlausible(int64_t external_ns,
                            const InternalEstimate& internal) const;  // lock held

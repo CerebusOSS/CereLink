@@ -438,3 +438,87 @@ TEST(ClockSyncMultiDeviceTest, TwoWildlyDisagreeingProbesNotReliable) {
     EXPECT_FALSE(sync.probesAreReliable())
         << "two probes disagreeing by 100 ms should not be treated as reliable";
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Commit discipline (deadband / slew / step / stepout)
+//
+// These drive the committed-offset discipline deterministically via a tailored
+// Config, feeding probes whose selected offset is known.  All GREEN — they
+// guard the discipline that damps per-sample jitter on the live multi-device
+// rig (see tests/integration/test_multidevice_clock_sync.cpp).
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+// A probe whose computed offset is exactly `offset_ns` (symmetric path, RTT
+// 2000 ns): offset = T3 - T1 - RTT/2 = (offset+1000) - 0 - 1000.
+void addProbeWithOffset(ClockSync& sync, int64_t offset_ns) {
+    sync.addProbeSample(tp_from_ns(0),
+                        static_cast<uint64_t>(offset_ns + 1000),
+                        tp_from_ns(2000));
+}
+} // anonymous namespace
+
+// A medium change (within slew_max) is damped, not applied in full: the
+// committed offset moves by slew_gain of the residual.
+TEST(ClockSyncDisciplineTest, MediumChangeIsSlewed) {
+    ClockSync::Config cfg;
+    cfg.commit_deadband_ns = 100'000;       // 0.1 ms
+    cfg.slew_max_ns        = 50'000'000;    // 50 ms
+    cfg.slew_gain          = 0.5;
+    ClockSync sync(cfg);
+
+    addProbeWithOffset(sync, 100'000'000);  // cold-commit at 100 ms
+    ASSERT_EQ(*sync.getOffsetNs(), 100'000'000);
+
+    // Jump the selected offset by +8 ms (deadband < 8 ms < slew_max).
+    addProbeWithOffset(sync, 108'000'000);
+    // Slewed halfway: 100 ms + 0.5 * 8 ms = 104 ms (not the full 108 ms).
+    EXPECT_EQ(*sync.getOffsetNs(), 104'000'000);
+}
+
+// A one-off large jump (beyond slew_max) is held, not adopted, until it
+// persists for step_persist samples.
+TEST(ClockSyncDisciplineTest, LargeJumpHeldThenSteppedAfterPersistence) {
+    ClockSync::Config cfg;
+    cfg.commit_deadband_ns = 100'000;       // 0.1 ms
+    cfg.slew_max_ns        = 2'000'000;     // 2 ms
+    cfg.step_persist       = 3;
+    cfg.stepout_samples    = 1000;          // keep stepout out of the way
+    ClockSync sync(cfg);
+
+    addProbeWithOffset(sync, 100'000'000);  // cold-commit at 100 ms
+    ASSERT_EQ(*sync.getOffsetNs(), 100'000'000);
+
+    // +5 ms jump (> slew_max) — held for the first two samples...
+    addProbeWithOffset(sync, 105'000'000);
+    EXPECT_EQ(*sync.getOffsetNs(), 100'000'000) << "held after 1 large-jump sample";
+    addProbeWithOffset(sync, 105'000'000);
+    EXPECT_EQ(*sync.getOffsetNs(), 100'000'000) << "held after 2 large-jump samples";
+    // ...then accepted on the third (step_persist == 3).
+    addProbeWithOffset(sync, 105'000'000);
+    EXPECT_EQ(*sync.getOffsetNs(), 105'000'000) << "stepped after persistence";
+}
+
+// Stepout backstop: when a large jump is held but never reaches step_persist
+// (here step_persist is effectively infinite), the committed offset still
+// re-acquires after stepout_samples non-converged samples.
+TEST(ClockSyncDisciplineTest, StepoutReacquiresAfterPersistentDisagreement) {
+    ClockSync::Config cfg;
+    cfg.commit_deadband_ns = 100'000;       // 0.1 ms
+    cfg.slew_max_ns        = 2'000'000;     // 2 ms
+    cfg.step_persist       = 1000;          // step path never accepts
+    cfg.stepout_samples    = 5;             // escape after 5 non-converged samples
+    ClockSync sync(cfg);
+
+    addProbeWithOffset(sync, 100'000'000);  // cold-commit at 100 ms
+    ASSERT_EQ(*sync.getOffsetNs(), 100'000'000);
+
+    // Four held large-jump samples: still pinned (step path won't accept).
+    for (int i = 0; i < 4; ++i)
+        addProbeWithOffset(sync, 105'000'000);
+    EXPECT_EQ(*sync.getOffsetNs(), 100'000'000) << "held before stepout";
+
+    // Fifth non-converged sample trips the stepout escape — re-acquire.
+    addProbeWithOffset(sync, 105'000'000);
+    EXPECT_EQ(*sync.getOffsetNs(), 105'000'000) << "stepout should re-acquire";
+}

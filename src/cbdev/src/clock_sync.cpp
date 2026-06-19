@@ -56,7 +56,7 @@ void ClockSync::addProbeSample(time_point t1_local, uint64_t t3_device_ns, time_
             // commit discipline doesn't lag the jump.
             m_probe_samples.clear();
             m_current_offset_ns = std::nullopt;
-            m_pending_step_count = 0;
+            resetDiscipline();
         }
     }
 
@@ -83,7 +83,7 @@ void ClockSync::reset() {
     m_data_floor_ns = std::nullopt;
     m_current_offset_ns = std::nullopt;
     m_current_uncertainty_ns = std::nullopt;
-    m_pending_step_count = 0;
+    resetDiscipline();
     m_committed_from_external = false;
 }
 
@@ -146,7 +146,7 @@ void ClockSync::addDataPacketSample(const uint64_t device_time_ns, const time_po
         m_data_samples.clear();
         m_data_floor_ns = std::nullopt;
         m_current_offset_ns = std::nullopt;  // re-acquire immediately past a jump
-        m_pending_step_count = 0;
+        resetDiscipline();
     }
 
     DataSample ds;
@@ -276,7 +276,7 @@ void ClockSync::recomputeEstimate() {
         m_current_uncertainty_ns = m_external_uncertainty_ns
             ? m_external_uncertainty_ns
             : std::optional<int64_t>(internal.uncertainty_ns);
-        m_pending_step_count = 0;
+        resetDiscipline();
         m_committed_from_external = true;
         return;
     }
@@ -288,7 +288,7 @@ void ClockSync::recomputeEstimate() {
         if (m_committed_from_external || !m_current_offset_ns.has_value()) {
             m_current_offset_ns = *internal.offset_ns;
             m_current_uncertainty_ns = internal.uncertainty_ns;
-            m_pending_step_count = 0;
+            resetDiscipline();
         } else {
             commitDisciplined(*internal.offset_ns, internal.uncertainty_ns);
         }
@@ -296,9 +296,14 @@ void ClockSync::recomputeEstimate() {
     } else {
         m_current_offset_ns = std::nullopt;
         m_current_uncertainty_ns = std::nullopt;
-        m_pending_step_count = 0;
+        resetDiscipline();
         m_committed_from_external = false;
     }
+}
+
+void ClockSync::resetDiscipline() {
+    m_pending_step_count = 0;
+    m_nonconverged_streak = 0;
 }
 
 void ClockSync::commitDisciplined(int64_t target_offset_ns, int64_t uncertainty_ns) {
@@ -306,7 +311,7 @@ void ClockSync::commitDisciplined(int64_t target_offset_ns, int64_t uncertainty_
     if (!m_current_offset_ns) {
         m_current_offset_ns = target_offset_ns;
         m_current_uncertainty_ns = uncertainty_ns;
-        m_pending_step_count = 0;
+        resetDiscipline();
         return;
     }
 
@@ -314,11 +319,25 @@ void ClockSync::commitDisciplined(int64_t target_offset_ns, int64_t uncertainty_
     const int64_t mag = std::llabs(residual);
 
     if (mag <= m_config.commit_deadband_ns) {
-        // Small change: apply exactly.
+        // Small change: apply exactly (converged).
         m_current_offset_ns = target_offset_ns;
         m_current_uncertainty_ns = uncertainty_ns;
-        m_pending_step_count = 0;
-    } else if (mag <= m_config.slew_max_ns) {
+        resetDiscipline();
+        return;
+    }
+
+    // Not converged this sample.  If the committed offset has stayed off-target
+    // for too long, re-acquire regardless — a backstop for a committed value
+    // that slew/step never reconciled (e.g. a lone device with no peer to
+    // break the tie).
+    if (++m_nonconverged_streak >= m_config.stepout_samples) {
+        m_current_offset_ns = target_offset_ns;
+        m_current_uncertainty_ns = uncertainty_ns;
+        resetDiscipline();
+        return;
+    }
+
+    if (mag <= m_config.slew_max_ns) {
         // Medium change: slew a fraction of the residual toward the target.
         // A transient spike is damped; a sustained change is tracked over
         // several samples.
@@ -332,7 +351,7 @@ void ClockSync::commitDisciplined(int64_t target_offset_ns, int64_t uncertainty_
         if (++m_pending_step_count >= m_config.step_persist) {
             m_current_offset_ns = target_offset_ns;
             m_current_uncertainty_ns = uncertainty_ns;
-            m_pending_step_count = 0;
+            resetDiscipline();
         }
         // else: hold the current offset, ignore this sample.
     }
