@@ -94,6 +94,11 @@ public:
     /// Current offset estimate: device_ns - local_ns.
     [[nodiscard]] std::optional<int64_t> getOffsetNs() const;
 
+    /// Offset from this device's OWN evidence only (probes/data), ignoring any
+    /// injected external/peer offset.  Provides an independent vote for
+    /// cross-device clock consensus.
+    [[nodiscard]] std::optional<int64_t> getInternalOffsetNs() const;
+
     /// Uncertainty (RTT/2) from the best probe.
     [[nodiscard]] std::optional<int64_t> getUncertaintyNs() const;
 

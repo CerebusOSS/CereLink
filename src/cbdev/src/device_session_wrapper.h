@@ -226,6 +226,10 @@ public:
         return m_device.getOffsetNs();
     }
 
+    [[nodiscard]] std::optional<int64_t> getInternalOffsetNs() const override {
+        return m_device.getInternalOffsetNs();
+    }
+
     [[nodiscard]] std::optional<int64_t> getUncertaintyNs() const override {
         return m_device.getUncertaintyNs();
     }

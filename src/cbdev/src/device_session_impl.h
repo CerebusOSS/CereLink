@@ -309,6 +309,7 @@ public:
     Result<void> sendClockProbe() override;
 
     [[nodiscard]] std::optional<int64_t> getOffsetNs() const override;
+    [[nodiscard]] std::optional<int64_t> getInternalOffsetNs() const override;
     [[nodiscard]] std::optional<int64_t> getUncertaintyNs() const override;
     void setExternalClockOffset(std::optional<int64_t> offset_ns,
                                 std::optional<int64_t> uncertainty_ns = std::nullopt) override;

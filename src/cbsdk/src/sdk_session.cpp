@@ -1009,48 +1009,81 @@ Result<void> SdkSession::start() {
                     impl->last_clock_probe_time = now;
                 }
 
-                // An NSP's own probe timing is unreliable, so it borrows a
-                // peer HUB's probe-based offset.  Open every HUB config segment
-                // (retrying segments not yet available), read each HUB's
-                // published offset, and inject the lowest-uncertainty one.
-                // ClockSync rejects the borrowed offset if it disagrees with
-                // the NSP's own data evidence, so a stale/implausible HUB value
-                // is ignored rather than latched.
-                if (impl->config.device_type == DeviceType::NSP ||
-                    impl->config.device_type == DeviceType::LEGACY_NSP) {
+                // Cross-device clock consensus.  Devices that share one PTP
+                // clock should report the same device->host offset.  Each device
+                // publishes its own (independent) estimate; here we combine this
+                // device's estimate with every peer's and use the median, so a
+                // transiently-biased device is outvoted instead of skewing time
+                // conversion.  All participants read the same set of published
+                // estimates and therefore converge on the same median.
+                // Consensus needs >=3 participants to reject one outlier; with
+                // fewer, an NSP still borrows a HUB's offset (its own probes are
+                // unreliable) and other device types keep their own estimate.
+                //
+                // Only Gemini devices share a PTP domain; nPlay/custom devices
+                // have no peers and skip this entirely.
+                const DeviceType self_type = impl->config.device_type;
+                const bool shares_ptp_clock =
+                    self_type == DeviceType::NSP  || self_type == DeviceType::LEGACY_NSP ||
+                    self_type == DeviceType::HUB1 || self_type == DeviceType::HUB2 ||
+                    self_type == DeviceType::HUB3;
+                if (shares_ptp_clock) {
                     if (!impl->peer_hubs_init) {
                         impl->peer_hubs_init = true;
-                        for (auto hub : {DeviceType::HUB1, DeviceType::HUB2, DeviceType::HUB3}) {
+                        for (auto dt : {DeviceType::NSP, DeviceType::HUB1,
+                                        DeviceType::HUB2, DeviceType::HUB3}) {
+                            if (dt == impl->config.device_type)
+                                continue;  // skip self
                             impl->peer_hubs.push_back(
-                                {getNativeSegmentName(hub, "config"),
+                                {getNativeSegmentName(dt, "config"),
                                  std::make_unique<PeerClockReader>()});
                         }
                     }
 
-                    std::optional<int64_t> best_offset;
-                    std::optional<int64_t> best_uncert;
-                    int64_t best_uncert_val = INT64_MAX;
+                    // Collect peer votes; track the lowest-uncertainty peer for
+                    // the <3-participant fallback.
+                    std::vector<int64_t> votes;
+                    std::optional<int64_t> best_peer_offset;
+                    std::optional<int64_t> best_peer_uncert;
+                    int64_t best_peer_uncert_val = INT64_MAX;
                     for (auto& ph : impl->peer_hubs) {
                         if (!ph.reader->isOpen())
                             ph.reader->tryOpen(ph.segment);
                         auto offset = ph.reader->getClockOffsetNs();
                         if (!offset)
                             continue;
+                        votes.push_back(*offset);
                         auto uncert = ph.reader->getClockUncertaintyNs();
                         const int64_t uncert_val = uncert ? *uncert : INT64_MAX;
-                        if (!best_offset || uncert_val < best_uncert_val) {
-                            best_offset = offset;
-                            best_uncert = uncert;
-                            best_uncert_val = uncert_val;
+                        if (!best_peer_offset || uncert_val < best_peer_uncert_val) {
+                            best_peer_offset = offset;
+                            best_peer_uncert = uncert;
+                            best_peer_uncert_val = uncert_val;
                         }
                     }
-                    impl->device_session->setExternalClockOffset(best_offset, best_uncert);
+                    // This device's own independent vote.
+                    if (auto own = impl->device_session->getInternalOffsetNs())
+                        votes.push_back(*own);
+
+                    if (votes.size() >= 3) {
+                        std::sort(votes.begin(), votes.end());
+                        const int64_t median = votes[votes.size() / 2];
+                        impl->device_session->setExternalClockOffset(median);
+                    } else if ((impl->config.device_type == DeviceType::NSP ||
+                                impl->config.device_type == DeviceType::LEGACY_NSP) &&
+                               best_peer_offset) {
+                        // Too few for consensus: an NSP still borrows a HUB.
+                        impl->device_session->setExternalClockOffset(best_peer_offset, best_peer_uncert);
+                    } else {
+                        impl->device_session->setExternalClockOffset(std::nullopt);
+                    }
                 }
 
-                // Propagate clock sync offset to shmem for CLIENT mode readers
-                if (auto offset = impl->device_session->getOffsetNs()) {
+                // Publish this device's OWN (independent) estimate for peer
+                // consensus and CLIENT-mode readers.
+                if (auto internal = impl->device_session->getInternalOffsetNs()) {
                     auto uncertainty = impl->device_session->getUncertaintyNs().value_or(0);
-                    impl->shmem_session->setClockSync(*offset, uncertainty);
+                    impl->shmem_session->setClockSync(*internal, uncertainty);
                 }
 
                 // Signal CLIENT processes that new data is available

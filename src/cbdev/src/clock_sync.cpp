@@ -111,6 +111,11 @@ std::optional<int64_t> ClockSync::getOffsetNs() const {
     return m_current_offset_ns;
 }
 
+std::optional<int64_t> ClockSync::getInternalOffsetNs() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return computeInternalEstimate().offset_ns;
+}
+
 std::optional<int64_t> ClockSync::getUncertaintyNs() const {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_current_uncertainty_ns;
