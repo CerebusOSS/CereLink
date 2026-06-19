@@ -1020,11 +1020,13 @@ Result<void> SdkSession::start() {
                 // fewer, an NSP still borrows a HUB's offset (its own probes are
                 // unreliable) and other device types keep their own estimate.
                 //
-                // Only Gemini devices share a PTP domain; nPlay/custom devices
-                // have no peers and skip this entirely.
+                // Only Gemini devices (NSP + HUBs) share one PTP clock.
+                // Non-Gemini devices (legacy NSP, nPlay, custom) have
+                // independent clocks and must not be averaged together, so they
+                // skip consensus/borrow entirely.
                 const DeviceType self_type = impl->config.device_type;
                 const bool shares_ptp_clock =
-                    self_type == DeviceType::NSP  || self_type == DeviceType::LEGACY_NSP ||
+                    self_type == DeviceType::NSP  ||
                     self_type == DeviceType::HUB1 || self_type == DeviceType::HUB2 ||
                     self_type == DeviceType::HUB3;
                 if (shares_ptp_clock) {
@@ -1069,10 +1071,9 @@ Result<void> SdkSession::start() {
                         std::sort(votes.begin(), votes.end());
                         const int64_t median = votes[votes.size() / 2];
                         impl->device_session->setExternalClockOffset(median);
-                    } else if ((impl->config.device_type == DeviceType::NSP ||
-                                impl->config.device_type == DeviceType::LEGACY_NSP) &&
+                    } else if (impl->config.device_type == DeviceType::NSP &&
                                best_peer_offset) {
-                        // Too few for consensus: an NSP still borrows a HUB.
+                        // Too few for consensus: a Gemini NSP still borrows a HUB.
                         impl->device_session->setExternalClockOffset(best_peer_offset, best_peer_uncert);
                     } else {
                         impl->device_session->setExternalClockOffset(std::nullopt);
