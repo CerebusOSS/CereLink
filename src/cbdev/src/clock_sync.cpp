@@ -114,14 +114,10 @@ void ClockSync::setExternalOffset(std::optional<int64_t> offset_ns,
     std::lock_guard<std::mutex> lock(m_mutex);
     m_external_offset_ns = offset_ns;
     m_external_uncertainty_ns = uncertainty_ns;
-    if (offset_ns) {
-        m_current_offset_ns = offset_ns;
-        if (uncertainty_ns)
-            m_current_uncertainty_ns = uncertainty_ns;
-    } else {
-        // Cleared — revert to internal estimate
-        recomputeEstimate();
-    }
+    // Re-evaluate: recomputeEstimate() adopts the external offset only when it
+    // is sanity-consistent with internal evidence, and reverts to the internal
+    // estimate when cleared or when the external offset is implausible.
+    recomputeEstimate();
 }
 
 bool ClockSync::probesAreReliable() const {
@@ -188,28 +184,10 @@ void ClockSync::addDataPacketSample(const uint64_t device_time_ns, const time_po
     recomputeEstimate();
 }
 
-void ClockSync::recomputeEstimate() {
-    // External offset (from peer device shmem) takes unconditional priority.
-    if (m_external_offset_ns) {
-        m_current_offset_ns = m_external_offset_ns;
-        if (m_external_uncertainty_ns)
-            m_current_uncertainty_ns = m_external_uncertainty_ns;
-        return;
-    }
-
-    // Strategy:
-    //   1. If probes are reliable (tight spread), use glitch-filtered
-    //      max-offset probe.  This is the HUB1 path.
-    //   2. Otherwise, if data-packet samples are available, use the
-    //      glitch-filtered max raw_offset from data packets.  This is
-    //      the NSP path — data-packet timestamps (from the ADC/PTP
-    //      clock) are more stable than probe header->time on the NSP.
-    //   3. If neither is available, use probes anyway (unreliable but
-    //      better than nothing).
-
-    // Check if probes are reliable enough to use directly.
-    if (!m_probe_samples.empty() && probeSpreadOk()) {
-        // Probes are tight — use glitch-filtered max-offset.
+ClockSync::InternalEstimate ClockSync::computeInternalEstimate() const {
+    // Glitch-filtered max-offset probe pick (least-queued probe).  Returns
+    // {offset, uncertainty=rtt/2} for the selected probe.
+    const auto bestProbe = [this]() -> InternalEstimate {
         std::vector<size_t> indices(m_probe_samples.size());
         std::iota(indices.begin(), indices.end(), 0);
         std::sort(indices.begin(), indices.end(),
@@ -229,53 +207,79 @@ void ClockSync::recomputeEstimate() {
         }
 
         const auto& best = m_probe_samples[indices[top - 1]];
-        m_current_offset_ns = best.offset_ns;
-        m_current_uncertainty_ns = best.rtt_ns / 2;
-        return;
-    }
+        InternalEstimate e;
+        e.offset_ns = best.offset_ns;
+        e.uncertainty_ns = best.rtt_ns / 2;
+        return e;
+    };
 
-    // Probes unreliable or absent — use data-packet fallback.
+    // Strategy:
+    //   1. If probes are reliable (enough samples, tight spread), use the
+    //      glitch-filtered max-offset probe.  This is the HUB1 path.
+    //   2. Otherwise, if data-packet samples are available, use the
+    //      glitch-filtered max raw_offset from data packets.  This is
+    //      the NSP path — data-packet timestamps (from the ADC/PTP
+    //      clock) are more stable than probe header->time on the NSP.
+    //   3. If neither is available, use probes anyway (unreliable but
+    //      better than nothing).
+    if (!m_probe_samples.empty() && probeSpreadOk())
+        return bestProbe();
+
     if (m_data_floor_ns.has_value()) {
-        m_current_offset_ns = *m_data_floor_ns;
-        m_current_uncertainty_ns = 700'000;  // ONE_WAY_DELAY_ESTIMATE_NS
+        InternalEstimate e;
+        e.offset_ns = *m_data_floor_ns;
+        e.uncertainty_ns = 700'000;  // ONE_WAY_DELAY_ESTIMATE_NS
+        return e;
+    }
+
+    if (!m_probe_samples.empty())
+        return bestProbe();
+
+    return InternalEstimate{};  // offset_ns == nullopt
+}
+
+bool ClockSync::externalPlausible(int64_t external_ns,
+                                  const InternalEstimate& internal) const {
+    // With no own evidence to check against, trust the peer (cold start).
+    if (!internal.offset_ns)
+        return true;
+    const int64_t diff = std::llabs(external_ns - *internal.offset_ns);
+    const int64_t band = std::max<int64_t>(
+        m_config.external_plausibility_band_ns,
+        static_cast<int64_t>(m_config.external_unc_k * internal.uncertainty_ns));
+    return diff <= band;
+}
+
+void ClockSync::recomputeEstimate() {
+    const InternalEstimate internal = computeInternalEstimate();
+
+    // An external (peer-borrowed) offset is treated as a candidate, not an
+    // unconditional override.  It is adopted only when it is sanity-consistent
+    // with our own evidence, and — because this runs on every probe/data
+    // sample — it is re-checked against fresh internal evidence each time, so a
+    // stale external offset cannot latch.  An implausible external offset
+    // (e.g. a wrong-epoch value that would leak the raw device clock) is
+    // rejected and the internal estimate is used instead.
+    if (m_external_offset_ns && externalPlausible(*m_external_offset_ns, internal)) {
+        m_current_offset_ns = m_external_offset_ns;
+        m_current_uncertainty_ns = m_external_uncertainty_ns
+            ? m_external_uncertainty_ns
+            : std::optional<int64_t>(internal.uncertainty_ns);
         return;
     }
 
-    // Last resort: use probes even though they're unreliable.
-    if (!m_probe_samples.empty()) {
-        // Same glitch-filtered max-offset as above.
-        std::vector<size_t> indices(m_probe_samples.size());
-        std::iota(indices.begin(), indices.end(), 0);
-        std::sort(indices.begin(), indices.end(),
-                  [this](size_t a, size_t b) {
-                      return m_probe_samples[a].offset_ns
-                           < m_probe_samples[b].offset_ns;
-                  });
-
-        constexpr int64_t GAP_THRESHOLD_NS = 10'000'000;
-        size_t top = indices.size();
-        while (top > 1) {
-            if (m_probe_samples[indices[top - 1]].offset_ns -
-                m_probe_samples[indices[top - 2]].offset_ns > GAP_THRESHOLD_NS)
-                --top;
-            else
-                break;
-        }
-
-        const auto& best = m_probe_samples[indices[top - 1]];
-        m_current_offset_ns = best.offset_ns;
-        m_current_uncertainty_ns = best.rtt_ns / 2;
-        return;
-    }
-
-    m_current_offset_ns = std::nullopt;
-    m_current_uncertainty_ns = std::nullopt;
+    m_current_offset_ns = internal.offset_ns;
+    m_current_uncertainty_ns = internal.offset_ns
+        ? std::optional<int64_t>(internal.uncertainty_ns)
+        : std::nullopt;
 }
 
 bool ClockSync::probeSpreadOk() const {
     // Internal version — called with m_mutex already held.
-    if (m_probe_samples.size() < 3)
-        return true;
+    // Require a minimum number of probes: one (or a wild pair of) probe is not
+    // enough evidence to declare the probe path reliable.
+    if (m_probe_samples.size() < m_config.min_reliable_probes)
+        return false;
     int64_t lo = m_probe_samples.front().offset_ns;
     int64_t hi = lo;
     for (const auto& p : m_probe_samples) {

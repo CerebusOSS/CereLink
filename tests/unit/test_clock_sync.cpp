@@ -194,3 +194,247 @@ TEST(ClockSyncTest, BestProbeIsMaxOffset) {
     EXPECT_EQ(*sync.getOffsetNs(), 9950);
     EXPECT_EQ(*sync.getUncertaintyNs(), 50);  // RTT/2 = 100/2 = 50
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Multi-device clock-sync bug coverage
+//
+// These tests pin down the device(PTP)->host time mapping invariants that the
+// Gemini NSP/HUB shared-clock bug violates.  Each test is labelled GREEN
+// (guards existing correct behavior) or RED (encodes the INTENDED invariant and
+// is EXPECTED TO FAIL on the current code, documenting the defect).
+//
+// Realistic magnitudes: a Gemini PTP clock reports wall-clock nanoseconds
+// (~1.77e18 ns ≈ mid-2026), while the host std::chrono::steady_clock counts
+// nanoseconds since boot (~5e12 ns ≈ 5000 s uptime).  The true offset
+// (device_ns - steady_ns) is therefore ~1.77e18.  A "raw device clock leak"
+// means toLocalTime() returns ~device_ns itself (offset ≈ 0 applied), i.e. a
+// time_point ~1.77e9 s from the steady epoch instead of the ~5000 s host value.
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+// Host steady_clock "now", in ns since the steady epoch (~5000 s uptime).
+constexpr int64_t HOST_NOW_NS = 5'000'000'000'000LL;
+// True device(PTP) - host offset (~1.77e18 ns ≈ mid-2026 wall clock).
+constexpr int64_t TRUE_OFFSET_NS = 1'770'000'000'000'000'000LL;
+// Device(PTP) timestamp corresponding to HOST_NOW_NS.
+constexpr uint64_t DEVICE_NOW_NS =
+    static_cast<uint64_t>(HOST_NOW_NS + TRUE_OFFSET_NS);
+
+} // anonymous namespace
+
+// (A1) GREEN — Device(PTP)->host sanity for the probe path.
+// After establishing a large true offset from a symmetric probe around host
+// instant HOST_NOW, toLocalTime(latest device_ns) must land near HOST_NOW and
+// MUST NOT leak the raw device clock (must be far from device_ns).
+TEST(ClockSyncMultiDeviceTest, ProbeMappingDoesNotLeakRawDeviceClock) {
+    ClockSync sync;
+
+    // Symmetric probe centered on HOST_NOW: RTT = 2000 ns, midpoint = HOST_NOW.
+    // offset = T3 - T1 - 0.5*RTT = DEVICE_NOW - (HOST_NOW-1000) - 1000 = TRUE_OFFSET.
+    sync.addProbeSample(tp_from_ns(HOST_NOW_NS - 1000),
+                        DEVICE_NOW_NS,
+                        tp_from_ns(HOST_NOW_NS + 1000));
+
+    ASSERT_TRUE(sync.getOffsetNs().has_value());
+    EXPECT_EQ(*sync.getOffsetNs(), TRUE_OFFSET_NS);
+
+    auto local = sync.toLocalTime(DEVICE_NOW_NS);
+    ASSERT_TRUE(local.has_value());
+    const int64_t local_ns = tp_to_ns(*local);
+
+    // Lands near the true host instant (within the ~1us probe RTT).
+    EXPECT_NEAR(static_cast<double>(local_ns),
+                static_cast<double>(HOST_NOW_NS), 1'000.0);
+
+    // Core invariant: result must NOT be ~= raw device_ns.  The gap equals the
+    // (huge) true offset, far more than 1 ms.
+    EXPECT_GT(std::llabs(static_cast<long long>(DEVICE_NOW_NS) - local_ns),
+              1'000'000LL)
+        << "toLocalTime leaked the raw device/PTP clock";
+}
+
+// (A2) GREEN — Data-packet fallback path.
+// With no probes, feed data-packet samples carrying a known device-host offset
+// plus per-packet network delay.  The data-floor estimate must yield
+// toLocalTime within the documented ONE_WAY_DELAY/uncertainty (700 us) of truth,
+// and the reported uncertainty must be the data-fallback value.
+TEST(ClockSyncMultiDeviceTest, DataFallbackMappingWithinUncertainty) {
+    ClockSync sync;
+
+    // Feed 8 data packets.  raw_offset = device_ts - recv = TRUE_OFFSET - delay.
+    // Min one-way delay is 300 us, so max raw_offset = TRUE_OFFSET - 300us, and
+    // the estimate (max raw + 700us correction) = TRUE_OFFSET + 400us.
+    constexpr int64_t MIN_DELAY_NS = 300'000;
+    int64_t last_recv_ns = 0;
+    uint64_t last_device_ns = 0;
+    for (int k = 0; k < 8; ++k) {
+        const int64_t recv_ns = HOST_NOW_NS + k * 1'000'000LL;  // 1 ms apart
+        // Vary delay >= MIN_DELAY_NS; k==3 hits the minimum.
+        const int64_t delay_ns = MIN_DELAY_NS + std::llabs(3 - k) * 50'000LL;
+        const uint64_t device_ns =
+            static_cast<uint64_t>(recv_ns + TRUE_OFFSET_NS - delay_ns);
+        sync.addDataPacketSample(device_ns, tp_from_ns(recv_ns));
+        last_recv_ns = recv_ns;
+        last_device_ns = device_ns;
+    }
+
+    ASSERT_TRUE(sync.getOffsetNs().has_value());
+    ASSERT_TRUE(sync.getUncertaintyNs().has_value());
+    EXPECT_EQ(*sync.getUncertaintyNs(), 700'000)
+        << "data fallback should report the ONE_WAY_DELAY uncertainty";
+
+    auto local = sync.toLocalTime(last_device_ns);
+    ASSERT_TRUE(local.has_value());
+    const int64_t local_ns = tp_to_ns(*local);
+
+    // The mapped host time must be within ~1 ms (one-way delay + correction) of
+    // when that packet was actually received.
+    EXPECT_NEAR(static_cast<double>(local_ns),
+                static_cast<double>(last_recv_ns), 1'000'000.0);
+
+    // And it must not leak the raw device clock.
+    EXPECT_GT(std::llabs(static_cast<long long>(last_device_ns) - local_ns),
+              1'000'000'000LL)
+        << "data fallback leaked the raw device/PTP clock";
+}
+
+// (A3a) GREEN — setExternalOffset is used while set, and clearing (nullopt)
+// reverts to the internal (data-derived) estimate.
+TEST(ClockSyncMultiDeviceTest, ExternalOffsetUsedThenClearedRevertsToInternal) {
+    ClockSync sync;
+
+    // Establish an internal data-derived estimate ≈ TRUE_OFFSET + 400us.
+    for (int k = 0; k < 8; ++k) {
+        const int64_t recv_ns = HOST_NOW_NS + k * 1'000'000LL;
+        const uint64_t device_ns =
+            static_cast<uint64_t>(recv_ns + TRUE_OFFSET_NS - 300'000);
+        sync.addDataPacketSample(device_ns, tp_from_ns(recv_ns));
+    }
+    ASSERT_TRUE(sync.getOffsetNs().has_value());
+    const int64_t internal = *sync.getOffsetNs();
+
+    // Inject a plausible external offset 50 ms away — it must take effect.
+    const int64_t external = TRUE_OFFSET_NS + 50'000'000LL;
+    sync.setExternalOffset(external, 1'000'000);
+    ASSERT_TRUE(sync.getOffsetNs().has_value());
+    EXPECT_EQ(*sync.getOffsetNs(), external);
+
+    // Clearing reverts to the internal estimate.
+    sync.setExternalOffset(std::nullopt);
+    ASSERT_TRUE(sync.getOffsetNs().has_value());
+    EXPECT_EQ(*sync.getOffsetNs(), internal);
+}
+
+// (A3b) RED — An external offset that maps the latest device_ns to an
+// implausible host time (decades from the device's own data-packet evidence)
+// must NOT be adopted with unconditional priority.  Intended invariant: an
+// adopted external offset must be sanity-consistent with the device's own data
+// evidence, else it is rejected/flagged.
+//
+// Current code (clock_sync.cpp:191-198 recomputeEstimate / 112-125
+// setExternalOffset) adopts ANY external offset unconditionally, so an external
+// offset of 0 collapses toLocalTime() to the raw device clock.  EXPECTED FAIL.
+TEST(ClockSyncMultiDeviceTest, ImplausibleExternalOffsetRejected) {
+    ClockSync sync;
+
+    // Strong internal data evidence: offset ≈ TRUE_OFFSET.
+    for (int k = 0; k < 8; ++k) {
+        const int64_t recv_ns = HOST_NOW_NS + k * 1'000'000LL;
+        const uint64_t device_ns =
+            static_cast<uint64_t>(recv_ns + TRUE_OFFSET_NS - 300'000);
+        sync.addDataPacketSample(device_ns, tp_from_ns(recv_ns));
+    }
+    ASSERT_TRUE(sync.toLocalTime(DEVICE_NOW_NS).has_value());
+
+    // Inject a wildly inconsistent external offset (0 → maps device_ns to the
+    // raw PTP clock, ~1.77e18 ns from the data-derived host time).
+    sync.setExternalOffset(0, 1'000'000);
+
+    auto local = sync.toLocalTime(DEVICE_NOW_NS);
+    ASSERT_TRUE(local.has_value());
+    const int64_t local_ns = tp_to_ns(*local);
+
+    // INTENDED: the implausible external offset is rejected, so the mapping
+    // stays near the device's own (data-derived) host estimate ≈ HOST_NOW.
+    EXPECT_LT(std::llabs(local_ns - HOST_NOW_NS), 1'000'000'000LL)
+        << "implausible external offset was blindly adopted; toLocalTime="
+        << local_ns << " (raw device_ns=" << DEVICE_NOW_NS << ")";
+}
+
+// (A4) RED — Latch behavior.  Model the SDK sequence: device on data fallback,
+// a stale external offset injected once, then fresh internal evidence keeps
+// arriving.  The estimate must be able to RECOVER (refresh off the fresh
+// internal evidence) rather than staying permanently pinned to the stale
+// external offset.
+//
+// Current code latches: once m_external_offset_ns is set, recomputeEstimate
+// (clock_sync.cpp:191-198) returns it first on every subsequent
+// addDataPacketSample, so internal evidence is ignored forever.  EXPECTED FAIL.
+TEST(ClockSyncMultiDeviceTest, ExternalOffsetDoesNotLatchAgainstFreshEvidence) {
+    ClockSync sync;
+
+    // Establish good internal data evidence ≈ TRUE_OFFSET (data fallback).
+    for (int k = 0; k < 8; ++k) {
+        const int64_t recv_ns = HOST_NOW_NS + k * 1'000'000LL;
+        const uint64_t device_ns =
+            static_cast<uint64_t>(recv_ns + TRUE_OFFSET_NS - 300'000);
+        sync.addDataPacketSample(device_ns, tp_from_ns(recv_ns));
+    }
+
+    // Inject a stale external offset 10 s away from the truth, once — as the
+    // SDK does when it borrows a peer HUB offset on data fallback.  An offset
+    // this far from the device's own evidence must NOT pin the estimate: it is
+    // rejected as implausible (and even if a future change instead adopted it
+    // briefly, the estimate must still recover as fresh evidence arrives — the
+    // invariant checked at the end of this test).
+    const int64_t stale_external = TRUE_OFFSET_NS + 10'000'000'000LL;
+    sync.setExternalOffset(stale_external, 700'000);
+
+    // Fresh, consistent internal evidence continues to arrive.
+    for (int k = 8; k < 40; ++k) {
+        const int64_t recv_ns = HOST_NOW_NS + k * 1'000'000LL;
+        const uint64_t device_ns =
+            static_cast<uint64_t>(recv_ns + TRUE_OFFSET_NS - 300'000);
+        sync.addDataPacketSample(device_ns, tp_from_ns(recv_ns));
+    }
+
+    // INTENDED: the estimate recovers toward the fresh internal evidence and is
+    // no longer pinned to the stale external offset.
+    ASSERT_TRUE(sync.getOffsetNs().has_value());
+    EXPECT_LT(std::llabs(*sync.getOffsetNs() - TRUE_OFFSET_NS), 1'000'000LL)
+        << "estimate latched to stale external offset " << stale_external
+        << "; got " << *sync.getOffsetNs();
+}
+
+// (A5a) RED — A single probe must not be reported as "reliable": one probe is
+// insufficient evidence to commit an offset.
+//
+// Current probeSpreadOk() (clock_sync.cpp:277) returns true for < 3 probes, so
+// probesAreReliable() reports a lone probe as reliable.  EXPECTED FAIL.
+TEST(ClockSyncMultiDeviceTest, SingleProbeNotReliable) {
+    ClockSync sync;
+    sync.addProbeSample(tp_from_ns(HOST_NOW_NS - 1000),
+                        DEVICE_NOW_NS,
+                        tp_from_ns(HOST_NOW_NS + 1000));
+    EXPECT_FALSE(sync.probesAreReliable())
+        << "a single probe should not be treated as reliable";
+}
+
+// (A5b) RED — Two wildly disagreeing probes must not be reported as "reliable".
+// A pair whose offsets differ by 100 ms is clearly inconsistent, but
+// probeSpreadOk() short-circuits to true for < 3 probes, so a wild pair (or a
+// single wild probe) can define the committed offset.  EXPECTED FAIL.
+TEST(ClockSyncMultiDeviceTest, TwoWildlyDisagreeingProbesNotReliable) {
+    ClockSync sync;
+    // Probe 1: offset ≈ TRUE_OFFSET.
+    sync.addProbeSample(tp_from_ns(HOST_NOW_NS - 1000),
+                        DEVICE_NOW_NS,
+                        tp_from_ns(HOST_NOW_NS + 1000));
+    // Probe 2: offset ≈ TRUE_OFFSET + 100 ms (wildly different).
+    sync.addProbeSample(tp_from_ns(HOST_NOW_NS - 1000),
+                        DEVICE_NOW_NS + 100'000'000ULL,
+                        tp_from_ns(HOST_NOW_NS + 1000));
+    EXPECT_FALSE(sync.probesAreReliable())
+        << "two probes disagreeing by 100 ms should not be treated as reliable";
+}

@@ -128,6 +128,32 @@ gtest_discover_tests(clock_sync_tests)
 
 message(STATUS "Unit tests configured for clock_sync")
 
+# Multi-device clock sync tests (cross-device consistency + peer-borrow leak).
+# Needs cbshm for the production ShmemSession clock exchange (setClockSync /
+# getClockOffsetNs) in addition to cbdev's ClockSync.
+add_executable(clock_sync_multidevice_tests
+    test_clock_sync_multidevice.cpp
+)
+
+target_link_libraries(clock_sync_multidevice_tests
+    PRIVATE
+        cbdev
+        cbshm
+        cbproto
+        GTest::gtest_main
+)
+
+target_include_directories(clock_sync_multidevice_tests
+    BEFORE PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/cbdev/include
+        ${PROJECT_SOURCE_DIR}/src/cbshm/include
+        ${PROJECT_SOURCE_DIR}/src/cbproto/include
+)
+
+gtest_discover_tests(clock_sync_multidevice_tests)
+
+message(STATUS "Unit tests configured for clock_sync multidevice")
+
 # cbsdk tests
 add_executable(cbsdk_tests
     test_sdk_session.cpp
