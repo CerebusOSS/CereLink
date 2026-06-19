@@ -112,6 +112,17 @@ struct PeerClockReader {
         return cfg->clock_offset_ns;
     }
 
+    /// Peer's own (pre-consensus) estimate — the value to use for cross-device
+    /// consensus voting (clock_offset_ns is the peer's post-consensus value).
+    std::optional<int64_t> getRawOffsetNs() const {
+        if (!isOpen()) return std::nullopt;
+        const auto* cfg = static_cast<const cbshm::NativeConfigBuffer*>(mapped);
+        if (!cfg->clock_raw_valid) return std::nullopt;
+        if (cfg->owner_pid != 0 && kill(static_cast<pid_t>(cfg->owner_pid), 0) != 0)
+            return std::nullopt;
+        return cfg->clock_raw_offset_ns;
+    }
+
     std::optional<int64_t> getClockUncertaintyNs() const {
         if (!isOpen()) return std::nullopt;
         const auto* cfg = static_cast<const cbshm::NativeConfigBuffer*>(mapped);
@@ -1051,7 +1062,9 @@ Result<void> SdkSession::start() {
                     for (auto& ph : impl->peer_hubs) {
                         if (!ph.reader->isOpen())
                             ph.reader->tryOpen(ph.segment);
-                        auto offset = ph.reader->getClockOffsetNs();
+                        // Vote on the peer's own (pre-consensus) estimate so the
+                        // median can track real common-mode drift.
+                        auto offset = ph.reader->getRawOffsetNs();
                         if (!offset)
                             continue;
                         votes.push_back(*offset);
@@ -1080,11 +1093,16 @@ Result<void> SdkSession::start() {
                     }
                 }
 
-                // Publish this device's OWN (independent) estimate for peer
-                // consensus and CLIENT-mode readers.
-                if (auto internal = impl->device_session->getInternalOffsetNs()) {
+                // Publish two offsets: the committed (post-consensus) value in
+                // clock_offset_ns for CLIENT-mode readers, and this device's own
+                // (pre-consensus) estimate in clock_raw_offset_ns for peers to
+                // vote on.
+                {
                     auto uncertainty = impl->device_session->getUncertaintyNs().value_or(0);
-                    impl->shmem_session->setClockSync(*internal, uncertainty);
+                    if (auto committed = impl->device_session->getOffsetNs())
+                        impl->shmem_session->setClockSync(*committed, uncertainty);
+                    if (auto internal = impl->device_session->getInternalOffsetNs())
+                        impl->shmem_session->setClockRawOffset(*internal);
                 }
 
                 // Signal CLIENT processes that new data is available
