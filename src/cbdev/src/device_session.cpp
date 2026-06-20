@@ -547,7 +547,9 @@ Result<int> DeviceSession::receivePackets(void* buffer, const size_t buffer_size
                 const size_t packet_size = cbPKT_HEADER_SIZE + (header->dlen * 4);
                 if (offset + packet_size > total_bytes) break;
 
-                header->time = header->time * m_impl->ts_convert_num / m_impl->ts_convert_den;
+                header->time = deviceTimestampToNs(
+                    header->time, m_impl->timestamps_are_nanoseconds,
+                    m_impl->ts_convert_num, m_impl->ts_convert_den);
 
                 offset += packet_size;
             }
@@ -1580,21 +1582,32 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                     // (we zero-initialize it). Fall back to header->time which is
                     // the stale ptptime from the previous main loop iteration.
                     constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
-                    uint64_t device_time_ns;
+                    // A probe is only usable if it carries a real device timestamp.
+                    // Both sources can be zero: .etime is zero on firmware that
+                    // doesn't write it, and header->time is zero while the device
+                    // clock isn't running yet (e.g. nPlay before playback starts,
+                    // proctime == 0). Such a probe yields offset ~= -host_clock,
+                    // which poisons the estimate (the max-offset/glitch filter then
+                    // strips the later good probes as outliers). Skip it.
+                    uint64_t device_time_ns = 0;
+                    bool have_device_time = true;
                     if (nplay->etime != 0) {
                         device_time_ns = nplay->etime;
+                    } else if (header->time != 0) {
+                        device_time_ns = deviceTimestampToNs(
+                                             header->time, m_impl->timestamps_are_nanoseconds,
+                                             m_impl->ts_convert_num, m_impl->ts_convert_den)
+                                       + STALENESS_CORRECTION_NS;
                     } else {
-                        device_time_ns = header->time;
-                        if (!m_impl->timestamps_are_nanoseconds && m_impl->ts_convert_den > 1) {
-                            device_time_ns = device_time_ns * m_impl->ts_convert_num / m_impl->ts_convert_den;
-                        }
-                        device_time_ns += STALENESS_CORRECTION_NS;
+                        have_device_time = false;  // device clock not running yet
                     }
 
-                    m_impl->clock_sync.addProbeSample(
-                        m_impl->pending_clock_probe.t1_local,
-                        device_time_ns,
-                        m_impl->last_recv_timestamp);
+                    if (have_device_time) {
+                        m_impl->clock_sync.addProbeSample(
+                            m_impl->pending_clock_probe.t1_local,
+                            device_time_ns,
+                            m_impl->last_recv_timestamp);
+                    }
                     m_impl->pending_clock_probe.active = false;
                 }
             }
@@ -1614,8 +1627,15 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
         offset += packet_size;
     }
 
-    // Feed the last data packet's timestamp for fallback clock sync.
+    // Feed the last data packet's timestamp for fallback clock sync. Convert
+    // ticks->ns the same way the probe and data-delivery paths do: on non-Gemini
+    // devices (e.g. nPlay) header->time is a sample count, not nanoseconds, so
+    // passing it raw makes the fallback offset ~= -host_clock and poisons the
+    // estimate. On Gemini (timestamps_are_nanoseconds) this is a no-op.
     if (last_data_time != 0) {
+        last_data_time = deviceTimestampToNs(
+            last_data_time, m_impl->timestamps_are_nanoseconds,
+            m_impl->ts_convert_num, m_impl->ts_convert_den);
         m_impl->clock_sync.addDataPacketSample(
             last_data_time, m_impl->last_recv_timestamp);
     }
