@@ -148,6 +148,7 @@ struct PeerClockReader {
     bool isOpen() const { return false; }
     bool tryOpen(const std::string&) { return false; }
     std::optional<int64_t> getClockOffsetNs() const { return std::nullopt; }
+    std::optional<int64_t> getRawOffsetNs() const { return std::nullopt; }
     std::optional<int64_t> getClockUncertaintyNs() const { return std::nullopt; }
     void close() {}
 #endif
