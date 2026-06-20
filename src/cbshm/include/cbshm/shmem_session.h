@@ -246,9 +246,14 @@ public:
     /// @{
 
     /// @brief Set clock sync offset (called by STANDALONE mode)
-    /// @param offset_ns device_ns - steady_clock_ns
+    /// @param offset_ns device_ns - steady_clock_ns (the usable/consensus offset)
     /// @param uncertainty_ns Half-RTT uncertainty
     void setClockSync(int64_t offset_ns, int64_t uncertainty_ns);
+
+    /// @brief Set this device's own (pre-consensus) offset estimate, published
+    ///        for peer cross-device consensus voting (called by STANDALONE).
+    /// @param raw_offset_ns device_ns - steady_clock_ns from this device alone
+    void setClockRawOffset(int64_t raw_offset_ns);
 
     /// @brief Get clock sync offset (readable by CLIENT mode)
     /// @return offset in nanoseconds, or nullopt if no sync data

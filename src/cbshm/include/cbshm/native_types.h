@@ -119,13 +119,19 @@ typedef struct {
     cbCOLORTABLE colortable;                                    ///< Color table
 
     // Clock synchronization (written by STANDALONE, read by CLIENT)
-    int64_t clock_offset_ns;        ///< device_ns - steady_clock_ns (0 if unknown)
+    int64_t clock_offset_ns;        ///< device_ns - steady_clock_ns; the usable (consensus) offset for CLIENT readers (0 if unknown)
     int64_t clock_uncertainty_ns;   ///< Half-RTT uncertainty in nanoseconds (0 if unknown)
     uint32_t clock_sync_valid;      ///< Non-zero if clock_offset_ns is valid
     uint32_t clock_sync_reserved;   ///< Reserved for alignment
 
     // Ownership tracking (written by STANDALONE at creation, read by CLIENT for liveness check)
     uint32_t owner_pid;             ///< PID of STANDALONE process that created this segment (0 = unknown)
+
+    // This device's OWN (pre-consensus) offset estimate, written for peer
+    // cross-device consensus voting.  Distinct from clock_offset_ns, which is
+    // the post-consensus value CLIENT readers should use.
+    uint32_t clock_raw_valid;       ///< Non-zero if clock_raw_offset_ns is valid
+    int64_t  clock_raw_offset_ns;   ///< This device's own independent estimate (device_ns - steady_clock_ns)
 } NativeConfigBuffer;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

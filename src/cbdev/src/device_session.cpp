@@ -976,6 +976,11 @@ std::optional<int64_t> DeviceSession::getOffsetNs() const {
     return m_impl->clock_sync.getOffsetNs();
 }
 
+std::optional<int64_t> DeviceSession::getInternalOffsetNs() const {
+    if (!m_impl) return std::nullopt;
+    return m_impl->clock_sync.getInternalOffsetNs();
+}
+
 std::optional<int64_t> DeviceSession::getUncertaintyNs() const {
     if (!m_impl) return std::nullopt;
     return m_impl->clock_sync.getUncertaintyNs();

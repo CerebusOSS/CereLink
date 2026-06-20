@@ -326,6 +326,11 @@ public:
     /// @return Offset in nanoseconds, or nullopt if no sync data available
     [[nodiscard]] virtual std::optional<int64_t> getOffsetNs() const = 0;
 
+    /// Offset from this device's own evidence only (ignores any injected
+    /// external/peer offset) — an independent vote for cross-device consensus.
+    /// @return Offset in nanoseconds, or nullopt if no sync data available
+    [[nodiscard]] virtual std::optional<int64_t> getInternalOffsetNs() const = 0;
+
     /// Uncertainty (half-RTT) from best probe, or INT64_MAX for one-way only.
     /// @return Uncertainty in nanoseconds, or nullopt if no sync data available
     [[nodiscard]] virtual std::optional<int64_t> getUncertaintyNs() const = 0;

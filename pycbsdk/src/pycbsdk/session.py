@@ -256,8 +256,11 @@ class Session:
         self._callback_refs: list = []
         self._lock = threading.Lock()
         self._closed = False
-        # Calibrate monotonic ↔ steady_clock offset for device_to_monotonic()
+        # Calibrate monotonic ↔ steady_clock offset for device_to_monotonic().
+        # Re-measured on drift (e.g. across host sleep); see
+        # _maybe_recalibrate_monotonic().
         self._mono_to_steady_offset_ns = self._calibrate_monotonic_offset()
+        self._last_recal_probe_mono_ns = _time.monotonic_ns()
 
     def __enter__(self):
         return self
@@ -1614,6 +1617,12 @@ class Session:
 
     # --- Clock Synchronization ---
 
+    # Re-measure the monotonic↔steady offset when the two clocks drift.  A cheap
+    # one-sample probe runs at most this often (monotonic ns); a full
+    # re-calibration runs only when the probe shows drift past the threshold.
+    _RECAL_PROBE_INTERVAL_NS = 1_000_000_000  # 1 s
+    _RECAL_DRIFT_THRESHOLD_NS = 1_000_000  # 1 ms
+
     @staticmethod
     def _calibrate_monotonic_offset(n_samples: int = 21) -> int:
         """Compute offset between time.monotonic() and C++ steady_clock.
@@ -1649,6 +1658,32 @@ class Session:
         if abs(offset) < 1_000_000:  # < 1 ms
             return 0
         return offset
+
+    def _maybe_recalibrate_monotonic(self) -> None:
+        """Re-measure the monotonic↔steady offset if the clocks have drifted.
+
+        The offset is measured once at session creation, but the two clocks can
+        diverge over a long session — most notably across host sleep on macOS,
+        where steady_clock (mach_continuous_time) advances during sleep while
+        time.monotonic() (mach_absolute_time) does not. Elapsed monotonic time
+        therefore cannot detect sleep, so we periodically take a cheap one-sample
+        measurement of the current offset and trigger a full re-calibration only
+        when it has drifted past the threshold.
+
+        GIL-safe without locking: a race only causes a redundant (idempotent)
+        re-calibration.
+        """
+        now_mono = _time.monotonic_ns()
+        if now_mono - self._last_recal_probe_mono_ns < self._RECAL_PROBE_INTERVAL_NS:
+            return
+        self._last_recal_probe_mono_ns = now_mono
+        steady_ns = _get_lib().cbsdk_get_steady_clock_ns()
+        current_offset = steady_ns - now_mono
+        if (
+            abs(current_offset - self._mono_to_steady_offset_ns)
+            >= self._RECAL_DRIFT_THRESHOLD_NS
+        ):
+            self._mono_to_steady_offset_ns = self._calibrate_monotonic_offset()
 
     @property
     def clock_offset_ns(self) -> Optional[int]:
@@ -1701,6 +1736,7 @@ class Session:
                 latency_ms = (time.monotonic() - t) * 1000
                 print(f"Spike latency: {latency_ms:.1f} ms")
         """
+        self._maybe_recalibrate_monotonic()
         offset = self.clock_offset_ns
         if offset is None:
             raise RuntimeError("No clock sync data available")

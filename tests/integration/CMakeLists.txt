@@ -146,6 +146,7 @@ if(NPLAY_AVAILABLE AND NPLAY_DATA_AVAILABLE)
         test_sdk_configuration.cpp
         test_sdk_data_reception.cpp
         test_sdk_clock_sync.cpp
+        test_multidevice_clock_sync.cpp
     )
 
     target_link_libraries(cbsdk_integration_tests

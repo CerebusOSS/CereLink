@@ -906,6 +906,32 @@ TEST_F(NativeShmemSessionTest, NativeConfigBufferAccessor) {
     EXPECT_EQ(session.getConfigBuffer(), nullptr);
 }
 
+// The consensus offset (clock_offset_ns, for CLIENT readers) and the raw
+// independent estimate (clock_raw_offset_ns, for peer voting) are separate
+// fields and must not clobber each other.
+TEST_F(NativeShmemSessionTest, ClockConsensusAndRawAreSeparate) {
+    auto result = createNativeSession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    const auto* cfg = session.getNativeConfigBuffer();
+    ASSERT_NE(cfg, nullptr);
+    EXPECT_EQ(cfg->clock_sync_valid, 0u);
+    EXPECT_EQ(cfg->clock_raw_valid, 0u);
+
+    session.setClockSync(1'700'000'000'000'000'000LL, 500'000);  // consensus
+    session.setClockRawOffset(1'700'000'000'002'500'000LL);      // own estimate, +2.5 ms
+
+    // CLIENT-facing offset is the consensus value...
+    auto consensus = session.getClockOffsetNs();
+    ASSERT_TRUE(consensus.has_value());
+    EXPECT_EQ(*consensus, 1'700'000'000'000'000'000LL);
+    // ...while the raw field retains the independent estimate.
+    EXPECT_EQ(cfg->clock_raw_valid, 1u);
+    EXPECT_EQ(cfg->clock_raw_offset_ns, 1'700'000'000'002'500'000LL);
+    EXPECT_EQ(cfg->clock_offset_ns, 1'700'000'000'000'000'000LL);
+}
+
 TEST_F(NativeShmemSessionTest, CreateAndDestroy) {
     {
         auto result = createNativeSession();

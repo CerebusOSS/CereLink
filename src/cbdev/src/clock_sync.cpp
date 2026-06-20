@@ -51,7 +51,12 @@ void ClockSync::addProbeSample(time_point t1_local, uint64_t t3_device_ns, time_
     if (m_current_offset_ns) {
         const int64_t drift = offset_ns - *m_current_offset_ns;
         if (std::abs(drift) > 1'000'000'000LL) {
+            // Device clock jumped (e.g. nPlay file loop) — old estimate is
+            // stale.  Drop history and force an immediate re-acquire so the
+            // commit discipline doesn't lag the jump.
             m_probe_samples.clear();
+            m_current_offset_ns = std::nullopt;
+            resetDiscipline();
         }
     }
 
@@ -78,6 +83,8 @@ void ClockSync::reset() {
     m_data_floor_ns = std::nullopt;
     m_current_offset_ns = std::nullopt;
     m_current_uncertainty_ns = std::nullopt;
+    resetDiscipline();
+    m_committed_from_external = false;
 }
 
 std::optional<ClockSync::time_point> ClockSync::toLocalTime(uint64_t device_time_ns) const {
@@ -104,6 +111,11 @@ std::optional<int64_t> ClockSync::getOffsetNs() const {
     return m_current_offset_ns;
 }
 
+std::optional<int64_t> ClockSync::getInternalOffsetNs() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return computeInternalEstimate().offset_ns;
+}
+
 std::optional<int64_t> ClockSync::getUncertaintyNs() const {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_current_uncertainty_ns;
@@ -114,14 +126,10 @@ void ClockSync::setExternalOffset(std::optional<int64_t> offset_ns,
     std::lock_guard<std::mutex> lock(m_mutex);
     m_external_offset_ns = offset_ns;
     m_external_uncertainty_ns = uncertainty_ns;
-    if (offset_ns) {
-        m_current_offset_ns = offset_ns;
-        if (uncertainty_ns)
-            m_current_uncertainty_ns = uncertainty_ns;
-    } else {
-        // Cleared — revert to internal estimate
-        recomputeEstimate();
-    }
+    // Re-evaluate: recomputeEstimate() adopts the external offset only when it
+    // is sanity-consistent with internal evidence, and reverts to the internal
+    // estimate when cleared or when the external offset is implausible.
+    recomputeEstimate();
 }
 
 bool ClockSync::probesAreReliable() const {
@@ -142,6 +150,8 @@ void ClockSync::addDataPacketSample(const uint64_t device_time_ns, const time_po
     if (m_current_offset_ns && std::abs(offset_ns - *m_current_offset_ns) > 1'000'000'000LL) {
         m_data_samples.clear();
         m_data_floor_ns = std::nullopt;
+        m_current_offset_ns = std::nullopt;  // re-acquire immediately past a jump
+        resetDiscipline();
     }
 
     DataSample ds;
@@ -188,28 +198,10 @@ void ClockSync::addDataPacketSample(const uint64_t device_time_ns, const time_po
     recomputeEstimate();
 }
 
-void ClockSync::recomputeEstimate() {
-    // External offset (from peer device shmem) takes unconditional priority.
-    if (m_external_offset_ns) {
-        m_current_offset_ns = m_external_offset_ns;
-        if (m_external_uncertainty_ns)
-            m_current_uncertainty_ns = m_external_uncertainty_ns;
-        return;
-    }
-
-    // Strategy:
-    //   1. If probes are reliable (tight spread), use glitch-filtered
-    //      max-offset probe.  This is the HUB1 path.
-    //   2. Otherwise, if data-packet samples are available, use the
-    //      glitch-filtered max raw_offset from data packets.  This is
-    //      the NSP path — data-packet timestamps (from the ADC/PTP
-    //      clock) are more stable than probe header->time on the NSP.
-    //   3. If neither is available, use probes anyway (unreliable but
-    //      better than nothing).
-
-    // Check if probes are reliable enough to use directly.
-    if (!m_probe_samples.empty() && probeSpreadOk()) {
-        // Probes are tight — use glitch-filtered max-offset.
+ClockSync::InternalEstimate ClockSync::computeInternalEstimate() const {
+    // Glitch-filtered max-offset probe pick (least-queued probe).  Returns
+    // {offset, uncertainty=rtt/2} for the selected probe.
+    const auto bestProbe = [this]() -> InternalEstimate {
         std::vector<size_t> indices(m_probe_samples.size());
         std::iota(indices.begin(), indices.end(), 0);
         std::sort(indices.begin(), indices.end(),
@@ -229,53 +221,153 @@ void ClockSync::recomputeEstimate() {
         }
 
         const auto& best = m_probe_samples[indices[top - 1]];
-        m_current_offset_ns = best.offset_ns;
-        m_current_uncertainty_ns = best.rtt_ns / 2;
-        return;
-    }
+        InternalEstimate e;
+        e.offset_ns = best.offset_ns;
+        e.uncertainty_ns = best.rtt_ns / 2;
+        return e;
+    };
 
-    // Probes unreliable or absent — use data-packet fallback.
+    // Strategy:
+    //   1. If probes are reliable (enough samples, tight spread), use the
+    //      glitch-filtered max-offset probe.  This is the HUB1 path.
+    //   2. Otherwise, if data-packet samples are available, use the
+    //      glitch-filtered max raw_offset from data packets.  This is
+    //      the NSP path — data-packet timestamps (from the ADC/PTP
+    //      clock) are more stable than probe header->time on the NSP.
+    //   3. If neither is available, use probes anyway (unreliable but
+    //      better than nothing).
+    if (!m_probe_samples.empty() && probeSpreadOk())
+        return bestProbe();
+
     if (m_data_floor_ns.has_value()) {
-        m_current_offset_ns = *m_data_floor_ns;
-        m_current_uncertainty_ns = 700'000;  // ONE_WAY_DELAY_ESTIMATE_NS
+        InternalEstimate e;
+        e.offset_ns = *m_data_floor_ns;
+        e.uncertainty_ns = 700'000;  // ONE_WAY_DELAY_ESTIMATE_NS
+        return e;
+    }
+
+    if (!m_probe_samples.empty())
+        return bestProbe();
+
+    return InternalEstimate{};  // offset_ns == nullopt
+}
+
+bool ClockSync::externalPlausible(int64_t external_ns,
+                                  const InternalEstimate& internal) const {
+    // With no own evidence to check against, trust the peer (cold start).
+    if (!internal.offset_ns)
+        return true;
+    const int64_t diff = std::llabs(external_ns - *internal.offset_ns);
+    const int64_t band = std::max<int64_t>(
+        m_config.external_plausibility_band_ns,
+        static_cast<int64_t>(m_config.external_unc_k * internal.uncertainty_ns));
+    return diff <= band;
+}
+
+void ClockSync::recomputeEstimate() {
+    const InternalEstimate internal = computeInternalEstimate();
+
+    // An external (peer-borrowed) offset is treated as a candidate, not an
+    // unconditional override.  It is adopted only when it is sanity-consistent
+    // with our own evidence, and — because this runs on every probe/data
+    // sample — it is re-checked against fresh internal evidence each time, so a
+    // stale external offset cannot latch.  An implausible external offset
+    // (e.g. a wrong-epoch value that would leak the raw device clock) is
+    // rejected and the internal estimate is used instead.
+    if (m_external_offset_ns && externalPlausible(*m_external_offset_ns, internal)) {
+        // A plausible peer offset is authoritative (and already disciplined at
+        // its source), so adopt it directly.
+        m_current_offset_ns = m_external_offset_ns;
+        m_current_uncertainty_ns = m_external_uncertainty_ns
+            ? m_external_uncertainty_ns
+            : std::optional<int64_t>(internal.uncertainty_ns);
+        resetDiscipline();
+        m_committed_from_external = true;
         return;
     }
 
-    // Last resort: use probes even though they're unreliable.
-    if (!m_probe_samples.empty()) {
-        // Same glitch-filtered max-offset as above.
-        std::vector<size_t> indices(m_probe_samples.size());
-        std::iota(indices.begin(), indices.end(), 0);
-        std::sort(indices.begin(), indices.end(),
-                  [this](size_t a, size_t b) {
-                      return m_probe_samples[a].offset_ns
-                           < m_probe_samples[b].offset_ns;
-                  });
-
-        constexpr int64_t GAP_THRESHOLD_NS = 10'000'000;
-        size_t top = indices.size();
-        while (top > 1) {
-            if (m_probe_samples[indices[top - 1]].offset_ns -
-                m_probe_samples[indices[top - 2]].offset_ns > GAP_THRESHOLD_NS)
-                --top;
-            else
-                break;
+    if (internal.offset_ns) {
+        // A change of source (external->internal, or first acquisition) is a
+        // deliberate event, not jitter — re-acquire directly.  Only the same
+        // (internal) source's drift is run through the commit discipline.
+        if (m_committed_from_external || !m_current_offset_ns.has_value()) {
+            m_current_offset_ns = *internal.offset_ns;
+            m_current_uncertainty_ns = internal.uncertainty_ns;
+            resetDiscipline();
+        } else {
+            commitDisciplined(*internal.offset_ns, internal.uncertainty_ns);
         }
+        m_committed_from_external = false;
+    } else {
+        m_current_offset_ns = std::nullopt;
+        m_current_uncertainty_ns = std::nullopt;
+        resetDiscipline();
+        m_committed_from_external = false;
+    }
+}
 
-        const auto& best = m_probe_samples[indices[top - 1]];
-        m_current_offset_ns = best.offset_ns;
-        m_current_uncertainty_ns = best.rtt_ns / 2;
+void ClockSync::resetDiscipline() {
+    m_pending_step_count = 0;
+    m_nonconverged_streak = 0;
+}
+
+void ClockSync::commitDisciplined(int64_t target_offset_ns, int64_t uncertainty_ns) {
+    // Cold start: nothing committed yet — accept the target as-is.
+    if (!m_current_offset_ns) {
+        m_current_offset_ns = target_offset_ns;
+        m_current_uncertainty_ns = uncertainty_ns;
+        resetDiscipline();
         return;
     }
 
-    m_current_offset_ns = std::nullopt;
-    m_current_uncertainty_ns = std::nullopt;
+    const int64_t residual = target_offset_ns - *m_current_offset_ns;
+    const int64_t mag = std::llabs(residual);
+
+    if (mag <= m_config.commit_deadband_ns) {
+        // Small change: apply exactly (converged).
+        m_current_offset_ns = target_offset_ns;
+        m_current_uncertainty_ns = uncertainty_ns;
+        resetDiscipline();
+        return;
+    }
+
+    // Not converged this sample.  If the committed offset has stayed off-target
+    // for too long, re-acquire regardless — a backstop for a committed value
+    // that slew/step never reconciled (e.g. a lone device with no peer to
+    // break the tie).
+    if (++m_nonconverged_streak >= m_config.stepout_samples) {
+        m_current_offset_ns = target_offset_ns;
+        m_current_uncertainty_ns = uncertainty_ns;
+        resetDiscipline();
+        return;
+    }
+
+    if (mag <= m_config.slew_max_ns) {
+        // Medium change: slew a fraction of the residual toward the target.
+        // A transient spike is damped; a sustained change is tracked over
+        // several samples.
+        m_current_offset_ns = *m_current_offset_ns
+            + static_cast<int64_t>(m_config.slew_gain * static_cast<double>(residual));
+        m_current_uncertainty_ns = uncertainty_ns;
+        m_pending_step_count = 0;
+    } else {
+        // Large jump: only accept once it persists, so a one-off outlier does
+        // not move the committed offset.
+        if (++m_pending_step_count >= m_config.step_persist) {
+            m_current_offset_ns = target_offset_ns;
+            m_current_uncertainty_ns = uncertainty_ns;
+            resetDiscipline();
+        }
+        // else: hold the current offset, ignore this sample.
+    }
 }
 
 bool ClockSync::probeSpreadOk() const {
     // Internal version — called with m_mutex already held.
-    if (m_probe_samples.size() < 3)
-        return true;
+    // Require a minimum number of probes: one (or a wild pair of) probe is not
+    // enough evidence to declare the probe path reliable.
+    if (m_probe_samples.size() < m_config.min_reliable_probes)
+        return false;
     int64_t lo = m_probe_samples.front().offset_ns;
     int64_t hi = lo;
     for (const auto& p : m_probe_samples) {

@@ -2174,6 +2174,17 @@ void ShmemSession::setClockSync(int64_t offset_ns, int64_t uncertainty_ns) {
     // CENTRAL and CENTRAL_COMPAT layouts don't have clock sync fields
 }
 
+void ShmemSession::setClockRawOffset(int64_t raw_offset_ns) {
+    if (!isOpen())
+        return;
+
+    if (m_impl->layout == ShmemLayout::NATIVE) {
+        auto* cfg = m_impl->nativeCfg();
+        cfg->clock_raw_offset_ns = raw_offset_ns;
+        cfg->clock_raw_valid = 1;
+    }
+}
+
 std::optional<int64_t> ShmemSession::getClockOffsetNs() const {
     if (!isOpen())
         return std::nullopt;
