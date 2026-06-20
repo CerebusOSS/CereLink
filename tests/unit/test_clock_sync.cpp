@@ -9,6 +9,7 @@
 
 #include <gtest/gtest.h>
 #include "cbdev/clock_sync.h"
+#include "cbdev/device_session.h"  // deviceTimestampToNs
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -521,4 +522,40 @@ TEST(ClockSyncDisciplineTest, StepoutReacquiresAfterPersistentDisagreement) {
     // Fifth non-converged sample trips the stepout escape — re-acquire.
     addProbeWithOffset(sync, 105'000'000);
     EXPECT_EQ(*sync.getOffsetNs(), 105'000'000) << "stepout should re-acquire";
+}
+
+// ---------------------------------------------------------------------------
+// deviceTimestampToNs: every clock-sync input (NPLAYREP probe, bulk
+// data-delivery, and the data-packet fallback) routes raw device timestamps
+// through this single helper so they all share one time domain. Regression
+// guard for the #185/#186 follow-up bug where the data-packet fallback fed raw
+// nPlay ticks as if they were nanoseconds, yielding an offset of ~ -host_clock
+// that poisoned the estimate.
+// ---------------------------------------------------------------------------
+
+// nPlay reports 30 kHz sample-count ticks; sysfreq 30000 => 1e9/30000 reduces to
+// 100000/3. These MUST be scaled to nanoseconds before reaching the clock sync.
+TEST(DeviceTimestampToNs, NonGeminiTicksScaleToNanoseconds) {
+    EXPECT_EQ(deviceTimestampToNs(30000, /*ts_are_ns=*/false, 100000, 3), 1'000'000'000ULL); // 1 s
+    EXPECT_EQ(deviceTimestampToNs(3,     /*ts_are_ns=*/false, 100000, 3),       100'000ULL);  // 3 ticks = 100 us
+}
+
+// A large proctime (a long uptime in 30 kHz ticks) must be scaled to ns and must
+// NOT pass through as raw ticks -- the exact mistake the data-packet fallback made.
+TEST(DeviceTimestampToNs, LargeTicksAreNotPassedThroughRaw) {
+    const uint64_t ticks = 71'390'520'562ULL;            // ~2.38e6 s of 30 kHz ticks
+    const uint64_t ns = deviceTimestampToNs(ticks, /*ts_are_ns=*/false, 100000, 3);
+    EXPECT_EQ(ns, ticks * 100000 / 3);
+    EXPECT_NE(ns, ticks);                                // regression guard
+}
+
+// Gemini already reports nanoseconds -> pass through unchanged.
+TEST(DeviceTimestampToNs, GeminiNanosecondsPassThrough) {
+    const uint64_t ptp_ns = 1'771'721'518'000'000'000ULL;
+    EXPECT_EQ(deviceTimestampToNs(ptp_ns, /*ts_are_ns=*/true, 100000, 3), ptp_ns);
+}
+
+// A trivial denominator (no usable sysfreq) disables conversion regardless of flag.
+TEST(DeviceTimestampToNs, TrivialDenominatorDisablesConversion) {
+    EXPECT_EQ(deviceTimestampToNs(12345, /*ts_are_ns=*/false, 1, 1), 12345ULL);
 }
