@@ -37,9 +37,9 @@ a stable interface, and keeps the most-common path (no Central running) unchange
 
 ## 2. Background
 
-See [shared_memory_architecture.md](shared_memory_architecture.md) for the current
+See [shared_memory_architecture.md](../shared_memory_architecture.md) for the current
 two-mode (NATIVE / CENTRAL_COMPAT) layout, and
-[central_shared_memory_layout.md](central_shared_memory_layout.md) for upstream
+[central_shared_memory_layout.md](../central_shared_memory_layout.md) for upstream
 Central's layout.
 
 The current `ShmemSession` carries a `ShmemLayout` enum (`CENTRAL`, `CENTRAL_COMPAT`,
@@ -559,8 +559,8 @@ Each step is independently shippable; old behavior is preserved until step 6.
 
 ## 13. References
 
-- [shared_memory_architecture.md](shared_memory_architecture.md) — current architecture
-- [central_shared_memory_layout.md](central_shared_memory_layout.md) — Central's layout
+- [shared_memory_architecture.md](../shared_memory_architecture.md) — current architecture
+- [central_shared_memory_layout.md](../central_shared_memory_layout.md) — Central's layout
 - `src/cbproto/include/cbproto/packet_translator.h` — existing version-tagged packet translation
 - `src/cbshm/src/shmem_session.cpp` — current `ShmemSession` dispatch sites
 - `src/cbshm/include/cbshm/central_types.h` — current `CentralLegacyCFGBUFF`

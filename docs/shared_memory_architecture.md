@@ -8,17 +8,17 @@ CereLink supports two shared memory modes:
   Lean, right-sized buffers. No instance index -- devices identified by type. Packets are
   always in the current protocol format.
 
-- **Central compat mode** (fallback): CereLink attaches to Central's existing shared memory
-  as a CLIENT. Uses `CentralLegacyCFGBUFF` to match Central's exact binary layout (which
-  differs from CereLink's `cbConfigBuffer`). Instrument filtering extracts only the
-  requested device's packets from Central's shared receive buffer. Protocol translation
-  handles older Central formats (3.11, 4.0, 4.1) automatically.
+- **Central mode** (fallback): CereLink attaches to Central's existing shared memory
+  as a CLIENT. Uses `cbCFGBUFF` to match Central's exact binary layout (which differs from
+  CereLink's `cbConfigBuffer`). Instrument filtering extracts only the requested device's
+  packets from Central's shared receive buffer. Protocol translation handles older Central
+  formats (3.11, 4.0, 4.1) automatically.
 
-Mode is auto-detected at startup: if Central's shared memory exists, use compat mode;
+Mode is auto-detected at startup: if Central's shared memory exists, use Central mode;
 otherwise, use native mode.
 
 **See also**: [Central's shared memory layout](central_shared_memory_layout.md) for the
-upstream layout that compat mode interoperates with.
+upstream layout that central mode interoperates with.
 
 ## Device Identification
 
@@ -45,39 +45,39 @@ auto session = SdkSession::open(DeviceType::HUB1);
 ## Architecture Diagram (Native Mode)
 
 ```
-+------------------------------------------------------------------------------------+
++-------------------------------------------------------------------------------------+
 |                                    CEREBUS DEVICE                                   |
 |                              (NSP Hardware - UDP Protocol)                          |
-+--------------------+-----------------------------------+---------------------------+
++--------------------+-----------------------------------+----------------------------+
                      |                                   |
                      | UDP Packets                       | UDP Packets
                      | (Port varies by device)           | (Port varies by device)
                      v                                   ^
 +-------------------------------------------------------------------------------------+
-|                           STANDALONE PROCESS (owns device)                           |
+|                           STANDALONE PROCESS (owns device)                          |
 |  +--------------------------------------------------------------------------------+ |
-|  |                                    THREADS                                      | |
-|  |                                                                                 | |
-|  |  +----------------+      +----------------+      +-----------------+            | |
-|  |  |  UDP Receive   |      |   UDP Send     |      |    Callback     |            | |
-|  |  |    Thread      |      |    Thread      |      |   Dispatcher    |            | |
-|  |  |  (cbdev)       |      |  (cbdev)       |      |    Thread       |            | |
+|  |                                    THREADS                                     | |
+|  |                                                                                | |
+|  |  +----------------+      +----------------+      +-----------------+           | |
+|  |  |  UDP Receive   |      |   UDP Send     |      |    Callback     |           | |
+|  |  |    Thread      |      |    Thread      |      |   Dispatcher    |           | |
+|  |  |  (cbdev)       |      |  (cbdev)       |      |    Thread       |           | |
 |  |  +--------+-------+      +--------^-------+      +--------^-------+            | |
-|  |           |                       |                       |                     | |
-|  |           | Packets               | Dequeue               | Process             | |
-|  |           | (translated to        | packets               | callbacks           | |
-|  |           |  current protocol)    |                       |                     | |
-|  |           v                       |                       |                     | |
-|  |  +--------+-----------------------+-----------------------+-------+             | |
-|  |  |           onPacketsReceivedFromDevice()                        |             | |
-|  |  |                                                                |             | |
-|  |  |   1. storePacket() -> rec buffer (ring buffer)                 |             | |
-|  |  |   2. storePacket() -> cfg buffer (config updates)              |             | |
-|  |  |   3. signalData()  -> signal event  <-----------+              |             | |
-|  |  |   4. Enqueue to local SPSC queue                | SIGNAL!      |             | |
-|  |  +--------------------------------------------------+             |             | |
+|  |           |                       |                       |                    | |
+|  |           | Packets               | Dequeue               | Process            | |
+|  |           | (translated to        | packets               | callbacks          | |
+|  |           |  current protocol)    |                       |                    | |
+|  |           v                       |                       |                    | |
+|  |  +--------+-----------------------+-----------------------+-------+            | |
+|  |  |           onPacketsReceivedFromDevice()                        |            | |
+|  |  |                                                                |            | |
+|  |  |   1. storePacket() -> rec buffer (ring buffer)                 |            | |
+|  |  |   2. storePacket() -> cfg buffer (config updates)              |            | |
+|  |  |   3. signalData()  -> signal event  <-----------+              |            | |
+|  |  |   4. Enqueue to local SPSC queue                | SIGNAL!      |            | |
+|  |  +--------------------------------------------------+             |            | |
 |  +--------------------------------------------------------------------------------+ |
-+------------------+----------------------------------------------------------------------+
++------------------+------------------------------------------------------------------+
                    |
                    | Writes to (Producer)
                    |
@@ -101,17 +101,17 @@ auto session = SdkSession::open(DeviceType::HUB1);
                    | Reads from (Consumer)
                    |
 +------------------v-----------------------------------------------------------------------+
-|                           CLIENT PROCESS (attaches to shmem)                              |
+|                           CLIENT PROCESS (attaches to shmem)                             |
 |  +-------------------------------------------------------------------------------------+ |
 |  |  Shared Memory Receive Thread                                                       | |
-|  |                                                                                      | |
-|  |  while (running) {                                                                   | |
-|  |    waitForData(250ms)                 <-- wakeup from signal                         | |
-|  |    if (signaled) {                                                                   | |
-|  |      readReceiveBuffer()              <-- all packets are this device's              | |
-|  |      packet_callback(packets, count)  <-- direct invocation, no queue                | |
-|  |    }                                                                                 | |
-|  |  }                                                                                   | |
+|  |                                                                                     | |
+|  |  while (running) {                                                                  | |
+|  |    waitForData(250ms)                 <-- wakeup from signal                        | |
+|  |    if (signaled) {                                                                  | |
+|  |      readReceiveBuffer()              <-- all packets are this device's             | |
+|  |      packet_callback(packets, count)  <-- direct invocation, no queue               | |
+|  |    }                                                                                | |
+|  |  }                                                                                  | |
 |  +-------------------------------------------------------------------------------------+ |
 +-----------------------------------------------------------------------------------------+
 ```
@@ -183,15 +183,15 @@ Channel count per device (`NATIVE_MAXCHANS` with `cbMAXPROCS=1`):
 
 ### Per-Device Memory Footprint
 
-| Segment        | Central-compat (4 instruments) | Native (1 device)         | Savings  |
-|----------------|--------------------------------|---------------------------|----------|
-| Config buffer  | ~4 MB (880 ch, `[4]` arrays)   | ~1 MB (284 ch, scalars)   | ~75%     |
-| Receive buffer | ~768 MB (768 FE ch)            | ~256 MB (256 FE ch)       | ~67%     |
-| XmtGlobal      | ~290 MB (5000 * max-UDP-size)  | ~5 MB (5000 * 1024 bytes) | ~98%     |
-| XmtLocal       | ~116 MB (2000 * max-UDP-size)  | ~2 MB (2000 * 1024 bytes) | ~98%     |
-| Spike cache    | large (832 analog ch)          | ~1/3 (272 analog ch)      | ~67%     |
-| Status         | ~few KB                        | ~few KB                   | --       |
-| **Total**      | **~1.2 GB**                    | **~265 MB**               | **~78%** |
+| Segment        | Central (4 instruments)        | Native (1 device)         |
+|----------------|--------------------------------|---------------------------|
+| Config buffer  | ~4 MB (880 ch, `[4]` arrays)   | ~1 MB (284 ch, scalars)   |
+| Receive buffer | ~768 MB (768 FE ch)            | ~256 MB (256 FE ch)       |
+| XmtGlobal      | ~290 MB (5000 * max-UDP-size)  | ~5 MB (5000 * 1024 bytes) |
+| XmtLocal       | ~116 MB (2000 * max-UDP-size)  | ~2 MB (2000 * 1024 bytes) |
+| Spike cache    | large (832 analog ch)          | ~1/3 (272 analog ch)      |
+| Status         | ~few KB                        | ~few KB                   |
+| **Total**      | **~1.2 GB**                    | **~265 MB**               |
 
 The transmit buffers are dramatically smaller because they carry only config/command packets
 (max 1024 bytes each), not max-UDP-sized packets. Central's XmtGlobal is drained at 4
@@ -210,14 +210,13 @@ Device (any protocol) --> cbdev DeviceSession wrapper --> translates to current 
 
 This means CLIENT processes never need to know what protocol the device speaks.
 
-## Central Compat Mode
+## Central Mode
 
 When CereLink detects that Central is running (its shared memory segments exist), it
-attaches as a CLIENT using the `CENTRAL_COMPAT` shared memory layout. This layout uses
-`CentralLegacyCFGBUFF` -- a struct matching Central's exact binary field order -- instead
-of CereLink's own `cbConfigBuffer` (which has incompatible field ordering).
+attaches as a CLIENT using the `CENTRAL` shared memory layout. This layout uses
+`cbCFGBUFF` which matches Central's exact binary field order.
 
-### Segment Names (Central's)
+### Segment Names
 
 Central uses instance-0 bare names:
 - `cbCFGbuffer`, `cbRECbuffer`, `XmtGlobal`, `XmtLocal`, `cbSTATUSbuffer`, `cbSPKbuffer`,
@@ -250,38 +249,40 @@ For legacy (non-Gemini) NSP systems, only instrument index 0 is used.
 
 ### Receive Buffer Filtering
 
-In Central's shared memory, ALL devices' packets go into ONE receive ring buffer. CereLink's
-`setInstrumentFilter()` method configures `readReceiveBuffer()` to filter by instrument:
-
-1. `SdkSession::create()` sets the instrument filter based on DeviceType → instrument index
-2. `readReceiveBuffer()` reads all packets from `cbRECbuffer` (advances the ring buffer tail)
-3. For each packet, checks `cbpkt_header.instrument` against the filter
-4. Packets not matching the filter are consumed (tail advances) but not delivered to the caller
-
-```cpp
-// Set automatically by SdkSession::create() in compat mode
-shmem_session.setInstrumentFilter(getCentralInstrumentIndex(config.device_type));
-
-// readReceiveBuffer() internally skips non-matching packets
-session.readReceiveBuffer(packets, max_count, packets_read);
-// packets_read only includes packets matching the instrument filter
-```
+In Central's shared memory, ALL devices' packets go into ONE receive ring buffer.
+`readReceiveBuffer()` filters these packets so only those belonging to the selected instrument
+are read.
 
 This is less efficient than native mode (where the receive buffer only contains one device's
-packets), but the large buffer size (~768 MB) makes this a negligible cost.
+packets). Because `readReceiveBuffer()` copies and translates each packet into the output slot
+*before* inspecting its instrument field, packets belonging to other instruments are fully
+processed and then discarded (the slot is overwritten on the next iteration). The overhead
+therefore scales with the total cross-instrument packet rate, not just the selected device's
+traffic. The per-packet instrument check itself is a single integer comparison; the cost that
+matters is the wasted copy/translate work for discarded packets.
 
-### Protocol Translation in Compat Mode (Phase 3 - Complete)
+### Protocol Translation in Compat Mode
 
 When CereLink attaches to Central's shared memory, Central may be running an older protocol
 (3.11, 4.0, or 4.1). Central stores raw device packets in `cbRECbuffer` without translation.
 CereLink detects the protocol version and translates packets on-the-fly.
 
-**Protocol detection** reads `procinfo[0].version` from `CentralLegacyCFGBUFF`:
-- `version = (major << 16) | minor` (MAKELONG format)
-- major < 4 → Protocol 3.11 (8-byte headers, 32-bit timestamps)
-- major=4, minor=0 → Protocol 4.0 (16-byte headers, different field layout)
-- major=4, minor=1 → Protocol 4.1 (16-byte headers, current layout)
-- major=4, minor≥2 → Current protocol (no translation needed)
+**Protocol detection** (`detectCompatProtocol`) cannot rely on Central's shared memory:
+the `version` field in `cbCFGBUFF` is a magic number (`96`), not a meaningful version, and
+`procinfo[].version` is unusable because its byte offset shifts between protocol versions.
+Instead, detection inspects the **application version** of the running `Central.exe`
+(`VersionInfo.ProductVersion`) and maps it to a protocol version. This is **Windows-only**;
+on other platforms compat mode is unavailable.
+
+The application-version → protocol-version mapping:
+- Central 7.0 → Protocol 3.11 (8-byte headers, 32-bit timestamps)
+- Central 7.5 → Protocol 4.0 (16-byte headers, different field layout)
+- Central 7.6, 7.7 → Protocol 4.1 (16-byte headers, current layout)
+- Central 7.8 (and newer 7.x) → Current protocol 4.2+ (no translation needed)
+- Central major version < 7 → unsupported (caller must upgrade Central)
+
+This indirect approach is brittle: a future Central with a different executable name or
+version-string format would defeat it. See `detectCompatProtocol` in `shmem_session.cpp`.
 
 **Receive path** (`readReceiveBuffer`): Parses the protocol-specific header to extract
 `dlen`, copies raw bytes from the ring buffer, translates header + payload to current
@@ -297,30 +298,32 @@ library) so that both `cbshm` and `cbdev` can access it.
 
 ### Config Buffer Access in Compat Mode
 
-Central's `cbCFGBUFF` has a different field layout than CereLink's `NativeConfigBuffer` or
-`cbConfigBuffer` (see "Differences from Central" section below). The `CENTRAL_COMPAT` layout
-uses a `CentralLegacyCFGBUFF` struct that matches Central's exact field order to read the
-config buffer correctly.
+Central's `cbCFGBUFF` has a different field layout than CereLink's `NativeConfigBuffer`.
+The `CENTRAL` layout uses a `cbCFGBUFF` struct that matches Central's exact field order to
+read the config buffer correctly.
 
 All `ShmemSession` accessor methods (`getProcInfo`, `setBankInfo`, `getFilterInfo`, etc.)
-dispatch on the layout and use the correct struct:
+dispatch on the layout and either use the native buffer or the Central adapter:
 
 ```cpp
-// In CENTRAL_COMPAT mode, accessors use legacyCfg()
-if (layout == ShmemLayout::CENTRAL_COMPAT)
-    return legacyCfg()->procinfo[idx];       // CentralLegacyCFGBUFF
-else if (layout == ShmemLayout::NATIVE)
-    return nativeCfg()->procinfo;            // NativeConfigBuffer (scalar)
-else
-    return centralCfg()->procinfo[idx];      // cbConfigBuffer
+if (layout == ShmemLayout::NATIVE) {
+    return Result<cbPKT_PROCINFO>::ok(nativeCfg()->procinfo);
+} else {
+    auto info = Result<cbPKT_PROCINFO>::ok({});
+    auto res = adapter->getProcInfo(info.value());
+    if (res.isError()) {
+        return Result<cbPKT_PROCINFO>::error(res.error());
+    }
+    return info;
+}
 ```
 
-Instrument status in compat mode:
+Instrument status in central mode:
 - `isInstrumentActive()` always returns **true** (Central has no `instrument_status` field;
   if the shared memory exists, instruments are configured by Central)
 - `setInstrumentActive()` returns **error** (read-only in compat mode)
 - `getConfigBuffer()` returns **nullptr** (wrong struct type for compat mode)
-- `getLegacyConfigBuffer()` returns the `CentralLegacyCFGBUFF*` pointer
+- `getLegacyConfigBuffer()` returns a copy of Central's configuration struct translated to a `NativeConfigBuffer`
 
 ## Mode Auto-Detection
 
@@ -329,12 +332,12 @@ SdkSession::open(DeviceType::HUB1)
     |
     +-- Can open Central's "cbSharedDataMutex" (instance 0)?
     |     |
-    |     YES --> Central Compat Mode (CENTRAL_COMPAT layout)
+    |     YES --> Central Mode (CENTRAL layout)
     |             - Map Central's 7 instance-0 segments
-    |             - Use CentralLegacyCFGBUFF for config buffer (Central's binary layout)
+    |             - Use cbCFGBUFF for config buffer (Central's binary layout)
     |             - Use GEMSTART==2 mapping: Hub1 = instrument index 0
-    |             - Set instrument filter (setInstrumentFilter) for receive buffer
-    |             - Index into [4] arrays for config access via legacyCfg()
+    |             - Set instrument filter for receive buffer
+    |             - Target instrument is fixed for the session's lifetime (set at creation)
     |             - Detect protocol version, translate packets if non-current
     |
     +-- NO --> Can open "cbshm_hub1_signal"?
@@ -346,10 +349,10 @@ SdkSession::open(DeviceType::HUB1)
     |             - Config is single-instrument (no indexing)
     |
     +-- NO --> Native Standalone Mode
-              - Create cbshm_hub1_* segments
-              - Start cbdev (protocol auto-detect + translation)
-              - Write current-format packets to native shmem
-              - Other CLIENTs can attach via Native Client Mode
+               - Create cbshm_hub1_* segments
+               - Start cbdev (protocol auto-detect + translation)
+               - Write current-format packets to native shmem
+               - Other CLIENTs can attach via Native Client Mode
 ```
 
 ## Key Data Flow Paths
@@ -443,79 +446,6 @@ an SPSC queue to buffer between fast UDP receive and slow callback processing.
 - One extra thread (simpler architecture, less overhead)
 - One extra data copy (receive buffer -> callback, no packet_queue needed)
 
-## Differences from Central-Suite's Shared Memory Layout
-
-CereLink's current `cbConfigBuffer` struct is **NOT binary-compatible** with Central's
-`cbCFGBUFF`. For a complete description of Central's layout, see
-[central_shared_memory_layout.md](central_shared_memory_layout.md).
-
-### cbCFGbuffer / Config Buffer (INCOMPATIBLE)
-
-Field ordering is changed and fields are added/removed:
-
-| #  | Central `cbCFGBUFF`  | CereLink `cbConfigBuffer`        |
-|----|----------------------|----------------------------------|
-| 1  | `version`            | `version`                        |
-| 2  | `sysflags`           | `sysflags`                       |
-| 3  | **`optiontable`**    | **`instrument_status[4]`** (NEW) |
-| 4  | **`colortable`**     | `sysinfo`                        |
-| 5  | `sysinfo`            | `procinfo[4]`                    |
-| 6  | `procinfo[4]`        | `bankinfo[4][30]`                |
-| 7  | `bankinfo[4][30]`    | `groupinfo[4][8]`                |
-| 8  | `groupinfo[4][8]`    | `filtinfo[4][32]`                |
-| 9  | `filtinfo[4][32]`    | `adaptinfo[4]`                   |
-| 10 | `adaptinfo[4]`       | `refelecinfo[4]`                 |
-| 11 | `refelecinfo[4]`     | **`isLnc[4]`** (MOVED earlier)   |
-| 12 | `chaninfo[880]`      | `chaninfo[880]`                  |
-| 13 | `isSortingOptions`   | `isSortingOptions`               |
-| 14 | `isNTrodeInfo[..]`   | `isNTrodeInfo[..]`               |
-| 15 | `isWaveform[..][..]` | `isWaveform[..][..]`             |
-| 16 | **`isLnc[4]`**       | `isNPlay`                        |
-| 17 | `isNPlay`            | `isVideoSource[..]`              |
-| 18 | `isVideoSource[..]`  | `isTrackObj[..]`                 |
-| 19 | `isTrackObj[..]`     | `fileinfo`                       |
-| 20 | `fileinfo`           | **`optiontable`** (MOVED later)  |
-| 21 | **`hwndCentral`**    | **`colortable`** (MOVED later)   |
-| 22 | --                   | (hwndCentral OMITTED)            |
-
-Central compat mode requires a separate `CentralLegacyCFGBUFF` struct matching Central's
-exact layout to read the config buffer correctly.
-
-### cbSTATUSbuffer / PC Status (PARTIALLY COMPATIBLE)
-
-| Difference          | Central `cbPcStatus`                          | CereLink `CentralPCStatus`  |
-|---------------------|-----------------------------------------------|-----------------------------|
-| Type                | C++ class (private/public)                    | Plain C struct              |
-| `APP_WORKSPACE[10]` | Present (at end)                              | **Omitted**                 |
-| Overlap             | Fields match in order up to `m_nGeminiSystem` | Same                        |
-
-CereLink's struct is a subset -- safe to read, safe to write (omitted field is at the end).
-
-### cbRECbuffer, XmtGlobal, XmtLocal (COMPATIBLE)
-
-Same field layout:
-- `received`, `lasttime`, `headwrap`, `headindex`, `buffer[N]` (receive)
-- `transmitted`, `headindex`, `tailindex`, `last_valid_index`, `bufferlen`, `buffer[N]` (transmit)
-
-Central uses flexible array member (`buffer[0]`), CereLink uses fixed-size. Binary layout
-matches as long as allocated sizes match.
-
-### cbSPKbuffer, cbSIGNALevent (COMPATIBLE)
-
-Same structure layouts and mechanisms.
-
-### Compatibility Summary
-
-| Segment        | Compatible?  | Notes                                            |
-|----------------|--------------|--------------------------------------------------|
-| cbCFGbuffer    | **NO**       | Field order differs; need `CentralLegacyCFGBUFF` |
-| cbRECbuffer    | Yes          | Same layout                                      |
-| XmtGlobal      | Yes          | Same layout                                      |
-| XmtLocal       | Yes          | Same layout                                      |
-| cbSTATUSbuffer | Partial      | CereLink is a subset (missing workspace at end)  |
-| cbSPKbuffer    | Yes          | Same layout                                      |
-| cbSIGNALevent  | Yes          | Same mechanism                                   |
-
 ## Known Limitations
 
 - GEMSTART mapping is hardcoded to `GEMSTART==2`. If a Central build uses a different
@@ -527,7 +457,10 @@ Same structure layouts and mechanisms.
 - **Shared Memory**: `src/cbshm/`
   - `include/cbshm/shmem_session.h` - Public API (ShmemSession class)
   - `src/shmem_session.cpp` - Implementation
-  - `include/cbshm/central_types.h` - Central-compatible buffer structures + `CentralLegacyCFGBUFF`
+  - `include/cbshm/central_adapters/base.h` - Base class of the Central adapters
+  - `include/cbshm/central_adapters/<version>.h` - Per-version Central adapters
+  - `include/cbshm/central_types/<version>.h` - Per-version Central-compatible buffer structures + `cbCFGBUFF`
+  - `src/central_adapters/<version>.cpp` - Per-version Central adapter implementations
   - `include/cbshm/native_types.h` - Native-mode buffer structures (single-instrument)
   - `include/cbshm/config_buffer.h` - Configuration buffer struct definition (`cbConfigBuffer`)
 
@@ -552,6 +485,7 @@ Same structure layouts and mechanisms.
 ## References
 
 - [Central's shared memory layout](central_shared_memory_layout.md)
+- [Central adapter](multi_version_central_compat/README.md)
 - Central Suite source: `Central-Suite/cbhwlib/cbhwlib.h` and `cbhwlib.cpp`
 - Central instrument assignment: `Central-Suite/CentralCommon/CentralDlg.cpp` (GEMSTART)
 - Cerebus Protocol Specification
