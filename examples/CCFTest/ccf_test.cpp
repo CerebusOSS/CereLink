@@ -35,8 +35,9 @@ DeviceType parseDeviceType(const std::string& s) {
 void printChannelSummary(SdkSession& session, const char* label, int n = 5) {
     std::cout << "=== " << label << " (channels 1-" << n << ") ===\n";
     for (uint32_t ch = 1; ch <= (uint32_t)n; ++ch) {
-        const auto* info = session.getChanInfo(ch);
-        if (info) {
+        auto info_res = session.getChanInfo(ch);
+        if (info_res.isOk()) {
+            const auto* info = &info_res.value();
             std::cout << "  ch " << std::setw(3) << ch
                       << ": spkopts=0x" << std::hex << std::setw(5) << std::setfill('0') << info->spkopts
                       << " ainpopts=0x" << std::setw(4) << info->ainpopts
@@ -125,8 +126,9 @@ int main(int argc, char* argv[]) {
     // Re-read saved CCF A to compare against current device state
     std::cout << "\n  Field differences (ch 1-5) between saved A and current (B) state:\n";
     for (uint32_t ch = 1; ch <= 5; ++ch) {
-        const auto* info = session.getChanInfo(ch);
-        if (!info) continue;
+        auto info_res = session.getChanInfo(ch);
+        if (info_res.isError()) continue;
+        const auto* info = &info_res.value();
         std::cout << "  ch " << ch << ":"
                   << " spkopts=0x" << std::hex << info->spkopts
                   << " ainpopts=0x" << info->ainpopts << std::dec
