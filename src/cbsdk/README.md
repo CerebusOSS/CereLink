@@ -6,7 +6,7 @@ single session interface.
 ## Responsibilities
 
 - **Session lifecycle:** Create, start, stop, destroy
-- **Mode auto-detection:** CENTRAL_COMPAT CLIENT → Native CLIENT → Native STANDALONE
+- **Mode auto-detection:** CENTRAL CLIENT → NATIVE CLIENT → NATIVE STANDALONE
   (three-way fallback)
 - **Device handshake:** Protocol detection, configuration request, run-level control
 - **Callback system:** Per-type callbacks (event, group, group batch, config, packet)
