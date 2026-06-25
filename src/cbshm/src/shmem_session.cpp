@@ -95,6 +95,34 @@ inline uint32_t shm_load_relaxed_u32(const uint32_t* p) {
 #endif
 }
 
+// The seven shared-memory segment names for a session.
+struct SegmentNames {
+    std::string cfg, rec, xmt, xmt_local, status, spk, signal;
+};
+
+// Synthesize segment names for the given layout. The meaning of name_qualifier
+// depends on the layout:
+//
+// CENTRAL uses Central's fixed, well-known names. name_qualifier is the Central
+// *instance* suffix appended to each base name ("" selects the primary instance
+// cbCFGbuffer; "1" selects cbCFGbuffer1, etc.). Instruments within an instance
+// are distinguished by index within the buffers, not by name.
+//
+// NATIVE uses per-device segment names of the form
+// "cbshm_<name_qualifier>_<segment>", where name_qualifier is the device token
+// (e.g. "hub1"), matching the names a CereLink STANDALONE publishes.
+inline SegmentNames makeSegmentNames(ShmemLayout layout, const std::string& name_qualifier) {
+    if (layout == ShmemLayout::CENTRAL) {
+        const std::string& s = name_qualifier;  // instance suffix
+        return SegmentNames{"cbCFGbuffer" + s, "cbRECbuffer" + s, "XmtGlobal" + s,
+                            "XmtLocal" + s, "cbSTATUSbuffer" + s, "cbSPKbuffer" + s,
+                            "cbSIGNALevent" + s};
+    }
+    auto seg = [&](const char* s) { return "cbshm_" + name_qualifier + "_" + s; };
+    return SegmentNames{seg("config"), seg("receive"), seg("xmt_global"), seg("xmt_local"),
+                        seg("status"), seg("spike"), seg("signal")};
+}
+
 } // namespace
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -802,8 +830,14 @@ struct ShmemSession::Impl {
 
         // Convert application version to protocol version
         switch(major_version) {
+            default:
+                return Result<cbproto_protocol_version_t>::ok(CBPROTO_PROTOCOL_CURRENT);
+                // return Result<cbproto_protocol_version_t>::error("Unrecognized major version number in version '" + app_version + "'" );
             case 7:
                 switch (minor_version) {
+                    default:
+                        return Result<cbproto_protocol_version_t>::ok(CBPROTO_PROTOCOL_CURRENT);
+                        // return Result<cbproto_protocol_version_t>::error("Unrecognized minor version number in version '" + app_version + "'");
                     case 8:
                         return Result<cbproto_protocol_version_t>::ok(CBPROTO_PROTOCOL_CURRENT);
                     case 7:
@@ -814,8 +848,6 @@ struct ShmemSession::Impl {
                         return Result<cbproto_protocol_version_t>::ok(CBPROTO_PROTOCOL_400);
                     case 0:
                         return Result<cbproto_protocol_version_t>::ok(CBPROTO_PROTOCOL_311);
-                    default:
-                        return Result<cbproto_protocol_version_t>::error("Unrecognized minor version number in version '" + app_version + "'");
                 }
                 break;
             case 6:
@@ -830,8 +862,6 @@ struct ShmemSession::Impl {
                 /* fallthrough */
             case 1:
                 return Result<cbproto_protocol_version_t>::error("Unsupported major version number in version '" + app_version + "'. Please update Central to a newer version");
-            default:
-                return Result<cbproto_protocol_version_t>::error("Unrecognized major version number in version '" + app_version + "'" );
         }
 #else
         return Result<cbproto_protocol_version_t>::error("Compatibility with Central requires Windows");
@@ -863,22 +893,22 @@ ShmemSession::~ShmemSession() = default;
 ShmemSession::ShmemSession(ShmemSession&& other) noexcept = default;
 ShmemSession& ShmemSession::operator=(ShmemSession&& other) noexcept = default;
 
-Result<ShmemSession> ShmemSession::create(cbproto::InstrumentId id, const std::string& cfg_name, const std::string& rec_name,
-                                           const std::string& xmt_name, const std::string& xmt_local_name,
-                                           const std::string& status_name, const std::string& spk_name,
-                                           const std::string& signal_event_name, Mode mode,
-                                           ShmemLayout layout) {
+Result<ShmemSession> ShmemSession::create(Mode mode, ShmemLayout layout,
+                                          const std::string& name_qualifier,
+                                          cbproto::InstrumentId id) {
+    SegmentNames names = makeSegmentNames(layout, name_qualifier);
+
     ShmemSession session;
-    session.m_impl->inst = id;
-    session.m_impl->cfg_name = cfg_name;
-    session.m_impl->rec_name = rec_name;
-    session.m_impl->xmt_name = xmt_name;
-    session.m_impl->xmt_local_name = xmt_local_name;
-    session.m_impl->status_name = status_name;
-    session.m_impl->spk_name = spk_name;
-    session.m_impl->signal_event_name = signal_event_name;
+    session.m_impl->cfg_name = names.cfg;
+    session.m_impl->rec_name = names.rec;
+    session.m_impl->xmt_name = names.xmt;
+    session.m_impl->xmt_local_name = names.xmt_local;
+    session.m_impl->status_name = names.status;
+    session.m_impl->spk_name = names.spk;
+    session.m_impl->signal_event_name = names.signal;
     session.m_impl->mode = mode;
     session.m_impl->layout = layout;
+    session.m_impl->inst = id;
 
     auto result = session.m_impl->open();
     if (result.isError()) {

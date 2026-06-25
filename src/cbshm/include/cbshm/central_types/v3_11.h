@@ -666,8 +666,8 @@ typedef struct {
 ///
 /// This struct matches Central's cbCFGBUFF field order EXACTLY (from cbhwlib.h).
 /// It is NOT the same as CereLink's cbConfigBuffer (which reorders fields and adds
-/// instrument_status). This struct is used in CENTRAL_COMPAT mode to read Central's
-/// shared memory as a CLIENT.
+/// instrument_status). This struct is used in CENTRAL mode to read Central's shared
+/// memory as a CLIENT.
 ///
 /// Key differences from CereLink's cbConfigBuffer:
 /// - optiontable/colortable: 3rd/4th fields here (after sysflags), last fields in CereLink

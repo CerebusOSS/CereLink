@@ -577,97 +577,6 @@ SdkSession::~SdkSession() {
     }
 }
 
-// Helper function to map DeviceType to shared memory instance number.
-// Central creates a SINGLE shared memory instance (0) for ALL instruments in a
-// Gemini system. The different instruments (Hub1-3, NSP) share the same buffers
-// and are distinguished by instrument INDEX within the buffers, not by separate
-// shared memory instances. Therefore all device types map to instance 0.
-static int getInstanceNumber(DeviceType /*type*/) {
-    return 0;
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-// Central-compatible shared memory naming
-// Names match Central's naming convention: base name + optional instance suffix
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Helper function to get Central-compatible shared memory names
-// Returns config buffer name (e.g., "cbCFGbuffer" or "cbCFGbuffer1")
-static std::string getCentralConfigBufferName(DeviceType type) {
-    int instance = getInstanceNumber(type);
-    if (instance == 0) {
-        return "cbCFGbuffer";
-    } else {
-        return "cbCFGbuffer" + std::to_string(instance);
-    }
-}
-
-// Helper function to get Central-compatible transmit buffer name
-// Returns transmit buffer name (e.g., "XmtGlobal" or "XmtGlobal1")
-static std::string getCentralTransmitBufferName(DeviceType type) {
-    int instance = getInstanceNumber(type);
-    if (instance == 0) {
-        return "XmtGlobal";
-    } else {
-        return "XmtGlobal" + std::to_string(instance);
-    }
-}
-
-// Helper function to get Central-compatible receive buffer name
-// Returns receive buffer name (e.g., "cbRECbuffer" or "cbRECbuffer1")
-static std::string getCentralReceiveBufferName(DeviceType type) {
-    int instance = getInstanceNumber(type);
-    if (instance == 0) {
-        return "cbRECbuffer";
-    } else {
-        return "cbRECbuffer" + std::to_string(instance);
-    }
-}
-
-// Helper function to get Central-compatible local transmit buffer name
-// Returns local transmit buffer name (e.g., "XmtLocal" or "XmtLocal1")
-static std::string getCentralLocalTransmitBufferName(DeviceType type) {
-    int instance = getInstanceNumber(type);
-    if (instance == 0) {
-        return "XmtLocal";
-    } else {
-        return "XmtLocal" + std::to_string(instance);
-    }
-}
-
-// Helper function to get Central-compatible status buffer name
-// Returns status buffer name (e.g., "cbSTATUSbuffer" or "cbSTATUSbuffer1")
-static std::string getCentralStatusBufferName(DeviceType type) {
-    int instance = getInstanceNumber(type);
-    if (instance == 0) {
-        return "cbSTATUSbuffer";
-    } else {
-        return "cbSTATUSbuffer" + std::to_string(instance);
-    }
-}
-
-// Helper function to get Central-compatible spike cache buffer name
-// Returns spike cache buffer name (e.g., "cbSPKbuffer" or "cbSPKbuffer1")
-static std::string getCentralSpikeBufferName(DeviceType type) {
-    int instance = getInstanceNumber(type);
-    if (instance == 0) {
-        return "cbSPKbuffer";
-    } else {
-        return "cbSPKbuffer" + std::to_string(instance);
-    }
-}
-
-// Helper function to get Central-compatible signal event name
-// Returns signal event name (e.g., "cbSIGNALevent" or "cbSIGNALevent1")
-static std::string getCentralSignalEventName(DeviceType type) {
-    int instance = getInstanceNumber(type);
-    if (instance == 0) {
-        return "cbSIGNALevent";
-    } else {
-        return "cbSIGNALevent" + std::to_string(instance);
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Native-mode shared memory naming
 // Names use per-device segments: "cbshm_{device}_{segment}"
@@ -716,38 +625,22 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     // 3. Fall back to native STANDALONE: create new native-mode segments
     bool is_standalone = false;
 
+    // Device token used to build NATIVE segment names. The SDK always targets
+    // Central's primary instance, so the CENTRAL instance suffix is empty.
+    std::string device_tag = getNativeDeviceName(config.device_type);
+
     // --- Attempt 1: Central-compatible CLIENT mode ---
     // Try to attach to Central's shared memory (Central is running)
-    std::string central_cfg = getCentralConfigBufferName(config.device_type);
-    std::string central_rec = getCentralReceiveBufferName(config.device_type);
-    std::string central_xmt = getCentralTransmitBufferName(config.device_type);
-    std::string central_xmt_local = getCentralLocalTransmitBufferName(config.device_type);
-    std::string central_status = getCentralStatusBufferName(config.device_type);
-    std::string central_spk = getCentralSpikeBufferName(config.device_type);
-    std::string central_signal = getCentralSignalEventName(config.device_type);
-
     auto inst = cbproto::InstrumentId::fromIndex(getCentralInstrumentIndex(config.device_type));
     auto shmem_result = cbshm::ShmemSession::create(
-        inst, central_cfg, central_rec, central_xmt, central_xmt_local,
-        central_status, central_spk, central_signal,
-        cbshm::Mode::CLIENT, cbshm::ShmemLayout::CENTRAL);
+        cbshm::Mode::CLIENT, cbshm::ShmemLayout::CENTRAL, /*instance=*/"", inst);
 
     if (shmem_result.isError()) {
         // --- Attempt 2: Native CLIENT mode ---
         // Try to attach to an existing CereLink STANDALONE's native segments
-        std::string native_cfg = getNativeSegmentName(config.device_type, "config");
-        std::string native_rec = getNativeSegmentName(config.device_type, "receive");
-        std::string native_xmt = getNativeSegmentName(config.device_type, "xmt_global");
-        std::string native_xmt_local = getNativeSegmentName(config.device_type, "xmt_local");
-        std::string native_status = getNativeSegmentName(config.device_type, "status");
-        std::string native_spk = getNativeSegmentName(config.device_type, "spike");
-        std::string native_signal = getNativeSegmentName(config.device_type, "signal");
-
         shmem_result = cbshm::ShmemSession::create(
-            cbproto::InstrumentId::fromIndex(0),
-            native_cfg, native_rec, native_xmt, native_xmt_local,
-            native_status, native_spk, native_signal,
-            cbshm::Mode::CLIENT, cbshm::ShmemLayout::NATIVE);
+            cbshm::Mode::CLIENT, cbshm::ShmemLayout::NATIVE, device_tag,
+            cbproto::InstrumentId::fromIndex(0));
 
         // Liveness check: reject stale segments from a dead STANDALONE process.
         // The ShmemSession destructor (triggered by reassignment) unmaps the segments;
@@ -761,10 +654,8 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
             // --- Attempt 3: Native STANDALONE mode ---
             // No existing shared memory found, create new native-mode segments
             shmem_result = cbshm::ShmemSession::create(
-                cbproto::InstrumentId::fromIndex(0),
-                native_cfg, native_rec, native_xmt, native_xmt_local,
-                native_status, native_spk, native_signal,
-                cbshm::Mode::STANDALONE, cbshm::ShmemLayout::NATIVE);
+                cbshm::Mode::STANDALONE, cbshm::ShmemLayout::NATIVE, device_tag,
+                cbproto::InstrumentId::fromIndex(0));
 
             if (shmem_result.isError()) {
                 return Result<SdkSession>::error("Failed to create shared memory: " + shmem_result.error());
@@ -2349,7 +2240,7 @@ std::optional<int64_t> SdkSession::getClockOffsetNs() const {
             return offset;
     }
 
-    // CLIENT fallback: use local ClockSync (CENTRAL_COMPAT — no shmem clock fields)
+    // CLIENT fallback: use local ClockSync (CENTRAL — no shmem clock fields)
     return m_impl->client_clock_sync.getOffsetNs();
 }
 
@@ -2364,7 +2255,7 @@ std::optional<int64_t> SdkSession::getClockUncertaintyNs() const {
             return uncert;
     }
 
-    // CLIENT fallback: use local ClockSync (CENTRAL_COMPAT)
+    // CLIENT fallback: use local ClockSync (CENTRAL)
     return m_impl->client_clock_sync.getUncertaintyNs();
 }
 
@@ -2382,7 +2273,7 @@ Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {
 
     // Stamp packet with a nanosecond timestamp (Central's xmt consumer skips packets with time=0).
     // Use getLastTime() (always nanoseconds) so that enqueuePacket's per-protocol translation
-    // can convert to the format each consumer expects (e.g. 30kHz ticks for 3.11 CENTRAL_COMPAT).
+    // can convert to the format each consumer expects (e.g. 30kHz ticks for 3.11 CENTRAL).
     cbPKT_GENERIC stamped = pkt;
     PROCTIME t = m_impl->shmem_session->getLastTime();
     stamped.cbpkt_header.time = (t != 0) ? t : 1;

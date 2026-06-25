@@ -65,7 +65,6 @@ void Adapter::fromLegacy(::cbPKT_PROCINFO& cur, const cbPKT_PROCINFO& leg) const
     fromLegacy(cur.cbpkt_header, leg.cbpkt_header);
     cur.proc = leg.proc;
     cur.idcode = leg.idcode;
-    cur.idcode = leg.idcode;
     copyArr(cur.ident, leg.ident);
     cur.chanbase = leg.chanbase;
     cur.chancount = leg.chancount;
@@ -395,7 +394,7 @@ void Adapter::fromLegacy(NativeConfigBuffer& cur, const cbCFGBUFF& leg) const {
     fromLegacy(cur.refelecinfo, leg.refelecinfo[instrument_idx]);
     copyArr(cur.chaninfo, leg.chaninfo, this, &Adapter::fromLegacy);
     copyArr(cur.asBasis, leg.isSortingOptions.asBasis, this, &Adapter::fromLegacy);
-    // copyArr2D(cur.asSortModel, leg.isSortingOptions.asSortModel, this, &Adapter::fromLegacy); // TODO: For some reason, this contains memory that's innaccessible
+    copyArr2D(cur.asSortModel, leg.isSortingOptions.asSortModel, this, &Adapter::fromLegacy);
     // TODO: Move native isSortingOptions fields into a struct
     fromLegacy(cur.pktDetect, leg.isSortingOptions.pktDetect);
     fromLegacy(cur.pktArtifReject, leg.isSortingOptions.pktArtifReject);
@@ -899,7 +898,7 @@ void Adapter::toLegacy(cbXMTBUFFLOCAL& leg, const NativeTransmitBufferLocal& cur
 
 void Adapter::toLegacy(cbPKT_SPK& leg, const ::cbPKT_SPK& cur) const {
     toLegacy(leg.cbpkt_header, cur.cbpkt_header);
-    copyArr(leg.fPattern, leg.fPattern);
+    copyArr(leg.fPattern, cur.fPattern);
     leg.nPeak = cur.nPeak;
     leg.nValley = cur.nValley;
     copyArr(leg.wave, cur.wave);

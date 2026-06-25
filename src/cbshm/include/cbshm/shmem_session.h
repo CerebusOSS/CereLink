@@ -47,7 +47,7 @@ enum class Mode {
 /// Controls buffer sizes, struct types, and bounds checking.
 ///
 enum class ShmemLayout {
-    CENTRAL,         ///< Central's actual binary layout (CentralLegacyCFGBUFF)
+    CENTRAL,         ///< Central's actual binary layout (cbCFGBUFF)
     NATIVE           ///< Native single-instrument layout (NativeConfigBuffer)
 };
 
@@ -67,22 +67,24 @@ public:
     /// @{
 
     /// @brief Create a new shared memory session
-    /// @param id Instrument ID (1-based)
-    /// @param cfg_name Config buffer shared memory name (e.g., "cbCFGbuffer")
-    /// @param rec_name Receive buffer shared memory name (e.g., "cbRECbuffer")
-    /// @param xmt_name Transmit buffer shared memory name (e.g., "XmtGlobal")
-    /// @param xmt_local_name Local transmit buffer shared memory name (e.g., "XmtLocal")
-    /// @param status_name PC status buffer shared memory name (e.g., "cbSTATUSbuffer")
-    /// @param spk_name Spike cache buffer shared memory name (e.g., "cbSPKbuffer")
-    /// @param signal_event_name Signal event name (e.g., "cbSIGNALevent")
+    ///
+    /// The seven segment names are synthesized internally from @p layout and
+    /// @p name_qualifier, whose meaning depends on the layout:
+    /// - CENTRAL: Central's fixed, well-known names (e.g., "cbCFGbuffer"), with
+    ///   @p name_qualifier appended as the Central *instance* suffix ("" selects
+    ///   the primary instance, "1" selects cbCFGbuffer1, etc.).
+    /// - NATIVE: per-device names of the form "cbshm_<name_qualifier>_<segment>",
+    ///   where @p name_qualifier is the device token (e.g., "hub1").
+    ///
     /// @param mode Operating mode (STANDALONE or CLIENT)
-    /// @param layout Buffer layout (CENTRAL or NATIVE, default CENTRAL for backward compat)
+    /// @param layout Buffer layout (CENTRAL or NATIVE)
+    /// @param name_qualifier Layout-specific naming discriminator: the Central
+    ///                       instance suffix for CENTRAL, or the device token for
+    ///                       NATIVE
+    /// @param id Instrument ID (1-based)
     /// @return Result containing ShmemSession on success, error message on failure
-    static Result<ShmemSession> create(cbproto::InstrumentId id, const std::string& cfg_name, const std::string& rec_name,
-                                        const std::string& xmt_name, const std::string& xmt_local_name,
-                                        const std::string& status_name, const std::string& spk_name,
-                                        const std::string& signal_event_name, Mode mode,
-                                        ShmemLayout layout = ShmemLayout::CENTRAL);
+    static Result<ShmemSession> create(Mode mode, ShmemLayout layout,
+                                        const std::string& name_qualifier, cbproto::InstrumentId id);
 
     /// @brief Destructor - closes shared memory and releases resources
     ~ShmemSession();
@@ -94,7 +96,7 @@ public:
     ShmemSession& operator=(const ShmemSession&) = delete;
 
     /// @}
-
+    
     ///////////////////////////////////////////////////////////////////////////
     /// @name Status
     /// @{
@@ -126,10 +128,16 @@ public:
     /// @{
 
     /// @brief Get instrument active status
+    ///
+    /// Always returns true if layout is CENTRAL.
+    ///
     /// @return true if instrument is active in shared memory
     Result<bool> isInstrumentActive() const;
 
     /// @brief Set instrument active status
+    ///
+    /// Does nothing if layout is CENTRAL (instruments assumed to always be active).
+    ///
     /// @param active true to mark active, false to mark inactive
     /// @return Result indicating success or failure
     Result<void> setInstrumentActive(bool active);

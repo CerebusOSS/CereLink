@@ -102,7 +102,7 @@ constexpr uint32_t AOUT_NUM_GAIN_CHANS = cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS
 
 /// Spike cache constants
 constexpr uint32_t cbPKT_SPKCACHEPKTCNT = 400;                          ///< Packets per channel cache
-constexpr uint32_t cbPKT_SPKCACHELINECNT = cbMAXCHANS;          ///< One cache per channel (Central uses cbMAXCHANS, not cbNUM_ANALOG_CHANS)
+constexpr uint32_t cbPKT_SPKCACHELINECNT = cbNUM_ANALOG_CHANS;          ///< One cache per channel (Central uses cbMAXCHANS, not cbNUM_ANALOG_CHANS)
 
 /// Receive buffer size
 constexpr uint32_t cbRECBUFFLEN = cbNUM_FE_CHANS * 32768 * 4;
@@ -666,8 +666,8 @@ typedef struct {
 ///
 /// This struct matches Central's cbCFGBUFF field order EXACTLY (from cbhwlib.h).
 /// It is NOT the same as CereLink's cbConfigBuffer (which reorders fields and adds
-/// instrument_status). This struct is used in CENTRAL_COMPAT mode to read Central's
-/// shared memory as a CLIENT.
+/// instrument_status). This struct is used in CENTRAL mode to read Central's shared
+/// memory as a CLIENT.
 ///
 /// Key differences from CereLink's cbConfigBuffer:
 /// - optiontable/colortable: 3rd/4th fields here (after sysflags), last fields in CereLink
