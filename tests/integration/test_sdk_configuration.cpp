@@ -95,10 +95,10 @@ TEST_F(SessionLifecycleTest, ProcIdent) {
 TEST_F(SessionLifecycleTest, SysInfo) {
     auto result = createNPlaySession();
     ASSERT_TRUE(result.isOk()) << result.error();
-    auto* sysinfo = result.value().getSysInfo();
-    EXPECT_NE(sysinfo, nullptr);
-    if (sysinfo) {
-        EXPECT_GT(sysinfo->sysfreq, 0u);
+    auto sysinfo = result.value().getSysInfo();
+    EXPECT_TRUE(sysinfo.isOk()) << sysinfo.error();
+    if (sysinfo.isOk()) {
+        EXPECT_GT(sysinfo.value().sysfreq, 0u);
     }
 }
 
@@ -130,8 +130,8 @@ TEST_F(ChannelSampleGroupTest, SetFrontend30kHz) {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     // Verify via group info
-    auto* group_info = session.getGroupInfo(static_cast<uint32_t>(SampleRate::SR_30kHz));
-    EXPECT_NE(group_info, nullptr);
+    auto group_info = session.getGroupInfo(static_cast<uint32_t>(SampleRate::SR_30kHz));
+    EXPECT_TRUE(group_info.isOk()) << group_info.error();
 }
 
 TEST_F(ChannelSampleGroupTest, SetAndVerifyViaChannelField) {
@@ -194,10 +194,10 @@ TEST_F(ChannelInfoTest, GetChanInfo) {
     auto result = createNPlaySession();
     ASSERT_TRUE(result.isOk()) << result.error();
 
-    const cbPKT_CHANINFO* info = result.value().getChanInfo(1);
-    ASSERT_NE(info, nullptr);
+    auto info = result.value().getChanInfo(1);
+    ASSERT_TRUE(info.isOk()) << info.error();
     // Channel 1 should be a front-end channel with capabilities
-    EXPECT_GT(info->chancaps, 0u);
+    EXPECT_GT(info.value().chancaps, 0u);
 }
 
 TEST_F(ChannelInfoTest, GetChanInfoInvalid) {
@@ -326,8 +326,8 @@ TEST_F(FilterInfoTest, GetFilterInfo) {
     ASSERT_TRUE(result.isOk()) << result.error();
 
     // Filter 0 exists (even if empty)
-    const cbPKT_FILTINFO* info = result.value().getFilterInfo(0);
-    // May be nullptr if no filters configured, but should not crash
+    auto info = result.value().getFilterInfo(0);
+    // May have error if no filters configured, but should not crash
 }
 
 TEST_F(FilterInfoTest, GetFilterInfoInvalid) {

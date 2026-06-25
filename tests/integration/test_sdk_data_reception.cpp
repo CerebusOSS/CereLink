@@ -251,9 +251,9 @@ TEST_F(MultiRateTest, TwoRatesSimultaneously) {
     ASSERT_GE(ids.size(), 4u);
 
     for (size_t i = 2; i < 4; ++i) {
-        const auto* info = session.getChanInfo(ids[i]);
-        ASSERT_NE(info, nullptr) << "getChanInfo returned null for channel " << ids[i];
-        cbPKT_CHANINFO modified = *info;
+        auto info = session.getChanInfo(ids[i]);
+        ASSERT_TRUE(info.isOk()) << info.error() << " (getChanInfo failed for channel " << ids[i] << ")";
+        cbPKT_CHANINFO modified = info.value();
         modified.smpgroup = static_cast<uint32_t>(SampleRate::SR_1kHz);
         // Must set the packet type to SET (not REP) for the device to accept it
         modified.cbpkt_header.type = cbPKTTYPE_CHANSET;

@@ -364,10 +364,7 @@ TEST_F(SdkSessionTest, PacketSize_Calculation) {
 TEST_F(SdkSessionTest, TransmitCallback_RoundTrip) {
     // Create shared memory session for testing (use short name to avoid length limits)
     std::string name = "xmt_rt";
-    auto shmem_result = cbshm::ShmemSession::create(
-        name, name + "_r", name + "_x", name + "_xl",
-        name + "_s", name + "_p", name + "_g",
-        cbshm::Mode::STANDALONE);
+    auto shmem_result = cbshm::ShmemSession::create(cbshm::Mode::STANDALONE, cbshm::ShmemLayout::NATIVE, name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(shmem_result.isOk()) << "Failed to create shmem: " << shmem_result.error();
     auto shmem = std::move(shmem_result.value());
 
