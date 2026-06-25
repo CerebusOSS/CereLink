@@ -189,13 +189,13 @@ public:
     Result<void> setProcInfo(const cbPKT_PROCINFO& info);
 
     /// @brief Set bank information
-    /// @param bank Bank number (0-based)
+    /// @param bank Bank number (1-based, as used in cbPKT_BANKINFO)
     /// @param info cbPKT_BANKINFO structure to write
     /// @return Result indicating success or failure
     Result<void> setBankInfo(uint32_t bank, const cbPKT_BANKINFO& info);
 
     /// @brief Set filter information
-    /// @param filter Filter number (0-based)
+    /// @param filter Filter number (1-based, as used in cbPKT_FILTINFO)
     /// @param info cbPKT_FILTINFO structure to write
     /// @return Result indicating success or failure
     Result<void> setFilterInfo(uint32_t filter, const cbPKT_FILTINFO& info);

@@ -300,7 +300,7 @@ struct SdkSession::Impl {
         // written to shmem (device_config is owned by the receive thread and
         // we avoid writing to it from other threads).
         if (shmem_session && chan_id >= 1 && chan_id <= cbMAXCHANS) {
-            return shmem_session->getChanInfo(chan_id);
+            return shmem_session->getChanInfo(chan_id - 1);
         }
         // Fallback to device_config (no shmem available)
         if (device_session)
@@ -396,7 +396,7 @@ struct SdkSession::Impl {
                 const auto* p = device_session->getChanInfo(chan_id);
                 if (p && p->chan > 0) { ci = *p; valid = true; }
             } else if (shmem_session) {
-                auto r = shmem_session->getChanInfo(chan_id);
+                auto r = shmem_session->getChanInfo(chan_id - 1);
                 if (r.isOk() && r.value().chan > 0) { ci = r.value(); valid = true; }
             }
             if (!valid) continue;
@@ -413,7 +413,7 @@ struct SdkSession::Impl {
             ci.label[sizeof(ci.label) - 1] = '\0';
 
             if (shmem_session) {
-                shmem_session->setChanInfo(chan_id, ci);
+                shmem_session->setChanInfo(chan_id - 1, ci);
             }
         }
     }
@@ -1329,15 +1329,15 @@ uint32_t SdkSession::getGroupChannelList(uint32_t group_id, uint16_t* list, uint
         // Prefer device_config (updated in updateConfigFromBuffer before the
         // sendAndWait / SYSREP sync barrier fires).  shmem chaninfo may lag
         // slightly because SDK callbacks run after the sync notification.
-        const cbPKT_CHANINFO& ci{};
+        cbPKT_CHANINFO ci{};
         if (m_impl->device_session) {
-            const auto* res = m_impl->device_session->getChanInfo(chan - 1);
+            const auto* res = m_impl->device_session->getChanInfo(chan);
             if (!res) continue;
-            const auto& ci = *res;
+            ci = *res;
         } else {
             auto res = getChanInfo(chan);
             if (res.isError()) continue;
-            const auto& ci = res.value();
+            ci = res.value();
         }
 
         bool in_group;
@@ -1360,7 +1360,7 @@ Result<cbPKT_FILTINFO> SdkSession::getFilterInfo(const uint32_t filter_id) const
         return Result<cbPKT_FILTINFO>::ok(config.filtinfo[filter_id]);
     }
     if (m_impl->shmem_session) {
-        return m_impl->shmem_session->getFilterInfo(filter_id);
+        return m_impl->shmem_session->getFilterInfo(filter_id + 1);
     }
     return Result<cbPKT_FILTINFO>::error("Filter information not available");
 }
