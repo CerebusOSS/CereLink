@@ -50,7 +50,7 @@ int ShmemSessionTest::test_counter = 0;
 /// @{
 
 TEST_F(ShmemSessionTest, CreateStandalone) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk()) << "Failed to create standalone session: " << result.error();
 
     auto& session = result.value();
@@ -60,7 +60,7 @@ TEST_F(ShmemSessionTest, CreateStandalone) {
 
 TEST_F(ShmemSessionTest, CreateAndDestroy) {
     {
-        auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+        auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
         ASSERT_TRUE(result.isOk());
         EXPECT_TRUE(result.value().isOpen());
     }
@@ -68,7 +68,7 @@ TEST_F(ShmemSessionTest, CreateAndDestroy) {
 }
 
 TEST_F(ShmemSessionTest, MoveConstruction) {
-    auto result1 = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result1 = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result1.isOk());
 
     // Move construction
@@ -77,8 +77,8 @@ TEST_F(ShmemSessionTest, MoveConstruction) {
 }
 
 TEST_F(ShmemSessionTest, MoveAssignment) {
-    auto result1 = ShmemSession::create(test_name + "_1", test_name + "_1_rec", test_name + "_1_xmt", test_name + "_1_xmt_local", test_name + "_1_status", test_name + "_1_spk", test_name + "_1_signal", Mode::STANDALONE);
-    auto result2 = ShmemSession::create(test_name + "_2", test_name + "_2_rec", test_name + "_2_xmt", test_name + "_2_xmt_local", test_name + "_2_status", test_name + "_2_spk", test_name + "_2_signal", Mode::STANDALONE);
+    auto result1 = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name + "_1", cbproto::InstrumentId::fromOneBased(cbNSP1));
+    auto result2 = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name + "_2", cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result1.isOk());
     ASSERT_TRUE(result2.isOk());
 
@@ -94,80 +94,45 @@ TEST_F(ShmemSessionTest, MoveAssignment) {
 /// @{
 
 TEST_F(ShmemSessionTest, InstrumentStatusInitiallyInactive) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
-    ASSERT_TRUE(result.isOk());
-    auto& session = result.value();
-
     // All instruments should be inactive initially
     for (uint8_t i = 1; i <= cbMAXOPEN; ++i) {
-        auto id = InstrumentId::fromOneBased(i);
-        auto active_result = session.isInstrumentActive(id);
+        auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, InstrumentId::fromOneBased(i));
+        ASSERT_TRUE(result.isOk());
+        auto& session = result.value();
+        auto active_result = session.isInstrumentActive();
         ASSERT_TRUE(active_result.isOk());
         EXPECT_FALSE(active_result.value()) << "Instrument " << (int)i << " should be inactive";
     }
 }
 
 TEST_F(ShmemSessionTest, SetInstrumentActive) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
     // Activate first instrument
-    auto id1 = InstrumentId::fromOneBased(cbNSP1);
-    auto set_result = session.setInstrumentActive(id1, true);
+    auto set_result = session.setInstrumentActive(true);
     ASSERT_TRUE(set_result.isOk());
 
     // Verify it's active
-    auto active_result = session.isInstrumentActive(id1);
+    auto active_result = session.isInstrumentActive();
     ASSERT_TRUE(active_result.isOk());
     EXPECT_TRUE(active_result.value());
 
     // Other instruments should still be inactive
-    auto id2 = InstrumentId::fromOneBased(cbNSP2);
-    auto active_result2 = session.isInstrumentActive(id2);
+    auto active_result2 = session.isInstrumentActive();
     ASSERT_TRUE(active_result2.isOk());
     EXPECT_FALSE(active_result2.value());
 }
 
-TEST_F(ShmemSessionTest, GetFirstActiveInstrument) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
-    ASSERT_TRUE(result.isOk());
-    auto& session = result.value();
-
-    // No active instruments initially
-    auto first_result = session.getFirstActiveInstrument();
-    EXPECT_TRUE(first_result.isError());
-    EXPECT_NE(first_result.error().find("No active"), std::string::npos);
-
-    // Activate third instrument
-    auto id3 = InstrumentId::fromOneBased(cbNSP3);
-    ASSERT_TRUE(session.setInstrumentActive(id3, true).isOk());
-
-    // Should return third instrument (index 2, 1-based = 3)
-    first_result = session.getFirstActiveInstrument();
-    ASSERT_TRUE(first_result.isOk());
-    EXPECT_EQ(first_result.value().toOneBased(), cbNSP3);
-}
-
-TEST_F(ShmemSessionTest, MultipleActiveInstruments) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
-    ASSERT_TRUE(result.isOk());
-    auto& session = result.value();
-
-    // Activate instruments 1 and 3
-    ASSERT_TRUE(session.setInstrumentActive(InstrumentId::fromOneBased(cbNSP1), true).isOk());
-    ASSERT_TRUE(session.setInstrumentActive(InstrumentId::fromOneBased(cbNSP3), true).isOk());
-
-    // First active should be cbNSP1
-    auto first_result = session.getFirstActiveInstrument();
-    ASSERT_TRUE(first_result.isOk());
-    EXPECT_EQ(first_result.value().toOneBased(), cbNSP1);
-
-    // Verify both are active
-    EXPECT_TRUE(session.isInstrumentActive(InstrumentId::fromOneBased(cbNSP1)).value());
-    EXPECT_TRUE(session.isInstrumentActive(InstrumentId::fromOneBased(cbNSP3)).value());
-    EXPECT_FALSE(session.isInstrumentActive(InstrumentId::fromOneBased(cbNSP2)).value());
-}
+// TODO: getFirstActiveInstrument() and multi-instrument-per-session tracking were
+// removed with the move to per-instrument ShmemSession instances. A ShmemSession
+// now represents a single instrument, so "first active instrument" discovery and
+// activating multiple instruments through one session no longer apply. These tests
+// should be reworked at the layer that now enumerates instruments across sessions.
+//
+// TEST_F(ShmemSessionTest, GetFirstActiveInstrument) { ... }
+// TEST_F(ShmemSessionTest, MultipleActiveInstruments) { ... }
 
 /// @}
 
@@ -176,102 +141,56 @@ TEST_F(ShmemSessionTest, MultipleActiveInstruments) {
 /// @{
 
 TEST_F(ShmemSessionTest, SetGetProcInfo_Instrument0) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
-    // Set PROCINFO for instrument 0 (cbNSP1)
+    // Set PROCINFO for this session's instrument (cbNSP1)
     cbPKT_PROCINFO info;
     std::memset(&info, 0, sizeof(info));
     info.proc = 1;
     info.chancount = 256;
 
-    auto id = InstrumentId::fromPacketField(0);
-    ASSERT_TRUE(session.setProcInfo(id, info).isOk());
-    ASSERT_TRUE(session.setInstrumentActive(id, true).isOk());
+    ASSERT_TRUE(session.setProcInfo(info).isOk());
+    ASSERT_TRUE(session.setInstrumentActive(true).isOk());
 
-    // THE KEY FIX: Should be stored at index 0 (instrument 0)
-    auto get_result = session.getProcInfo(id);
+    auto get_result = session.getProcInfo();
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().proc, 1);
     EXPECT_EQ(get_result.value().chancount, 256);
 
     // Instrument should be marked active
-    auto active_result = session.isInstrumentActive(id);
+    auto active_result = session.isInstrumentActive();
     ASSERT_TRUE(active_result.isOk());
     EXPECT_TRUE(active_result.value());
 }
 
-TEST_F(ShmemSessionTest, SetGetProcInfo_Instrument2) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
-    ASSERT_TRUE(result.isOk());
-    auto& session = result.value();
-
-    // Set PROCINFO for instrument 2 (cbNSP3)
-    cbPKT_PROCINFO info;
-    std::memset(&info, 0, sizeof(info));
-    info.proc = 3;
-    info.chancount = 128;
-
-    auto id = InstrumentId::fromPacketField(2);
-    ASSERT_TRUE(session.setProcInfo(id, info).isOk());
-
-    // THE KEY FIX: Should be stored at index 2, NOT index 0!
-    auto get_result = session.getProcInfo(id);
-    ASSERT_TRUE(get_result.isOk());
-    EXPECT_EQ(get_result.value().proc, 3);
-    EXPECT_EQ(get_result.value().chancount, 128);
-
-    // Verify it's NOT stored at index 0
-    auto id0 = InstrumentId::fromPacketField(0);
-    auto get_result0 = session.getProcInfo(id0);
-    ASSERT_TRUE(get_result0.isOk());
-    EXPECT_NE(get_result0.value().proc, 3);  // Should not have this data
-}
-
-TEST_F(ShmemSessionTest, SetGetProcInfo_MultipleInstruments) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
-    ASSERT_TRUE(result.isOk());
-    auto& session = result.value();
-
-    // Set PROCINFO for instruments 0, 1, and 3
-    for (uint8_t inst : {0, 1, 3}) {
-        cbPKT_PROCINFO info;
-        std::memset(&info, 0, sizeof(info));
-        info.proc = inst + 1;
-        info.chancount = 100 + inst;
-
-        auto id = InstrumentId::fromPacketField(inst);
-        ASSERT_TRUE(session.setProcInfo(id, info).isOk());
-    }
-
-    // Verify each instrument has correct data at correct index
-    for (uint8_t inst : {0, 1, 3}) {
-        auto id = InstrumentId::fromPacketField(inst);
-        auto get_result = session.getProcInfo(id);
-        ASSERT_TRUE(get_result.isOk());
-        EXPECT_EQ(get_result.value().proc, inst + 1);
-        EXPECT_EQ(get_result.value().chancount, 100 + inst);
-    }
-}
+// TODO: These tested the old single-session, multi-instrument indexing model
+// ("THE KEY FIX" of routing by packet.instrument into procinfo[index]). With
+// per-instrument ShmemSession instances a session owns exactly one instrument's
+// config slot, so cross-instrument isolation within one session no longer exists.
+// Equivalent coverage now lives in SetGetProcInfo_Instrument0 (per-instrument
+// round-trip) and the CENTRAL per-instrument tests.
+//
+// TEST_F(ShmemSessionTest, SetGetProcInfo_Instrument2) { ... }
+// TEST_F(ShmemSessionTest, SetGetProcInfo_MultipleInstruments) { ... }
 
 TEST_F(ShmemSessionTest, SetGetBankInfo) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
-    // Set BANKINFO for instrument 1 (cbNSP2), bank 3
+    // Set BANKINFO for bank 3
     cbPKT_BANKINFO info;
     std::memset(&info, 0, sizeof(info));
     info.proc = 2;
     info.bank = 3;
     info.chancount = 32;
 
-    auto id = InstrumentId::fromPacketField(1);
-    ASSERT_TRUE(session.setBankInfo(id, 3, info).isOk());
+    ASSERT_TRUE(session.setBankInfo(3, info).isOk());
 
     // Retrieve and verify
-    auto get_result = session.getBankInfo(id, 3);
+    auto get_result = session.getBankInfo(3);
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().proc, 2);
     EXPECT_EQ(get_result.value().bank, 3);
@@ -279,22 +198,21 @@ TEST_F(ShmemSessionTest, SetGetBankInfo) {
 }
 
 TEST_F(ShmemSessionTest, SetGetFilterInfo) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
-    // Set FILTINFO for instrument 0 (cbNSP1), filter 5
+    // Set FILTINFO for filter 5
     cbPKT_FILTINFO info;
     std::memset(&info, 0, sizeof(info));
     info.proc = 1;
     info.filt = 5;
     info.hpfreq = 250000;  // 250 Hz in millihertz
 
-    auto id = InstrumentId::fromPacketField(0);
-    ASSERT_TRUE(session.setFilterInfo(id, 5, info).isOk());
+    ASSERT_TRUE(session.setFilterInfo(5, info).isOk());
 
     // Retrieve and verify
-    auto get_result = session.getFilterInfo(id, 5);
+    auto get_result = session.getFilterInfo(5);
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().proc, 1);
     EXPECT_EQ(get_result.value().filt, 5);
@@ -308,20 +226,19 @@ TEST_F(ShmemSessionTest, SetGetFilterInfo) {
 /// @{
 
 TEST_F(ShmemSessionTest, GetProcInfo_NotFound) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
     // Try to get PROCINFO before storing anything
-    auto id = InstrumentId::fromOneBased(cbNSP1);
-    auto get_result = session.getProcInfo(id);
+    auto get_result = session.getProcInfo();
     // Should succeed but return zeroed data
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().proc, 0);
 }
 
 TEST_F(ShmemSessionTest, SetAndGetProcInfo) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -332,12 +249,11 @@ TEST_F(ShmemSessionTest, SetAndGetProcInfo) {
     info.chancount = 512;
     info.bankcount = 24;
 
-    auto id = InstrumentId::fromOneBased(cbNSP2);
-    auto set_result = session.setProcInfo(id, info);
+    auto set_result = session.setProcInfo(info);
     ASSERT_TRUE(set_result.isOk());
 
     // Retrieve and verify
-    auto get_result = session.getProcInfo(id);
+    auto get_result = session.getProcInfo();
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().proc, 2);
     EXPECT_EQ(get_result.value().chancount, 512);
@@ -345,16 +261,13 @@ TEST_F(ShmemSessionTest, SetAndGetProcInfo) {
 }
 
 TEST_F(ShmemSessionTest, InvalidInstrumentId) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
-    ASSERT_TRUE(result.isOk());
-    auto& session = result.value();
-
-    // Try to use invalid instrument ID (0 is invalid, 1-4 are valid)
+    // The instrument ID is now fixed at session creation, so an invalid ID is
+    // rejected by create() rather than by individual accessors.
     auto invalid_id = InstrumentId::fromOneBased(0);
     EXPECT_FALSE(invalid_id.isValid());
 
-    auto get_result = session.getProcInfo(invalid_id);
-    EXPECT_TRUE(get_result.isError());
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, invalid_id);
+    EXPECT_TRUE(result.isError());
 }
 
 /// @}
@@ -367,18 +280,18 @@ TEST_F(ShmemSessionTest, OperationsOnClosedSession) {
     // Create a session in a scope
     std::string name = test_name;
     {
-        auto result = ShmemSession::create(name, name + "_rec", name + "_xmt", name + "_xmt_local", name + "_status", name + "_spk", name + "_signal", Mode::STANDALONE);
+        auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, name, cbproto::InstrumentId::fromOneBased(cbNSP1));
         ASSERT_TRUE(result.isOk());
     }
     // Session is now closed
 
     // Try to create a new session with same name should work
-    auto result2 = ShmemSession::create(name, name + "_rec", name + "_xmt", name + "_xmt_local", name + "_status", name + "_spk", name + "_signal", Mode::STANDALONE);
+    auto result2 = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result2.isOk());
 }
 
 TEST_F(ShmemSessionTest, StorePacket_InvalidInstrument) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -409,7 +322,7 @@ TEST_F(ShmemSessionTest, StorePacket_InvalidInstrument) {
 /// @{
 
 TEST_F(ShmemSessionTest, StorePacket_ADAPTFILTINFO) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -436,7 +349,7 @@ TEST_F(ShmemSessionTest, StorePacket_ADAPTFILTINFO) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_REFELECFILTINFO) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -458,7 +371,7 @@ TEST_F(ShmemSessionTest, StorePacket_REFELECFILTINFO) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_SS_STATUS) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -479,7 +392,7 @@ TEST_F(ShmemSessionTest, StorePacket_SS_STATUS) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_SS_DETECT) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -500,7 +413,7 @@ TEST_F(ShmemSessionTest, StorePacket_SS_DETECT) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_SS_ARTIF_REJECT) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -521,7 +434,7 @@ TEST_F(ShmemSessionTest, StorePacket_SS_ARTIF_REJECT) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_SS_NOISE_BOUNDARY) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -555,7 +468,7 @@ TEST_F(ShmemSessionTest, StorePacket_SS_NOISE_BOUNDARY) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_SS_STATISTICS) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -576,7 +489,7 @@ TEST_F(ShmemSessionTest, StorePacket_SS_STATISTICS) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_SS_MODEL) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -614,7 +527,7 @@ TEST_F(ShmemSessionTest, StorePacket_SS_MODEL) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_FS_BASIS) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -647,7 +560,7 @@ TEST_F(ShmemSessionTest, StorePacket_FS_BASIS) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_LNC) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -669,7 +582,7 @@ TEST_F(ShmemSessionTest, StorePacket_LNC) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_FILECFG) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -703,7 +616,7 @@ TEST_F(ShmemSessionTest, StorePacket_FILECFG) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_NTRODEINFO) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -737,7 +650,7 @@ TEST_F(ShmemSessionTest, StorePacket_NTRODEINFO) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_WAVEFORM) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -775,7 +688,7 @@ TEST_F(ShmemSessionTest, StorePacket_WAVEFORM) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_NPLAY) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -799,7 +712,7 @@ TEST_F(ShmemSessionTest, StorePacket_NPLAY) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_NM_VideoSource) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -834,7 +747,7 @@ TEST_F(ShmemSessionTest, StorePacket_NM_VideoSource) {
 }
 
 TEST_F(ShmemSessionTest, StorePacket_NM_TrackableObject) {
-    auto result = ShmemSession::create(test_name, test_name + "_rec", test_name + "_xmt", test_name + "_xmt_local", test_name + "_status", test_name + "_spk", test_name + "_signal", Mode::STANDALONE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
@@ -873,10 +786,7 @@ protected:
 
     // Helper to create a native STANDALONE session
     Result<ShmemSession> createNativeSession() {
-        return ShmemSession::create(
-            test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-            test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-            test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+        return ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
     }
 
     std::string test_name;
@@ -902,8 +812,9 @@ TEST_F(NativeShmemSessionTest, NativeConfigBufferAccessor) {
 
     // Native layout should return native config buffer
     EXPECT_NE(session.getNativeConfigBuffer(), nullptr);
-    // Central accessor should return nullptr for native layout
-    EXPECT_EQ(session.getConfigBuffer(), nullptr);
+    // CENTRAL accessor should return an error for the native layout
+    auto buf = std::make_unique<NativeConfigBuffer>();
+    EXPECT_TRUE(session.getLegacyConfigBuffer(*buf).isError());
 }
 
 TEST_F(NativeShmemSessionTest, CreateAndDestroy) {
@@ -915,42 +826,27 @@ TEST_F(NativeShmemSessionTest, CreateAndDestroy) {
     // Session destroyed, shared memory released
 }
 
-TEST_F(NativeShmemSessionTest, SingleInstrumentOnly) {
+// TODO: A ShmemSession is now per-instrument and carries no notion of rejecting
+// "other" instruments or enumerating active ones. setInstrumentActive()/
+// isInstrumentActive() operate on the session's own instrument (see InstrumentToggle
+// below), and getFirstActiveInstrument() was removed. Rework instrument enumeration
+// at the layer that manages the set of sessions.
+//
+// TEST_F(NativeShmemSessionTest, SingleInstrumentOnly) { ... }
+// TEST_F(NativeShmemSessionTest, GetFirstActiveInstrument) { ... }
+
+TEST_F(NativeShmemSessionTest, InstrumentToggle) {
     auto result = createNativeSession();
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
-    // Instrument 1 (index 0) should work
-    auto id1 = InstrumentId::fromOneBased(1);
-    auto set_result = session.setInstrumentActive(id1, true);
+    // The session's own instrument can be toggled active/inactive.
+    auto set_result = session.setInstrumentActive(true);
     ASSERT_TRUE(set_result.isOk());
 
-    auto active_result = session.isInstrumentActive(id1);
+    auto active_result = session.isInstrumentActive();
     ASSERT_TRUE(active_result.isOk());
     EXPECT_TRUE(active_result.value());
-
-    // Instrument 2 (index 1) should fail in native mode
-    auto id2 = InstrumentId::fromOneBased(2);
-    auto set_result2 = session.setInstrumentActive(id2, true);
-    EXPECT_TRUE(set_result2.isError()) << "Native mode should reject instrument index > 0";
-}
-
-TEST_F(NativeShmemSessionTest, GetFirstActiveInstrument) {
-    auto result = createNativeSession();
-    ASSERT_TRUE(result.isOk()) << result.error();
-    auto& session = result.value();
-
-    // No active instruments initially
-    auto first_result = session.getFirstActiveInstrument();
-    EXPECT_TRUE(first_result.isError());
-
-    // Activate the only instrument
-    auto id = InstrumentId::fromOneBased(1);
-    ASSERT_TRUE(session.setInstrumentActive(id, true).isOk());
-
-    first_result = session.getFirstActiveInstrument();
-    ASSERT_TRUE(first_result.isOk());
-    EXPECT_EQ(first_result.value().toOneBased(), 1);
 }
 
 TEST_F(NativeShmemSessionTest, SetAndGetProcInfo) {
@@ -964,30 +860,20 @@ TEST_F(NativeShmemSessionTest, SetAndGetProcInfo) {
     info.chancount = 284;
     info.bankcount = 16;
 
-    auto id = InstrumentId::fromOneBased(1);
-    ASSERT_TRUE(session.setProcInfo(id, info).isOk());
+    ASSERT_TRUE(session.setProcInfo(info).isOk());
 
-    auto get_result = session.getProcInfo(id);
+    auto get_result = session.getProcInfo();
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().proc, 1);
     EXPECT_EQ(get_result.value().chancount, 284);
     EXPECT_EQ(get_result.value().bankcount, 16);
 }
 
-TEST_F(NativeShmemSessionTest, SetAndGetProcInfo_RejectMultiInstrument) {
-    auto result = createNativeSession();
-    ASSERT_TRUE(result.isOk()) << result.error();
-    auto& session = result.value();
-
-    cbPKT_PROCINFO info;
-    std::memset(&info, 0, sizeof(info));
-    info.proc = 2;
-
-    // Setting procinfo for instrument 2 should fail
-    auto id2 = InstrumentId::fromOneBased(2);
-    auto set_result = session.setProcInfo(id2, info);
-    EXPECT_TRUE(set_result.isError());
-}
+// TODO: setProcInfo() no longer takes an instrument ID — a session writes to its
+// own instrument's single procinfo slot — so there is no per-call instrument to
+// reject. Multi-instrument rejection, if still desired, belongs at session creation.
+//
+// TEST_F(NativeShmemSessionTest, SetAndGetProcInfo_RejectMultiInstrument) { ... }
 
 TEST_F(NativeShmemSessionTest, SetAndGetBankInfo) {
     auto result = createNativeSession();
@@ -1000,10 +886,9 @@ TEST_F(NativeShmemSessionTest, SetAndGetBankInfo) {
     info.bank = 3;
     info.chancount = 32;
 
-    auto id = InstrumentId::fromOneBased(1);
-    ASSERT_TRUE(session.setBankInfo(id, 3, info).isOk());
+    ASSERT_TRUE(session.setBankInfo(3, info).isOk());
 
-    auto get_result = session.getBankInfo(id, 3);
+    auto get_result = session.getBankInfo(3);
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().proc, 1);
     EXPECT_EQ(get_result.value().bank, 3);
@@ -1021,10 +906,9 @@ TEST_F(NativeShmemSessionTest, SetAndGetFilterInfo) {
     info.filt = 5;
     info.hpfreq = 250000;
 
-    auto id = InstrumentId::fromOneBased(1);
-    ASSERT_TRUE(session.setFilterInfo(id, 5, info).isOk());
+    ASSERT_TRUE(session.setFilterInfo(5, info).isOk());
 
-    auto get_result = session.getFilterInfo(id, 5);
+    auto get_result = session.getFilterInfo(5);
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().filt, 5);
     EXPECT_EQ(get_result.value().hpfreq, 250000);
@@ -1143,18 +1027,12 @@ TEST_F(NativeShmemSessionTest, NspStatus) {
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
-    auto id = InstrumentId::fromOneBased(1);
+    // Set NSP status for this session's instrument
+    ASSERT_TRUE(session.setNspStatus(NativeNSPStatus::NSP_FOUND).isOk());
 
-    // Set NSP status
-    ASSERT_TRUE(session.setNspStatus(id, NSPStatus::NSP_FOUND).isOk());
-
-    auto get_result = session.getNspStatus(id);
+    auto get_result = session.getNspStatus();
     ASSERT_TRUE(get_result.isOk());
-    EXPECT_EQ(get_result.value(), NSPStatus::NSP_FOUND);
-
-    // Instrument 2 should fail
-    auto id2 = InstrumentId::fromOneBased(2);
-    EXPECT_TRUE(session.setNspStatus(id2, NSPStatus::NSP_FOUND).isError());
+    EXPECT_EQ(get_result.value(), NativeNSPStatus::NSP_FOUND);
 }
 
 TEST_F(NativeShmemSessionTest, GeminiSystem) {
@@ -1270,7 +1148,7 @@ TEST_F(NativeShmemSessionTest, NumTotalChans) {
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @name CENTRAL_COMPAT ShmemSession Tests
+/// @name CENTRAL ShmemSession Tests
 /// @{
 
 class CentralCompatShmemSessionTest : public ::testing::Test {
@@ -1279,12 +1157,9 @@ protected:
         test_name = "test_compat_" + std::to_string(test_counter++);
     }
 
-    // Helper to create a CENTRAL_COMPAT STANDALONE session (for testing)
+    // Helper to create a CENTRAL STANDALONE session (for testing)
     Result<ShmemSession> createCompatSession() {
-        return ShmemSession::create(
-            test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-            test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-            test_name + "_signal", Mode::STANDALONE, ShmemLayout::CENTRAL_COMPAT);
+        return ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
     }
 
     std::string test_name;
@@ -1300,7 +1175,7 @@ TEST_F(CentralCompatShmemSessionTest, CreateCompatStandalone) {
     auto& session = result.value();
     EXPECT_TRUE(session.isOpen());
     EXPECT_EQ(session.getMode(), Mode::STANDALONE);
-    EXPECT_EQ(session.getLayout(), ShmemLayout::CENTRAL_COMPAT);
+    EXPECT_EQ(session.getLayout(), ShmemLayout::CENTRAL);
 }
 
 TEST_F(CentralCompatShmemSessionTest, LegacyConfigBufferAccessor) {
@@ -1308,11 +1183,10 @@ TEST_F(CentralCompatShmemSessionTest, LegacyConfigBufferAccessor) {
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
-    // CENTRAL_COMPAT should return legacy config buffer
-    EXPECT_NE(session.getLegacyConfigBuffer(), nullptr);
-    // Central accessor should return nullptr for compat layout
-    EXPECT_EQ(session.getConfigBuffer(), nullptr);
-    // Native accessor should also return nullptr
+    // CENTRAL should provide a translated copy of the legacy config buffer
+    auto buf = std::make_unique<NativeConfigBuffer>();
+    EXPECT_TRUE(session.getLegacyConfigBuffer(*buf).isOk());
+    // Native accessor should return nullptr for the CENTRAL layout
     EXPECT_EQ(session.getNativeConfigBuffer(), nullptr);
 }
 
@@ -1321,13 +1195,11 @@ TEST_F(CentralCompatShmemSessionTest, IsInstrumentActive_AlwaysTrue) {
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
-    // In CENTRAL_COMPAT mode, all instruments report as active
-    for (uint8_t i = 1; i <= cbMAXOPEN; ++i) {
-        auto id = InstrumentId::fromOneBased(i);
-        auto active_result = session.isInstrumentActive(id);
-        ASSERT_TRUE(active_result.isOk());
-        EXPECT_TRUE(active_result.value()) << "Instrument " << (int)i << " should be active in compat mode";
-    }
+    // In CENTRAL mode the session's instrument always reports as active
+    // (Central's layout has no instrument_status field).
+    auto active_result = session.isInstrumentActive();
+    ASSERT_TRUE(active_result.isOk());
+    EXPECT_TRUE(active_result.value()) << "Instrument should be active in compat mode";
 }
 
 TEST_F(CentralCompatShmemSessionTest, SetInstrumentActive_ReturnsError) {
@@ -1336,24 +1208,20 @@ TEST_F(CentralCompatShmemSessionTest, SetInstrumentActive_ReturnsError) {
     auto& session = result.value();
 
     // Setting instrument status should fail (read-only in compat mode)
-    auto id = InstrumentId::fromOneBased(1);
-    auto set_result = session.setInstrumentActive(id, true);
+    auto set_result = session.setInstrumentActive(true);
     EXPECT_TRUE(set_result.isError());
 }
 
-TEST_F(CentralCompatShmemSessionTest, GetFirstActiveInstrument) {
-    auto result = createCompatSession();
-    ASSERT_TRUE(result.isOk()) << result.error();
-    auto& session = result.value();
-
-    // Should always return instrument 0 (first)
-    auto first_result = session.getFirstActiveInstrument();
-    ASSERT_TRUE(first_result.isOk());
-    EXPECT_EQ(first_result.value().toIndex(), 0);
-}
+// TODO: getFirstActiveInstrument() was removed; a CENTRAL session is bound to a
+// single instrument at creation. Instrument enumeration now happens above the
+// ShmemSession layer.
+//
+// TEST_F(CentralCompatShmemSessionTest, GetFirstActiveInstrument) { ... }
 
 TEST_F(CentralCompatShmemSessionTest, SetAndGetProcInfo) {
-    auto result = createCompatSession();
+    // A CENTRAL session targets a single instrument; create one for instrument 2.
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL,
+                                       test_name + "_cfg", InstrumentId::fromOneBased(2));
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
@@ -1363,13 +1231,11 @@ TEST_F(CentralCompatShmemSessionTest, SetAndGetProcInfo) {
     info.chancount = 512;
     info.bankcount = 24;
 
-    // Set procinfo for instrument 2 (index 1)
-    auto id = InstrumentId::fromOneBased(2);
-    auto set_result = session.setProcInfo(id, info);
+    auto set_result = session.setProcInfo(info);
     ASSERT_TRUE(set_result.isOk());
 
     // Retrieve and verify
-    auto get_result = session.getProcInfo(id);
+    auto get_result = session.getProcInfo();
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().proc, 2);
     EXPECT_EQ(get_result.value().chancount, 512);
@@ -1387,10 +1253,9 @@ TEST_F(CentralCompatShmemSessionTest, SetAndGetBankInfo) {
     info.bank = 5;
     info.chancount = 32;
 
-    auto id = InstrumentId::fromOneBased(1);
-    ASSERT_TRUE(session.setBankInfo(id, 5, info).isOk());
+    ASSERT_TRUE(session.setBankInfo(5, info).isOk());
 
-    auto get_result = session.getBankInfo(id, 5);
+    auto get_result = session.getBankInfo(5);
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().proc, 1);
     EXPECT_EQ(get_result.value().bank, 5);
@@ -1408,10 +1273,9 @@ TEST_F(CentralCompatShmemSessionTest, SetAndGetFilterInfo) {
     info.filt = 10;
     info.hpfreq = 300000;
 
-    auto id = InstrumentId::fromOneBased(1);
-    ASSERT_TRUE(session.setFilterInfo(id, 10, info).isOk());
+    ASSERT_TRUE(session.setFilterInfo(10, info).isOk());
 
-    auto get_result = session.getFilterInfo(id, 10);
+    auto get_result = session.getFilterInfo(10);
     ASSERT_TRUE(get_result.isOk());
     EXPECT_EQ(get_result.value().filt, 10);
     EXPECT_EQ(get_result.value().hpfreq, 300000);
@@ -1437,28 +1301,21 @@ TEST_F(CentralCompatShmemSessionTest, SetAndGetChanInfo) {
     EXPECT_STREQ(get_result.value().label, "elec100");
 }
 
-TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_DefaultNoFilter) {
-    auto result = createCompatSession();
-    ASSERT_TRUE(result.isOk()) << result.error();
-    auto& session = result.value();
+// TODO: The explicit setInstrumentFilter()/getInstrumentFilter() API was removed.
+// readReceiveBuffer() now implicitly returns only packets for the session's own
+// instrument (the instrument fixed at create()), so there is no separate filter to
+// get/set and no "no filter" mode. The implicit filtering is covered by
+// InstrumentFilter_ReturnsOwnInstrument below.
+//
+// TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_DefaultNoFilter) { ... }
+// TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_SetAndGet) { ... }
+// TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_NoFilter_ReturnsAll) { ... }
 
-    EXPECT_EQ(session.getInstrumentFilter(), -1);
-}
-
-TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_SetAndGet) {
-    auto result = createCompatSession();
-    ASSERT_TRUE(result.isOk()) << result.error();
-    auto& session = result.value();
-
-    session.setInstrumentFilter(2);
-    EXPECT_EQ(session.getInstrumentFilter(), 2);
-
-    session.setInstrumentFilter(-1);
-    EXPECT_EQ(session.getInstrumentFilter(), -1);
-}
-
-TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_FiltersReceiveBuffer) {
-    auto result = createCompatSession();
+TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_ReturnsOwnInstrument) {
+    // A session bound to instrument 2 should only see instrument-2 packets when
+    // reading the (shared) receive buffer.
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL,
+                                       test_name + "_cfg", InstrumentId::fromIndex(2));
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
@@ -1482,10 +1339,7 @@ TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_FiltersReceiveBuffer) {
         ASSERT_TRUE(session.storePacket(pkt).isOk());
     }
 
-    // Set filter to instrument 2 only
-    session.setInstrumentFilter(2);
-
-    // Read packets - should only get the one from instrument 2
+    // Read packets - should only get the one from this session's instrument (2)
     cbPKT_GENERIC read_pkts[10];
     size_t packets_read = 0;
     auto read_result = session.readReceiveBuffer(read_pkts, 10, packets_read);
@@ -1493,35 +1347,6 @@ TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_FiltersReceiveBuffer) {
     EXPECT_EQ(packets_read, 1u);
     EXPECT_EQ(read_pkts[0].cbpkt_header.instrument, 2);
     EXPECT_EQ(read_pkts[0].data_u32[0], 0xAA02u);
-}
-
-TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_NoFilter_ReturnsAll) {
-    auto result = createCompatSession();
-    ASSERT_TRUE(result.isOk()) << result.error();
-    auto& session = result.value();
-
-    // Store packets from different instruments with realistic timestamps
-    uint32_t dlen = 4;
-
-    for (uint8_t inst = 0; inst < 3; ++inst) {
-        cbPKT_GENERIC pkt;
-        std::memset(&pkt, 0, sizeof(pkt));
-        pkt.cbpkt_header.time = 2000000000ULL + inst * 33333ULL;  // Realistic nanosecond timestamps
-        pkt.cbpkt_header.chid = 1;
-        pkt.cbpkt_header.instrument = inst;
-        pkt.cbpkt_header.type = 0x01;
-        pkt.cbpkt_header.dlen = dlen;
-        pkt.data_u32[0] = 0xBB00 + inst;
-
-        ASSERT_TRUE(session.storePacket(pkt).isOk());
-    }
-
-    // No filter set (default -1) - should get all packets
-    cbPKT_GENERIC read_pkts[10];
-    size_t packets_read = 0;
-    auto read_result = session.readReceiveBuffer(read_pkts, 10, packets_read);
-    ASSERT_TRUE(read_result.isOk()) << read_result.error();
-    EXPECT_EQ(packets_read, 3u);
 }
 
 TEST_F(CentralCompatShmemSessionTest, TransmitQueueRoundTrip) {
@@ -1562,10 +1387,7 @@ protected:
     }
 
     Result<ShmemSession> createCompatSession() {
-        return ShmemSession::create(
-            test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-            test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-            test_name + "_signal", Mode::STANDALONE, ShmemLayout::CENTRAL_COMPAT);
+        return ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
     }
 
     std::string test_name;
@@ -1592,13 +1414,15 @@ TEST_F(CentralCompatProtocolTest, ReadCurrentFormat_WithRealisticTimestamps) {
 
     EXPECT_EQ(session.getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
 
-    // Store packets (current format, written by storePacket)
+    // Store packets (current format, written by storePacket).  The session is bound
+    // to instrument 0, and readReceiveBuffer only returns that instrument's packets,
+    // so store all three as instrument 0.
     for (uint8_t i = 0; i < 3; ++i) {
         cbPKT_GENERIC pkt;
         std::memset(&pkt, 0, sizeof(pkt));
         pkt.cbpkt_header.time = 5000000000ULL + i * 33333ULL;
         pkt.cbpkt_header.chid = 1;
-        pkt.cbpkt_header.instrument = i;
+        pkt.cbpkt_header.instrument = 0;
         pkt.cbpkt_header.type = 0x01;
         pkt.cbpkt_header.dlen = 4;
         pkt.data_u32[0] = 0xCC00 + i;
@@ -1614,93 +1438,28 @@ TEST_F(CentralCompatProtocolTest, ReadCurrentFormat_WithRealisticTimestamps) {
     EXPECT_EQ(packets_read, 3u);
 
     for (size_t i = 0; i < packets_read; ++i) {
-        EXPECT_EQ(read_pkts[i].cbpkt_header.instrument, i);
+        EXPECT_EQ(read_pkts[i].cbpkt_header.instrument, 0);
         EXPECT_EQ(read_pkts[i].data_u32[0], 0xCC00u + i);
         EXPECT_EQ(read_pkts[i].cbpkt_header.dlen, 4u);
     }
 }
 
-/// @brief Test version detection: 3.11
-TEST_F(CentralCompatProtocolTest, DetectProtocol_311) {
-    auto writer_result = createCompatSession();
-    ASSERT_TRUE(writer_result.isOk()) << writer_result.error();
-    auto& writer = writer_result.value();
+// TODO: Protocol-version detection no longer reads procinfo[0].version from a
+// writable legacy config buffer (that pointer accessor was removed). It is now
+// inferred from Central.exe's file version, which requires Windows and a running
+// Central, so these CLIENT+CENTRAL detection tests can't be exercised here. They
+// should be reworked as Windows-only integration tests against a real Central.
+//
+// TEST_F(CentralCompatProtocolTest, DetectProtocol_311) { ... }
+// TEST_F(CentralCompatProtocolTest, DetectProtocol_400) { ... }
+// TEST_F(CentralCompatProtocolTest, DetectProtocol_410) { ... }
+// TEST_F(CentralCompatProtocolTest, DetectProtocol_Current_42) { ... }
 
-    // Set version to 3.11 (major=3, minor=11)
-    auto* cfg = writer.getLegacyConfigBuffer();
-    ASSERT_NE(cfg, nullptr);
-    cfg->procinfo[0].version = (3 << 16) | 11;
-
-    std::string name = test_name;
-    auto reader_result = ShmemSession::create(
-        name + "_cfg", name + "_rec", name + "_xmt",
-        name + "_xmt_local", name + "_status", name + "_spk",
-        name + "_signal", Mode::CLIENT, ShmemLayout::CENTRAL_COMPAT);
-    ASSERT_TRUE(reader_result.isOk()) << reader_result.error();
-    EXPECT_EQ(reader_result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_311);
-}
-
-/// @brief Test version detection: 4.0
-TEST_F(CentralCompatProtocolTest, DetectProtocol_400) {
-    // Create standalone, set version, then open CLIENT to pick it up
-    auto writer_result = createCompatSession();
-    ASSERT_TRUE(writer_result.isOk()) << writer_result.error();
-    auto& writer = writer_result.value();
-
-    auto* cfg = writer.getLegacyConfigBuffer();
-    ASSERT_NE(cfg, nullptr);
-    cfg->procinfo[0].version = (4 << 16) | 0;  // major=4, minor=0
-
-    std::string name = test_name;
-    auto reader_result = ShmemSession::create(
-        name + "_cfg", name + "_rec", name + "_xmt",
-        name + "_xmt_local", name + "_status", name + "_spk",
-        name + "_signal", Mode::CLIENT, ShmemLayout::CENTRAL_COMPAT);
-    ASSERT_TRUE(reader_result.isOk()) << reader_result.error();
-    EXPECT_EQ(reader_result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_400);
-}
-
-/// @brief Test version detection: 4.1
-TEST_F(CentralCompatProtocolTest, DetectProtocol_410) {
-    auto writer_result = createCompatSession();
-    ASSERT_TRUE(writer_result.isOk()) << writer_result.error();
-    auto& writer = writer_result.value();
-
-    auto* cfg = writer.getLegacyConfigBuffer();
-    ASSERT_NE(cfg, nullptr);
-    cfg->procinfo[0].version = (4 << 16) | 1;  // major=4, minor=1
-
-    std::string name = test_name;
-    auto reader_result = ShmemSession::create(
-        name + "_cfg", name + "_rec", name + "_xmt",
-        name + "_xmt_local", name + "_status", name + "_spk",
-        name + "_signal", Mode::CLIENT, ShmemLayout::CENTRAL_COMPAT);
-    ASSERT_TRUE(reader_result.isOk()) << reader_result.error();
-    EXPECT_EQ(reader_result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_410);
-}
-
-/// @brief Test version detection: 4.2 (current)
-TEST_F(CentralCompatProtocolTest, DetectProtocol_Current_42) {
-    auto writer_result = createCompatSession();
-    ASSERT_TRUE(writer_result.isOk()) << writer_result.error();
-    auto& writer = writer_result.value();
-
-    auto* cfg = writer.getLegacyConfigBuffer();
-    ASSERT_NE(cfg, nullptr);
-    cfg->procinfo[0].version = (4 << 16) | 2;  // major=4, minor=2
-
-    std::string name = test_name;
-    auto reader_result = ShmemSession::create(
-        name + "_cfg", name + "_rec", name + "_xmt",
-        name + "_xmt_local", name + "_status", name + "_spk",
-        name + "_signal", Mode::CLIENT, ShmemLayout::CENTRAL_COMPAT);
-    ASSERT_TRUE(reader_result.isOk()) << reader_result.error();
-    EXPECT_EQ(reader_result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
-}
-
-/// @brief Test readReceiveBuffer with instrument filter and current-format packets
+/// @brief Test readReceiveBuffer's implicit per-instrument filtering with current-format packets
 TEST_F(CentralCompatProtocolTest, InstrumentFilterWithCurrentProtocol) {
-    auto result = createCompatSession();
+    // Bind the session to instrument 3; readReceiveBuffer returns only its packets.
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL,
+                                       test_name + "_cfg", InstrumentId::fromIndex(3));
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
@@ -1719,9 +1478,6 @@ TEST_F(CentralCompatProtocolTest, InstrumentFilterWithCurrentProtocol) {
 
         ASSERT_TRUE(session.storePacket(pkt).isOk());
     }
-
-    // Filter for instrument 3 only
-    session.setInstrumentFilter(3);
 
     cbPKT_GENERIC read_pkts[10];
     size_t packets_read = 0;
@@ -1767,10 +1523,7 @@ TEST_F(CentralCompatProtocolTest, TransmitRoundTrip_CurrentProtocol) {
 /// @brief Non-compat layout always detects CURRENT protocol
 TEST_F(CentralCompatProtocolTest, NativeLayout_AlwaysCurrent) {
     std::string name = test_name;
-    auto result = ShmemSession::create(
-        name + "_cfg", name + "_rec", name + "_xmt",
-        name + "_xmt_local", name + "_status", name + "_spk",
-        name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk()) << result.error();
     EXPECT_EQ(result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
 }
@@ -1778,10 +1531,7 @@ TEST_F(CentralCompatProtocolTest, NativeLayout_AlwaysCurrent) {
 /// @brief CENTRAL layout always detects CURRENT protocol
 TEST_F(CentralCompatProtocolTest, CentralLayout_AlwaysCurrent) {
     std::string name = test_name;
-    auto result = ShmemSession::create(
-        name + "_cfg", name + "_rec", name + "_xmt",
-        name + "_xmt_local", name + "_status", name + "_spk",
-        name + "_signal", Mode::STANDALONE, ShmemLayout::CENTRAL);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL, name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk()) << result.error();
     EXPECT_EQ(result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
 }
@@ -1805,10 +1555,7 @@ protected:
 int OwnerLivenessTest::test_counter = 0;
 
 TEST_F(OwnerLivenessTest, StandaloneWritesOwnerPid) {
-    auto result = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk()) << result.error();
 
     auto* cfg = result.value().getNativeConfigBuffer();
@@ -1821,10 +1568,7 @@ TEST_F(OwnerLivenessTest, StandaloneWritesOwnerPid) {
 }
 
 TEST_F(OwnerLivenessTest, StandaloneAlwaysReturnsTrue) {
-    auto result = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk()) << result.error();
 
     // isOwnerAlive() is only meaningful for CLIENT — STANDALONE always returns true
@@ -1833,17 +1577,11 @@ TEST_F(OwnerLivenessTest, StandaloneAlwaysReturnsTrue) {
 
 TEST_F(OwnerLivenessTest, ClientDetectsLiveOwner) {
     // Create STANDALONE (sets owner_pid to current process)
-    auto standalone = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    auto standalone = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(standalone.isOk()) << standalone.error();
 
     // Create CLIENT on same segments
-    auto client = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::CLIENT, ShmemLayout::NATIVE);
+    auto client = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(client.isOk()) << client.error();
 
     // Owner (this process) is alive
@@ -1852,10 +1590,7 @@ TEST_F(OwnerLivenessTest, ClientDetectsLiveOwner) {
 
 TEST_F(OwnerLivenessTest, ClientDetectsDeadOwner) {
     // Create STANDALONE, then set a fake dead PID
-    auto standalone = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    auto standalone = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(standalone.isOk()) << standalone.error();
 
     // Overwrite owner_pid with a PID that (almost certainly) doesn't exist
@@ -1864,10 +1599,7 @@ TEST_F(OwnerLivenessTest, ClientDetectsDeadOwner) {
     cfg->owner_pid = 4000000000u;  // Well above any real PID
 
     // Create CLIENT on same segments
-    auto client = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::CLIENT, ShmemLayout::NATIVE);
+    auto client = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(client.isOk()) << client.error();
 
     // Owner PID doesn't exist — should detect as dead
@@ -1876,10 +1608,7 @@ TEST_F(OwnerLivenessTest, ClientDetectsDeadOwner) {
 
 TEST_F(OwnerLivenessTest, ClientTreatsZeroPidAsAlive) {
     // Create STANDALONE, then clear owner_pid to simulate pre-liveness segments
-    auto standalone = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    auto standalone = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(standalone.isOk()) << standalone.error();
 
     auto* cfg = standalone.value().getNativeConfigBuffer();
@@ -1887,33 +1616,19 @@ TEST_F(OwnerLivenessTest, ClientTreatsZeroPidAsAlive) {
     cfg->owner_pid = 0;
 
     // Create CLIENT on same segments
-    auto client = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::CLIENT, ShmemLayout::NATIVE);
+    auto client = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(client.isOk()) << client.error();
 
     // PID 0 = unknown — assume alive (backward compat)
     EXPECT_TRUE(client.value().isOwnerAlive());
 }
 
-TEST_F(OwnerLivenessTest, CentralCompatAlwaysReturnsTrue) {
-    // Liveness check only applies to NATIVE layout
-    auto standalone = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::STANDALONE, ShmemLayout::CENTRAL);
-    ASSERT_TRUE(standalone.isOk()) << standalone.error();
-
-    auto client = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::CLIENT, ShmemLayout::CENTRAL);
-    ASSERT_TRUE(client.isOk()) << client.error();
-
-    // Non-NATIVE layout always returns true (no PID field)
-    EXPECT_TRUE(client.value().isOwnerAlive());
-}
+// TODO: Opening a CLIENT + CENTRAL session triggers Central protocol-version
+// detection, which inspects Central.exe's file version and therefore requires
+// Windows with a running Central. This can't be exercised on a non-Windows build,
+// so this liveness test should be reworked as a Windows-only integration test.
+//
+// TEST_F(OwnerLivenessTest, CentralCompatAlwaysReturnsTrue) { ... }
 
 /// @}
 
