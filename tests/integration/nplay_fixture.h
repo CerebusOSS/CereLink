@@ -15,6 +15,7 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -50,13 +51,25 @@
 class NPlayFixture : public ::testing::Test {
 protected:
     void SetUp() override {
+        // Unique lock name PER LAUNCH, not per process: gtest runs every TEST_F
+        // in one process, so a pid-only name would collide across consecutive
+        // SetUp()s.  The trailing counter guarantees each nPlayServer instance
+        // gets its own lock (and its own plugin-container shmem channel names,
+        // which are also derived from the lock name).
         m_lockName = "nplay_integ_" + std::to_string(
 #ifdef _WIN32
             GetCurrentProcessId()
 #else
             getpid()
 #endif
-        );
+        ) + "_" + std::to_string(nextLaunchId());
+
+#ifndef _WIN32
+        // Defensive: clear any stale lock file a hard-killed prior run left
+        // behind.  nPlayServer guards the lock with O_EXCL, so a leftover file
+        // would make this launch fail with "Cannot run multiple instances".
+        std::remove(lockFilePath().c_str());
+#endif
 
         std::string binary = NPLAY_BINARY_PATH;
         std::string ns6    = NPLAY_NS6_PATH;
@@ -112,9 +125,15 @@ protected:
             }
             m_pid = -1;
 
-            // Clean up the POSIX named semaphore
-            std::string sem_name = "/" + m_lockName;
-            sem_unlink(sem_name.c_str());
+            // nPlayServer's lock is a FILE ($TMPDIR/<name>.lock guarded by
+            // O_EXCL), not a named semaphore.  A SIGKILLed instance leaves it
+            // behind, so remove it here.  (The per-launch unique name already
+            // prevents collisions; this just keeps TMPDIR from accumulating
+            // stale locks.)
+            std::remove(lockFilePath().c_str());
+            // Belt-and-suspenders: older builds also created a named semaphore;
+            // unlinking a non-existent name is harmless.
+            sem_unlink(("/" + m_lockName).c_str());
         }
 #endif
     }
@@ -147,6 +166,22 @@ protected:
     }
 
 private:
+    /// Monotonically increasing id so each launch gets a unique lock name,
+    /// even though all TEST_F instances share one process (and thus one pid).
+    static unsigned nextLaunchId() {
+        static std::atomic<unsigned> counter{0};
+        return counter.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    /// Path of nPlayServer's lock file for the current lock name, computed the
+    /// same way nPlayServer does ($TMPDIR/<name>.lock, falling back to /tmp).
+    std::string lockFilePath() const {
+        const char* tmp = std::getenv("TMPDIR");
+        std::string dir = (tmp != nullptr && tmp[0] != '\0') ? tmp : "/tmp";
+        if (!dir.empty() && dir.back() == '/') dir.pop_back();
+        return dir + "/" + m_lockName + ".lock";
+    }
+
     std::string m_lockName;
 #ifdef _WIN32
     PROCESS_INFORMATION m_pi = {};
