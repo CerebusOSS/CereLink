@@ -1122,6 +1122,39 @@ CBSDK_API cbsdk_result_t cbsdk_session_get_clock_uncertainty(
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure
 CBSDK_API cbsdk_result_t cbsdk_session_send_clock_probe(cbsdk_session_t session);
 
+/// Convert a batch of device timestamps (nanoseconds) to host steady_clock
+/// nanoseconds, optionally enforcing per-stream monotonicity.
+///
+/// The whole batch is converted against one consistent clock snapshot.  When
+/// @p stream_id >= 0 the outputs are clamped to be non-decreasing relative to
+/// the previous conversion request on that same stream_id, except across a
+/// clock re-sync (where the floor resets so the timeline follows the new
+/// regime).  Pass @p stream_id < 0 for a stateless conversion (no clamping).
+/// Monotonic streams assume in-order submission per stream_id; their state is
+/// created lazily and freed by cbsdk_session_reset_monotonic() or session close.
+///
+/// @param session Session handle (must not be NULL)
+/// @param stream_id Opaque per-stream key (e.g. sample group); <0 = stateless
+/// @param device_ns Input device timestamps, n entries (must not be NULL)
+/// @param[out] out_steady_ns Output host steady_clock nanoseconds, n entries (must not be NULL)
+/// @param n Number of timestamps
+/// @return CBSDK_RESULT_SUCCESS if converted, CBSDK_RESULT_NOT_RUNNING if no sync data
+CBSDK_API cbsdk_result_t cbsdk_session_to_local_time(
+    cbsdk_session_t session,
+    int64_t stream_id,
+    const uint64_t* device_ns,
+    int64_t* out_steady_ns,
+    size_t n);
+
+/// Drop the monotonic floor/epoch state for one stream_id used by
+/// cbsdk_session_to_local_time().  No-op if the stream is unknown.
+/// @param session Session handle (must not be NULL)
+/// @param stream_id Stream key previously used for monotonic conversion
+/// @return CBSDK_RESULT_SUCCESS, or CBSDK_RESULT_INVALID_PARAMETER on a bad handle
+CBSDK_API cbsdk_result_t cbsdk_session_reset_monotonic(
+    cbsdk_session_t session,
+    int64_t stream_id);
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Utility
 ///////////////////////////////////////////////////////////////////////////////////////////////////

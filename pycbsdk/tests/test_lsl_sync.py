@@ -50,12 +50,14 @@ GUARD_S = 0.150
 MONO_BACKSTEP_S = 0.020
 
 
-def _analyze(dev_ns, mono_s):
+def _analyze(dev_ns, mono_s, backstep_threshold_s=MONO_BACKSTEP_S):
     """Walk a captured (device_ns, host_monotonic_s) timeline.
 
     Splits on device-clock resets (none expected for LSL), skips a short guard at
     each segment start, and counts BACKWARD steps in the host-mapped time beyond
-    MONO_BACKSTEP_S.  Returns a stats dict.
+    ``backstep_threshold_s``.  The stateless mapping uses the tolerant default;
+    the per-stream monotonic mapping is checked with 0 (it must never step back).
+    Returns a stats dict.
     """
     n = len(dev_ns)
     stats = {"n_samples": 0, "n_wraps": 0, "n_segments": 0,
@@ -90,7 +92,7 @@ def _analyze(dev_ns, mono_s):
                 backstep = prev - mono_s[i]  # >0 => went backward
                 if backstep > stats["max_backstep_s"]:
                     stats["max_backstep_s"] = backstep
-                if backstep > MONO_BACKSTEP_S:
+                if backstep > backstep_threshold_s:
                     stats["n_backsteps"] += 1
             prev = mono_s[i]
 
@@ -102,12 +104,14 @@ def _analyze(dev_ns, mono_s):
     return stats
 
 
-def _start_capture(session):
+def _start_capture(session, stream_id=-1):
     """Register a 30 kHz batch capture on *session*.
 
-    Stamps each batch's first sample with ``device_to_monotonic`` — the way an
-    acquisition consumer maps the device clock onto the host monotonic clock —
-    and returns the (device_ns, host_monotonic_s) lists it appends to.
+    Stamps each batch's first sample onto the host monotonic clock — the way an
+    acquisition consumer does — and returns the (device_ns, host_monotonic_s)
+    lists it appends to.  ``stream_id < 0`` (default) uses the stateless
+    ``device_to_monotonic``; ``stream_id >= 0`` uses the monotonicity-enforcing
+    ``device_to_monotonic_batch`` keyed on that stream.
     """
     dev_ns: list[int] = []
     mono_s: list[float] = []
@@ -118,7 +122,10 @@ def _start_capture(session):
             return
         t0 = int(timestamps[0])
         try:
-            m = session.device_to_monotonic(t0)
+            if stream_id < 0:
+                m = session.device_to_monotonic(t0)
+            else:
+                m = session.device_to_monotonic_batch([t0], stream_id)[0]
         except RuntimeError:
             return  # no clock offset yet — the safe fallback
         dev_ns.append(t0)
@@ -169,6 +176,48 @@ def test_lsl_host_mapped_timeline_monotonic(nplay_lsl_session):
         f"timeline (max {stats['max_backstep_s'] * 1e3:.3f} ms). The offset is "
         "recalibrating against the replayed origin clock — the non-monotonic "
         "timestamp bug that stalls downstream RESAMPLE/MERGE."
+    )
+
+
+def test_lsl_monotonic_batch_strictly_nondecreasing(nplay_lsl_session):
+    """device_to_monotonic_batch(stream_id) must be EXACTLY non-decreasing.
+
+    The stateless mapping is only monotonic to within sub-deadband offset wiggle;
+    the per-stream monotonic API clamps every backward step, so the host timeline
+    must never decrease at all (checked with threshold 0).
+    """
+    session = nplay_lsl_session
+
+    session.set_sample_group(
+        N_CHANS, ChannelType.FRONTEND, SampleRate.SR_30kHz, disable_others=True,
+    )
+    time.sleep(WARMUP_S)
+
+    stream_id = 1  # the 30 kHz raw stream
+    dev_ns, mono_s = _start_capture(session, stream_id=stream_id)
+    time.sleep(CAPTURE_S)
+
+    dev = list(dev_ns)
+    mono = list(mono_s)
+    assert len(dev) > 1000, f"Too few batches captured ({len(dev)}) — no data flowing?"
+
+    stats = _analyze(dev, mono, backstep_threshold_s=0.0)
+    print(
+        f"\n=== nPlay+LSL MONOTONIC timeline: {len(dev)} batches, "
+        f"{stats['n_wraps']} wraps, {stats['n_segments']} segments, "
+        f"{stats['n_backsteps']} backstep(s), max backstep = "
+        f"{stats['max_backstep_s'] * 1e3:.6f} ms ==="
+    )
+
+    assert stats["n_wraps"] == 0, (
+        f"Unexpected device-clock reset(s) ({stats['n_wraps']}) on the LSL path"
+    )
+    assert stats["n_segments"] > 0, "No evaluable timeline captured"
+
+    assert stats["n_backsteps"] == 0, (
+        f"{stats['n_backsteps']} backward step(s) in the MONOTONIC host timeline "
+        f"(max {stats['max_backstep_s'] * 1e3:.6f} ms). "
+        "device_to_monotonic_batch(stream_id) must clamp every backstep."
     )
 
 

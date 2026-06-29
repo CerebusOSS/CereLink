@@ -113,22 +113,34 @@ struct TimelineStats {
 class TimelineCapture {
 public:
     /// Register the batch callback on @p session.  Stamps run on the callback
-    /// thread; toLocalTime() is internally locked, so this is safe.
-    explicit TimelineCapture(SdkSession& session) {
+    /// thread; both conversion paths are internally locked, so this is safe.
+    ///
+    /// @param stream_id  <0 (default): stamp with the stateless toLocalTime(),
+    ///   the raw mapping a naive consumer uses.  >=0: stamp with the monotonic
+    ///   toLocalTimeBatch() on that stream_id, which enforces a non-decreasing
+    ///   host timeline (resetting only across a clock re-sync / file wrap).
+    explicit TimelineCapture(SdkSession& session, int64_t stream_id = -1) {
         m_handle = session.registerGroupBatchCallback(
             SampleRate::SR_30kHz,
-            [this, &session](const int16_t*, size_t n_samples, size_t,
-                             const uint64_t* timestamps) {
+            [this, &session, stream_id](const int16_t*, size_t n_samples, size_t,
+                                        const uint64_t* timestamps) {
                 if (n_samples == 0) return;
                 const uint64_t dev_ns = timestamps[0];
-                auto local = session.toLocalTime(dev_ns);
                 TimelineSample s;
                 s.dev_ns = dev_ns;
-                s.host_valid = local.has_value();
-                s.host_ns = local.has_value()
-                    ? std::chrono::duration_cast<std::chrono::nanoseconds>(
-                          local->time_since_epoch()).count()
-                    : 0;
+                if (stream_id < 0) {
+                    auto local = session.toLocalTime(dev_ns);
+                    s.host_valid = local.has_value();
+                    s.host_ns = local.has_value()
+                        ? std::chrono::duration_cast<std::chrono::nanoseconds>(
+                              local->time_since_epoch()).count()
+                        : 0;
+                } else {
+                    int64_t out = 0;
+                    s.host_valid =
+                        session.toLocalTimeBatch(stream_id, &dev_ns, &out, 1);
+                    s.host_ns = s.host_valid ? out : 0;
+                }
                 std::lock_guard<std::mutex> lock(m_mutex);
                 m_samples.push_back(s);
             });
@@ -148,13 +160,17 @@ private:
 /// Evaluate one no-wrap segment [begin, end) and fold its findings into @p st.
 /// (Defined below; forward-declared so analyzeTimeline can call it.)
 void analyzeSegment(const std::vector<TimelineSample>& samples,
-                    size_t begin, size_t end, TimelineStats& st);
+                    size_t begin, size_t end, TimelineStats& st,
+                    int64_t backstep_threshold);
 
 /// Walk a captured timeline: split it into no-wrap segments (a wrap is a large
 /// backward jump in DEVICE time), skip a short re-acquisition guard at the start
 /// of each segment, and count BACKWARD jumps in the host-mapped time that exceed
-/// MONO_BACKSTEP_NS.  Healthy sync produces zero.
-TimelineStats analyzeTimeline(const std::vector<TimelineSample>& samples) {
+/// @p backstep_threshold.  Healthy sync produces zero.  The raw mapping uses a
+/// tolerant threshold (sub-deadband corrections are allowed); the monotonic
+/// mapping is checked with threshold 0 (it must never step back at all).
+TimelineStats analyzeTimeline(const std::vector<TimelineSample>& samples,
+                              int64_t backstep_threshold = MONO_BACKSTEP_NS) {
     TimelineStats st;
 
     // First pass: locate segment boundaries from the device-time series alone,
@@ -166,16 +182,17 @@ TimelineStats analyzeTimeline(const std::vector<TimelineSample>& samples) {
             static_cast<int64_t>(samples[i - 1].dev_ns) < -WRAP_BACK_NS;
         if (wrap) {
             ++st.n_wraps;
-            analyzeSegment(samples, seg_start, i, st);
+            analyzeSegment(samples, seg_start, i, st, backstep_threshold);
             seg_start = i;
         }
     }
-    analyzeSegment(samples, seg_start, samples.size(), st);
+    analyzeSegment(samples, seg_start, samples.size(), st, backstep_threshold);
     return st;
 }
 
 void analyzeSegment(const std::vector<TimelineSample>& samples,
-                    size_t begin, size_t end, TimelineStats& st) {
+                    size_t begin, size_t end, TimelineStats& st,
+                    int64_t backstep_threshold) {
     if (end <= begin) return;
     const uint64_t seg_dev_start = samples[begin].dev_ns;
 
@@ -201,7 +218,7 @@ void analyzeSegment(const std::vector<TimelineSample>& samples,
         if (have_prev) {
             const int64_t backstep = prev_host - s.host_ns;  // >0 = went backward
             if (backstep > seg_max_backstep) seg_max_backstep = backstep;
-            if (backstep > MONO_BACKSTEP_NS) ++seg_backsteps;
+            if (backstep > backstep_threshold) ++seg_backsteps;
         }
         prev_host = s.host_ns;
         have_prev = true;
@@ -277,6 +294,48 @@ TEST_F(NPlaySyncStressTest, HostMappedTimelineMonotonicAcrossLongPlayback) {
         << "timeline (max " << static_cast<double>(st.max_backstep_ns) / 1e6
         << " ms). nPlay's offset is recalibrating against the replay clock — "
         << "this is the non-monotonic-timestamp bug that stalls RESAMPLE/MERGE.";
+}
+
+// Same long playback, but stamped through the MONOTONIC batch API
+// (toLocalTimeBatch with a stream_id).  Unlike the raw mapping above — which is
+// only monotonic WITHIN a no-wrap segment and tolerates sub-deadband wiggle —
+// the monotonic stream must NEVER step backward within a segment (threshold 0).
+// At each file wrap the discontinuity epoch advances and the floor resets, so a
+// single backward step per wrap is expected and excluded by the segmentation.
+TEST_F(NPlaySyncStressTest, MonotonicStreamNeverStepsBackWithinSegment) {
+    auto result = createSession(DeviceType::NPLAY);
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    ASSERT_TRUE(session.setSampleGroup(N_CHANS, ChannelType::FRONTEND,
+                                       SampleRate::SR_30kHz, true).isOk());
+    std::this_thread::sleep_for(std::chrono::seconds(SYNC_WARMUP_S));
+
+    constexpr int64_t kMonoStream = 1;  // 30 kHz raw stream
+    TimelineCapture capture(session, kMonoStream);
+    std::this_thread::sleep_for(std::chrono::seconds(20));
+    session.stop();
+
+    const auto samples = capture.drain();
+    ASSERT_GT(samples.size(), 1000u)
+        << "Too few batches captured (" << samples.size() << ") — no data flowing?";
+
+    // Threshold 0: the monotonic timeline must be exactly non-decreasing.
+    const TimelineStats st = analyzeTimeline(samples, /*backstep_threshold=*/0);
+
+    std::printf("=== nPlay MONOTONIC timeline: %zu batches, %zu wraps, %zu segments, "
+                "%zu backstep(s), max backstep = %.6f ms ===\n",
+                samples.size(), st.n_wraps, st.n_segments, st.n_backsteps,
+                static_cast<double>(st.max_backstep_ns) / 1e6);
+    std::fflush(stdout);
+
+    EXPECT_GT(st.n_wraps, 0u) << "Expected the short test file to wrap during 20 s";
+    ASSERT_GT(st.n_segments, 0u) << "No evaluable no-wrap segment captured";
+
+    EXPECT_EQ(st.n_backsteps, 0u)
+        << st.n_backsteps << " backward step(s) in the MONOTONIC host timeline "
+        << "(max " << static_cast<double>(st.max_backstep_ns) / 1e6 << " ms). "
+        << "toLocalTimeBatch(stream_id) must clamp every within-segment backstep.";
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

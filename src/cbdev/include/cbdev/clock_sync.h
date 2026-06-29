@@ -102,6 +102,14 @@ public:
     /// Uncertainty (RTT/2) from the best probe.
     [[nodiscard]] std::optional<int64_t> getUncertaintyNs() const;
 
+    /// Monotonically-increasing counter, bumped whenever the committed offset
+    /// changes *discontinuously* (a step / re-acquire / source change), and
+    /// NEVER on a smooth slew or a sub-deadband converge.  Consumers that
+    /// enforce post-conversion monotonicity reset their floor when this value
+    /// changes — it is the structural signal for "the converted timeline just
+    /// moved to a new regime, don't clamp across it."
+    [[nodiscard]] uint64_t syncEpoch() const;
+
     /// True if probes are producing consistent offsets (spread < threshold).
     /// When false, the caller should feed data-packet timestamps as a fallback.
     [[nodiscard]] bool probesAreReliable() const;
@@ -144,6 +152,7 @@ private:
 
     std::optional<int64_t> m_current_offset_ns;
     std::optional<int64_t> m_current_uncertainty_ns;
+    uint64_t m_sync_epoch = 0;          // bumped on discontinuous offset commits
     int m_pending_step_count = 0;       // consecutive large-jump samples seen
     int m_nonconverged_streak = 0;      // consecutive samples not within deadband
     bool m_committed_from_external = false;  // committed value came from a peer offset
