@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @file   v4_1.h
+/// @file   v7_6.h
 /// @author Caden Shmookler
 /// @date   2026-05-15
 ///
@@ -12,8 +12,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifndef CBSHM_CENTRAL_TYPES_V4_1_H
-#define CBSHM_CENTRAL_TYPES_V4_1_H
+#ifndef CBSHM_CENTRAL_TYPES_V7_6_H
+#define CBSHM_CENTRAL_TYPES_V7_6_H
 
 #include <cstdint>
 
@@ -22,7 +22,7 @@
 
 namespace cbshm {
 
-namespace central_v4_1 {
+namespace central_v7_6 {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Protocol Version
@@ -846,10 +846,10 @@ struct cbRECBUFF {
     uint32_t buffer[cbRECBUFFLEN];      ///< Packet buffer
 };
 
-} // namespace central_v4_1
+} // namespace central_v7_6
 
 } // namespace cbshm
 
 #pragma pack(pop)
 
-#endif // CBSHMEM_CENTRAL_TYPES_V4_1_H
+#endif // CBSHMEM_CENTRAL_TYPES_V7_6_H

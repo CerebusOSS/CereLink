@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @file   v3_11.cpp
+/// @file   v7_8.cpp
 /// @author Caden Shmookler
 /// @date   2026-05-22
 ///
@@ -7,12 +7,12 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include <cbshm/central_adapters/v3_11.h>
-#include <cbshm/central_types/v3_11.h>
+#include <cbshm/central_adapters/v7_8.h>
+#include <cbshm/central_types/v7_8.h>
 
 namespace cbshm {
 
-namespace central_v3_11 {
+namespace central_v7_8 {
 
 size_t BootstrapAdapter::getConfigBufferSize() const {
     return sizeof(cbCFGBUFF);
@@ -43,12 +43,12 @@ size_t BootstrapAdapter::getReceiveBufferLen() const {
 }
 
 void Adapter::fromLegacy(::cbPKT_HEADER& cur, const cbPKT_HEADER& leg) const {
-    cur.time = leg.time; // TODO: explicit or implicit conversion here (?) (and for all PROCTIME)
+    cur.time = leg.time;
     cur.chid = leg.chid;
-    cur.type = static_cast<uint16_t>(leg.type);
-    cur.dlen = static_cast<uint16_t>(leg.dlen);
-    cur.instrument = 0;
-    cur.reserved = 0;
+    cur.type = leg.type;
+    cur.dlen = leg.dlen;
+    cur.instrument = leg.instrument;
+    cur.reserved = leg.reserved;
 }
 
 void Adapter::fromLegacy(::cbPKT_SYSINFO& cur, const cbPKT_SYSINFO& leg) const {
@@ -74,7 +74,7 @@ void Adapter::fromLegacy(::cbPKT_PROCINFO& cur, const cbPKT_PROCINFO& leg) const
     cur.sortcount = leg.sortcount;
     cur.unitcount = leg.unitcount;
     cur.hoopcount = leg.hoopcount;
-    cur.reserved = leg.sortmethod;
+    cur.reserved = leg.reserved;
     cur.version = leg.version;
 }
 
@@ -195,12 +195,12 @@ void Adapter::fromLegacy(::cbPKT_CHANINFO& cur, const cbPKT_CHANINFO& leg) const
     cur.dinpopts = leg.dinpopts;
     cur.aoutopts = leg.aoutopts;
     cur.eopchar = leg.eopchar;
-    cur.moninst = static_cast<uint16_t>((leg.monsource >> 16) & 0xFFFF); // aka lowsamples
-    cur.monchan = static_cast<uint16_t>(leg.monsource & 0xFFFF); // aka highsamples
+    cur.moninst = leg.moninst; // aka lowsamples
+    cur.monchan = leg.monchan; // aka highsamples
     cur.outvalue = leg.outvalue; // aka offset
     cur.trigtype = leg.trigtype;
-    // skip reserved
-    cur.triginst = 0; // TODO: VERIFY
+    copyArr(cur.reserved, leg.reserved);
+    cur.triginst = leg.triginst;
     cur.trigchan = leg.trigchan;
     cur.trigval = leg.trigval;
     cur.ainpopts = leg.ainpopts;
@@ -330,8 +330,8 @@ void Adapter::fromLegacy(::cbPKT_AOUT_WAVEFORM& cur, const cbPKT_AOUT_WAVEFORM& 
     cur.chan = leg.chan;
     cur.mode = leg.mode;
     cur.repeats = leg.repeats;
-    cur.trig = static_cast<uint8_t>((leg.trig >> 8) & 0xFF);
-    cur.trigInst = static_cast<uint8_t>(leg.trig & 0xFF);
+    cur.trig = leg.trig;
+    cur.trigInst = leg.trigInst;
     cur.trigChan = leg.trigChan;
     cur.trigValue = leg.trigValue;
     cur.trigNum = leg.trigNum;
@@ -408,7 +408,6 @@ void Adapter::fromLegacy(NativeConfigBuffer& cur, const cbCFGBUFF& leg) const {
     copyArr(cur.isVideoSource, leg.isVideoSource, this, &Adapter::fromLegacy);
     copyArr(cur.isTrackObj, leg.isTrackObj, this, &Adapter::fromLegacy);
     fromLegacy(cur.fileinfo, leg.fileinfo);
-
 }
 
 void Adapter::fromLegacy(NativeNSPStatus& cur, const NSPStatus& leg) const {
@@ -453,9 +452,10 @@ void Adapter::fromLegacy(NativePCStatus& cur, const cbPcStatus& leg) const {
     cur.m_nNumSerialChans = leg.m_nNumSerialChans;
     cur.m_nNumDigoutChans = leg.m_nNumDigoutChans;
     cur.m_nNumTotalChans = leg.m_nNumTotalChans;
-    cur.m_nNspStatus = NativeNSPStatus::NSP_FOUND; // TODO: VERIFY
-    cur.m_nNumNTrodesPerInstrument = cbMAXNTRODES; // TODO: VERIFY
-    cur.m_nGeminiSystem = 1; // TODO: VERIFY
+    fromLegacy(cur.m_nNspStatus, leg.m_nNspStatus[instrument_idx]);
+    cur.m_nNumNTrodesPerInstrument = leg.m_nNumNTrodesPerInstrument[instrument_idx];
+    cur.m_nGeminiSystem = leg.m_nGeminiSystem;
+    // ignore APP_WORKSPACE
 }
 
 void Adapter::fromLegacy(NativeReceiveBuffer& cur, const cbRECBUFF& leg) const {
@@ -512,8 +512,10 @@ void Adapter::fromLegacy(NativeSpikeBuffer& cur, const cbSPKBUFF& leg) const {
 void Adapter::toLegacy(cbPKT_HEADER& leg, const ::cbPKT_HEADER& cur) const {
     leg.time = cur.time;
     leg.chid = cur.chid;
-    leg.type = static_cast<uint8_t>(cur.type);
-    leg.dlen = static_cast<uint8_t>(cur.dlen);
+    leg.type = cur.type;
+    leg.dlen = cur.dlen;
+    leg.instrument = cur.instrument;
+    leg.reserved = cur.reserved;
 }
 
 void Adapter::toLegacy(cbPKT_SYSINFO& leg, const ::cbPKT_SYSINFO& cur) const {
@@ -540,7 +542,7 @@ void Adapter::toLegacy(cbPKT_PROCINFO& leg, const ::cbPKT_PROCINFO& cur) const {
     leg.sortcount = cur.sortcount;
     leg.unitcount = cur.unitcount;
     leg.hoopcount = cur.hoopcount;
-    leg.sortmethod = cur.reserved;
+    leg.reserved = cur.reserved;
     leg.version = cur.version;
 }
 
@@ -661,9 +663,12 @@ void Adapter::toLegacy(cbPKT_CHANINFO& leg, const ::cbPKT_CHANINFO& cur) const {
     leg.dinpopts = cur.dinpopts;
     leg.aoutopts = cur.aoutopts;
     leg.eopchar = cur.eopchar;
-    leg.monsource = (static_cast<uint32_t>(cur.moninst) << 16) | static_cast<uint32_t>(cur.monchan); // aka highsamples and lowsamples
+    leg.moninst = cur.moninst; // aka lowsamples
+    leg.monchan = cur.monchan; // aka highsamples
     leg.outvalue = cur.outvalue; // aka offset
     leg.trigtype = cur.trigtype;
+    copyArr(leg.reserved, cur.reserved);
+    leg.triginst = cur.triginst;
     leg.trigchan = cur.trigchan;
     leg.trigval = cur.trigval;
     leg.ainpopts = cur.ainpopts;
@@ -793,7 +798,8 @@ void Adapter::toLegacy(cbPKT_AOUT_WAVEFORM& leg, const ::cbPKT_AOUT_WAVEFORM& cu
     leg.chan = cur.chan;
     leg.mode = cur.mode;
     leg.repeats = cur.repeats;
-    leg.trig = (static_cast<uint16_t>(cur.trig) << 8) | static_cast<uint16_t>(cur.trigInst);
+    leg.trig = cur.trig;
+    leg.trigInst = cur.trigInst;
     leg.trigChan = cur.trigChan;
     leg.trigValue = cur.trigValue;
     leg.trigNum = cur.trigNum;
@@ -1097,13 +1103,15 @@ cbutil::Result<void> Adapter::setGroupInfo(uint32_t group_idx, const ::cbPKT_GRO
 }
 
 cbutil::Result<void> Adapter::setNspStatus(const NativeNSPStatus& status) const {
-    return cbutil::Result<void>::error("Central v3.11 does not have fields for NSP status");
+    toLegacy(this->status->m_nNspStatus[instrument_idx], status);
+    return cbutil::Result<void>::ok();
 }
 
 cbutil::Result<void> Adapter::setGeminiSystem(bool is_gemini) const {
-    return cbutil::Result<void>::error("Central v3.11 does not recognize Gemini systems");
+    status->m_nGeminiSystem = is_gemini ? 1 : 0;
+    return cbutil::Result<void>::ok();
 }
 
-} // namespace central_v3_11
+} // namespace central_v7_8
 
 } // namespace cbshm

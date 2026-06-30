@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @file   v4_2.h
+/// @file   v7_5.h
 /// @author Caden Shmookler
 /// @date   2026-05-15
 ///
@@ -12,8 +12,8 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifndef CBSHM_CENTRAL_TYPES_V4_2_H
-#define CBSHM_CENTRAL_TYPES_V4_2_H
+#ifndef CBSHM_CENTRAL_TYPES_V7_5_H
+#define CBSHM_CENTRAL_TYPES_V7_5_H
 
 #include <cstdint>
 
@@ -22,14 +22,14 @@
 
 namespace cbshm {
 
-namespace central_v4_2 {
+namespace central_v7_5 {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Protocol Version
 /// @{
 
 constexpr uint32_t cbVERSION_MAJOR = 4;
-constexpr uint32_t cbVERSION_MINOR = 2;
+constexpr uint32_t cbVERSION_MINOR = 0;
 
 /// @}
 
@@ -38,8 +38,8 @@ constexpr uint32_t cbVERSION_MINOR = 2;
 /// @{
 
 // These MUST match Central's constants
-constexpr uint32_t cbMAXPROCS = 4;          ///< Central supports up to 4 NSPs
-constexpr uint32_t cbNUM_FE_CHANS = 768;    ///< Central supports 768 FE channels
+constexpr uint32_t cbMAXPROCS = 2;          ///< Central supports up to 2 NSPs
+constexpr uint32_t cbNUM_FE_CHANS = 512;    ///< Central supports 512 FE channels
 constexpr uint32_t cbMAXGROUPS = 8;         ///< Sample rate groups
 constexpr uint32_t cbMAXFILTS = 32;         ///< Digital filters
 constexpr uint32_t cbMAXVIDEOSOURCE = 1;    ///< Maximum number of video sources
@@ -94,18 +94,18 @@ constexpr uint32_t cbCER_UDP_SIZE_MAX = 58080;
 constexpr uint32_t cbXMT_GLOBAL_BUFFLEN = ((cbCER_UDP_SIZE_MAX / 4) * 5000 + 2);  ///< Room for 5000 packet-sized slots
 constexpr uint32_t cbXMT_LOCAL_BUFFLEN = ((cbCER_UDP_SIZE_MAX / 4) * 2000 + 2);   ///< Room for 2000 packet-sized slots
 
-/// N-Trode count (Central uses cbNUM_FE_CHANS / 2, not cbNUM_ANALOG_CHANS / 2)
-constexpr uint32_t cbMAXNTRODES = cbNUM_FE_CHANS / 2;  ///< = 384
+/// N-Trode count
+constexpr uint32_t cbMAXNTRODES = cbNUM_ANALOG_CHANS / 2;  ///< = 272
 
 /// Analog output gain channels (Central's multi-instrument count)
-constexpr uint32_t AOUT_NUM_GAIN_CHANS = cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS;  ///< = 24
+constexpr uint32_t AOUT_NUM_GAIN_CHANS = cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS;  ///< = 12
 
 /// Spike cache constants
 constexpr uint32_t cbPKT_SPKCACHEPKTCNT = 400;                          ///< Packets per channel cache
-constexpr uint32_t cbPKT_SPKCACHELINECNT = cbMAXCHANS;          ///< One cache per channel (Central uses cbMAXCHANS, not cbNUM_ANALOG_CHANS)
+constexpr uint32_t cbPKT_SPKCACHELINECNT = cbNUM_ANALOG_CHANS;          ///< One cache per channel (Central uses cbMAXCHANS, not cbNUM_ANALOG_CHANS)
 
 /// Receive buffer size
-constexpr uint32_t cbRECBUFFLEN = cbNUM_FE_CHANS * 65536 * 4 - 1;
+constexpr uint32_t cbRECBUFFLEN = cbNUM_FE_CHANS * 32768 * 4;
 
 /// @}
 
@@ -132,7 +132,7 @@ typedef uint64_t PROCTIME;
 typedef struct {
     PROCTIME time;        ///< System clock timestamp
     uint16_t chid;        ///< Channel identifier
-    uint16_t type;        ///< Packet type
+    uint8_t  type;        ///< Packet type
     uint16_t dlen;        ///< Length of data field in 32-bit chunks
     uint8_t  instrument;  ///< Instrument number (0-based in packet, despite cbNSP1=1!)
     uint8_t  reserved;    ///< Reserved for future use
@@ -365,8 +365,7 @@ typedef struct {
     uint32_t     eopchar;        ///< digital input capablities (given by cbDINP_* flags)
     union {
         struct {    // separate system channel to instrument specific channel number
-            uint16_t  moninst;        ///< instrument of channel to monitor
-            uint16_t  monchan;        ///< channel to monitor
+            uint32_t  monsource;      ///< address of channel to monitor
             int32_t   outvalue;       ///< output value
         };
         struct {    // used for digout timed output
@@ -376,8 +375,6 @@ typedef struct {
         };
     };
     uint8_t               trigtype;       ///< trigger type (see cbDOUT_TRIGGER_*)
-    uint8_t               reserved[2];    ///< 2 bytes reserved
-    uint8_t               triginst;       ///< instrument of the trigger channel
     uint16_t              trigchan;       ///< trigger channel
     uint16_t              trigval;        ///< trigger value
     uint32_t              ainpopts;       ///< analog input options (composed of cbAINP* flags)
@@ -584,8 +581,7 @@ typedef struct {
     /// Waveform parameter information
     uint16_t  mode;              ///< Can be any of cbWAVEFORM_MODE_*
     uint32_t  repeats;           ///< Number of repeats (0 means forever)
-    uint8_t   trig;              ///< Can be any of cbWAVEFORM_TRIGGER_*
-    uint8_t   trigInst;          ///< Instrument the trigChan belongs
+    uint16_t  trig;              ///< Can be any of cbWAVEFORM_TRIGGER*
     uint16_t  trigChan;          ///< Depends on trig:
                                  ///  for cbWAVEFORM_TRIGGER_DINP* 1-based trigChan (1-16) is digin1, (17-32) is digin2, ...
                                  ///  for cbWAVEFORM_TRIGGER_SPIKEUNIT 1-based trigChan (1-156) is channel number
@@ -801,23 +797,6 @@ enum class NSPStatus : uint32_t {
     NSP_INVALID = 4
 };
 
-/// @brief App workspace entry (matches Central's APP_WORKSPACE from Launching.h)
-///
-/// Central uses `enLaunchView` (C++ enum, sizeof(int) = 4 bytes) for the application field.
-/// We use uint32_t for ABI compatibility.
-///
-constexpr uint32_t cbMAXAPPWORKSPACES = 10;
-
-struct APP_WORKSPACE {
-    uint32_t m_nWorkspace;          ///< Workspace number (1-based)
-    uint32_t m_nApplication;        ///< Application index (enLaunchView in Central, uint32_t for ABI compat)
-    uint32_t m_nChannel;            ///< Channel number displayed (1-based)
-    uint32_t m_nLeft;
-    uint32_t m_nTop;
-    uint32_t m_nRight;
-    uint32_t m_nBottom;
-};
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Unit Selection
 ///
@@ -850,7 +829,6 @@ struct cbPcStatus {
     NSPStatus m_nNspStatus[cbMAXPROCS];             ///< NSP status per instrument
     uint32_t m_nNumNTrodesPerInstrument[cbMAXPROCS];///< NTrode count per instrument
     uint32_t m_nGeminiSystem;                               ///< Gemini system flag
-    APP_WORKSPACE m_icAppWorkspace[cbMAXAPPWORKSPACES]; ///< App workspace config
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -864,10 +842,10 @@ struct cbRECBUFF {
     uint32_t buffer[cbRECBUFFLEN];      ///< Packet buffer
 };
 
-} // namespace central_v4_2 
+} // namespace central_v7_5
 
 } // namespace cbshm
 
 #pragma pack(pop)
 
-#endif // CBSHMEM_CENTRAL_TYPES_V4_2_H
+#endif // CBSHMEM_CENTRAL_TYPES_V7_5_H

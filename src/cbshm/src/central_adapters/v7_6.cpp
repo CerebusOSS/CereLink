@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @file   v4_1.cpp
+/// @file   v7_6.cpp
 /// @author Caden Shmookler
 /// @date   2026-05-22
 ///
@@ -7,12 +7,12 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include <cbshm/central_adapters/v4_1.h>
-#include <cbshm/central_types/v4_1.h>
+#include <cbshm/central_adapters/v7_6.h>
+#include <cbshm/central_types/v7_6.h>
 
 namespace cbshm {
 
-namespace central_v4_1 {
+namespace central_v7_6 {
 
 size_t BootstrapAdapter::getConfigBufferSize() const {
     return sizeof(cbCFGBUFF);
@@ -1111,6 +1111,6 @@ cbutil::Result<void> Adapter::setGeminiSystem(bool is_gemini) const {
     return cbutil::Result<void>::ok();
 }
 
-} // namespace central_v4_1
+} // namespace central_v7_6
 
 } // namespace cbshm

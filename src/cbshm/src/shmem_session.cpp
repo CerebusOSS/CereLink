@@ -34,14 +34,17 @@
 
 #include <cbshm/shmem_session.h>
 #include <cbshm/central_adapters/base.h>
-#include <cbshm/central_adapters/v4_2.h>
-#include <cbshm/central_adapters/v4_1.h>
-#include <cbshm/central_adapters/v4_0.h>
-#include <cbshm/central_adapters/v3_11.h>
-#include <cbshm/central_types/v4_2.h>
-#include <cbshm/central_types/v4_1.h>
-#include <cbshm/central_types/v4_0.h>
-#include <cbshm/central_types/v3_11.h>
+#include <cbshm/central_adapters/v7_8.h>
+#include <cbshm/central_adapters/v7_7.h>
+#include <cbshm/central_adapters/v7_6.h>
+#include <cbshm/central_adapters/v7_5.h>
+#include <cbshm/central_adapters/v7_0.h>
+#include <cbshm/central_types/v7_8.h>
+#include <cbshm/central_types/v7_7.h>
+#include <cbshm/central_types/v7_6.h>
+#include <cbshm/central_types/v7_5.h>
+#include <cbshm/central_types/v7_0.h>
+#include <cbshm/central_version.h>
 #include <cbshm/native_types.h>
 #include <cbproto/packet_translator.h>
 #include <memory>
@@ -185,7 +188,8 @@ struct ShmemSession::Impl {
     uint32_t rec_tailindex;      // Our read position in receive buffer
     uint32_t rec_tailwrap;       // Our wrap counter
 
-    // Detected protocol version for CENTRAL mode
+    // Detected versions for CENTRAL mode
+    CentralVersion central_version;
     cbproto_protocol_version_t compat_protocol;
 
     // Typed accessor for config buffer
@@ -231,6 +235,7 @@ struct ShmemSession::Impl {
         , rec_buffer_len(0)
         , rec_tailindex(0)
         , rec_tailwrap(0)
+        , central_version(CentralVersion::UNKNOWN)
         , compat_protocol(CBPROTO_PROTOCOL_CURRENT)
     {}
 
@@ -374,33 +379,37 @@ struct ShmemSession::Impl {
 
         if (mode == Mode::CLIENT && layout == ShmemLayout::CENTRAL) {
             // Detect protocol version for CLIENT + CENTRAL mode
-            auto compat_result = detectCompatProtocol();
-            if (compat_result.isError()) {
-                return Result<void>::error("Failed to get Central's protocol version: " + compat_result.error());
+            auto central_result = detectCentralVersion();
+            if (central_result.isError()) {
+                return Result<void>::error("Failed to get Central's version: " + central_result.error());
             }
-            compat_protocol = compat_result.value();
+            central_version = central_result.value();
+            compat_protocol = getProtocolVersion(central_version);
+
+            // Select the bootstrap adapter for fetching pointers to Central's shared memory.
+            switch (central_version) {
+                case CentralVersion::V7_0:
+                    bootstrap_adapter = std::make_unique<central_v7_0::BootstrapAdapter>();
+                    break;
+                case CentralVersion::V7_5:
+                    bootstrap_adapter = std::make_unique<central_v7_5::BootstrapAdapter>();
+                    break;
+                case CentralVersion::V7_6:
+                    bootstrap_adapter = std::make_unique<central_v7_6::BootstrapAdapter>();
+                    break;
+                case CentralVersion::V7_7:
+                    bootstrap_adapter = std::make_unique<central_v7_7::BootstrapAdapter>();
+                    break;
+                default:
+                    /* fallthrough */
+                case CentralVersion::CURRENT:
+                    bootstrap_adapter = std::make_unique<central::BootstrapAdapter>();
+                    break;
+            }
         } else {
             // The compatibility protocol is ignored for NATIVE or CENTRAL
             // layouts and is always current for STANDALONE mode.
             compat_protocol = CBPROTO_PROTOCOL_CURRENT;
-        }
-
-        // Select the bootstrap adapter for fetching pointers to Central's shared memory.
-        switch (compat_protocol) {
-            default:
-                /* fallthrough */
-            case CBPROTO_PROTOCOL_CURRENT:
-                bootstrap_adapter = std::make_unique<central_v4_2::BootstrapAdapter>();
-                break;
-            case CBPROTO_PROTOCOL_410:
-                bootstrap_adapter = std::make_unique<central_v4_1::BootstrapAdapter>();
-                break;
-            case CBPROTO_PROTOCOL_400:
-                bootstrap_adapter = std::make_unique<central_v4_0::BootstrapAdapter>();
-                break;
-            case CBPROTO_PROTOCOL_311:
-                bootstrap_adapter = std::make_unique<central_v3_11::BootstrapAdapter>();
-                break;
         }
 
         // Compute buffer sizes based on layout and protocol version
@@ -546,22 +555,27 @@ struct ShmemSession::Impl {
         }
 #endif
         
-        // Select the adapter for compatibility with Central's shared memory.
-        switch (compat_protocol) {
-            default:
-                /* fallthrough */
-            case CBPROTO_PROTOCOL_CURRENT:
-                adapter = std::make_unique<central_v4_2::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
-                break;
-            case CBPROTO_PROTOCOL_410:
-                adapter = std::make_unique<central_v4_1::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
-                break;
-            case CBPROTO_PROTOCOL_400:
-                adapter = std::make_unique<central_v4_0::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
-                break;
-            case CBPROTO_PROTOCOL_311:
-                adapter = std::make_unique<central_v3_11::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
-                break;
+        if (mode == Mode::CLIENT && layout == ShmemLayout::CENTRAL) {
+            // Select the adapter for compatibility with Central's shared memory.
+            switch (central_version) {
+                case CentralVersion::V7_0:
+                    adapter = std::make_unique<central_v7_0::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
+                    break;
+                case CentralVersion::V7_5:
+                    adapter = std::make_unique<central_v7_5::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
+                    break;
+                case CentralVersion::V7_6:
+                    adapter = std::make_unique<central_v7_6::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
+                    break;
+                case CentralVersion::V7_7:
+                    adapter = std::make_unique<central_v7_7::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
+                    break;
+                default:
+                    /* fallthrough */
+                case CentralVersion::CURRENT:
+                    adapter = std::make_unique<central::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
+                    break;
+            }
         }
 
         // Initialize buffers in standalone mode

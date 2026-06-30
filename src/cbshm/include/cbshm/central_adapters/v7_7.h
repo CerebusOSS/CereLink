@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @file   v4_0.h
+/// @file   v7_7.h
 /// @author Caden Shmookler
 /// @date   2026-05-22
 ///
@@ -7,15 +7,15 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifndef CBSHM_CENTRAL_ADAPTERS_V4_0_H
-#define CBSHM_CENTRAL_ADAPTERS_V4_0_H 
+#ifndef CBSHM_CENTRAL_ADAPTERS_V7_7_H
+#define CBSHM_CENTRAL_ADAPTERS_V7_7_H 
 
 #include <cbshm/central_adapters/base.h>
-#include <cbshm/central_types/v4_0.h>
+#include <cbshm/central_types/v7_7.h>
 
 namespace cbshm {
 
-namespace central_v4_0 {
+namespace central_v7_7 {
 
 ///
 /// @brief Adapter that provides information for fetching pointers to Central's shared memory
@@ -183,8 +183,8 @@ public:
     cbutil::Result<void> setGeminiSystem(bool is_gemini) const override;
 };
 
-} // namespace central_v4_0
+} // namespace central_v7_7
 
 } // namespace cbshm
 
-#endif // CBSHM_CENTRAL_ADAPTERS_V4_0_H
+#endif // CBSHM_CENTRAL_ADAPTERS_V7_7_H 
