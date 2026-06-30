@@ -362,6 +362,11 @@ public:
     /// @return Uncertainty in nanoseconds, or nullopt if no sync data available
     [[nodiscard]] virtual std::optional<int64_t> getUncertaintyNs() const = 0;
 
+    /// Discontinuity epoch — advances whenever the committed clock offset steps
+    /// to a new regime (re-acquire / step / wrap), never on a smooth slew.
+    /// Consumers reset post-conversion monotonic floors when this changes.
+    [[nodiscard]] virtual uint64_t syncEpoch() const = 0;
+
     /// Inject an externally-determined offset (e.g., from a peer device).
     /// When set, overrides internal probe/data estimates in toLocalTime().
     /// Pass nullopt to clear and revert to internal estimates.

@@ -1667,6 +1667,38 @@ cbsdk_result_t cbsdk_session_send_clock_probe(cbsdk_session_t session) {
     }
 }
 
+cbsdk_result_t cbsdk_session_to_local_time(
+    cbsdk_session_t session,
+    int64_t stream_id,
+    const uint64_t* device_ns,
+    int64_t* out_steady_ns,
+    size_t n) {
+    if (!session || !session->cpp_session || !device_ns || !out_steady_ns) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        const bool ok = session->cpp_session->toLocalTimeBatch(
+            stream_id, device_ns, out_steady_ns, n);
+        return ok ? CBSDK_RESULT_SUCCESS : CBSDK_RESULT_NOT_RUNNING;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_reset_monotonic(
+    cbsdk_session_t session,
+    int64_t stream_id) {
+    if (!session || !session->cpp_session) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        session->cpp_session->resetMonotonic(stream_id);
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Utility
 ///////////////////////////////////////////////////////////////////////////////////////////////////

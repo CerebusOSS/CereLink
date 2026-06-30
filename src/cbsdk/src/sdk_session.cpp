@@ -32,6 +32,8 @@
 #include <array>
 #include <set>
 #include <vector>
+#include <unordered_map>
+#include <utility>
 #include "cbdev/clock_sync.h"
 #ifndef _WIN32
 #include <sys/mman.h>
@@ -331,6 +333,52 @@ struct SdkSession::Impl {
     };
     PendingClockProbe pending_clock_probe;
     std::mutex clock_probe_mutex;
+
+    // Per-stream monotonic-conversion state (see toLocalTimeBatch).  Each stream
+    // keeps its own non-decreasing floor and the discontinuity epoch it last
+    // saw; on an epoch change the floor is reset (a genuine clock re-sync), else
+    // a backward step is clamped to the floor.  Lazily created per stream_id.
+    struct MonoState {
+        int64_t  floor_ns  = 0;
+        uint64_t last_epoch = 0;
+        bool     seen       = false;
+    };
+    std::mutex mono_mutex;
+    std::unordered_map<int64_t, MonoState> mono_streams;
+
+    // CLIENT-mode (shmem) discontinuity-epoch approximation.  The shmem offset
+    // path has no local ClockSync, so we derive an epoch by watching the
+    // peer/Central offset for jumps larger than a smooth slew (Q1=b — best
+    // effort until the shmem layout carries a real epoch field).  Guarded by
+    // mono_mutex (only touched from the monotonic conversion path).
+    std::optional<int64_t> client_epoch_offset;
+    uint64_t client_epoch = 0;
+
+    uint64_t deriveClientEpoch(int64_t offset_ns) {  // mono_mutex held
+        constexpr int64_t kStepNs = 50'000'000;  // ~ClockSync slew_max_ns
+        if (client_epoch_offset &&
+            std::llabs(offset_ns - *client_epoch_offset) > kStepNs)
+            ++client_epoch;
+        client_epoch_offset = offset_ns;
+        return client_epoch;
+    }
+
+    // Current (offset, epoch) from whichever source getClockOffsetNs() would
+    // use, read together so a batch converts against one consistent regime.
+    std::optional<std::pair<int64_t, uint64_t>> currentOffsetAndEpoch() {  // mono_mutex held
+        if (device_session) {
+            auto off = device_session->getOffsetNs();
+            if (off) return std::make_pair(*off, device_session->syncEpoch());
+            return std::nullopt;
+        }
+        if (shmem_session) {
+            auto off = shmem_session->getClockOffsetNs();
+            if (off) return std::make_pair(*off, deriveClientEpoch(*off));
+        }
+        auto off = client_clock_sync.getOffsetNs();
+        if (off) return std::make_pair(*off, client_clock_sync.syncEpoch());
+        return std::nullopt;
+    }
 
     // Statistics — atomic counters, no mutex needed (Phase 2, Fix 9)
     struct AtomicStats {
@@ -2402,6 +2450,51 @@ SdkSession::toLocalTime(uint64_t device_time_ns) const {
         }
     }
     return std::nullopt;
+}
+
+bool SdkSession::toLocalTimeBatch(int64_t stream_id,
+                                  const uint64_t* device_ns,
+                                  int64_t* out_steady_ns,
+                                  size_t n) const {
+    if (n == 0) return true;
+    if (!device_ns || !out_steady_ns) return false;
+
+    // Stateless fast path: one offset, plain subtraction, no per-stream state.
+    if (stream_id < 0) {
+        const auto offset = getClockOffsetNs();
+        if (!offset) return false;
+        for (size_t i = 0; i < n; ++i)
+            out_steady_ns[i] = static_cast<int64_t>(device_ns[i]) - *offset;
+        return true;
+    }
+
+    // Monotonic path: take a single (offset, epoch) snapshot and the floor map
+    // under one lock so the whole batch sees one consistent clock regime.
+    std::lock_guard<std::mutex> lock(m_impl->mono_mutex);
+    const auto oe = m_impl->currentOffsetAndEpoch();
+    if (!oe) return false;
+    const int64_t  offset = oe->first;
+    const uint64_t epoch  = oe->second;
+
+    auto& st = m_impl->mono_streams[stream_id];  // lazy-create (seen == false)
+    for (size_t i = 0; i < n; ++i) {
+        const int64_t raw = static_cast<int64_t>(device_ns[i]) - offset;
+        // Reset the floor on the first conversion for this stream or whenever
+        // the clock regime changed; otherwise clamp to a non-decreasing floor.
+        const int64_t out = (!st.seen || epoch != st.last_epoch)
+                                ? raw
+                                : std::max(raw, st.floor_ns);
+        st.floor_ns = out;
+        st.last_epoch = epoch;
+        st.seen = true;
+        out_steady_ns[i] = out;
+    }
+    return true;
+}
+
+void SdkSession::resetMonotonic(int64_t stream_id) {
+    std::lock_guard<std::mutex> lock(m_impl->mono_mutex);
+    m_impl->mono_streams.erase(stream_id);
 }
 
 std::optional<uint64_t>

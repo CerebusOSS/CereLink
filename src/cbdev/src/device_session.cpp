@@ -988,6 +988,11 @@ std::optional<int64_t> DeviceSession::getUncertaintyNs() const {
     return m_impl->clock_sync.getUncertaintyNs();
 }
 
+uint64_t DeviceSession::syncEpoch() const {
+    if (!m_impl) return 0;
+    return m_impl->clock_sync.syncEpoch();
+}
+
 void DeviceSession::setExternalClockOffset(std::optional<int64_t> offset_ns,
                                             std::optional<int64_t> uncertainty_ns) {
     if (!m_impl) return;

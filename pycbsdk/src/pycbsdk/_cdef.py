@@ -357,6 +357,10 @@ cbsdk_result_t cbsdk_session_set_spike_extraction(
 cbsdk_result_t cbsdk_session_get_clock_offset(cbsdk_session_t session, int64_t* offset_ns);
 cbsdk_result_t cbsdk_session_get_clock_uncertainty(cbsdk_session_t session, int64_t* uncertainty_ns);
 cbsdk_result_t cbsdk_session_send_clock_probe(cbsdk_session_t session);
+cbsdk_result_t cbsdk_session_to_local_time(
+    cbsdk_session_t session, int64_t stream_id,
+    const uint64_t* device_ns, int64_t* out_steady_ns, size_t n);
+cbsdk_result_t cbsdk_session_reset_monotonic(cbsdk_session_t session, int64_t stream_id);
 
 // Utility
 int64_t cbsdk_get_steady_clock_ns(void);

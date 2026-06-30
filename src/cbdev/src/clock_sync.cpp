@@ -121,6 +121,11 @@ std::optional<int64_t> ClockSync::getUncertaintyNs() const {
     return m_current_uncertainty_ns;
 }
 
+uint64_t ClockSync::syncEpoch() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_sync_epoch;
+}
+
 void ClockSync::setExternalOffset(std::optional<int64_t> offset_ns,
                                    std::optional<int64_t> uncertainty_ns) {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -267,6 +272,19 @@ bool ClockSync::externalPlausible(int64_t external_ns,
 void ClockSync::recomputeEstimate() {
     const InternalEstimate internal = computeInternalEstimate();
 
+    // Snapshot the committed offset before we touch it, so the discontinuity
+    // epoch is bumped only when the committed value actually steps to a new
+    // regime — not when a stable external/peer offset is merely re-affirmed on
+    // every sample (which would churn the epoch and defeat the monotonic floor).
+    const std::optional<int64_t> prev_committed = m_current_offset_ns;
+    const auto stepped = [&](std::optional<int64_t> next) {
+        // Discontinuous = the value appears, disappears, or jumps beyond the
+        // converge deadband.  Sub-deadband moves leave the timeline in place.
+        if (prev_committed.has_value() != next.has_value()) return true;
+        return prev_committed && next &&
+               std::llabs(*next - *prev_committed) > m_config.commit_deadband_ns;
+    };
+
     // An external (peer-borrowed) offset is treated as a candidate, not an
     // unconditional override.  It is adopted only when it is sanity-consistent
     // with our own evidence, and — because this runs on every probe/data
@@ -277,6 +295,7 @@ void ClockSync::recomputeEstimate() {
     if (m_external_offset_ns && externalPlausible(*m_external_offset_ns, internal)) {
         // A plausible peer offset is authoritative (and already disciplined at
         // its source), so adopt it directly.
+        if (stepped(m_external_offset_ns)) ++m_sync_epoch;
         m_current_offset_ns = m_external_offset_ns;
         m_current_uncertainty_ns = m_external_uncertainty_ns
             ? m_external_uncertainty_ns
@@ -291,14 +310,19 @@ void ClockSync::recomputeEstimate() {
         // deliberate event, not jitter — re-acquire directly.  Only the same
         // (internal) source's drift is run through the commit discipline.
         if (m_committed_from_external || !m_current_offset_ns.has_value()) {
+            if (stepped(internal.offset_ns)) ++m_sync_epoch;
             m_current_offset_ns = *internal.offset_ns;
             m_current_uncertainty_ns = internal.uncertainty_ns;
             resetDiscipline();
         } else {
+            // commitDisciplined() bumps the epoch itself on its discontinuous
+            // (cold-start / stepout / step-persist) paths, and leaves it
+            // untouched on a smooth slew or a sub-deadband converge.
             commitDisciplined(*internal.offset_ns, internal.uncertainty_ns);
         }
         m_committed_from_external = false;
     } else {
+        if (stepped(std::nullopt)) ++m_sync_epoch;
         m_current_offset_ns = std::nullopt;
         m_current_uncertainty_ns = std::nullopt;
         resetDiscipline();
@@ -314,6 +338,7 @@ void ClockSync::resetDiscipline() {
 void ClockSync::commitDisciplined(int64_t target_offset_ns, int64_t uncertainty_ns) {
     // Cold start: nothing committed yet — accept the target as-is.
     if (!m_current_offset_ns) {
+        ++m_sync_epoch;                 // first acquisition is a regime boundary
         m_current_offset_ns = target_offset_ns;
         m_current_uncertainty_ns = uncertainty_ns;
         resetDiscipline();
@@ -336,6 +361,7 @@ void ClockSync::commitDisciplined(int64_t target_offset_ns, int64_t uncertainty_
     // that slew/step never reconciled (e.g. a lone device with no peer to
     // break the tie).
     if (++m_nonconverged_streak >= m_config.stepout_samples) {
+        ++m_sync_epoch;                 // abrupt re-acquire after a stuck offset
         m_current_offset_ns = target_offset_ns;
         m_current_uncertainty_ns = uncertainty_ns;
         resetDiscipline();
@@ -354,6 +380,7 @@ void ClockSync::commitDisciplined(int64_t target_offset_ns, int64_t uncertainty_
         // Large jump: only accept once it persists, so a one-off outlier does
         // not move the committed offset.
         if (++m_pending_step_count >= m_config.step_persist) {
+            ++m_sync_epoch;             // confirmed step applied abruptly
             m_current_offset_ns = target_offset_ns;
             m_current_uncertainty_ns = uncertainty_ns;
             resetDiscipline();

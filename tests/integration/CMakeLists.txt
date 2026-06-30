@@ -21,7 +21,7 @@ include(GoogleTest)
 # Download nPlayServer binary and test data from the CereLink GitHub release
 ###############################################################################
 
-set(CERELINK_RELEASE_URL "https://github.com/CerebusOSS/CereLink/releases/download/v9.3.0")
+set(CERELINK_RELEASE_URL "https://github.com/CerebusOSS/CereLink/releases/download/v9.11.0")
 set(NPLAY_CACHE_DIR "${CMAKE_CURRENT_BINARY_DIR}/_nplay_cache")
 file(MAKE_DIRECTORY ${NPLAY_CACHE_DIR})
 
@@ -147,6 +147,7 @@ if(NPLAY_AVAILABLE AND NPLAY_DATA_AVAILABLE)
         test_sdk_data_reception.cpp
         test_sdk_clock_sync.cpp
         test_multidevice_clock_sync.cpp
+        test_nplay_sync_stress.cpp
     )
 
     target_link_libraries(cbsdk_integration_tests

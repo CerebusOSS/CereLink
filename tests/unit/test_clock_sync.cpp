@@ -559,3 +559,114 @@ TEST(DeviceTimestampToNs, GeminiNanosecondsPassThrough) {
 TEST(DeviceTimestampToNs, TrivialDenominatorDisablesConversion) {
     EXPECT_EQ(deviceTimestampToNs(12345, /*ts_are_ns=*/false, 1, 1), 12345ULL);
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Discontinuity epoch (syncEpoch)
+//
+// syncEpoch() must bump exactly when the committed offset steps to a new regime
+// (cold-start, confirmed step, stepout, external adopt/revert, device wrap) and
+// must NOT bump on a smooth slew, a sub-deadband converge, or while a stable
+// external offset is merely re-affirmed every sample.  Consumers reset their
+// post-conversion monotonic floor on a change here, so churn here would defeat
+// monotonicity and a missed bump would clamp across a real re-sync.
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+// Add a probe at host instant host_ns whose computed offset equals target_off.
+// Fixed RTT = 1000 ns: offset = T3 - T1 - 0.5*RTT = T3 - host_ns - 500.
+void addOffsetProbe(ClockSync& sync, int64_t host_ns, int64_t target_off) {
+    const uint64_t t3 = static_cast<uint64_t>(target_off + host_ns + 500);
+    sync.addProbeSample(tp_from_ns(host_ns), t3, tp_from_ns(host_ns + 1000));
+}
+
+} // anonymous namespace
+
+// Starts at 0, and the first acquisition is itself a regime boundary.
+TEST(ClockSyncEpochTest, ColdStartBumpsOnceFromZero) {
+    ClockSync sync;
+    EXPECT_EQ(sync.syncEpoch(), 0u);
+
+    addOffsetProbe(sync, HOST_NOW_NS, TRUE_OFFSET_NS);
+    EXPECT_EQ(sync.syncEpoch(), 1u);
+}
+
+// A stable offset (repeated within-deadband probes) must not churn the epoch.
+TEST(ClockSyncEpochTest, StableOffsetDoesNotBump) {
+    ClockSync sync;
+    addOffsetProbe(sync, HOST_NOW_NS, TRUE_OFFSET_NS);
+    const uint64_t after_cold = sync.syncEpoch();
+
+    // Sub-deadband jitter (< commit_deadband_ns = 1 ms) around the same offset.
+    for (int k = 1; k < 12; ++k) {
+        const int64_t jitter = (k % 2 ? 1 : -1) * 200'000LL;  // ±0.2 ms
+        addOffsetProbe(sync, HOST_NOW_NS + k * 1'000'000LL, TRUE_OFFSET_NS + jitter);
+    }
+    EXPECT_EQ(sync.syncEpoch(), after_cold) << "sub-deadband jitter churned the epoch";
+}
+
+// A confirmed step (> slew_max, persisted step_persist samples) bumps exactly
+// once, and holding at the new level afterward does not bump again.
+TEST(ClockSyncEpochTest, ConfirmedStepBumpsOnce) {
+    ClockSync sync;
+    addOffsetProbe(sync, HOST_NOW_NS, TRUE_OFFSET_NS);
+    const uint64_t before = sync.syncEpoch();
+
+    // Step the target +200 ms (> slew_max_ns = 50 ms).  The first stepped probe
+    // is a lone upward outlier the glitch filter strips, so the step only starts
+    // counting once it is corroborated and then commits after step_persist (=3)
+    // consecutive samples.  Feed enough to guarantee a single commit.
+    const int64_t stepped = TRUE_OFFSET_NS + 200'000'000LL;
+    for (int k = 1; k <= 8; ++k)
+        addOffsetProbe(sync, HOST_NOW_NS + k * 1'000'000LL, stepped);
+    EXPECT_EQ(sync.syncEpoch(), before + 1) << "confirmed step did not bump exactly once";
+
+    // Hold at the new level: now converged, must not bump.
+    for (int k = 9; k < 15; ++k)
+        addOffsetProbe(sync, HOST_NOW_NS + k * 1'000'000LL, stepped);
+    EXPECT_EQ(sync.syncEpoch(), before + 1) << "holding at the new level re-bumped";
+}
+
+// Adopting a plausible external offset bumps once; re-affirming the same external
+// value on subsequent samples must NOT churn; reverting to internal bumps again.
+TEST(ClockSyncEpochTest, ExternalAdoptReaffirmRevert) {
+    ClockSync sync;
+    for (int k = 0; k < 8; ++k) {
+        const int64_t recv_ns = HOST_NOW_NS + k * 1'000'000LL;
+        const uint64_t device_ns =
+            static_cast<uint64_t>(recv_ns + TRUE_OFFSET_NS - 300'000);
+        sync.addDataPacketSample(device_ns, tp_from_ns(recv_ns));
+    }
+    const uint64_t before_ext = sync.syncEpoch();
+
+    // Adopt a plausible external offset 50 ms away — one regime boundary.
+    sync.setExternalOffset(TRUE_OFFSET_NS + 50'000'000LL, 1'000'000);
+    const uint64_t after_adopt = sync.syncEpoch();
+    EXPECT_EQ(after_adopt, before_ext + 1);
+
+    // Re-affirm the same external value over many samples — no churn.
+    for (int k = 8; k < 24; ++k) {
+        const int64_t recv_ns = HOST_NOW_NS + k * 1'000'000LL;
+        const uint64_t device_ns =
+            static_cast<uint64_t>(recv_ns + TRUE_OFFSET_NS - 300'000);
+        sync.addDataPacketSample(device_ns, tp_from_ns(recv_ns));
+    }
+    EXPECT_EQ(sync.syncEpoch(), after_adopt) << "stable external offset churned the epoch";
+
+    // Revert to the internal estimate (50 ms away) — another regime boundary.
+    sync.setExternalOffset(std::nullopt);
+    EXPECT_EQ(sync.syncEpoch(), after_adopt + 1) << "reverting source did not bump";
+}
+
+// A device-clock wrap (offset jumps > 1 s, e.g. nPlay file loop) drops history
+// and re-acquires — the epoch must advance so consumers reset their floor.
+TEST(ClockSyncEpochTest, DeviceWrapBumps) {
+    ClockSync sync;
+    for (int k = 0; k < 4; ++k)
+        addOffsetProbe(sync, HOST_NOW_NS + k * 1'000'000LL, TRUE_OFFSET_NS);
+    const uint64_t before_wrap = sync.syncEpoch();
+
+    // Device timestamp jumps backward by 2 s relative to host -> offset drops 2 s.
+    addOffsetProbe(sync, HOST_NOW_NS + 5'000'000LL, TRUE_OFFSET_NS - 2'000'000'000LL);
+    EXPECT_GT(sync.syncEpoch(), before_wrap) << "device wrap did not advance the epoch";
+}
