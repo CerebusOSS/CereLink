@@ -967,27 +967,27 @@ uint32_t* Adapter::getXmtBufferPtr() {
 }
 
 uint32_t& Adapter::getLocalXmtTransmittedPtr() {
-    return xmt->transmitted;
+    return xmt_local->transmitted;
 }
 
 uint32_t& Adapter::getLocalXmtHeadindexPtr() {
-    return xmt->headindex;
+    return xmt_local->headindex;
 }
 
 uint32_t& Adapter::getLocalXmtTailindexPtr() {
-    return xmt->tailindex;
+    return xmt_local->tailindex;
 }
 
 uint32_t& Adapter::getLocalXmtLastValidIndexPtr() {
-    return xmt->last_valid_index;
+    return xmt_local->last_valid_index;
 }
 
 uint32_t& Adapter::getLocalXmtBufferlenPtr() {
-    return xmt->bufferlen;
+    return xmt_local->bufferlen;
 }
 
 uint32_t* Adapter::getLocalXmtBufferPtr() {
-    return xmt->buffer;
+    return xmt_local->buffer;
 }
 
 cbutil::Result<void> Adapter::getProcInfo(::cbPKT_PROCINFO& buf) const {
