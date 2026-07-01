@@ -11,13 +11,14 @@
 ///   central_client 1         # Instance 1 (for multi-instance setups)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+#include "cbproto/instrument_id.h"
+#include <cbsdk/cbsdk.h>
+#include <cbsdk/sdk_session.h>
 #include <cbshm/shmem_session.h>
-#include <cbshm/central_types.h>
 #include <cbproto/cbproto.h>
 #include <iostream>
 #include <iomanip>
 #include <chrono>
-#include <thread>
 #include <atomic>
 #include <csignal>
 #include <cstring>
@@ -27,11 +28,6 @@ using namespace cbshm;
 std::atomic<bool> g_running{true};
 
 void signalHandler(int) { g_running = false; }
-
-static std::string makeName(const char* base, int instance) {
-    if (instance == 0) return base;
-    return std::string(base) + std::to_string(instance);
-}
 
 int main(int argc, char* argv[]) {
     int instance = 0;
@@ -44,88 +40,30 @@ int main(int argc, char* argv[]) {
     std::cout << "  CereLink Central Client Diagnostic\n";
     std::cout << "==============================================\n\n";
 
-    // Print struct sizes for comparison with Central
-    std::cout << "=== Struct Size Verification ===\n";
-    std::cout << "  sizeof(CentralLegacyCFGBUFF):   " << sizeof(CentralLegacyCFGBUFF) << "\n";
-    std::cout << "  sizeof(CentralReceiveBuffer):    " << sizeof(CentralReceiveBuffer) << "\n";
-    std::cout << "  sizeof(CentralTransmitBuffer):   " << sizeof(CentralTransmitBuffer) << "\n";
-    std::cout << "  sizeof(CentralTransmitBufferLocal): " << sizeof(CentralTransmitBufferLocal) << "\n";
-    std::cout << "  sizeof(CentralPCStatus):         " << sizeof(CentralPCStatus) << "\n";
-    std::cout << "  sizeof(CentralSpikeBuffer):      " << sizeof(CentralSpikeBuffer) << "\n";
-    std::cout << "  sizeof(CentralSpikeCache):       " << sizeof(CentralSpikeCache) << "\n";
-    std::cout << "  sizeof(CentralAppWorkspace):     " << sizeof(CentralAppWorkspace) << "\n";
-    std::cout << "\n";
-
-    // Print key constants
-    std::cout << "=== Key Constants ===\n";
-    std::cout << "  CENTRAL_cbMAXPROCS:              " << CENTRAL_cbMAXPROCS << "\n";
-    std::cout << "  CENTRAL_cbNUM_FE_CHANS:          " << CENTRAL_cbNUM_FE_CHANS << "\n";
-    std::cout << "  CENTRAL_cbMAXCHANS:              " << CENTRAL_cbMAXCHANS << "\n";
-    std::cout << "  CENTRAL_cbMAXBANKS:              " << CENTRAL_cbMAXBANKS << "\n";
-    std::cout << "  CENTRAL_cbMAXNTRODES:            " << CENTRAL_cbMAXNTRODES << "\n";
-    std::cout << "  CENTRAL_AOUT_NUM_GAIN_CHANS:     " << CENTRAL_AOUT_NUM_GAIN_CHANS << "\n";
-    std::cout << "  CENTRAL_cbPKT_SPKCACHELINECNT:   " << CENTRAL_cbPKT_SPKCACHELINECNT << "\n";
-    std::cout << "  CENTRAL_cbMAXAPPWORKSPACES:      " << CENTRAL_cbMAXAPPWORKSPACES << "\n";
-    std::cout << "  sizeof(PROCTIME):                " << sizeof(PROCTIME) << "\n";
-    std::cout << "\n";
-
-    // Construct names for this instance
-    std::string cfg_name    = makeName("cbCFGbuffer", instance);
-    std::string rec_name    = makeName("cbRECbuffer", instance);
-    std::string xmt_name    = makeName("XmtGlobal", instance);
-    std::string xmtl_name   = makeName("XmtLocal", instance);
-    std::string status_name = makeName("cbSTATUSbuffer", instance);
-    std::string spk_name    = makeName("cbSPKbuffer", instance);
-    std::string signal_name = makeName("cbSIGNALevent", instance);
+    // For the CENTRAL layout, name_qualifier is the Central instance suffix
+    // ("" for the primary instance, "1" for instance 1, etc.).
+    std::string instance_suffix = (instance == 0) ? "" : std::to_string(instance);
 
     std::cout << "=== Attempting Central CLIENT mode (instance " << instance << ") ===\n";
-    std::cout << "  Config:  " << cfg_name << "\n";
-    std::cout << "  Receive: " << rec_name << "\n";
-    std::cout << "  XmtGlob: " << xmt_name << "\n";
-    std::cout << "  XmtLoc:  " << xmtl_name << "\n";
-    std::cout << "  Status:  " << status_name << "\n";
-    std::cout << "  Spike:   " << spk_name << "\n";
-    std::cout << "  Signal:  " << signal_name << "\n\n";
+    std::cout << std::endl;
 
-    auto result = ShmemSession::create(
-        cfg_name, rec_name, xmt_name, xmtl_name,
-        status_name, spk_name, signal_name,
-        Mode::CLIENT, ShmemLayout::CENTRAL_COMPAT);
+    // Each ShmemSession targets a single instrument for its lifetime, so attach
+    // a fresh session per instrument id we want to inspect.
+    auto makeSession = [&](cbproto::InstrumentId id) {
+        return ShmemSession::create(
+            Mode::CLIENT, ShmemLayout::CENTRAL, instance_suffix, id);
+    };
+
+    auto result = makeSession(cbproto::InstrumentId::fromOneBased(cbNSP1));
 
     if (result.isError()) {
         std::cerr << "FAILED to attach to Central's shared memory: " << result.error() << "\n";
-        std::cerr << "\nIs Central running?\n";
+        std::cerr << "\nIs Central running?" << std::endl;
         return 1;
     }
 
     auto session = std::move(result.value());
-    std::cout << "SUCCESS: Attached to Central's shared memory!\n\n";
-
-    // Read config buffer
-    auto* cfg = session.getLegacyConfigBuffer();
-    if (!cfg) {
-        std::cerr << "ERROR: getLegacyConfigBuffer() returned null\n";
-        return 1;
-    }
-
-    std::cout << "=== Config Buffer Contents ===\n";
-    std::cout << "  version:   " << cfg->version << "\n";
-    std::cout << "  sysflags:  0x" << std::hex << cfg->sysflags << std::dec << "\n";
-
-    // Read procinfo for each instrument
-    std::cout << "\n=== Processor Info ===\n";
-    for (uint32_t i = 0; i < CENTRAL_cbMAXPROCS; ++i) {
-        auto& proc = cfg->procinfo[i];
-        // procinfo version field = (major << 16) | minor
-        uint32_t ver = proc.cbpkt_header.type;  // Version is stored in a known field
-        std::cout << "  Proc[" << i << "]:"
-                  << " time=" << proc.cbpkt_header.time
-                  << " chid=" << proc.cbpkt_header.chid
-                  << " type=0x" << std::hex << proc.cbpkt_header.type << std::dec
-                  << " dlen=" << proc.cbpkt_header.dlen
-                  << " inst=" << (int)proc.cbpkt_header.instrument
-                  << "\n";
-    }
+    std::cout << "SUCCESS: Attached to Central's shared memory!" << std::endl;
 
     // Detect protocol version
     auto proto = session.getCompatProtocolVersion();
@@ -139,25 +77,53 @@ int main(int argc, char* argv[]) {
         default:                       std::cout << "UNKNOWN\n"; break;
     }
 
+    // Read procinfo for each instrument (one session per instrument)
+    std::cout << "\n=== Processor Info ===\n";
+    uint32_t max_procs = session.getMaxProcs();
+    for (uint32_t i = 0; i < max_procs; ++i) {
+        auto inst_result = makeSession(cbproto::InstrumentId::fromIndex(i));
+        if (inst_result.isError()) {
+            std::cerr << "ERROR: failed to attach for instrument " << i
+                      << ": " << inst_result.error() << std::endl;
+            return 1;
+        }
+        auto inst_session = std::move(inst_result.value());
+
+        // Read config buffer
+        auto cfg = std::make_unique<NativeConfigBuffer>();
+        auto cfg_res = inst_session.getLegacyConfigBuffer(*cfg);
+        if (cfg_res.isError()) {
+            std::cerr << "ERROR: getLegacyConfigBuffer() returned error: " << cfg_res.error() << std::endl;
+            return 1;
+        }
+
+        auto& proc = cfg->procinfo;
+        std::cout << "  Proc: "
+                  << " time=" << proc.cbpkt_header.time
+                  << " chid=" << proc.cbpkt_header.chid
+                  << " type=0x" << std::hex << proc.cbpkt_header.type << std::dec
+                  << " dlen=" << proc.cbpkt_header.dlen
+                  << " inst=" << (int)proc.cbpkt_header.instrument
+                  << "\n";
+    }
+
     // Read status buffer
     std::cout << "\n=== PC Status ===\n";
     auto num_total = session.getNumTotalChans();
     if (num_total.isOk()) {
         std::cout << "  Total channels:  " << num_total.value() << "\n";
     }
-    for (uint32_t i = 0; i < CENTRAL_cbMAXPROCS; ++i) {
-        auto nsp = session.getNspStatus(cbproto::InstrumentId::fromIndex(i));
-        if (nsp.isOk()) {
-            const char* status_str = "?";
-            switch (nsp.value()) {
-                case NSPStatus::NSP_INIT:     status_str = "INIT"; break;
-                case NSPStatus::NSP_NOIPADDR: status_str = "NOIPADDR"; break;
-                case NSPStatus::NSP_NOREPLY:  status_str = "NOREPLY"; break;
-                case NSPStatus::NSP_FOUND:    status_str = "FOUND"; break;
-                case NSPStatus::NSP_INVALID:  status_str = "INVALID"; break;
-            }
-            std::cout << "  NSP[" << i << "] status:  " << status_str << "\n";
+    auto nsp = session.getNspStatus();
+    if (nsp.isOk()) {
+        const char* status_str = "?";
+        switch (nsp.value()) {
+            case NativeNSPStatus::NSP_INIT:     status_str = "INIT"; break;
+            case NativeNSPStatus::NSP_NOIPADDR: status_str = "NOIPADDR"; break;
+            case NativeNSPStatus::NSP_NOREPLY:  status_str = "NOREPLY"; break;
+            case NativeNSPStatus::NSP_FOUND:    status_str = "FOUND"; break;
+            case NativeNSPStatus::NSP_INVALID:  status_str = "INVALID"; break;
         }
+        std::cout << "  NSP status:  " << status_str << "\n";
     }
     auto gemini = session.isGeminiSystem();
     if (gemini.isOk()) {
@@ -166,7 +132,7 @@ int main(int argc, char* argv[]) {
 
     // Read some channel info
     std::cout << "\n=== Sample Channel Info ===\n";
-    for (uint32_t ch = 0; ch < 5 && ch < CENTRAL_cbMAXCHANS; ++ch) {
+    for (uint32_t ch = 0; ch < 5 && ch < cbMAXCHANS; ++ch) {
         auto ci = session.getChanInfo(ch);
         if (ci.isOk()) {
             auto& chan = ci.value();
@@ -183,9 +149,6 @@ int main(int argc, char* argv[]) {
     // Now monitor receive buffer for packets
     std::cout << "\n=== Monitoring Receive Buffer ===\n";
     std::cout << "Waiting for packets (Ctrl+C to stop)...\n\n";
-
-    // Set instrument filter for Hub1 (index 0 in GEMSTART=2 mapping)
-    session.setInstrumentFilter(0);
 
     uint64_t total_packets = 0;
     auto start = std::chrono::steady_clock::now();
