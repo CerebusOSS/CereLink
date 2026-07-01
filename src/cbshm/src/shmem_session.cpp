@@ -417,7 +417,9 @@ struct ShmemSession::Impl {
         } else {
             // The compatibility protocol is ignored for NATIVE or CENTRAL
             // layouts and is always current for STANDALONE mode.
+            central_version = CentralVersion::CURRENT;
             compat_protocol = CBPROTO_PROTOCOL_CURRENT;
+            bootstrap_adapter = std::make_unique<central::BootstrapAdapter>();
         }
 
         // Compute buffer sizes based on layout and protocol version
@@ -584,6 +586,10 @@ struct ShmemSession::Impl {
                     adapter = std::make_unique<central::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
                     break;
             }
+        } else {
+            // The adapter is used to fetch the byte offset of fields in the transmit/receive buffers.
+            // TODO: Add helper methods in Impl for fetching byte offsets of transmit/receive buffer fields without relying on the Central adapter.
+            adapter = std::make_unique<central::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
         }
 
         // Initialize buffers in standalone mode
