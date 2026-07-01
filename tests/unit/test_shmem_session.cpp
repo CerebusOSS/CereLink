@@ -106,23 +106,29 @@ TEST_F(ShmemSessionTest, InstrumentStatusInitiallyInactive) {
 }
 
 TEST_F(ShmemSessionTest, SetInstrumentActive) {
+    // A ShmemSession represents a single instrument; setInstrumentActive()/
+    // isInstrumentActive() operate on that one instrument's status. Verify the
+    // full active/inactive round-trip (InstrumentToggle only covers activation).
     auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk());
     auto& session = result.value();
 
-    // Activate first instrument
-    auto set_result = session.setInstrumentActive(true);
-    ASSERT_TRUE(set_result.isOk());
+    // Starts inactive.
+    auto initial = session.isInstrumentActive();
+    ASSERT_TRUE(initial.isOk());
+    EXPECT_FALSE(initial.value());
 
-    // Verify it's active
-    auto active_result = session.isInstrumentActive();
-    ASSERT_TRUE(active_result.isOk());
-    EXPECT_TRUE(active_result.value());
+    // Activating is reflected by isInstrumentActive().
+    ASSERT_TRUE(session.setInstrumentActive(true).isOk());
+    auto activated = session.isInstrumentActive();
+    ASSERT_TRUE(activated.isOk());
+    EXPECT_TRUE(activated.value());
 
-    // Other instruments should still be inactive
-    auto active_result2 = session.isInstrumentActive();
-    ASSERT_TRUE(active_result2.isOk());
-    EXPECT_FALSE(active_result2.value());
+    // Deactivating toggles it back off.
+    ASSERT_TRUE(session.setInstrumentActive(false).isOk());
+    auto deactivated = session.isInstrumentActive();
+    ASSERT_TRUE(deactivated.isOk());
+    EXPECT_FALSE(deactivated.value());
 }
 
 // TODO: getFirstActiveInstrument() and multi-instrument-per-session tracking were

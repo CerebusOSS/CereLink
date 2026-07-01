@@ -42,6 +42,14 @@ size_t BootstrapAdapter::getReceiveBufferLen() const {
     return cbRECBUFFLEN;
 }
 
+size_t BootstrapAdapter::getTransmitBufferLen() const {
+    return cbXMT_GLOBAL_BUFFLEN;
+}
+
+size_t BootstrapAdapter::getTransmitBufferLocalLen() const {
+    return cbXMT_LOCAL_BUFFLEN;
+}
+
 void Adapter::fromLegacy(::cbPKT_HEADER& cur, const cbPKT_HEADER& leg) const {
     cur.time = leg.time;
     cur.chid = leg.chid;

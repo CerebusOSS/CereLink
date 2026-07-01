@@ -645,6 +645,25 @@ struct ShmemSession::Impl {
             }
         }
 
+        // Initialize transmit buffers in STANDALONE + CENTRAL mode.  When Central
+        // owns the shared memory it populates last_valid_index/bufferlen itself,
+        // but in STANDALONE we create the segments, so we must set them or
+        // enqueuePacket's wrap check sees a zero-length ring and always reports
+        // "Transmit buffer full".  (The receive/config/status/spike segments are
+        // fresh-mapped zero, which is a valid empty ring.)
+        if (mode == Mode::STANDALONE && layout == ShmemLayout::CENTRAL) {
+            std::memset(xmt_buffer_raw, 0, xmt_buffer_size);
+            std::memset(xmt_local_buffer_raw, 0, xmt_local_buffer_size);
+
+            uint32_t xmt_len = static_cast<uint32_t>(bootstrap_adapter->getTransmitBufferLen());
+            adapter->getXmtLastValidIndexPtr() = xmt_len - 1;
+            adapter->getXmtBufferlenPtr() = xmt_len;
+
+            uint32_t xmt_local_len = static_cast<uint32_t>(bootstrap_adapter->getTransmitBufferLocalLen());
+            adapter->getLocalXmtLastValidIndexPtr() = xmt_local_len - 1;
+            adapter->getLocalXmtBufferlenPtr() = xmt_local_len;
+        }
+
         is_open = true;
 
         // In CLIENT mode, sync our read position to the current head so we only

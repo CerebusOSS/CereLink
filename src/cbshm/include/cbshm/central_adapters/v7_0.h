@@ -30,6 +30,8 @@ public:
     size_t getStatusBufferSize() const override;
     size_t getSpikeBufferSize() const override;
     size_t getReceiveBufferLen() const override;
+    size_t getTransmitBufferLen() const override;
+    size_t getTransmitBufferLocalLen() const override;
 };
 
 ///
