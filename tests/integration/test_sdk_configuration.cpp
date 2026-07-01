@@ -205,7 +205,7 @@ TEST_F(ChannelInfoTest, GetChanInfoInvalid) {
     ASSERT_TRUE(result.isOk()) << result.error();
 
     // Channel 0 is invalid (1-based)
-    EXPECT_EQ(result.value().getChanInfo(0), nullptr);
+    EXPECT_FALSE(result.value().getChanInfo(0).isOk());
 }
 
 TEST_F(ChannelInfoTest, GetChannelLabels) {
@@ -334,7 +334,7 @@ TEST_F(FilterInfoTest, GetFilterInfoInvalid) {
     auto result = createNPlaySession();
     ASSERT_TRUE(result.isOk()) << result.error();
 
-    EXPECT_EQ(result.value().getFilterInfo(9999), nullptr);
+    EXPECT_FALSE(result.value().getFilterInfo(9999).isOk());
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
