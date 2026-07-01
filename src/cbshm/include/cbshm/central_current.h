@@ -15,12 +15,12 @@
 #ifndef CBSHM_CENTRAL_ADAPTERS_CURRENT_H
 #define CBSHM_CENTRAL_ADAPTERS_CURRENT_H
 
-#include <cbshm/central_types/v4_2.h>
-#include <cbshm/central_adapters/v4_2.h>
+#include <cbshm/central_types/v7_8.h>
+#include <cbshm/central_adapters/v7_8.h>
 
 namespace cbshm {
 
-namespace central = cbshm::central_v4_2;
+namespace central = cbshm::central_v7_8;
 
 } // namespace cbshm
 

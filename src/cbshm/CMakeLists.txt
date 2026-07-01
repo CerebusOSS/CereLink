@@ -9,6 +9,7 @@ project(cbshm
 # Library sources
 set(CBSHMEM_SOURCES
     src/shmem_session.cpp
+    src/central_version.cpp
     src/central_adapters/v7_8.cpp
     src/central_adapters/v7_7.cpp
     src/central_adapters/v7_6.cpp
