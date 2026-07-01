@@ -39,7 +39,7 @@ size_t BootstrapAdapter::getSpikeBufferSize() const {
 }
 
 size_t BootstrapAdapter::getReceiveBufferLen() const {
-    return sizeof(cbRECBUFFLEN);
+    return cbRECBUFFLEN;
 }
 
 void Adapter::fromLegacy(::cbPKT_HEADER& cur, const cbPKT_HEADER& leg) const {
