@@ -58,6 +58,25 @@ gtest_discover_tests(cbshm_tests)
 
 message(STATUS "Unit tests configured for cbshm")
 
+# cbshm central adapter tests (per-version translation + copyArr helpers).
+# Fully off-Windows testable: adapters translate caller-owned buffers, no shared
+# memory or Central.exe required.
+add_executable(cbshm_adapter_tests
+    test_central_adapters.cpp
+    test_central_adapter_base.cpp
+)
+
+target_link_libraries(cbshm_adapter_tests
+    PRIVATE
+        cbshm
+        cbproto
+        GTest::gtest_main
+)
+
+gtest_discover_tests(cbshm_adapter_tests)
+
+message(STATUS "Unit tests configured for cbshm central adapters")
+
 # cbdev tests (non-device-dependent: packet translation, clock sync)
 add_executable(cbdev_tests
     test_packet_translation.cpp
