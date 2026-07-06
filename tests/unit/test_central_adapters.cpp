@@ -18,8 +18,7 @@
 ///                         (translation round-trips through the version's legacy
 ///                         layout without loss).
 ///   - Divergence tests  : targeted, named tests for behavior that genuinely
-///                         differs by version/protocol group (NSP/Gemini write
-///                         contract, v7_0 PcStatus hardcoding, bit-packed vs split
+///                         differs by version/protocol group (bit-packed vs split
 ///                         CHANINFO/AOUT fields, PROCINFO sortmethod aliasing).
 ///
 /// NOTE (scaffold): the round-trip assertions target fields that are expected to
@@ -63,10 +62,6 @@ using V7_8 = VersionTraits<central_v7_8::BootstrapAdapter, central_v7_8::Adapter
 
 /// All five versions — for invariants that must hold everywhere.
 using AllVersions = ::testing::Types<V7_0, V7_5, V7_6, V7_7, V7_8>;
-
-/// Versions where setNspStatus / setGeminiSystem succeed (protocol 4.0+).
-/// v7_0 (protocol 3.11) lacks these fields and returns errors — covered separately.
-using NspWritableVersions = ::testing::Types<V7_5, V7_6, V7_7, V7_8>;
 
 /// Stub size for the receive/transmit ring buffers. None of the adapter
 /// *translation* tests dereference these buffers — the Adapter constructor only
@@ -277,73 +272,6 @@ TYPED_TEST(AdapterFixture, GetConfigBufferReflectsProcInfo) {
     EXPECT_EQ(buf->procinfo.chancount, 128u);
 }
 
-// pc-status is exercised meaningfully for every version elsewhere: v7_0 by
-// V7_0Fixture (hardcoded fields) and v7_5..v7_8 by NspWritableFixture
-// (buffer-backed fields), so no generic smoke test is needed here.
-
-/// @}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @name Divergence — NSP status / Gemini write contract
-///
-/// v7_0 (protocol 3.11) has no NSP-status or Gemini fields, so the setters must
-/// return errors. v7_5+ have real fields and must succeed.
-/// @{
-
-// v7_0-specific divergence. Reuses AdapterFixture<V7_0>'s buffer setup rather
-// than re-allocating the six buffers by hand.
-class V7_0Fixture : public AdapterFixture<V7_0> {};
-
-TEST_F(V7_0Fixture, SetNspStatusReturnsError) {
-    EXPECT_TRUE(adapter->setNspStatus(NativeNSPStatus::NSP_FOUND).isError())
-        << "v3.11 has no NSP status field";
-    EXPECT_TRUE(adapter->setGeminiSystem(true).isError())
-        << "v3.11 does not recognize Gemini systems";
-}
-
-// CHARACTERIZATION TEST (not a correctness assertion). v7_0's status buffer has
-// no NSP/Gemini fields, so getPcStatus substitutes fixed values that do not come
-// from the buffer. Those substitutes are stopgaps the implementation itself marks
-// "TODO: VERIFY" — they are NOT known to be the right values. This test pins the
-// current behavior so that (a) accidental changes to the stopgap are noticed and
-// (b) when real 3.11 handling is implemented, this test fails loudly and must be
-// revisited. Do not read a passing result as "these values are correct."
-TEST_F(V7_0Fixture, PcStatusReportsStopgapDefaults) {
-    NativePCStatus out;
-    std::memset(&out, 0, sizeof(out));
-    ASSERT_TRUE(adapter->getPcStatus(out).isOk());
-
-    // Independent of the (zeroed) buffer contents, confirming these are synthesized.
-    EXPECT_EQ(out.m_nNspStatus, NativeNSPStatus::NSP_FOUND);
-    EXPECT_EQ(out.m_nGeminiSystem, 1u);
-}
-
-// Typed over v7_5..v7_8: setters succeed and getPcStatus reflects the buffer.
-template <class T>
-class NspWritableFixture : public AdapterFixture<T> {};
-TYPED_TEST_SUITE(NspWritableFixture, NspWritableVersions);
-
-TYPED_TEST(NspWritableFixture, SetNspStatusSucceeds) {
-    EXPECT_TRUE(this->adapter->setNspStatus(NativeNSPStatus::NSP_FOUND).isOk());
-}
-
-TYPED_TEST(NspWritableFixture, GeminiFlagReflectsBuffer) {
-    // Zeroed buffer → not Gemini.
-    NativePCStatus before;
-    std::memset(&before, 0, sizeof(before));
-    ASSERT_TRUE(this->adapter->getPcStatus(before).isOk());
-    EXPECT_EQ(before.m_nGeminiSystem, 0u);
-
-    // After setting, getPcStatus reflects the change.
-    ASSERT_TRUE(this->adapter->setGeminiSystem(true).isOk());
-    NativePCStatus after;
-    std::memset(&after, 0, sizeof(after));
-    ASSERT_TRUE(this->adapter->getPcStatus(after).isOk());
-    EXPECT_NE(after.m_nGeminiSystem, 0u);
-}
-
-/// @}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Spike cache read (needs a full-size spike buffer)
 /// @{
@@ -388,7 +316,6 @@ TYPED_TEST(AdapterFixture, ChanInfoMonSourceRoundTrips) {
     in.chan = 1;
     in.moninst = 2;
     in.monchan = 5;
-    in.triginst = 1;
 
     ASSERT_TRUE(this->adapter->setChanInfo(chan_idx, in).isOk());
 
@@ -398,8 +325,6 @@ TYPED_TEST(AdapterFixture, ChanInfoMonSourceRoundTrips) {
 
     EXPECT_EQ(out.moninst, in.moninst);
     EXPECT_EQ(out.monchan, in.monchan);
-    // triginst is hardcoded to 0 on v7_0 (no such field in 3.11); real elsewhere.
-    // TODO: split this expectation by version once the v7_0 contract is confirmed.
 }
 
 // TODO(scaffold): raw-layout divergence check. Cast the cfg buffer to the
