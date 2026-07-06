@@ -110,26 +110,27 @@ struct SegmentNames {
 // "cbshm_<name_qualifier>_<segment>", where name_qualifier is the device token
 // (e.g. "hub1"), matching the names a CereLink STANDALONE publishes.
 inline SegmentNames makeSegmentNames(ShmemLayout layout, const std::string& name_qualifier) {
-    const std::string& s = name_qualifier;  // instance suffix
     if (layout == ShmemLayout::NATIVE) {
+        const std::string& device = name_qualifier;
         return SegmentNames{
-            "cbshm_config_" + s,
-            "cbshm_receive_" + s,
-            "cbshm_xmt_global_" + s,
-            "cbshm_xmt_local_" + s,
-            "cbshm_status_" + s,
-            "cbshm_spike_" + s,
-            "cbshm_signal_" + s
+            "cbshm_" + device + "_config",
+            "cbshm_" + device + "_receive",
+            "cbshm_" + device + "_xmt_global",
+            "cbshm_" + device + "_xmt_local",
+            "cbshm_" + device + "_status",
+            "cbshm_" + device + "_spike",
+            "cbshm_" + device + "_signal"
         };
     } else {
+        const std::string& suffix = name_qualifier;
         return SegmentNames{
-            "cbCFGbuffer" + s,
-            "cbRECbuffer" + s,
-            "XmtGlobal" + s,
-            "XmtLocal" + s,
-            "cbSTATUSbuffer" + s,
-            "cbSPKbuffer" + s,
-            "cbSIGNALevent" + s
+            "cbCFGbuffer" + suffix,
+            "cbRECbuffer" + suffix,
+            "XmtGlobal" + suffix,
+            "XmtLocal" + suffix,
+            "cbSTATUSbuffer" + suffix,
+            "cbSPKbuffer" + suffix,
+            "cbSIGNALevent" + suffix
         };
     }
 }
@@ -843,7 +844,7 @@ Result<bool> ShmemSession::isInstrumentActive() const {
         bool active = (m_impl->nativeCfg()->instrument_status == static_cast<uint32_t>(InstrumentStatus::ACTIVE));
         return Result<bool>::ok(active);
     } else {
-        // CentralLegacyCFGBUFF has no instrument_status field;
+        // cbCFGBUFF has no instrument_status field;
         // if the shared memory exists, instruments are as Central configured them
         return Result<bool>::ok(true);
     }
@@ -1942,6 +1943,7 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             m_impl->rec_tailwrap++;
         }
 
+        // Filter packets so only those from the selected instrument are read.
         uint8_t pkt_instrument = packets[packets_read].cbpkt_header.instrument;
         if (pkt_instrument != m_impl->inst.toIndex()) {
             continue;  // Skip this packet, don't increment packets_read

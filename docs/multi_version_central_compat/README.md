@@ -6,16 +6,20 @@
 
 ## Brief
 
-This document describes a compatibility layer within CereLink which enables cross-version compatibility with Central's shared memory.  Previous versions of CereLink only supported the latest version of Central.  This compatibility layer consists of an `Adapter` class which hides the implementation differences between protocol versions behind a common interface.
+This document describes a compatibility layer within CereLink which enables cross-version compatibility with Central's shared memory.  Previous versions of CereLink only supported the latest version of Central.  This compatibility layer consists of an `Adapter` class which hides the implementation differences between Central versions behind a common interface.  Adapters are selected per Central application version (see the `CentralVersion` enum in [Organization](#organization)).
 
 Central has a 'protocol version' and an 'application version'.  As of the writing of this document, the most recent protocol and application versions are 4.2 and 7.8.0 respectively.  Shared memory compatibility is dependent on the protocol version.  Protocols with different major version numbers are completely incompatible whereas protocols with different minor version numbers may be partially compatible.  Different application versions do not break protocol compatibility unless the protocol version has also changed.
 
 
 ## Organization
 
-Each supported protocol version has a `BootstrapAdapter` and `Adapter`.  The `BootstrapAdapter` class fetches the sizes of shared memory structs in order to instantiate an `Adapter` with raw pointers to each struct.  Each adapter has a collection of Central structs which are translated to and from the native CereLink equivalents.  These native equivalents (defined in cbproto and native_types.h) are the common language used by `ShmemSession` to perform operations on the shared memory buffers.
+Each supported application version of Central has a `BootstrapAdapter` and `Adapter`.  The `BootstrapAdapter` class fetches the sizes of shared memory structs in order to instantiate an `Adapter` with raw pointers to each struct.  Each adapter has a collection of Central structs which are translated to and from the native CereLink equivalents.  These native equivalents (defined in cbproto and native_types.h) are the common language used by `ShmemSession` to perform operations on the shared memory buffers.
 
-The structure and sizes of types are defined in `src/cbshm/include/cbshm/central_types/*`.  The translation behavior is defined in `src/cbshm/src/central_adapters/*`.  Version headers in `src/cbshm/include/cbshm/central_adapters/*` should be nearly identical.
+Adapters are named after the Central *application* version they support (e.g. `v7_0`, `v7_5`), not the protocol version.  The `CentralVersion` enum in `src/cbshm/include/cbshm/central_version.h` enumerates every supported application version: `V7_0`, `V7_5`, `V7_6`, `V7_7`, and `CURRENT` (the newest supported version, currently 7.8).
+
+The structure and sizes of types are defined in `src/cbshm/include/cbshm/central_types/<version>.h`.  The adapter and bootstrap adapter classes are declared in `src/cbshm/include/cbshm/central_adapters/<version>.h`, and their translation behavior is defined in `src/cbshm/src/central_adapters/<version>.cpp`.  Each version lives in its own namespace (e.g. `central_v7_0`).  The current version's types and adapters live in `central_v7_8`, which `src/cbshm/include/cbshm/central_current.h` aliases as `central`.  Version headers in `src/cbshm/include/cbshm/central_adapters/*` should be nearly identical.
+
+At runtime, `detectCentralVersion` (declared in `src/cbshm/include/cbshm/central_version.h`, defined in `src/cbshm/src/central_version.cpp`) inspects the application version of the running `Central.exe` and returns the matching `CentralVersion`.  `getProtocolVersion` converts a `CentralVersion` to its protocol version for the receive/transmit buffer logic.  `ShmemSession::Impl::open` uses the detected `CentralVersion` to select the appropriate `BootstrapAdapter` and `Adapter`.
 
 
 ## Limitations
@@ -86,13 +90,31 @@ editor src/cbshm/src/central_adapters/<version>.cpp
 
 Verify your changes by diffing the existing version header with the added version header.
 
-#### 7. Add the version to ShmemSession::Impl
+#### 7. Register the version
+
+First, add a value for the version to the `CentralVersion` enum.  Because the added version is newer than any currently supported version, it becomes the new `CURRENT`; add an explicit value for the version that `CURRENT` previously coded for (e.g. `V7_8`).
+
+```bash
+editor src/cbshm/include/cbshm/central_version.h
+```
+
+Repoint the `central` alias at the added version's namespace.
+
+```bash
+editor src/cbshm/include/cbshm/central_current.h
+```
+
+Map the application version to the added `CentralVersion` value in `detectCentralVersion`, and map each `CentralVersion` value to its protocol version in `getProtocolVersion`.  The added version maps to `CBPROTO_PROTOCOL_CURRENT`; the previously-current version now maps to its own (frozen) protocol version.
+
+```bash
+editor src/cbshm/src/central_version.cpp
+```
+
+Finally, register the adapter with `ShmemSession`.  Add `#include <cbshm/central_types/<version>.h>` and `#include <cbshm/central_adapters/<version>.h>` near the top of the file and append cases for the new `CentralVersion` values to both switch statements in `ShmemSession::Impl::open` (one selects the `BootstrapAdapter`, the other selects the `Adapter`).  The `CURRENT` case uses the `central::` alias, so the added version is reached through it; add an explicit case for the previously-current version.
 
 ```bash
 editor src/cbshm/src/shmem_session.cpp
 ```
-
-Add `#include <cbshm/central_types/<version>.h>` at the top of the file and append the adapter and bootstrap adapter to the corresponding switch statements in `ShmemSession::Impl::open`.  Modify the switch statement at the bottom of `detectCompatProtocol` so corresponding application versions are mapped to the added protocol version.
 
 #### 8. Add the adapter implementation to CMakeLists.txt
 
@@ -113,6 +135,14 @@ The types in cbproto must match the most recent protocol version, `CBPROTO_PROTO
 #### 10. Rectify the translators and adapters for all older versions
 
 All translators and adapters use the cbproto types, so these methods must be fixed to translate to the added version instead.
+
+#### 11. Add the version to the adapter unit tests
+
+```bash
+editor tests/unit/test_central_adapters.cpp
+```
+
+Add `#include <cbshm/central_adapters/<version>.h>` near the top of the file, define a `VersionTraits` alias for the version (e.g. `using V7_9 = VersionTraits<central_v7_9::BootstrapAdapter, central_v7_9::Adapter>;`), and add that alias to the `AllVersions` type list so the round-trip invariants run against it.  If the added version's protocol has the NSP-status and Gemini fields (protocol 4.0+), also add the alias to the `NspWritableVersions` type list; otherwise leave it out and cover its divergent behavior with dedicated tests.  The test file has no entry in `tests/unit/CMakeLists.txt` to update — it already compiles every version through these type lists.
 
 
 ### Add an older protocol version
@@ -167,13 +197,25 @@ editor src/cbshm/src/central_adapters/<version>.cpp
 
 Verify your changes by diffing the existing version header with the added version header.
 
-#### 7. Add the version to ShmemSession::Impl
+#### 7. Register the version
+
+First, add a value for the version to the `CentralVersion` enum.
+
+```bash
+editor src/cbshm/include/cbshm/central_version.h
+```
+
+Map the application version to the added `CentralVersion` value in `detectCentralVersion`, and map the added `CentralVersion` value to its protocol version in `getProtocolVersion`.
+
+```bash
+editor src/cbshm/src/central_version.cpp
+```
+
+Finally, register the adapter with `ShmemSession`.  Add `#include <cbshm/central_types/<version>.h>` and `#include <cbshm/central_adapters/<version>.h>` near the top of the file and append a case for the added `CentralVersion` value to both switch statements in `ShmemSession::Impl::open` (one selects the `BootstrapAdapter`, the other selects the `Adapter`).
 
 ```bash
 editor src/cbshm/src/shmem_session.cpp
 ```
-
-Add `#include <cbshm/central_types/<version>.h>` at the top of the file and append the adapter and bootstrap adapter to the corresponding switch statements in `ShmemSession::Impl::open`.  Modify the switch statement at the bottom of `detectCompatProtocol` so corresponding application versions are mapped to the added protocol version.
 
 #### 8. Add the adapter implementation to CMakeLists.txt
 
@@ -182,6 +224,14 @@ editor src/cbshm/CMakeLists.txt
 ```
 
 Append `src/central_adapters/<version>.cpp` to the `CBSHMEM_SOURCES` environment variable.
+
+#### 9. Add the version to the adapter unit tests
+
+```bash
+editor tests/unit/test_central_adapters.cpp
+```
+
+Add `#include <cbshm/central_adapters/<version>.h>` near the top of the file, define a `VersionTraits` alias for the version (e.g. `using V7_1 = VersionTraits<central_v7_1::BootstrapAdapter, central_v7_1::Adapter>;`), and add that alias to the `AllVersions` type list so the round-trip invariants run against it.  If the added version's protocol has the NSP-status and Gemini fields (protocol 4.0+), also add the alias to the `NspWritableVersions` type list; otherwise leave it out and cover its divergent behavior with dedicated tests.  The test file has no entry in `tests/unit/CMakeLists.txt` to update — it already compiles every version through these type lists.
 
 
 ## Remove a protocol version

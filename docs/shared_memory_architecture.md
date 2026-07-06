@@ -85,12 +85,12 @@ auto session = SdkSession::open(DeviceType::HUB1);
     ||                   NATIVE SHARED MEMORY (per device)                            ||
     ||                   Named: cbshm_{device}_{segment}                              ||
     ||                                                                                ||
-    ||  1. cbshm_hub1_cfg          | Config for 1 device (284 channels, ~1 MB)        ||
-    ||  2. cbshm_hub1_rec          | Receive ring buffer (~256 MB)                    ||
-    ||  3. cbshm_hub1_xmt          | Transmit queue (~5 MB)                           ||
+    ||  1. cbshm_hub1_config       | Config for 1 device (284 channels, ~1 MB)        ||
+    ||  2. cbshm_hub1_receive      | Receive ring buffer (~256 MB)                    ||
+    ||  3. cbshm_hub1_xmt_global   | Transmit queue (~5 MB)                           ||
     ||  4. cbshm_hub1_xmt_local    | Local transmit queue (~2 MB)                     ||
     ||  5. cbshm_hub1_status       | Device status (~few KB)                          ||
-    ||  6. cbshm_hub1_spk          | Spike cache (272 analog channels)                ||
+    ||  6. cbshm_hub1_spike        | Spike cache (272 analog channels)                ||
     ||  7. cbshm_hub1_signal       | Data availability signal                         ||
     ||                                                                                ||
     ||  All packets stored in CURRENT protocol format (translation at cbdev layer)    ||
@@ -126,16 +126,16 @@ Each device gets its own set of shared memory segments:
 cbshm_{device}_{segment}
 
 Examples:
-  cbshm_nsp_cfg         cbshm_hub1_cfg         cbshm_hub2_cfg
-  cbshm_nsp_rec         cbshm_hub1_rec         cbshm_hub2_rec
-  cbshm_nsp_xmt         cbshm_hub1_xmt         cbshm_hub2_xmt
+  cbshm_nsp_config      cbshm_hub1_config     cbshm_hub2_config
+  cbshm_nsp_receive     cbshm_hub1_receive    cbshm_hub2_receive
+  cbshm_nsp_xmt_global  cbshm_hub1_xmt_global cbshm_hub2_xmt_global
   cbshm_nsp_xmt_local   cbshm_hub1_xmt_local   cbshm_hub2_xmt_local
   cbshm_nsp_status      cbshm_hub1_status      cbshm_hub2_status
-  cbshm_nsp_spk         cbshm_hub1_spk         cbshm_hub2_spk
+  cbshm_nsp_spike       cbshm_hub1_spike      cbshm_hub2_spike
   cbshm_nsp_signal      cbshm_hub1_signal      cbshm_hub2_signal
 ```
 
-On POSIX, names are prefixed with `/` (e.g., `/cbshm_hub1_rec`).
+On POSIX, names are prefixed with `/` (e.g., `/cbshm_hub1_receive`).
 
 ### Per-Device Config Buffer (Native)
 
@@ -267,12 +267,13 @@ When CereLink attaches to Central's shared memory, Central may be running an old
 (3.11, 4.0, or 4.1). Central stores raw device packets in `cbRECbuffer` without translation.
 CereLink detects the protocol version and translates packets on-the-fly.
 
-**Protocol detection** (`detectCompatProtocol`) cannot rely on Central's shared memory:
+**Version detection** (`detectCentralVersion`) cannot rely on Central's shared memory:
 the `version` field in `cbCFGBUFF` is a magic number (`96`), not a meaningful version, and
 `procinfo[].version` is unusable because its byte offset shifts between protocol versions.
 Instead, detection inspects the **application version** of the running `Central.exe`
-(`VersionInfo.ProductVersion`) and maps it to a protocol version. This is **Windows-only**;
-on other platforms compat mode is unavailable.
+(`VersionInfo.ProductVersion`) and maps it to a `CentralVersion` enum value. A companion
+function, `getProtocolVersion`, converts that `CentralVersion` to its protocol version. This
+is **Windows-only**; on other platforms compat mode is unavailable.
 
 The application-version → protocol-version mapping:
 - Central 7.0 → Protocol 3.11 (8-byte headers, 32-bit timestamps)
@@ -282,7 +283,8 @@ The application-version → protocol-version mapping:
 - Central major version < 7 → unsupported (caller must upgrade Central)
 
 This indirect approach is brittle: a future Central with a different executable name or
-version-string format would defeat it. See `detectCompatProtocol` in `shmem_session.cpp`.
+version-string format would defeat it. See `detectCentralVersion` and `getProtocolVersion`
+in `central_version.cpp`.
 
 **Receive path** (`readReceiveBuffer`): Parses the protocol-specific header to extract
 `dlen`, copies raw bytes from the ring buffer, translates header + payload to current

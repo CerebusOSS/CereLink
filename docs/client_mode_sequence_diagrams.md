@@ -98,8 +98,9 @@ sequenceDiagram
     end
 ```
 
-Four threads total: cbdev UDP receive, cbdev-driven callbacks feeding the SPSC queue,
-the SDK callback dispatcher, and the SDK send thread (plus main).
+Three worker threads (plus main): the cbdev UDP-receive thread — which also runs the
+receive and datagram-complete callbacks that feed the SPSC queue — the SDK callback
+dispatcher, and the SDK send thread.
 
 ## Mode 2 — NATIVE CLIENT (attaches to a CereLink STANDALONE)
 
@@ -137,7 +138,7 @@ sequenceDiagram
     rect rgba(255,150,40,0.15)
     Note over App,NSP: Send + client clock sync
     App->>SDK: sendPacket(cmd)
-    SDK->>SHM: enqueuePacket → cbshm_hub1_xmt
+    SDK->>SHM: enqueuePacket → cbshm_hub1_xmt_global
     SA->>SHM: dequeuePacket (its send thread)
     SA->>NSP: UDP
     Note over SDK: every ~2 s: enqueue NPLAYSET probe the same way —<br/>NPLAYREP returns via rec ring → ClockSync sample
@@ -182,7 +183,7 @@ sequenceDiagram
     CTL-->>SDK: waitForData wakes
     loop drain ring
         SDK->>SHM: readReceiveBuffer()
-        Note over SHM: protocol == CURRENT → parse 16-byte header,<br/>copy packet as-is (no translation)<br/>non-Gemini system: header.time ticks→ns via sysfreq<br/>then FILTER: instrument != 0 → discard (after copy)
+        Note over SHM: protocol == CURRENT → parse 16-byte header,<br/>copy packet as-is (no translation)<br/>non-Gemini system: header.time ticks→ns via sysfreq<br/>then FILTER: instrument != selected idx (0 for HUB1) → discard (after copy)
         SDK->>App: dispatchBatch → callbacks
     end
     end
@@ -223,7 +224,7 @@ sequenceDiagram
     alt 7.7 / 7.6 → protocol 4.1
         SHM->>ADP: v7_7 / v7_6 BootstrapAdapter + Adapter
     else 7.5 → protocol 4.0
-        SHM->>ADP: v7_5 (16-byte header, reordered fields, 8-bit type)
+        SHM->>ADP: v7_5 (16-byte header, 8-bit type widens to 16 → shifted offsets)
     else 7.0 → protocol 3.11
         SHM->>ADP: v7_0 (8-byte header, uint32 tick timestamps)
     else major < 7
@@ -268,7 +269,7 @@ sequenceDiagram
 | Central app version | Protocol | Header in `cbRECbuffer` | Packet translation | Config/status/spike access |
 |---|---|---|---|---|
 | 7.8, and any unrecognized 7.x minor | 4.2 (CURRENT) | 16 B, ns timestamps | none | `central` (v7_8) adapter, ~identity copy |
-| 7.7, 7.6 | 4.1 | 16 B, identical to current | payload-only (4 packet types) | v7_7 / v7_6 adapters |
-| 7.5 | 4.0 | 16 B, reordered, u8 type | header + payload both ways | v7_5 adapter |
+| 7.7, 7.6 | 4.1 | 16 B, identical to current | payload-only (3 packets / 4 type codes) | v7_7 / v7_6 adapters |
+| 7.5 | 4.0 | 16 B, u8 type widened to u16 → shifted offsets | header + payload both ways | v7_5 adapter |
 | 7.0 | 3.11 | 8 B, u32 ticks @30 kHz | header + payload + timestamp unit conversion; instrument forced to 0 | v7_0 adapter |
 | major < 7 | — | — | attach refused → SDK falls back to native modes | — |

@@ -611,7 +611,10 @@ static int32_t getCentralInstrumentIndex(DeviceType type) {
         case DeviceType::HUB3:       return 2;
         case DeviceType::NSP:        return 3;
         case DeviceType::LEGACY_NSP: return 0;  // Non-Gemini, single instrument
-        default:                     return -1;  // No filter
+        // No CENTRAL instrument mapping (e.g. NPLAY). -1 yields an invalid
+        // InstrumentId, so CENTRAL-mode create() fails and the caller falls
+        // back to NATIVE. This is NOT a "match all instruments" sentinel.
+        default:                     return -1;
     }
 }
 
