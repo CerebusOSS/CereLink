@@ -14,13 +14,17 @@
 
 namespace cbproto {
 
+// These describe on-the-wire byte layouts, so they MUST be byte-packed — the
+// current-protocol structs in cbproto/types.h are all under #pragma pack(1).
+// Without this, natural alignment inflates cbPKT_HEADER_400 to 24 bytes (dlen
+// lands at offset 12 instead of 11), corrupting every translated 4.0 packet.
+#pragma pack(push, 1)
 typedef struct {
     uint32_t time;        ///< Ticks at 30 kHz
     uint16_t chid;        ///< Channel identifier
     uint8_t type;         ///< Packet type
     uint8_t dlen;         ///< Length of data field in 32-bit chunks
 } cbPKT_HEADER_311;
-constexpr size_t HEADER_SIZE_311 = sizeof(cbPKT_HEADER_311);
 
 typedef struct {
     PROCTIME time;        ///< Ticks at 30 kHz on legacy, or nanoseconds on Gemini
@@ -30,7 +34,13 @@ typedef struct {
     uint8_t instrument;   ///< Instrument identifier
     uint16_t reserved;    ///< Reserved byte
 } cbPKT_HEADER_400;
+#pragma pack(pop)
+
+constexpr size_t HEADER_SIZE_311 = sizeof(cbPKT_HEADER_311);
 constexpr size_t HEADER_SIZE_400 = sizeof(cbPKT_HEADER_400);
+
+static_assert(HEADER_SIZE_311 == 8, "cbPKT_HEADER_311 must be 8 bytes on the wire");
+static_assert(HEADER_SIZE_400 == 16, "cbPKT_HEADER_400 must be 16 bytes on the wire");
 
 constexpr size_t HEADER_SIZE_410 = cbPKT_HEADER_SIZE;  // Header unchanged since 4.1
 
