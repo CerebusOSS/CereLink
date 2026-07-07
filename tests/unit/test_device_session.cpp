@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 #include "cbdev/device_session.h"
 #include "cbdev/device_factory.h"
+#include <cbproto/cbproto.h>
 #include <cstring>
 #include <thread>
 #include <chrono>
@@ -251,4 +252,47 @@ TEST_F(DeviceSessionTest, Error_SendPacketsEmpty) {
     std::vector<cbPKT_GENERIC> empty_pkts;
     auto send_result = session->sendPackets(empty_pkts);
     EXPECT_TRUE(send_result.isError());
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Configuration-packet send pacing
+//
+// Bursts of per-channel setChannelConfig() sends must be throttled so they don't
+// overrun a device's small UDP receive buffer (which drops packets, including a
+// following runlevel sync barrier). sendPacket() enforces a minimum gap between
+// consecutive configuration-channel sends; streaming/data packets are exempt.
+// std::this_thread::sleep_for only ever sleeps AT LEAST the requested time, so
+// the lower-bound timing assertion below cannot be flaky.
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+TEST_F(DeviceSessionTest, ConfigSends_ArePaced_DataSends_AreNot) {
+    auto config = ConnectionParams::custom("127.0.0.1", "0.0.0.0", 51045, 51046);
+    auto result = createDeviceSession(config, ProtocolVersion::PROTOCOL_CURRENT);
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    constexpr int kBurst = 40;  // 39 gaps * 200us >= ~7.8 ms guaranteed for config
+
+    // Data-channel packets (chid without the configuration bit) are not throttled.
+    cbPKT_GENERIC data{};
+    data.cbpkt_header.chid = 1;  // a real acquisition channel, not configuration
+    data.cbpkt_header.type = 0x0006;
+    const auto data_start = std::chrono::steady_clock::now();
+    for (int i = 0; i < kBurst; ++i) ASSERT_TRUE(session->sendPacket(data).isOk());
+    const auto data_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - data_start).count();
+
+    // Configuration-channel packets are paced.
+    cbPKT_GENERIC cfg{};
+    cfg.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    cfg.cbpkt_header.type = cbPKTTYPE_CHANSET;
+    const auto cfg_start = std::chrono::steady_clock::now();
+    for (int i = 0; i < kBurst; ++i) ASSERT_TRUE(session->sendPacket(cfg).isOk());
+    const auto cfg_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - cfg_start).count();
+
+    // Config burst is meaningfully paced; data burst is effectively free.
+    EXPECT_GE(cfg_ms, 4) << "configuration sends were not throttled";
+    EXPECT_LT(data_ms, 4) << "data sends should not be throttled";
+    EXPECT_GT(cfg_ms, data_ms) << "config sends should be slower than data sends";
 }

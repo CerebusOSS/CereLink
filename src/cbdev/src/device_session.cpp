@@ -204,6 +204,16 @@ struct DeviceSession::Impl {
     // Device configuration (from REQCONFIGALL)
     cbproto::DeviceConfig device_config{};
 
+    // Outbound pacing for configuration packets. A device's UDP receive buffer
+    // can be as small as ~8 KB (~8 CHANINFO packets); a caller that sends many
+    // per-channel setChannelConfig() packets back-to-back (e.g. clearing LNC /
+    // spike processing on every channel) can overrun it, dropping packets —
+    // including a following runlevel sync barrier, which then times out. We
+    // enforce a minimum gap between consecutive configuration-channel sends so
+    // bursts drain at a rate the device can sustain. Isolated sends (the gap
+    // has already elapsed) and data packets are unaffected.
+    std::chrono::steady_clock::time_point last_config_send{};
+
     // Timestamp conversion for non-Gemini devices
     // Gemini devices, our primary use case, send timestamps in nanoseconds; default to true.
     // Non-Gemini (i.e. NPlay and Legacy NSP) send sample counts.
@@ -562,6 +572,21 @@ Result<int> DeviceSession::receivePackets(void* buffer, const size_t buffer_size
 Result<void> DeviceSession::sendPacket(const cbPKT_GENERIC& pkt) {
     if (!m_impl || !m_impl->connected) {
         return Result<void>::error("Device not connected");
+    }
+
+    // Pace bursts of configuration packets so they drain at a rate the device
+    // can sustain (see Impl::last_config_send). Only configuration-channel
+    // packets are throttled; streaming/data sends and isolated config sends
+    // (where the gap has already elapsed) incur no delay.
+    if ((pkt.cbpkt_header.chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
+        constexpr auto kConfigSendMinInterval = std::chrono::microseconds(200);
+        if (m_impl->last_config_send.time_since_epoch().count() != 0) {
+            const auto elapsed = std::chrono::steady_clock::now() - m_impl->last_config_send;
+            if (elapsed < kConfigSendMinInterval) {
+                std::this_thread::sleep_for(kConfigSendMinInterval - elapsed);
+            }
+        }
+        m_impl->last_config_send = std::chrono::steady_clock::now();
     }
 
     // Non-Gemini: convert nanosecond timestamp back to device clock ticks.
