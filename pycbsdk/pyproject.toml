@@ -49,6 +49,8 @@ lint = [
 test = [
     "pytest",
     "pytest-timeout",
+    "numpy",
+    "pylsl",
 ]
 
 [tool.setuptools.packages.find]
@@ -60,6 +62,7 @@ pycbsdk = ["*.dll", "*.so", "*.so.*", "*.dylib"]
 [tool.pytest.ini_options]
 markers = [
     "integration: tests requiring a running nPlayServer instance",
+    "lsl: nPlay+LSL tests; need an EXCLUSIVE nPlayServer (one shmem per device type). Auto-skipped when file-based nPlay tests are also collected — run with `pytest -m lsl`.",
 ]
 
 [tool.setuptools_scm]

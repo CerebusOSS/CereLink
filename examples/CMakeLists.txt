@@ -8,6 +8,7 @@ set(CBSDK_EXAMPLES
     "central_client:CentralClient/central_client.cpp"
     "ccf_test:CCFTest/ccf_test.cpp"
     "recording_test:RecordingTest/recording_test.cpp"
+    "clear_config_repro:ClearConfigRepro/clear_config_repro.cpp"
 )
 
 # cbdev examples (link against cbdev only - no cbshm, no cbsdk)

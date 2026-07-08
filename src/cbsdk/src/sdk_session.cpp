@@ -32,6 +32,8 @@
 #include <array>
 #include <set>
 #include <vector>
+#include <unordered_map>
+#include <utility>
 #include "cbdev/clock_sync.h"
 #ifndef _WIN32
 #include <sys/mman.h>
@@ -112,6 +114,17 @@ struct PeerClockReader {
         return cfg->clock_offset_ns;
     }
 
+    /// Peer's own (pre-consensus) estimate — the value to use for cross-device
+    /// consensus voting (clock_offset_ns is the peer's post-consensus value).
+    std::optional<int64_t> getRawOffsetNs() const {
+        if (!isOpen()) return std::nullopt;
+        const auto* cfg = static_cast<const cbshm::NativeConfigBuffer*>(mapped);
+        if (!cfg->clock_raw_valid) return std::nullopt;
+        if (cfg->owner_pid != 0 && kill(static_cast<pid_t>(cfg->owner_pid), 0) != 0)
+            return std::nullopt;
+        return cfg->clock_raw_offset_ns;
+    }
+
     std::optional<int64_t> getClockUncertaintyNs() const {
         if (!isOpen()) return std::nullopt;
         const auto* cfg = static_cast<const cbshm::NativeConfigBuffer*>(mapped);
@@ -137,6 +150,7 @@ struct PeerClockReader {
     bool isOpen() const { return false; }
     bool tryOpen(const std::string&) { return false; }
     std::optional<int64_t> getClockOffsetNs() const { return std::nullopt; }
+    std::optional<int64_t> getRawOffsetNs() const { return std::nullopt; }
     std::optional<int64_t> getClockUncertaintyNs() const { return std::nullopt; }
     void close() {}
 #endif
@@ -314,17 +328,68 @@ struct SdkSession::Impl {
     // CLIENT-mode clock sync (used when no device_session is available)
     cbdev::ClockSync client_clock_sync;
 
-    // Peer-device clock sync reader.  When this device (NSP) has
-    // unreliable probes, we try to read a peer HUB's clock offset
-    // from its shared memory config segment instead.
-    PeerClockReader peer_clock;
-    bool peer_clock_attempted = false;  // only try once
+    // Peer-device clock sync readers.  When this device (NSP) has unreliable
+    // probes, it borrows a peer HUB's clock offset from the HUB's shared memory
+    // config segment.  All known HUB segments are kept open and refreshed each
+    // cycle; the borrowed offset is sanity-checked inside ClockSync before use.
+    struct PeerHub {
+        std::string segment;
+        std::unique_ptr<PeerClockReader> reader;
+    };
+    std::vector<PeerHub> peer_hubs;
+    bool peer_hubs_init = false;
     struct PendingClockProbe {
         std::chrono::steady_clock::time_point t1_local;
         bool active = false;
     };
     PendingClockProbe pending_clock_probe;
     std::mutex clock_probe_mutex;
+
+    // Per-stream monotonic-conversion state (see toLocalTimeBatch).  Each stream
+    // keeps its own non-decreasing floor and the discontinuity epoch it last
+    // saw; on an epoch change the floor is reset (a genuine clock re-sync), else
+    // a backward step is clamped to the floor.  Lazily created per stream_id.
+    struct MonoState {
+        int64_t  floor_ns  = 0;
+        uint64_t last_epoch = 0;
+        bool     seen       = false;
+    };
+    std::mutex mono_mutex;
+    std::unordered_map<int64_t, MonoState> mono_streams;
+
+    // CLIENT-mode (shmem) discontinuity-epoch approximation.  The shmem offset
+    // path has no local ClockSync, so we derive an epoch by watching the
+    // peer/Central offset for jumps larger than a smooth slew (Q1=b — best
+    // effort until the shmem layout carries a real epoch field).  Guarded by
+    // mono_mutex (only touched from the monotonic conversion path).
+    std::optional<int64_t> client_epoch_offset;
+    uint64_t client_epoch = 0;
+
+    uint64_t deriveClientEpoch(int64_t offset_ns) {  // mono_mutex held
+        constexpr int64_t kStepNs = 50'000'000;  // ~ClockSync slew_max_ns
+        if (client_epoch_offset &&
+            std::llabs(offset_ns - *client_epoch_offset) > kStepNs)
+            ++client_epoch;
+        client_epoch_offset = offset_ns;
+        return client_epoch;
+    }
+
+    // Current (offset, epoch) from whichever source getClockOffsetNs() would
+    // use, read together so a batch converts against one consistent regime.
+    std::optional<std::pair<int64_t, uint64_t>> currentOffsetAndEpoch() {  // mono_mutex held
+        if (device_session) {
+            auto off = device_session->getOffsetNs();
+            if (off) return std::make_pair(*off, device_session->syncEpoch());
+            return std::nullopt;
+        }
+        if (shmem_session) {
+            auto off = shmem_session->getClockOffsetNs();
+            if (off) return std::make_pair(*off, deriveClientEpoch(*off));
+        }
+        auto off = client_clock_sync.getOffsetNs();
+        if (off) return std::make_pair(*off, client_clock_sync.syncEpoch());
+        return std::nullopt;
+    }
 
     // Statistics — atomic counters, no mutex needed (Phase 2, Fix 9)
     struct AtomicStats {
@@ -901,35 +966,89 @@ Result<void> SdkSession::start() {
                     impl->last_clock_probe_time = now;
                 }
 
-                // If this NSP is using data-packet fallback, try to inject
-                // a peer HUB's probe-based offset into the ClockSync so
-                // that toLocalTime() uses it on the hot path.
-                constexpr int64_t DATA_FALLBACK_UNCERT = 700'000;
-                auto own_uncert = impl->device_session->getUncertaintyNs();
-                if (own_uncert && *own_uncert == DATA_FALLBACK_UNCERT &&
-                    (impl->config.device_type == DeviceType::NSP ||
-                     impl->config.device_type == DeviceType::LEGACY_NSP)) {
-                    if (!impl->peer_clock_attempted) {
-                        impl->peer_clock_attempted = true;
-                        for (auto hub : {DeviceType::HUB1, DeviceType::HUB2, DeviceType::HUB3}) {
-                            std::string name = getNativeSegmentName(hub, "config");
-                            if (impl->peer_clock.tryOpen(name))
-                                break;
+                // Cross-device clock consensus.  Devices that share one PTP
+                // clock should report the same device->host offset.  Each device
+                // publishes its own (independent) estimate; here we combine this
+                // device's estimate with every peer's and use the median, so a
+                // transiently-biased device is outvoted instead of skewing time
+                // conversion.  All participants read the same set of published
+                // estimates and therefore converge on the same median.
+                // Consensus needs >=3 participants to reject one outlier; with
+                // fewer, an NSP still borrows a HUB's offset (its own probes are
+                // unreliable) and other device types keep their own estimate.
+                //
+                // Only Gemini devices (NSP + HUBs) share one PTP clock.
+                // Non-Gemini devices (legacy NSP, nPlay, custom) have
+                // independent clocks and must not be averaged together, so they
+                // skip consensus/borrow entirely.
+                const DeviceType self_type = impl->config.device_type;
+                const bool shares_ptp_clock =
+                    self_type == DeviceType::NSP  ||
+                    self_type == DeviceType::HUB1 || self_type == DeviceType::HUB2 ||
+                    self_type == DeviceType::HUB3;
+                if (shares_ptp_clock) {
+                    if (!impl->peer_hubs_init) {
+                        impl->peer_hubs_init = true;
+                        for (auto dt : {DeviceType::NSP, DeviceType::HUB1,
+                                        DeviceType::HUB2, DeviceType::HUB3}) {
+                            if (dt == impl->config.device_type)
+                                continue;  // skip self
+                            impl->peer_hubs.push_back(
+                                {getNativeSegmentName(dt, "config"),
+                                 std::make_unique<PeerClockReader>()});
                         }
                     }
-                    auto peer_offset = impl->peer_clock.getClockOffsetNs();
-                    auto peer_uncert = impl->peer_clock.getClockUncertaintyNs();
-                    if (peer_offset) {
-                        impl->device_session->setExternalClockOffset(peer_offset, peer_uncert);
+
+                    // Collect peer votes; track the lowest-uncertainty peer for
+                    // the <3-participant fallback.
+                    std::vector<int64_t> votes;
+                    std::optional<int64_t> best_peer_offset;
+                    std::optional<int64_t> best_peer_uncert;
+                    int64_t best_peer_uncert_val = INT64_MAX;
+                    for (auto& ph : impl->peer_hubs) {
+                        if (!ph.reader->isOpen())
+                            ph.reader->tryOpen(ph.segment);
+                        // Vote on the peer's own (pre-consensus) estimate so the
+                        // median can track real common-mode drift.
+                        auto offset = ph.reader->getRawOffsetNs();
+                        if (!offset)
+                            continue;
+                        votes.push_back(*offset);
+                        auto uncert = ph.reader->getClockUncertaintyNs();
+                        const int64_t uncert_val = uncert ? *uncert : INT64_MAX;
+                        if (!best_peer_offset || uncert_val < best_peer_uncert_val) {
+                            best_peer_offset = offset;
+                            best_peer_uncert = uncert;
+                            best_peer_uncert_val = uncert_val;
+                        }
+                    }
+                    // This device's own independent vote.
+                    if (auto own = impl->device_session->getInternalOffsetNs())
+                        votes.push_back(*own);
+
+                    if (votes.size() >= 3) {
+                        std::sort(votes.begin(), votes.end());
+                        const int64_t median = votes[votes.size() / 2];
+                        impl->device_session->setExternalClockOffset(median);
+                    } else if (impl->config.device_type == DeviceType::NSP &&
+                               best_peer_offset) {
+                        // Too few for consensus: a Gemini NSP still borrows a HUB.
+                        impl->device_session->setExternalClockOffset(best_peer_offset, best_peer_uncert);
                     } else {
                         impl->device_session->setExternalClockOffset(std::nullopt);
                     }
                 }
 
-                // Propagate clock sync offset to shmem for CLIENT mode readers
-                if (auto offset = impl->device_session->getOffsetNs()) {
+                // Publish two offsets: the committed (post-consensus) value in
+                // clock_offset_ns for CLIENT-mode readers, and this device's own
+                // (pre-consensus) estimate in clock_raw_offset_ns for peers to
+                // vote on.
+                {
                     auto uncertainty = impl->device_session->getUncertaintyNs().value_or(0);
-                    impl->shmem_session->setClockSync(*offset, uncertainty);
+                    if (auto committed = impl->device_session->getOffsetNs())
+                        impl->shmem_session->setClockSync(*committed, uncertainty);
+                    if (auto internal = impl->device_session->getInternalOffsetNs())
+                        impl->shmem_session->setClockRawOffset(*internal);
                 }
 
                 // Signal CLIENT processes that new data is available
@@ -2176,6 +2295,51 @@ SdkSession::toLocalTime(uint64_t device_time_ns) const {
         }
     }
     return std::nullopt;
+}
+
+bool SdkSession::toLocalTimeBatch(int64_t stream_id,
+                                  const uint64_t* device_ns,
+                                  int64_t* out_steady_ns,
+                                  size_t n) const {
+    if (n == 0) return true;
+    if (!device_ns || !out_steady_ns) return false;
+
+    // Stateless fast path: one offset, plain subtraction, no per-stream state.
+    if (stream_id < 0) {
+        const auto offset = getClockOffsetNs();
+        if (!offset) return false;
+        for (size_t i = 0; i < n; ++i)
+            out_steady_ns[i] = static_cast<int64_t>(device_ns[i]) - *offset;
+        return true;
+    }
+
+    // Monotonic path: take a single (offset, epoch) snapshot and the floor map
+    // under one lock so the whole batch sees one consistent clock regime.
+    std::lock_guard<std::mutex> lock(m_impl->mono_mutex);
+    const auto oe = m_impl->currentOffsetAndEpoch();
+    if (!oe) return false;
+    const int64_t  offset = oe->first;
+    const uint64_t epoch  = oe->second;
+
+    auto& st = m_impl->mono_streams[stream_id];  // lazy-create (seen == false)
+    for (size_t i = 0; i < n; ++i) {
+        const int64_t raw = static_cast<int64_t>(device_ns[i]) - offset;
+        // Reset the floor on the first conversion for this stream or whenever
+        // the clock regime changed; otherwise clamp to a non-decreasing floor.
+        const int64_t out = (!st.seen || epoch != st.last_epoch)
+                                ? raw
+                                : std::max(raw, st.floor_ns);
+        st.floor_ns = out;
+        st.last_epoch = epoch;
+        st.seen = true;
+        out_steady_ns[i] = out;
+    }
+    return true;
+}
+
+void SdkSession::resetMonotonic(int64_t stream_id) {
+    std::lock_guard<std::mutex> lock(m_impl->mono_mutex);
+    m_impl->mono_streams.erase(stream_id);
 }
 
 std::optional<uint64_t>

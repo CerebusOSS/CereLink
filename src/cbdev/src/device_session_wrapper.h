@@ -226,8 +226,16 @@ public:
         return m_device.getOffsetNs();
     }
 
+    [[nodiscard]] std::optional<int64_t> getInternalOffsetNs() const override {
+        return m_device.getInternalOffsetNs();
+    }
+
     [[nodiscard]] std::optional<int64_t> getUncertaintyNs() const override {
         return m_device.getUncertaintyNs();
+    }
+
+    [[nodiscard]] uint64_t syncEpoch() const override {
+        return m_device.syncEpoch();
     }
 
     void setExternalClockOffset(std::optional<int64_t> offset_ns,

@@ -256,8 +256,11 @@ class Session:
         self._callback_refs: list = []
         self._lock = threading.Lock()
         self._closed = False
-        # Calibrate monotonic ↔ steady_clock offset for device_to_monotonic()
+        # Calibrate monotonic ↔ steady_clock offset for device_to_monotonic().
+        # Re-measured on drift (e.g. across host sleep); see
+        # _maybe_recalibrate_monotonic().
         self._mono_to_steady_offset_ns = self._calibrate_monotonic_offset()
+        self._last_recal_probe_mono_ns = _time.monotonic_ns()
 
     def __enter__(self):
         return self
@@ -1614,6 +1617,12 @@ class Session:
 
     # --- Clock Synchronization ---
 
+    # Re-measure the monotonic↔steady offset when the two clocks drift.  A cheap
+    # one-sample probe runs at most this often (monotonic ns); a full
+    # re-calibration runs only when the probe shows drift past the threshold.
+    _RECAL_PROBE_INTERVAL_NS = 1_000_000_000  # 1 s
+    _RECAL_DRIFT_THRESHOLD_NS = 1_000_000  # 1 ms
+
     @staticmethod
     def _calibrate_monotonic_offset(n_samples: int = 21) -> int:
         """Compute offset between time.monotonic() and C++ steady_clock.
@@ -1650,6 +1659,32 @@ class Session:
             return 0
         return offset
 
+    def _maybe_recalibrate_monotonic(self) -> None:
+        """Re-measure the monotonic↔steady offset if the clocks have drifted.
+
+        The offset is measured once at session creation, but the two clocks can
+        diverge over a long session — most notably across host sleep on macOS,
+        where steady_clock (mach_continuous_time) advances during sleep while
+        time.monotonic() (mach_absolute_time) does not. Elapsed monotonic time
+        therefore cannot detect sleep, so we periodically take a cheap one-sample
+        measurement of the current offset and trigger a full re-calibration only
+        when it has drifted past the threshold.
+
+        GIL-safe without locking: a race only causes a redundant (idempotent)
+        re-calibration.
+        """
+        now_mono = _time.monotonic_ns()
+        if now_mono - self._last_recal_probe_mono_ns < self._RECAL_PROBE_INTERVAL_NS:
+            return
+        self._last_recal_probe_mono_ns = now_mono
+        steady_ns = _get_lib().cbsdk_get_steady_clock_ns()
+        current_offset = steady_ns - now_mono
+        if (
+            abs(current_offset - self._mono_to_steady_offset_ns)
+            >= self._RECAL_DRIFT_THRESHOLD_NS
+        ):
+            self._mono_to_steady_offset_ns = self._calibrate_monotonic_offset()
+
     @property
     def clock_offset_ns(self) -> Optional[int]:
         """Clock offset in nanoseconds (device_ns - host_ns), or None if unavailable."""
@@ -1677,15 +1712,62 @@ class Session:
             "Failed to send clock probe",
         )
 
-    def device_to_monotonic(self, device_time_ns: int) -> float:
+    def device_to_monotonic_batch(self, device_ns, stream_id: int = -1) -> list[float]:
+        """Convert a batch of device timestamps to ``time.monotonic()`` seconds.
+
+        The whole batch is converted inside the library against one consistent
+        clock snapshot (device_ns → steady_clock_ns), then the steady_clock →
+        monotonic offset is applied here.  This is the efficient path for
+        per-batch stamping and the only way to get monotonicity enforcement.
+
+        Args:
+            device_ns: Iterable of device timestamps in nanoseconds.
+            stream_id: Per-stream key controlling monotonicity.  When ``>= 0``,
+                each output is clamped to be non-decreasing relative to the
+                previous conversion request on the *same* ``stream_id`` — except
+                across a genuine clock re-sync, where the floor resets so the
+                timeline follows the new regime instead of stalling.  The
+                natural key is the sample group (e.g. one id for the 30 kHz raw
+                stream, another for 1 kHz); use a distinct id per derived stream.
+                ``-1`` (default) is a stateless conversion with no clamping —
+                use it for spikes and one-off lookups.  Monotonic streams assume
+                timestamps are submitted in intended-output order.
+
+        Returns:
+            List of ``time.monotonic()`` values in seconds, one per input.
+
+        Raises:
+            RuntimeError: If no clock sync data is available yet.
+        """
+        self._maybe_recalibrate_monotonic()
+        device_list = [int(t) for t in device_ns]
+        n = len(device_list)
+        if n == 0:
+            return []
+        inp = ffi.new("uint64_t[]", device_list)
+        out = ffi.new("int64_t[]", n)
+        result = _get_lib().cbsdk_session_to_local_time(
+            self._session, stream_id, inp, out, n
+        )
+        if result != 0:
+            raise RuntimeError("No clock sync data available")
+        k = self._mono_to_steady_offset_ns
+        return [(out[i] - k) / 1_000_000_000 for i in range(n)]
+
+    def device_to_monotonic(self, device_time_ns: int, stream_id: int = -1) -> float:
         """Convert a device timestamp to ``time.monotonic()`` seconds.
 
         Chains two offsets:
-        1. device_ns → steady_clock_ns  (via clock_offset_ns from device sync)
+        1. device_ns → steady_clock_ns  (via the device clock sync)
         2. steady_clock_ns → monotonic_ns  (via calibration at session creation)
 
         Args:
             device_time_ns: Device timestamp in nanoseconds (e.g., header.time).
+            stream_id: Per-stream monotonicity key; ``-1`` (default) is a
+                stateless conversion.  See :meth:`device_to_monotonic_batch` for
+                the monotonicity semantics; for a stream you want kept monotonic,
+                stamp each batch through that method (or pass a stable
+                ``stream_id`` here) rather than mixing ids.
 
         Returns:
             Corresponding ``time.monotonic()`` value in seconds.
@@ -1701,12 +1783,18 @@ class Session:
                 latency_ms = (time.monotonic() - t) * 1000
                 print(f"Spike latency: {latency_ms:.1f} ms")
         """
-        offset = self.clock_offset_ns
-        if offset is None:
-            raise RuntimeError("No clock sync data available")
-        steady_ns = device_time_ns - offset
-        mono_ns = steady_ns - self._mono_to_steady_offset_ns
-        return mono_ns / 1_000_000_000
+        return self.device_to_monotonic_batch([device_time_ns], stream_id)[0]
+
+    def reset_monotonic(self, stream_id: int) -> None:
+        """Drop the monotonic floor/epoch state for one ``stream_id``.
+
+        The next monotonic conversion on that stream starts fresh.  No-op if the
+        stream is unknown.
+        """
+        _check(
+            _get_lib().cbsdk_session_reset_monotonic(self._session, stream_id),
+            "Failed to reset monotonic state",
+        )
 
     # --- Commands ---
 

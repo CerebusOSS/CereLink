@@ -769,6 +769,32 @@ public:
     std::optional<uint64_t>
         toDeviceTime(std::chrono::steady_clock::time_point local_time) const;
 
+    /// Convert a batch of device timestamps (nanoseconds) to host steady_clock
+    /// nanoseconds, optionally enforcing per-stream monotonicity.
+    ///
+    /// The whole batch is converted against one consistent (offset, epoch)
+    /// snapshot.  When @p stream_id >= 0, each output is clamped to be
+    /// non-decreasing relative to the previous conversion *request* on that same
+    /// stream_id — except across a clock re-sync (discontinuity epoch change),
+    /// where the floor is reset so the timeline follows the new regime instead
+    /// of stalling.  Pass @p stream_id < 0 for a stateless conversion (no
+    /// clamping).  Monotonic streams assume in-order submission per stream_id;
+    /// state is created lazily and lives until resetMonotonic() or session end.
+    ///
+    /// @param stream_id   Opaque per-stream key (e.g. sample group); <0 = stateless
+    /// @param device_ns   Input device timestamps (n entries)
+    /// @param out_steady_ns Output host steady_clock nanoseconds (n entries)
+    /// @param n           Number of timestamps
+    /// @return true on success; false if no clock sync data is available
+    bool toLocalTimeBatch(int64_t stream_id,
+                          const uint64_t* device_ns,
+                          int64_t* out_steady_ns,
+                          size_t n) const;
+
+    /// Drop the monotonic floor/epoch state for one stream_id (next monotonic
+    /// conversion on it starts fresh).  No-op if the stream is unknown.
+    void resetMonotonic(int64_t stream_id);
+
     /// Send a clock synchronization probe to the device.
     /// @return Result indicating success or error
     Result<void> sendClockProbe();

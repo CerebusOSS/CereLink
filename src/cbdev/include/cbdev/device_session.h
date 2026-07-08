@@ -26,6 +26,33 @@
 
 namespace cbdev {
 
+/// @brief Convert a raw device timestamp to nanoseconds.
+///
+/// Gemini devices report timestamps already in nanoseconds (no-op here). Other
+/// processors (e.g. nPlay) report sample-count *ticks* that must be scaled by
+/// the reduced 1e9/sysfreq fraction (@p ts_convert_num / @p ts_convert_den).
+///
+/// Every clock-sync input -- the NPLAYREP probe, the bulk data-delivery
+/// conversion, and the data-packet fallback -- MUST pass its raw timestamp
+/// through this one function so they all share a single time domain. Feeding raw
+/// ticks where nanoseconds are expected yields an offset of roughly -host_clock
+/// and poisons the clock-sync estimate (see CereLink #185/#186 follow-up).
+///
+/// @param raw_timestamp           Raw device timestamp (ns on Gemini, ticks otherwise).
+/// @param timestamps_are_nanoseconds  True for Gemini; the value is returned unchanged.
+/// @param ts_convert_num          Numerator of the reduced 1e9/sysfreq fraction.
+/// @param ts_convert_den          Denominator; <= 1 disables conversion.
+/// @return The timestamp in nanoseconds.
+inline uint64_t deviceTimestampToNs(uint64_t raw_timestamp,
+                                    bool timestamps_are_nanoseconds,
+                                    uint64_t ts_convert_num,
+                                    uint64_t ts_convert_den) {
+    if (!timestamps_are_nanoseconds && ts_convert_den > 1) {
+        return raw_timestamp * ts_convert_num / ts_convert_den;
+    }
+    return raw_timestamp;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Callback Types for Receive Thread
 /// @{
@@ -326,9 +353,19 @@ public:
     /// @return Offset in nanoseconds, or nullopt if no sync data available
     [[nodiscard]] virtual std::optional<int64_t> getOffsetNs() const = 0;
 
+    /// Offset from this device's own evidence only (ignores any injected
+    /// external/peer offset) — an independent vote for cross-device consensus.
+    /// @return Offset in nanoseconds, or nullopt if no sync data available
+    [[nodiscard]] virtual std::optional<int64_t> getInternalOffsetNs() const = 0;
+
     /// Uncertainty (half-RTT) from best probe, or INT64_MAX for one-way only.
     /// @return Uncertainty in nanoseconds, or nullopt if no sync data available
     [[nodiscard]] virtual std::optional<int64_t> getUncertaintyNs() const = 0;
+
+    /// Discontinuity epoch — advances whenever the committed clock offset steps
+    /// to a new regime (re-acquire / step / wrap), never on a smooth slew.
+    /// Consumers reset post-conversion monotonic floors when this changes.
+    [[nodiscard]] virtual uint64_t syncEpoch() const = 0;
 
     /// Inject an externally-determined offset (e.g., from a peer device).
     /// When set, overrides internal probe/data estimates in toLocalTime().
