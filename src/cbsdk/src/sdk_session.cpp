@@ -317,8 +317,13 @@ struct SdkSession::Impl {
             return shmem_session->getChanInfo(chan_id - 1);
         }
         // Fallback to device_config (no shmem available)
-        if (device_session)
-            return Result<cbPKT_CHANINFO>::ok(*device_session->getChanInfo(chan_id));
+        if (device_session) {
+            const auto* chaninfo = device_session->getChanInfo(chan_id);
+            if (!chaninfo) {
+                return Result<cbPKT_CHANINFO>::error("Failed to get channel information");
+            }
+            return Result<cbPKT_CHANINFO>::ok(*chaninfo);
+        }
         return Result<cbPKT_CHANINFO>::error("Channel information not available");
     }
 
