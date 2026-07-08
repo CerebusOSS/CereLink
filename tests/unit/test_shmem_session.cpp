@@ -32,7 +32,8 @@ class ShmemSessionTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Use unique names for each test to avoid conflicts
-        test_name = "test_shmem_" + std::to_string(test_counter++);
+        // s = shmem
+        test_name = "s" + std::to_string(test_counter++);
     }
 
     void TearDown() override {
@@ -787,12 +788,13 @@ TEST_F(ShmemSessionTest, StorePacket_NM_TrackableObject) {
 class NativeShmemSessionTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        test_name = "test_native_" + std::to_string(test_counter++);
+        // n = native
+        test_name = "n" + std::to_string(test_counter++);
     }
 
     // Helper to create a native STANDALONE session
     Result<ShmemSession> createNativeSession() {
-        return ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
+        return ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     }
 
     std::string test_name;
@@ -1186,12 +1188,13 @@ TEST_F(NativeShmemSessionTest, NumTotalChans) {
 class CentralCompatShmemSessionTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        test_name = "test_compat_" + std::to_string(test_counter++);
+        // c = compat
+        test_name = "c" + std::to_string(test_counter++);
     }
 
     // Helper to create a CENTRAL STANDALONE session (for testing)
     Result<ShmemSession> createCompatSession() {
-        return ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
+        return ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     }
 
     std::string test_name;
@@ -1252,8 +1255,7 @@ TEST_F(CentralCompatShmemSessionTest, SetInstrumentActive_ReturnsError) {
 
 TEST_F(CentralCompatShmemSessionTest, SetAndGetProcInfo) {
     // A CENTRAL session targets a single instrument; create one for instrument 2.
-    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL,
-                                       test_name + "_cfg", InstrumentId::fromOneBased(2));
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL, test_name, InstrumentId::fromOneBased(2));
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
@@ -1346,8 +1348,7 @@ TEST_F(CentralCompatShmemSessionTest, SetAndGetChanInfo) {
 TEST_F(CentralCompatShmemSessionTest, InstrumentFilter_ReturnsOwnInstrument) {
     // A session bound to instrument 2 should only see instrument-2 packets when
     // reading the (shared) receive buffer.
-    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL,
-                                       test_name + "_cfg", InstrumentId::fromIndex(2));
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL, test_name, InstrumentId::fromIndex(2));
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
@@ -1415,11 +1416,12 @@ TEST_F(CentralCompatShmemSessionTest, TransmitQueueRoundTrip) {
 class CentralCompatProtocolTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        test_name = "test_proto_" + std::to_string(test_counter++);
+        // p = proto
+        test_name = "p" + std::to_string(test_counter++);
     }
 
     Result<ShmemSession> createCompatSession() {
-        return ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
+        return ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     }
 
     std::string test_name;
@@ -1490,8 +1492,7 @@ TEST_F(CentralCompatProtocolTest, ReadCurrentFormat_WithRealisticTimestamps) {
 /// @brief Test readReceiveBuffer's implicit per-instrument filtering with current-format packets
 TEST_F(CentralCompatProtocolTest, InstrumentFilterWithCurrentProtocol) {
     // Bind the session to instrument 3; readReceiveBuffer returns only its packets.
-    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL,
-                                       test_name + "_cfg", InstrumentId::fromIndex(3));
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL, test_name, InstrumentId::fromIndex(3));
     ASSERT_TRUE(result.isOk()) << result.error();
     auto& session = result.value();
 
@@ -1555,7 +1556,7 @@ TEST_F(CentralCompatProtocolTest, TransmitRoundTrip_CurrentProtocol) {
 /// @brief Non-compat layout always detects CURRENT protocol
 TEST_F(CentralCompatProtocolTest, NativeLayout_AlwaysCurrent) {
     std::string name = test_name;
-    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk()) << result.error();
     EXPECT_EQ(result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
 }
@@ -1563,7 +1564,7 @@ TEST_F(CentralCompatProtocolTest, NativeLayout_AlwaysCurrent) {
 /// @brief CENTRAL layout always detects CURRENT protocol
 TEST_F(CentralCompatProtocolTest, CentralLayout_AlwaysCurrent) {
     std::string name = test_name;
-    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL, name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::CENTRAL, name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk()) << result.error();
     EXPECT_EQ(result.value().getCompatProtocolVersion(), CBPROTO_PROTOCOL_CURRENT);
 }
@@ -1577,7 +1578,8 @@ TEST_F(CentralCompatProtocolTest, CentralLayout_AlwaysCurrent) {
 class OwnerLivenessTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        test_name = "test_liveness_" + std::to_string(test_counter++);
+        // l = liveness
+        test_name = "l" + std::to_string(test_counter++);
     }
 
     std::string test_name;
@@ -1587,7 +1589,7 @@ protected:
 int OwnerLivenessTest::test_counter = 0;
 
 TEST_F(OwnerLivenessTest, StandaloneWritesOwnerPid) {
-    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk()) << result.error();
 
     auto* cfg = result.value().getNativeConfigBuffer();
@@ -1600,7 +1602,7 @@ TEST_F(OwnerLivenessTest, StandaloneWritesOwnerPid) {
 }
 
 TEST_F(OwnerLivenessTest, StandaloneAlwaysReturnsTrue) {
-    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk()) << result.error();
 
     // isOwnerAlive() is only meaningful for CLIENT — STANDALONE always returns true
@@ -1609,11 +1611,11 @@ TEST_F(OwnerLivenessTest, StandaloneAlwaysReturnsTrue) {
 
 TEST_F(OwnerLivenessTest, ClientDetectsLiveOwner) {
     // Create STANDALONE (sets owner_pid to current process)
-    auto standalone = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
+    auto standalone = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(standalone.isOk()) << standalone.error();
 
     // Create CLIENT on same segments
-    auto client = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
+    auto client = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(client.isOk()) << client.error();
 
     // Owner (this process) is alive
@@ -1622,7 +1624,7 @@ TEST_F(OwnerLivenessTest, ClientDetectsLiveOwner) {
 
 TEST_F(OwnerLivenessTest, ClientDetectsDeadOwner) {
     // Create STANDALONE, then set a fake dead PID
-    auto standalone = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
+    auto standalone = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(standalone.isOk()) << standalone.error();
 
     // Overwrite owner_pid with a PID that (almost certainly) doesn't exist
@@ -1631,7 +1633,7 @@ TEST_F(OwnerLivenessTest, ClientDetectsDeadOwner) {
     cfg->owner_pid = 4000000000u;  // Well above any real PID
 
     // Create CLIENT on same segments
-    auto client = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
+    auto client = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(client.isOk()) << client.error();
 
     // Owner PID doesn't exist — should detect as dead
@@ -1640,7 +1642,7 @@ TEST_F(OwnerLivenessTest, ClientDetectsDeadOwner) {
 
 TEST_F(OwnerLivenessTest, ClientTreatsZeroPidAsAlive) {
     // Create STANDALONE, then clear owner_pid to simulate pre-liveness segments
-    auto standalone = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
+    auto standalone = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(standalone.isOk()) << standalone.error();
 
     auto* cfg = standalone.value().getNativeConfigBuffer();
@@ -1648,7 +1650,7 @@ TEST_F(OwnerLivenessTest, ClientTreatsZeroPidAsAlive) {
     cfg->owner_pid = 0;
 
     // Create CLIENT on same segments
-    auto client = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name + "_cfg", cbproto::InstrumentId::fromOneBased(cbNSP1));
+    auto client = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(client.isOk()) << client.error();
 
     // PID 0 = unknown — assume alive (backward compat)
