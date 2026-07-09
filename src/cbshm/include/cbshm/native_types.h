@@ -119,6 +119,12 @@ typedef struct {
 
     // Ownership tracking (written by STANDALONE at creation, read by CLIENT for liveness check)
     uint32_t owner_pid;             ///< PID of STANDALONE process that created this segment (0 = unknown)
+    uint32_t owner_reserved;        ///< Reserved (keeps segment_uid 8-byte aligned)
+    uint64_t segment_uid;           ///< Per-creation id of this segment instance (0 = unknown).
+                                    ///< Changes every time the owner unlinks + recreates the segment
+                                    ///< under the same name, so a CLIENT can detect that the segment it
+                                    ///< mapped has been superseded — something owner_pid cannot see when a
+                                    ///< persistent service (constant PID) tears down and recreates sessions.
 
     // This device's OWN (pre-consensus) offset estimate, written for peer
     // cross-device consensus voting.  Distinct from clock_offset_ns, which is

@@ -43,6 +43,8 @@
 #include <cbshm/central_version.h>
 #include <cbshm/native_types.h>
 #include <cbproto/packet_translator.h>
+#include <atomic>
+#include <chrono>
 #include <memory>
 #include <cstring>
 #include <numeric>  // std::gcd
@@ -133,6 +135,28 @@ inline SegmentNames makeSegmentNames(ShmemLayout layout, const std::string& name
             "cbSIGNALevent" + suffix
         };
     }
+}
+
+// Generate a per-creation identifier for a shared-memory segment.  Written into
+// NativeConfigBuffer.segment_uid by the STANDALONE owner at creation so a CLIENT
+// can tell whether the segment it mapped is still the one the name resolves to.
+//
+// (POSIX inode would be the natural id, but macOS returns st_ino == 0 for shm
+// fds, so we mint a portable token instead: a high-resolution clock stamp mixed
+// with the PID and a process-local counter — distinct across recreations by the
+// same process and across processes.)
+inline uint64_t makeSegmentUid() {
+    static std::atomic<uint64_t> counter{0};
+    const uint64_t c = counter.fetch_add(1, std::memory_order_relaxed) + 1;
+    const uint64_t t = static_cast<uint64_t>(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+#ifdef _WIN32
+    const uint64_t pid = static_cast<uint64_t>(GetCurrentProcessId());
+#else
+    const uint64_t pid = static_cast<uint64_t>(getpid());
+#endif
+    uint64_t uid = t ^ (pid * 0x9E3779B97F4A7C15ull) ^ (c * 0xD1B54A32D192ED03ull);
+    return uid ? uid : 1;  // never 0 (0 means "unknown")
 }
 
 } // namespace
@@ -613,11 +637,15 @@ struct ShmemSession::Impl {
             std::memset(cfg, 0, cfg_buffer_size);
             cfg->version = cbVERSION_MAJOR * 100 + cbVERSION_MINOR;
             cfg->instrument_status = static_cast<uint32_t>(InstrumentStatus::INACTIVE);
+            // Ownership + per-creation identity.  owner_pid detects a crashed owner;
+            // segment_uid detects a live owner that recreated this segment under the
+            // same name (a persistent service keeps its PID, so only the uid changes).
 #ifdef _WIN32
             cfg->owner_pid = GetCurrentProcessId();
 #else
             cfg->owner_pid = static_cast<uint32_t>(getpid());
 #endif
+            cfg->segment_uid = makeSegmentUid();
 
             // Initialize receive buffer
             std::memset(rec_buffer_raw, 0, rec_buffer_size);
@@ -804,6 +832,46 @@ struct ShmemSession::Impl {
             return 30000; // default
         }
         return sysinfo.sysfreq;
+    }
+
+    /// @brief Read the segment_uid of whatever the config-buffer name resolves to
+    ///        right now (a fresh open, independent of our existing mapping).
+    ///
+    /// Returns nullopt if the name no longer exists (owner unlinked it).  Compared
+    /// by isOwnerAlive() against the uid stored in our mapped buffer to detect a
+    /// segment that has been superseded since we attached.
+    std::optional<uint64_t> readCurrentSegmentUid() const {
+#ifdef _WIN32
+        HANDLE h = OpenFileMappingA(FILE_MAP_READ, FALSE, cfg_name.c_str());
+        if (!h) {
+            return std::nullopt;  // Name gone => segment was destroyed
+        }
+        void* p = MapViewOfFile(h, FILE_MAP_READ, 0, 0, cfg_buffer_size);
+        if (!p) {
+            CloseHandle(h);
+            return std::nullopt;
+        }
+        uint64_t uid = static_cast<const NativeConfigBuffer*>(p)->segment_uid;
+        UnmapViewOfFile(p);
+        CloseHandle(h);
+        return uid;
+#else
+        std::string posix_name = (cfg_name[0] == '/') ? cfg_name : ("/" + cfg_name);
+        int fd = shm_open(posix_name.c_str(), O_RDONLY, 0);
+        if (fd < 0) {
+            return std::nullopt;  // Name gone => segment was destroyed
+        }
+        // macOS returns st_ino == 0 for shm fds, so we can't use the inode as the
+        // id — map the current segment and read the uid the owner stamped in.
+        void* p = mmap(nullptr, cfg_buffer_size, PROT_READ, MAP_SHARED, fd, 0);
+        ::close(fd);
+        if (p == MAP_FAILED) {
+            return std::nullopt;
+        }
+        uint64_t uid = static_cast<const NativeConfigBuffer*>(p)->segment_uid;
+        munmap(p, cfg_buffer_size);
+        return uid;
+#endif
     }
 };
 
@@ -2158,6 +2226,21 @@ bool ShmemSession::isOwnerAlive() const {
     if (m_impl->layout != ShmemLayout::NATIVE)
         return true;
 
+    // Supersession check: is the segment we mapped still the one this name
+    // resolves to?  A persistent owner (e.g. a long-running service) keeps the
+    // same PID across sessions, so owner_pid stays "alive" even after it has
+    // torn down our segment and created a fresh one under the same name.  The
+    // per-creation segment_uid distinguishes the instances.
+    uint64_t my_uid = m_impl->nativeCfg()->segment_uid;
+    if (my_uid != 0) {
+        std::optional<uint64_t> cur_uid = m_impl->readCurrentSegmentUid();
+        if (!cur_uid.has_value() || *cur_uid != my_uid)
+            return false;  // Name unlinked, or replaced by a newer segment — stale
+    }
+
+    // Crash-orphan check: the owner may have died without unlinking, leaving the
+    // same segment behind.  segment_uid can't see that (inode is unchanged), so
+    // fall back to probing the recorded PID.
     uint32_t pid = m_impl->nativeCfg()->owner_pid;
     if (pid == 0)
         return true;  // Pre-liveness segments or unknown — assume alive

@@ -273,13 +273,21 @@ public:
     /// @return uncertainty in nanoseconds, or nullopt if no sync data
     std::optional<int64_t> getClockUncertaintyNs() const;
 
-    /// @brief Check if the STANDALONE owner of these segments is still alive
+    /// @brief Check whether the segments this CLIENT mapped are still live and current
     ///
-    /// For NATIVE CLIENT mode, reads owner_pid from the config buffer and checks
-    /// if that process still exists. Returns true in all other cases (STANDALONE mode,
-    /// non-NATIVE layout, or unknown PID).
+    /// For NATIVE CLIENT mode, applies two checks against the config buffer:
+    ///  - Supersession: compares the per-creation @c segment_uid in our mapped
+    ///    buffer against the uid of whatever the segment name resolves to now.
+    ///    A mismatch (or a missing name) means the owner unlinked our segment and
+    ///    created a fresh one under the same name — undetectable via @c owner_pid
+    ///    when a persistent service keeps the same PID across sessions.
+    ///  - Crash-orphan: probes @c owner_pid to catch an owner that died without
+    ///    unlinking (segment_uid is unchanged in that case).
     ///
-    /// @return false if the owner process is confirmed dead (stale segments), true otherwise
+    /// Returns true in all other cases (STANDALONE mode, non-NATIVE layout, or an
+    /// unknown/zero uid and PID).
+    ///
+    /// @return false if the segments are stale (superseded or owner dead), true otherwise
     bool isOwnerAlive() const;
 
     /// @}
