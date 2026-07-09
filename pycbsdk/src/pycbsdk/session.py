@@ -720,7 +720,10 @@ class Session:
         _lib = _get_lib()
         buf_len = _lib.cbsdk_session_get_channel_label_length()
         buf = ffi.new(f"char[{buf_len}]")
-        if _lib.cbsdk_session_get_channel_label(self._session, chan_id, buf, buf_len) < 0:
+        written = _lib.cbsdk_session_get_channel_label(
+            self._session, chan_id, buf, buf_len
+        )
+        if written < 0:
             return None
         return ffi.string(buf).decode()
 
@@ -828,7 +831,10 @@ class Session:
         _lib = _get_lib()
         buf_len = _lib.cbsdk_session_get_group_label_length()
         buf = ffi.new(f"char[{buf_len}]")
-        if _lib.cbsdk_session_get_group_label(self._session, group_id, buf, buf_len) < 0:
+        written = _lib.cbsdk_session_get_group_label(
+            self._session, group_id, buf, buf_len
+        )
+        if written < 0:
             return None
         return ffi.string(buf).decode()
 
@@ -1932,7 +1938,10 @@ class Session:
         _lib = _get_lib()
         buf_len = _lib.cbsdk_session_get_filter_label_length()
         buf = ffi.new(f"char[{buf_len}]")
-        if _lib.cbsdk_session_get_filter_label(self._session, filter_id, buf, buf_len) < 0:
+        written = _lib.cbsdk_session_get_filter_label(
+            self._session, filter_id, buf, buf_len
+        )
+        if written < 0:
             return None
         return {
             "label": ffi.string(buf).decode(),
