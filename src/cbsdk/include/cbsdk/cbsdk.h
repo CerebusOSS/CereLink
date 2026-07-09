@@ -442,12 +442,18 @@ CBSDK_API uint32_t cbsdk_get_num_fe_chans(void);
 /// @return cbNUM_ANALOG_CHANS (compile-time constant)
 CBSDK_API uint32_t cbsdk_get_num_analog_chans(void);
 
+/// Get the buffer size required to store a channel label.
+/// @return cbLEN_STR_LABEL + 1 (label field width plus the null terminator)
+CBSDK_API uint32_t cbsdk_session_get_channel_label_length(void);
+
 /// Get a channel's label
 /// @param session Session handle (must not be NULL)
 /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
-/// @return Pointer to null-terminated label string, or NULL if invalid.
-///         Pointer is valid for the lifetime of the session.
-CBSDK_API const char* cbsdk_session_get_channel_label(cbsdk_session_t session, uint32_t chan_id);
+/// @param buf Output buffer for the label string (null-terminated on success)
+/// @param buf_size Size of the output buffer in bytes
+/// @return Number of bytes written (excluding null terminator), or -1 if unavailable
+CBSDK_API int32_t cbsdk_session_get_channel_label(
+    cbsdk_session_t session, uint32_t chan_id, char* buf, uint32_t buf_size);
 
 /// Get a channel's sample group assignment
 /// @param session Session handle (must not be NULL)
@@ -539,11 +545,18 @@ CBSDK_API int64_t cbsdk_session_get_channel_field(
     uint32_t chan_id,
     cbsdk_chaninfo_field_t field);
 
+/// Get the buffer size required to store a group label.
+/// @return cbLEN_STR_LABEL + 1 (label field width plus the null terminator)
+CBSDK_API uint32_t cbsdk_session_get_group_label_length(void);
+
 /// Get a sample group's label
 /// @param session Session handle (must not be NULL)
 /// @param group_id Group ID (1-6)
-/// @return Pointer to null-terminated label string, or NULL if invalid
-CBSDK_API const char* cbsdk_session_get_group_label(cbsdk_session_t session, uint32_t group_id);
+/// @param buf Output buffer for the label string (null-terminated on success)
+/// @param buf_size Size of the output buffer in bytes
+/// @return Number of bytes written (excluding null terminator), or -1 if unavailable
+CBSDK_API int32_t cbsdk_session_get_group_label(
+    cbsdk_session_t session, uint32_t group_id, char* buf, uint32_t buf_size);
 
 /// Get the list of channels in a sample group
 /// @param session Session handle (must not be NULL)
@@ -819,11 +832,18 @@ CBSDK_API uint32_t cbsdk_session_get_sysfreq(cbsdk_session_t session);
 /// @return cbMAXFILTS (compile-time constant)
 CBSDK_API uint32_t cbsdk_get_num_filters(void);
 
+/// Get the buffer size required to store a filter label.
+/// @return cbLEN_STR_FILT_LABEL + 1 (label field width plus the null terminator)
+CBSDK_API uint32_t cbsdk_session_get_filter_label_length(void);
+
 /// Get a filter's label
 /// @param session Session handle (must not be NULL)
 /// @param filter_id Filter ID (0 to cbMAXFILTS-1)
-/// @return Pointer to label string, or NULL if invalid
-CBSDK_API const char* cbsdk_session_get_filter_label(cbsdk_session_t session, uint32_t filter_id);
+/// @param buf Output buffer for the label string (null-terminated on success)
+/// @param buf_size Size of the output buffer in bytes
+/// @return Number of bytes written (excluding null terminator), or -1 if unavailable
+CBSDK_API int32_t cbsdk_session_get_filter_label(
+    cbsdk_session_t session, uint32_t filter_id, char* buf, uint32_t buf_size);
 
 /// Get a filter's high-pass corner frequency
 /// @param session Session handle (must not be NULL)

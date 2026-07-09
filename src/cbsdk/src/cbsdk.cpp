@@ -16,6 +16,7 @@
 #include "cbsdk/sdk_session.h"
 #include <chrono>
 #include <csignal>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -694,15 +695,21 @@ uint32_t cbsdk_get_num_analog_chans(void) {
     return cbNUM_ANALOG_CHANS;
 }
 
-const char* cbsdk_session_get_channel_label(cbsdk_session_t session, uint32_t chan_id) {
-    if (!session || !session->cpp_session) {
-        return nullptr;
-    }
+uint32_t cbsdk_session_get_channel_label_length(void) {
+    return cbLEN_STR_LABEL + 1;  // + null terminator
+}
+
+int32_t cbsdk_session_get_channel_label(
+    cbsdk_session_t session, uint32_t chan_id, char* buf, uint32_t buf_size) {
+    if (!session || !session->cpp_session || !buf || buf_size == 0) return -1;
     try {
         auto info = session->cpp_session->getChanInfo(chan_id);
-        return info.isOk() ? info.value().label : nullptr;
+        if (info.isError()) return -1;
+        auto written = std::snprintf(buf, buf_size, "%.*s", static_cast<int>(std::size(info.value().label)), info.value().label);
+        if (written < 0) return -1;
+        return written < buf_size ? written : buf_size - 1;  // clamp if truncated
     } catch (...) {
-        return nullptr;
+        return -1;
     }
 }
 
@@ -872,15 +879,21 @@ int64_t cbsdk_session_get_channel_field(
     } catch (...) { return 0; }
 }
 
-const char* cbsdk_session_get_group_label(cbsdk_session_t session, uint32_t group_id) {
-    if (!session || !session->cpp_session) {
-        return nullptr;
-    }
+uint32_t cbsdk_session_get_group_label_length(void) {
+    return cbLEN_STR_LABEL + 1;  // + null terminator
+}
+
+int32_t cbsdk_session_get_group_label(
+    cbsdk_session_t session, uint32_t group_id, char* buf, uint32_t buf_size) {
+    if (!session || !session->cpp_session || !buf || buf_size == 0) return -1;
     try {
         auto info = session->cpp_session->getGroupInfo(group_id);
-        return info.isOk() ? info.value().label : nullptr;
+        if (info.isError()) return -1;
+        auto written = std::snprintf(buf, buf_size, "%.*s", static_cast<int>(std::size(info.value().label)), info.value().label);
+        if (written < 0) return -1;
+        return written < buf_size ? written : buf_size - 1;  // clamp if truncated
     } catch (...) {
-        return nullptr;
+        return -1;
     }
 }
 
@@ -1236,12 +1249,20 @@ uint32_t cbsdk_get_num_filters(void) {
     return cbMAXFILTS;
 }
 
-const char* cbsdk_session_get_filter_label(cbsdk_session_t session, uint32_t filter_id) {
-    if (!session || !session->cpp_session) return nullptr;
+uint32_t cbsdk_session_get_filter_label_length(void) {
+    return cbLEN_STR_FILT_LABEL + 1;  // + null terminator
+}
+
+int32_t cbsdk_session_get_filter_label(
+    cbsdk_session_t session, uint32_t filter_id, char* buf, uint32_t buf_size) {
+    if (!session || !session->cpp_session || !buf || buf_size == 0) return -1;
     try {
         auto info = session->cpp_session->getFilterInfo(filter_id);
-        return info.isOk() ? info.value().label : nullptr;
-    } catch (...) { return nullptr; }
+        if (info.isError()) return -1;
+        auto written = std::snprintf(buf, buf_size, "%.*s", static_cast<int>(std::size(info.value().label)), info.value().label);
+        if (written < 0) return -1;
+        return written < buf_size ? written : buf_size - 1;  // clamp if truncated
+    } catch (...) { return -1; }
 }
 
 uint32_t cbsdk_session_get_filter_hpfreq(cbsdk_session_t session, uint32_t filter_id) {

@@ -718,10 +718,11 @@ class Session:
     def get_channel_label(self, chan_id: int) -> Optional[str]:
         """Get a channel's label (1-based channel ID)."""
         _lib = _get_lib()
-        ptr = _lib.cbsdk_session_get_channel_label(self._session, chan_id)
-        if ptr == ffi.NULL:
+        buf_len = _lib.cbsdk_session_get_channel_label_length()
+        buf = ffi.new(f"char[{buf_len}]")
+        if _lib.cbsdk_session_get_channel_label(self._session, chan_id, buf, buf_len) < 0:
             return None
-        return ffi.string(ptr).decode()
+        return ffi.string(buf).decode()
 
     def get_channel_smpgroup(self, chan_id: int) -> int:
         """Get a channel's sample group (0 = disabled, 1-6)."""
@@ -825,10 +826,11 @@ class Session:
     def get_group_label(self, group_id: int) -> Optional[str]:
         """Get a sample group's label (group_id 1-6)."""
         _lib = _get_lib()
-        ptr = _lib.cbsdk_session_get_group_label(self._session, group_id)
-        if ptr == ffi.NULL:
+        buf_len = _lib.cbsdk_session_get_group_label_length()
+        buf = ffi.new(f"char[{buf_len}]")
+        if _lib.cbsdk_session_get_group_label(self._session, group_id, buf, buf_len) < 0:
             return None
-        return ffi.string(ptr).decode()
+        return ffi.string(buf).decode()
 
     def get_group_channels(self, group_id: int) -> list[int]:
         """Get the list of channel IDs in a sample group."""
@@ -1928,11 +1930,12 @@ class Session:
             ``lporder``. Frequencies are in milliHertz. Returns None if invalid.
         """
         _lib = _get_lib()
-        ptr = _lib.cbsdk_session_get_filter_label(self._session, filter_id)
-        if ptr == ffi.NULL:
+        buf_len = _lib.cbsdk_session_get_filter_label_length()
+        buf = ffi.new(f"char[{buf_len}]")
+        if _lib.cbsdk_session_get_filter_label(self._session, filter_id, buf, buf_len) < 0:
             return None
         return {
-            "label": ffi.string(ptr).decode(),
+            "label": ffi.string(buf).decode(),
             "hpfreq": _lib.cbsdk_session_get_filter_hpfreq(self._session, filter_id),
             "hporder": _lib.cbsdk_session_get_filter_hporder(self._session, filter_id),
             "lpfreq": _lib.cbsdk_session_get_filter_lpfreq(self._session, filter_id),
