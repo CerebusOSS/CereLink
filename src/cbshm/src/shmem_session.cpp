@@ -231,6 +231,14 @@ struct ShmemSession::Impl {
     CentralVersion central_version;
     cbproto_protocol_version_t compat_protocol;
 
+    // NATIVE-layout segment identity captured at attach (0 = unknown).  Compared
+    // against the current named segment's uid in isOwnerAlive() to detect a
+    // segment that was recreated under the same name after we attached.  Must be
+    // a snapshot, not a live read of the buffer: on Windows a recreate reuses the
+    // same object and overwrites the uid in place, so a live read would always
+    // match itself.
+    uint64_t attached_segment_uid;
+
     // Typed accessor for config buffer
     NativeConfigBuffer* nativeCfg() {
         return static_cast<NativeConfigBuffer*>(cfg_buffer_raw);
@@ -277,6 +285,7 @@ struct ShmemSession::Impl {
         , rec_tailwrap(0)
         , central_version(CentralVersion::CURRENT)
         , compat_protocol(CBPROTO_PROTOCOL_CURRENT)
+        , attached_segment_uid(0)
     {}
 
     ~Impl() {
@@ -708,6 +717,13 @@ struct ShmemSession::Impl {
         }
 
         is_open = true;
+
+        // Snapshot the segment identity we attached to (STANDALONE has just
+        // written it in initBuffers(); CLIENT reads what the owner wrote).  Used
+        // by isOwnerAlive() to detect later supersession.
+        if (layout == ShmemLayout::NATIVE && cfg_buffer_raw) {
+            attached_segment_uid = nativeCfg()->segment_uid;
+        }
 
         // In CLIENT mode, sync our read position to the current head so we only
         // read NEW packets, not stale data that was already in the ring buffer.
@@ -2231,7 +2247,12 @@ bool ShmemSession::isOwnerAlive() const {
     // same PID across sessions, so owner_pid stays "alive" even after it has
     // torn down our segment and created a fresh one under the same name.  The
     // per-creation segment_uid distinguishes the instances.
-    uint64_t my_uid = m_impl->nativeCfg()->segment_uid;
+    //
+    // Compare the uid we captured at attach against the current named segment's
+    // uid.  We must use the captured snapshot, not a live read of our mapped
+    // buffer: on Windows a recreate reuses the same object and overwrites the
+    // uid in place, so a live-vs-current comparison would always match.
+    uint64_t my_uid = m_impl->attached_segment_uid;
     if (my_uid != 0) {
         std::optional<uint64_t> cur_uid = m_impl->readCurrentSegmentUid();
         if (!cur_uid.has_value() || *cur_uid != my_uid)

@@ -1642,10 +1642,8 @@ TEST_F(OwnerLivenessTest, ClientDetectsDeadOwner) {
 }
 
 TEST_F(OwnerLivenessTest, StandaloneWritesSegmentUid) {
-    auto result = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name,
+                                           cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(result.isOk()) << result.error();
 
     auto* cfg = result.value().getNativeConfigBuffer();
@@ -1653,18 +1651,22 @@ TEST_F(OwnerLivenessTest, StandaloneWritesSegmentUid) {
     EXPECT_NE(cfg->segment_uid, 0ull);
 }
 
+#ifndef _WIN32
+// POSIX-only: an owner "unlinking" its segment removes the name immediately
+// (shm_unlink), so a client's fresh open by name fails.  Windows has no unlink —
+// a named mapping persists as long as any handle is open, so an owner that
+// merely closes (without recreating) leaves the name and memory intact and the
+// client legitimately still sees a current segment.  That case is covered by
+// the crash-orphan (owner_pid) path or, mid-stream, by the client noticing the
+// data stall (see the pycbsdk liveness follow-up).
 TEST_F(OwnerLivenessTest, ClientDetectsUnlinkedSegment) {
     // Owner creates the segment; client attaches (records uid N1).
-    auto standalone = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    auto standalone = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name,
+                                           cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(standalone.isOk()) << standalone.error();
 
-    auto client = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::CLIENT, ShmemLayout::NATIVE);
+    auto client = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name,
+                                           cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(client.isOk()) << client.error();
     EXPECT_TRUE(client.value().isOwnerAlive());  // segment is current
 
@@ -1676,19 +1678,16 @@ TEST_F(OwnerLivenessTest, ClientDetectsUnlinkedSegment) {
     }
     EXPECT_FALSE(client.value().isOwnerAlive());
 }
+#endif  // !_WIN32
 
 TEST_F(OwnerLivenessTest, ClientDetectsSupersededSegment) {
     // Owner creates the segment (uid N1); client attaches.
-    auto standalone1 = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    auto standalone1 = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name,
+                                           cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(standalone1.isOk()) << standalone1.error();
 
-    auto client = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::CLIENT, ShmemLayout::NATIVE);
+    auto client = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name,
+                                           cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(client.isOk()) << client.error();
     EXPECT_TRUE(client.value().isOwnerAlive());
 
@@ -1698,17 +1697,13 @@ TEST_F(OwnerLivenessTest, ClientDetectsSupersededSegment) {
     {
         ShmemSession owner1 = std::move(standalone1.value());
     }
-    auto standalone2 = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::STANDALONE, ShmemLayout::NATIVE);
+    auto standalone2 = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name,
+                                           cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(standalone2.isOk()) << standalone2.error();
 
     // A fresh client on the new segment sees it as current...
-    auto client2 = ShmemSession::create(
-        test_name + "_cfg", test_name + "_rec", test_name + "_xmt",
-        test_name + "_xmt_local", test_name + "_status", test_name + "_spk",
-        test_name + "_signal", Mode::CLIENT, ShmemLayout::NATIVE);
+    auto client2 = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name,
+                                           cbproto::InstrumentId::fromOneBased(cbNSP1));
     ASSERT_TRUE(client2.isOk()) << client2.error();
     EXPECT_TRUE(client2.value().isOwnerAlive());
 
