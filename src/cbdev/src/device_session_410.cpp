@@ -98,20 +98,6 @@ Result<int> DeviceSession_410::receivePackets(void* buffer, const size_t buffer_
     return Result<int>::ok(static_cast<int>(offset));
 }
 
-Result<void> DeviceSession_410::sendPacket(const cbPKT_GENERIC& pkt) {
-    // Formats are nearly identical.
-    // Nevertheless, the src pkt is const so we make a copy to modify.
-    cbPKT_GENERIC new_pkt;
-    std::memcpy(&new_pkt, &pkt, sizeof(cbPKT_GENERIC));
-    auto* pkt_bytes = reinterpret_cast<uint8_t*>(&new_pkt);
-    const size_t dest_dlen = PacketTranslator::translatePayload_current_to_410(pkt, pkt_bytes);
-    new_pkt.cbpkt_header.dlen = dest_dlen;
-    const size_t packet_size_410 = HEADER_SIZE_410 + new_pkt.cbpkt_header.dlen * 4;
-
-    // Send raw bytes directly via the device's sendRaw method
-    return m_device.sendRaw(pkt_bytes, packet_size_410);
-}
-
 Result<void> DeviceSession_410::sendRaw(const void* buffer, const size_t size) {
     // Pass through to underlying device
     return m_device.sendRaw(buffer, size);

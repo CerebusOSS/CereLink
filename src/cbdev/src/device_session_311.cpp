@@ -137,32 +137,6 @@ Result<int> DeviceSession_311::receivePackets(void* buffer, const size_t buffer_
     return Result<int>::ok(static_cast<int>(dest_offset));
 }
 
-Result<void> DeviceSession_311::sendPacket(const cbPKT_GENERIC& pkt) {
-    // Translate current format to 3.11 format
-    uint8_t dest[cbPKT_MAX_SIZE];
-
-    if (pkt.cbpkt_header.type > 0xFF) {
-        return Result<void>::error("Packet type too large for protocol 3.11 (max 255)");
-    }
-    if (pkt.cbpkt_header.dlen > 0xFF) {
-        return Result<void>::error("Packet dlen too large for protocol 3.11 (max 255)");
-    }
-
-    // -- Header --
-    auto& dest_header = *reinterpret_cast<cbPKT_HEADER_311*>(&dest[0]);
-    dest_header.time = static_cast<uint32_t>(pkt.cbpkt_header.time * 30000 / 1000000000);
-    dest_header.chid = pkt.cbpkt_header.chid;
-    dest_header.type = static_cast<uint8_t>(pkt.cbpkt_header.type);  // Narrowing!
-    dest_header.dlen = static_cast<uint8_t>(pkt.cbpkt_header.dlen);  // Narrowing!
-
-    // -- Payload --
-    const size_t dest_dlen = PacketTranslator::translatePayload_current_to_311(pkt, dest);
-    dest_header.dlen = dest_dlen;
-
-    // Send raw bytes directly via the device's sendRaw method
-    return m_device.sendRaw(dest, HEADER_SIZE_311 + dest_header.dlen * 4);
-}
-
 Result<void> DeviceSession_311::sendRaw(const void* buffer, const size_t size) {
     // Pass through to underlying device
     return m_device.sendRaw(buffer, size);

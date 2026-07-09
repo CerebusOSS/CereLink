@@ -62,9 +62,6 @@ public:
     /// Receive packets from device and translate from 4.0 to current format
     Result<int> receivePackets(void* buffer, size_t buffer_size) override;
 
-    /// Send packet to device, translating from current to 4.0 format
-    Result<void> sendPacket(const cbPKT_GENERIC& pkt) override;
-
     /// Send raw bytes (pass-through to underlying device)
     Result<void> sendRaw(const void* buffer, size_t size) override;
 
@@ -76,7 +73,11 @@ public:
 private:
     /// Private constructor taking a DeviceSession
     explicit DeviceSession_400(DeviceSession&& device)
-        : DeviceSessionWrapper(std::move(device)) {}
+        : DeviceSessionWrapper(std::move(device)) {
+        // Outbound packets (incl. those from delegated config helpers) are
+        // down-translated to 4.0 by the wrapped session.
+        m_device.setSendProtocol(ProtocolVersion::PROTOCOL_400);
+    }
 };
 
 } // namespace cbdev

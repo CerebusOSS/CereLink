@@ -133,35 +133,6 @@ Result<int> DeviceSession_400::receivePackets(void* buffer, const size_t buffer_
     return Result<int>::ok(static_cast<int>(dest_offset));
 }
 
-Result<void> DeviceSession_400::sendPacket(const cbPKT_GENERIC& pkt) {
-    // Translate current format to 4.0 format
-    uint8_t temp_buffer[cbPKT_MAX_SIZE];
-
-    // -- Header --
-    // Read current format header fields
-    ///   When going from current to 4.0, we fix the header as follows:
-    ///   1. Read 16-bit type from bytes 11-12, shift right 8 bits to get 8-bit type, set on byte 11.
-    ///   2. Read dlen from bytes 13-14, write to bytes 12-13.
-    ///   3. Read instrument from byte 15, write to byte 14.
-    ///   4. Read reserved from byte 16, write to bytes 15-16 as 16-bit.
-    auto& dest_header = *reinterpret_cast<cbPKT_HEADER_400*>(temp_buffer);
-    dest_header.time = pkt.cbpkt_header.time;  // TODO: What if we are using time ticks, not nanoseconds?
-    dest_header.chid = pkt.cbpkt_header.chid;
-    dest_header.type = static_cast<uint8_t>(pkt.cbpkt_header.type);
-    dest_header.dlen = pkt.cbpkt_header.dlen;
-    dest_header.instrument = pkt.cbpkt_header.instrument;
-    dest_header.reserved = static_cast<uint16_t>(pkt.cbpkt_header.reserved);
-
-    // -- Payload --
-    auto* dest_payload = &temp_buffer[HEADER_SIZE_400];
-    const size_t dest_dlen = PacketTranslator::translatePayload_current_to_400(pkt, dest_payload);
-    dest_header.dlen = dest_dlen;
-    const size_t packet_size_400 = HEADER_SIZE_400 + dest_header.dlen * 4;
-
-    // Send raw bytes directly via the device's sendRaw method
-    return m_device.sendRaw(temp_buffer, packet_size_400);
-}
-
 Result<void> DeviceSession_400::sendRaw(const void* buffer, const size_t size) {
     // Pass through to underlying device
     return m_device.sendRaw(buffer, size);
