@@ -540,7 +540,6 @@ void Adapter::toLegacy(cbPKT_PROCINFO& leg, const ::cbPKT_PROCINFO& cur) const {
     toLegacy(leg.cbpkt_header, cur.cbpkt_header);
     leg.proc = cur.proc;
     leg.idcode = cur.idcode;
-    leg.idcode = cur.idcode;
     copyArr(leg.ident, cur.ident);
     leg.chanbase = cur.chanbase;
     leg.chancount = cur.chancount;
