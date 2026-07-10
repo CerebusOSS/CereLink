@@ -1112,11 +1112,11 @@ cbutil::Result<void> Adapter::setGroupInfo(uint32_t group_idx, const ::cbPKT_GRO
 }
 
 cbutil::Result<void> Adapter::setNspStatus(const NativeNSPStatus& status) const {
-    return cbutil::Result<void>::error("Central v3.11 does not have fields for NSP status");
+    return cbutil::Result<void>::error("Central v7.0 (protocol 3.11) does not have fields for NSP status");
 }
 
 cbutil::Result<void> Adapter::setGeminiSystem(bool is_gemini) const {
-    return cbutil::Result<void>::error("Central v3.11 does not recognize Gemini systems");
+    return cbutil::Result<void>::error("Central v7.0 (protocol 3.11) does not recognize Gemini systems");
 }
 
 } // namespace central_v7_0
