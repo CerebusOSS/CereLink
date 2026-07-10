@@ -1767,12 +1767,42 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
     uint32_t* buf = m_impl->adapter->getRecBufferPtr();
     uint32_t buflen = m_impl->rec_buffer_len;
 
-    // Acquire-load: pairs with the producer's release-store of head_index in
-    // writeToReceiveBuffer.  Without this, on weak memory architectures
-    // (ARM/Apple Silicon) we can observe an advanced head_index but stale or
-    // partial packet bytes, leading to misaligned reads of the ring buffer.
-    uint32_t head_index = shm_load_acquire_u32(&m_impl->adapter->getRecHeadindexPtr());
-    uint32_t head_wrap = shm_load_relaxed_u32(&m_impl->adapter->getRecHeadwrapPtr());
+    // Read a (head_index, head_wrap) snapshot.
+    //
+    // The producer publishes these as two separate words and, on a wrap, bumps
+    // head_wrap *before* republishing head_index (see writeToReceiveBuffer).
+    // There is no ordering of two independent stores that keeps the combined
+    // position (head_wrap * buflen + head_index) monotonic across a wrap, so a
+    // naive read can observe a torn pair (e.g. the old index with the new wrap),
+    // which corrupts the overrun math and drops tail off a packet boundary.
+    //
+    // The acquire-load on head_index also pairs with the producer's
+    // release-store, so on weak memory architectures (ARM/Apple Silicon) we
+    // don't observe an advanced index with stale packet bytes.  The seqlock-
+    // style retry shrinks the torn-pair window; because it cannot close it
+    // entirely, the loop below additionally validates every packet and resyncs
+    // to head on any anomaly instead of trusting the pair (see resyncToHead).
+    auto loadHeadSnapshot = [&](uint32_t& idx_out, uint32_t& wrap_out) {
+        for (;;) {
+            uint32_t i1 = shm_load_acquire_u32(&m_impl->adapter->getRecHeadindexPtr());
+            uint32_t w = shm_load_acquire_u32(&m_impl->adapter->getRecHeadwrapPtr());
+            uint32_t i2 = shm_load_acquire_u32(&m_impl->adapter->getRecHeadindexPtr());
+            if (i1 == i2) { idx_out = i1; wrap_out = w; return; }
+        }
+    };
+
+    // Fail-safe recovery: our tail no longer points at a packet boundary
+    // (the producer lapped us, or we observed a torn head snapshot across a
+    // wrap).  Jump tail to the current head and report the loss, rather than
+    // advancing by a garbage size and delivering misinterpreted bytes to user
+    // callbacks.
+    auto resyncToHead = [&](const char* msg) -> Result<void> {
+        loadHeadSnapshot(m_impl->rec_tailindex, m_impl->rec_tailwrap);
+        return Result<void>::error(msg);
+    };
+
+    uint32_t head_index, head_wrap;
+    loadHeadSnapshot(head_index, head_wrap);
 
     if (m_impl->rec_tailwrap == head_wrap && m_impl->rec_tailindex == head_index) {
         return Result<void>::ok();
@@ -1809,9 +1839,7 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
 
         if ((m_impl->rec_tailwrap + 1 == head_wrap && m_impl->rec_tailindex < head_index) ||
             (m_impl->rec_tailwrap + 1 < head_wrap)) {
-            m_impl->rec_tailindex = head_index;
-            m_impl->rec_tailwrap = head_wrap;
-            return Result<void>::error("Receive buffer overrun - data lost");
+            return resyncToHead("Receive buffer overrun - data lost");
         }
 
         // Parse the packet header to determine packet size based on protocol version.
@@ -1851,12 +1879,9 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
         uint32_t pkt_size_dwords = raw_header_32size + raw_dlen;
 
         if (pkt_size_dwords == 0 || pkt_size_dwords > (sizeof(cbPKT_GENERIC) / sizeof(uint32_t))) {
-            m_impl->rec_tailindex++;
-            if (m_impl->rec_tailindex >= buflen) {
-                m_impl->rec_tailindex = 0;
-                m_impl->rec_tailwrap++;
-            }
-            continue;
+            // Implausible size => tail is off a packet boundary.  Fail safe
+            // rather than byte-scanning through garbage.
+            return resyncToHead("Receive buffer desync - data lost");
         }
 
         if (needs_translation) {
@@ -1934,6 +1959,22 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
         if (needs_ts_conversion) {
             packets[packets_read].cbpkt_header.time =
                 packets[packets_read].cbpkt_header.time * ts_num / ts_den;
+        }
+
+        // Fail-safe validation: a header that can't belong to a real packet
+        // means tail drifted off a packet boundary (producer lapped us, or a
+        // torn head snapshot across a wrap).  Real packets have the high byte of
+        // `type` clear, and chid is a channel (0 group sample, up to 0x0FFF) or
+        // the configuration channel (0x8000).  Resync to head and drop instead
+        // of advancing by a garbage size and scanning more garbage into the
+        // user callbacks.
+        {
+            const uint16_t vchid = packets[packets_read].cbpkt_header.chid;
+            const uint16_t vtype = packets[packets_read].cbpkt_header.type;
+            if ((vtype & 0xFF00) != 0 ||
+                (vchid > 0x0FFF && vchid != cbPKTCHAN_CONFIGURATION)) {
+                return resyncToHead("Receive buffer desync - data lost");
+            }
         }
 
         // Advance tail past this packet (consumed from ring buffer regardless of filter)
