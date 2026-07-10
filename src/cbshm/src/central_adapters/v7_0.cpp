@@ -461,9 +461,17 @@ void Adapter::fromLegacy(NativePCStatus& cur, const cbPcStatus& leg) const {
     cur.m_nNumSerialChans = leg.m_nNumSerialChans;
     cur.m_nNumDigoutChans = leg.m_nNumDigoutChans;
     cur.m_nNumTotalChans = leg.m_nNumTotalChans;
-    cur.m_nNspStatus = NativeNSPStatus::NSP_FOUND; // TODO: VERIFY
-    cur.m_nNumNTrodesPerInstrument = cbMAXNTRODES; // TODO: VERIFY
-    cur.m_nGeminiSystem = 1; // TODO: VERIFY
+    // Central considers the NSP "found" once the corresponding sysinfo packet is received.
+    cur.m_nNspStatus = cfg->sysinfo.cbpkt_header.chid == 0
+        ? NativeNSPStatus::NSP_INIT
+        : NativeNSPStatus::NSP_FOUND;
+    cur.m_nNumNTrodesPerInstrument = 0;
+    for (uint32_t n = 0; n < cbMAXNTRODES; ++n) {
+        // Central considers an N-Trode slot valid when its packet header chid is non-zero.
+        if (cfg->isNTrodeInfo[n].cbpkt_header.chid != 0)
+            ++cur.m_nNumNTrodesPerInstrument;
+    }
+    cur.m_nGeminiSystem = 0; // 7.0.x predates Gemini hardware.
 }
 
 void Adapter::fromLegacy(NativeReceiveBuffer& cur, const cbRECBUFF& leg) const {
