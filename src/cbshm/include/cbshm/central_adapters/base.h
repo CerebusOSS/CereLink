@@ -25,6 +25,8 @@ namespace cbshm {
 ///
 class CentralBootstrapAdapterBase {
 public:
+    virtual ~CentralBootstrapAdapterBase() = default;
+
     // Buffer sizes
     virtual size_t getConfigBufferSize() const = 0;
     virtual size_t getReceiveBufferSize() const = 0;
@@ -89,7 +91,7 @@ protected:
     }
 
     template<typename LHS_T, size_t lhs_ny, size_t lhs_nx, typename RHS_T, size_t rhs_ny, size_t rhs_nx, class A>
-    static const void copyArr2D(LHS_T(&lhs)[lhs_ny][lhs_nx], const RHS_T(&rhs)[rhs_ny][rhs_nx], const A* adapter, void(A::*translation_func)(LHS_T&, const RHS_T&) const) {
+    static void copyArr2D(LHS_T(&lhs)[lhs_ny][lhs_nx], const RHS_T(&rhs)[rhs_ny][rhs_nx], const A* adapter, void(A::*translation_func)(LHS_T&, const RHS_T&) const) {
         if (lhs_ny <= rhs_ny) {
             for (size_t i = 0; i < lhs_ny; ++i) {
                 copyArr(lhs[i], rhs[i], adapter, translation_func);
