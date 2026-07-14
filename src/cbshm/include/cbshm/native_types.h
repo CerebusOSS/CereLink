@@ -111,10 +111,6 @@ typedef struct {
     // File recording status
     cbPKT_FILECFG fileinfo;                                     ///< File recording configuration
 
-    // Application UI configuration
-    cbOPTIONTABLE optiontable;                                  ///< Option table
-    cbCOLORTABLE colortable;                                    ///< Color table
-
     // Clock synchronization (written by STANDALONE, read by CLIENT)
     int64_t clock_offset_ns;        ///< device_ns - steady_clock_ns; the usable (consensus) offset for CLIENT readers (0 if unknown)
     int64_t clock_uncertainty_ns;   ///< Half-RTT uncertainty in nanoseconds (0 if unknown)

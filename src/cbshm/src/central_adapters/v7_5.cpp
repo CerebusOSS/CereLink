@@ -155,6 +155,7 @@ void Adapter::fromLegacy(::cbSCALING& cur, const cbSCALING& leg) const {
 }
 
 void Adapter::fromLegacy(::cbFILTDESC& cur, const cbFILTDESC& leg) const {
+    copyArr(cur.label, leg.label);
     cur.hpfreq = leg.hpfreq;
     cur.hporder = leg.hporder;
     cur.hptype = leg.hptype;
@@ -208,7 +209,7 @@ void Adapter::fromLegacy(::cbPKT_CHANINFO& cur, const cbPKT_CHANINFO& leg) const
     cur.outvalue = leg.outvalue; // aka offset
     cur.trigtype = leg.trigtype;
     // skip reserved
-    cur.triginst = 0; // TODO: VERIFY
+    cur.triginst = 0;
     cur.trigchan = leg.trigchan;
     cur.trigval = leg.trigval;
     cur.ainpopts = leg.ainpopts;
@@ -338,8 +339,8 @@ void Adapter::fromLegacy(::cbPKT_AOUT_WAVEFORM& cur, const cbPKT_AOUT_WAVEFORM& 
     cur.chan = leg.chan;
     cur.mode = leg.mode;
     cur.repeats = leg.repeats;
-    cur.trig = static_cast<uint8_t>((leg.trig >> 8) & 0xFF);
-    cur.trigInst = static_cast<uint8_t>(leg.trig & 0xFF);
+    cur.trig = leg.trig;
+    cur.trigInst = 0;
     cur.trigChan = leg.trigChan;
     cur.trigValue = leg.trigValue;
     cur.trigNum = leg.trigNum;
@@ -416,6 +417,14 @@ void Adapter::fromLegacy(NativeConfigBuffer& cur, const cbCFGBUFF& leg) const {
     copyArr(cur.isVideoSource, leg.isVideoSource, this, &Adapter::fromLegacy);
     copyArr(cur.isTrackObj, leg.isTrackObj, this, &Adapter::fromLegacy);
     fromLegacy(cur.fileinfo, leg.fileinfo);
+    // 0 = unknown/invalid
+    cur.clock_offset_ns = 0;
+    cur.clock_uncertainty_ns = 0;
+    cur.clock_sync_valid = 0;
+    cur.clock_sync_reserved = 0;
+    cur.owner_pid = 0;
+    cur.clock_raw_valid = 0;
+    cur.clock_raw_offset_ns = 0;
 }
 
 void Adapter::fromLegacy(NativeNSPStatus& cur, const NSPStatus& leg) const {
@@ -622,6 +631,7 @@ void Adapter::toLegacy(cbSCALING& leg, const ::cbSCALING& cur) const {
 }
 
 void Adapter::toLegacy(cbFILTDESC& leg, const ::cbFILTDESC& cur) const {
+    copyArr(leg.label, cur.label);
     leg.hpfreq = cur.hpfreq;
     leg.hporder = cur.hporder;
     leg.hptype = cur.hptype;
@@ -802,7 +812,7 @@ void Adapter::toLegacy(cbPKT_AOUT_WAVEFORM& leg, const ::cbPKT_AOUT_WAVEFORM& cu
     leg.chan = cur.chan;
     leg.mode = cur.mode;
     leg.repeats = cur.repeats;
-    leg.trig = (static_cast<uint16_t>(cur.trig) << 8) | static_cast<uint16_t>(cur.trigInst);
+    leg.trig = cur.trig;
     leg.trigChan = cur.trigChan;
     leg.trigValue = cur.trigValue;
     leg.trigNum = cur.trigNum;

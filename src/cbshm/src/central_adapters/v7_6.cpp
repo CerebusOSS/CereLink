@@ -155,6 +155,7 @@ void Adapter::fromLegacy(::cbSCALING& cur, const cbSCALING& leg) const {
 }
 
 void Adapter::fromLegacy(::cbFILTDESC& cur, const cbFILTDESC& leg) const {
+    copyArr(cur.label, leg.label);
     cur.hpfreq = leg.hpfreq;
     cur.hporder = leg.hporder;
     cur.hptype = leg.hptype;
@@ -416,6 +417,14 @@ void Adapter::fromLegacy(NativeConfigBuffer& cur, const cbCFGBUFF& leg) const {
     copyArr(cur.isVideoSource, leg.isVideoSource, this, &Adapter::fromLegacy);
     copyArr(cur.isTrackObj, leg.isTrackObj, this, &Adapter::fromLegacy);
     fromLegacy(cur.fileinfo, leg.fileinfo);
+    // 0 = unknown/invalid
+    cur.clock_offset_ns = 0;
+    cur.clock_uncertainty_ns = 0;
+    cur.clock_sync_valid = 0;
+    cur.clock_sync_reserved = 0;
+    cur.owner_pid = 0;
+    cur.clock_raw_valid = 0;
+    cur.clock_raw_offset_ns = 0;
 }
 
 void Adapter::fromLegacy(NativeNSPStatus& cur, const NSPStatus& leg) const {
@@ -621,6 +630,7 @@ void Adapter::toLegacy(cbSCALING& leg, const ::cbSCALING& cur) const {
 }
 
 void Adapter::toLegacy(cbFILTDESC& leg, const ::cbFILTDESC& cur) const {
+    copyArr(leg.label, cur.label);
     leg.hpfreq = cur.hpfreq;
     leg.hporder = cur.hporder;
     leg.hptype = cur.hptype;
