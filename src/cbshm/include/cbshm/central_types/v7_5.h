@@ -102,7 +102,7 @@ constexpr uint32_t AOUT_NUM_GAIN_CHANS = cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS
 
 /// Spike cache constants
 constexpr uint32_t cbPKT_SPKCACHEPKTCNT = 400;                          ///< Packets per channel cache
-constexpr uint32_t cbPKT_SPKCACHELINECNT = cbNUM_ANALOG_CHANS;          ///< One cache per channel (Central uses cbMAXCHANS, not cbNUM_ANALOG_CHANS)
+constexpr uint32_t cbPKT_SPKCACHELINECNT = cbMAXCHANS;          ///< One cache per channel (Central uses cbMAXCHANS, not cbNUM_ANALOG_CHANS)
 
 /// Receive buffer size
 constexpr uint32_t cbRECBUFFLEN = cbNUM_FE_CHANS * 32768 * 4;
@@ -135,7 +135,7 @@ typedef struct {
     uint8_t  type;        ///< Packet type
     uint16_t dlen;        ///< Length of data field in 32-bit chunks
     uint8_t  instrument;  ///< Instrument number (0-based in packet, despite cbNSP1=1!)
-    uint8_t  reserved;    ///< Reserved for future use
+    uint8_t  reserved[2]; ///< Reserved for future use
 } cbPKT_HEADER;
 
 constexpr uint32_t cbPKT_MAX_SIZE = 1024;                    ///< Maximum packet size in bytes

@@ -56,7 +56,7 @@ void Adapter::fromLegacy(::cbPKT_HEADER& cur, const cbPKT_HEADER& leg) const {
     cur.type = static_cast<uint16_t>(leg.type);
     cur.dlen = leg.dlen;
     cur.instrument = leg.instrument;
-    cur.reserved = leg.reserved;
+    cur.reserved = leg.reserved[0];
 }
 
 void Adapter::fromLegacy(::cbPKT_SYSINFO& cur, const cbPKT_SYSINFO& leg) const {
@@ -522,7 +522,8 @@ void Adapter::toLegacy(cbPKT_HEADER& leg, const ::cbPKT_HEADER& cur) const {
     leg.type = static_cast<uint8_t>(cur.type);
     leg.dlen = cur.dlen;
     leg.instrument = cur.instrument;
-    leg.reserved = cur.reserved;
+    leg.reserved[0] = cur.reserved;
+    leg.reserved[1] = 0;
 }
 
 void Adapter::toLegacy(cbPKT_SYSINFO& leg, const ::cbPKT_SYSINFO& cur) const {
