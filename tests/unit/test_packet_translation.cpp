@@ -262,10 +262,11 @@ TEST(CHANINFO_Translation, Pre410_to_Current_FieldExpansion) {
     size_t result_dlen = PacketTranslator::translate_CHANINFO_pre410_to_current(
         src_payload, &dest);
 
-    // Then: monsource narrowed to moninst, monchan=0, new fields zeroed
+    // Then: monsource split into moninst (low 16) and monchan (high 16), matching CCFUtilsBinary;
+    // new fields zeroed.
     EXPECT_EQ(dest.chan, 42u);
     EXPECT_EQ(dest.moninst, 0x5678u);  // Lower 16 bits of monsource
-    EXPECT_EQ(dest.monchan, 0u);       // New field
+    EXPECT_EQ(dest.monchan, 0x1234u);  // Upper 16 bits of monsource
     EXPECT_EQ(dest.reserved[0], 0u);   // New field
     EXPECT_EQ(dest.reserved[1], 0u);   // New field
     EXPECT_EQ(dest.triginst, 0u);      // New field
@@ -283,12 +284,14 @@ TEST(CHANINFO_Translation, Current_to_Pre410_FieldNarrowing) {
     size_t result_dlen = PacketTranslator::translate_CHANINFO_current_to_pre410(
         pkt_current, dest_payload);
 
-    // Then: chan preserved, moninst expanded to monsource, monchan/triginst dropped
+    // Then: chan preserved; moninst/monchan merged into monsource (low 16 / high 16); triginst dropped.
     uint32_t dest_chan = *reinterpret_cast<uint32_t*>(&dest_payload[0]);
     EXPECT_EQ(dest_chan, 42u);
 
-    // Find monsource field (at specific offset in structure)
-    // For simplicity, we'll verify the dlen change
+    constexpr size_t monsource_offset = offsetof(cbPKT_CHANINFO, moninst) - cbPKT_HEADER_SIZE;
+    uint32_t dest_monsource = *reinterpret_cast<uint32_t*>(&dest_payload[monsource_offset]);
+    EXPECT_EQ(dest_monsource, 0x56781234u);  // (monchan << 16) | moninst
+
     EXPECT_EQ(result_dlen, cbPKTDLEN_CHANINFO - 1u);
 }
 

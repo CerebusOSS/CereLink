@@ -204,8 +204,8 @@ void Adapter::fromLegacy(::cbPKT_CHANINFO& cur, const cbPKT_CHANINFO& leg) const
     cur.dinpopts = leg.dinpopts;
     cur.aoutopts = leg.aoutopts;
     cur.eopchar = leg.eopchar;
-    cur.moninst = static_cast<uint16_t>((leg.monsource >> 16) & 0xFFFF); // aka lowsamples
-    cur.monchan = static_cast<uint16_t>(leg.monsource & 0xFFFF); // aka highsamples
+    cur.moninst = static_cast<uint16_t>(leg.monsource & 0xFFFF); // aka lowsamples
+    cur.monchan = static_cast<uint16_t>(leg.monsource >> 16); // aka highsamples
     cur.outvalue = leg.outvalue; // aka offset
     cur.trigtype = leg.trigtype;
     // skip reserved
@@ -680,7 +680,7 @@ void Adapter::toLegacy(cbPKT_CHANINFO& leg, const ::cbPKT_CHANINFO& cur) const {
     leg.dinpopts = cur.dinpopts;
     leg.aoutopts = cur.aoutopts;
     leg.eopchar = cur.eopchar;
-    leg.monsource = (static_cast<uint32_t>(cur.moninst) << 16) | static_cast<uint32_t>(cur.monchan); // aka highsamples and lowsamples
+    leg.monsource = (static_cast<uint32_t>(cur.monchan) << 16) | static_cast<uint32_t>(cur.moninst); // aka highsamples and lowsamples
     leg.outvalue = cur.outvalue; // aka offset
     leg.trigtype = cur.trigtype;
     leg.trigchan = cur.trigchan;

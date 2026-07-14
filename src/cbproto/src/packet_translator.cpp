@@ -121,10 +121,11 @@ size_t cbproto::PacketTranslator::translate_CHANINFO_pre410_to_current(const uin
     constexpr size_t payload_to_union = offsetof(cbPKT_CHANINFO, eopchar) + sizeof(dest->eopchar) - cbPKT_HEADER_SIZE;
     std::memcpy(&dest->chan, src_payload, payload_to_union);
     size_t src_offset = payload_to_union;
-    // Narrow 3.11's uint32_t monsource to 4.1's uint16_t moninst, set uint16_t monchan to 0.
-    dest->moninst = static_cast<uint16_t>(*reinterpret_cast<const uint32_t*>(&src_payload[src_offset]));
+    // Split uint32_t monsource (3.11) into uint16_t moninst/monchan (4.1) to match CCFUtilsBinary.
+    uint32_t monsource = *reinterpret_cast<const uint32_t*>(&src_payload[src_offset]);
+    dest->moninst = static_cast<uint16_t>(monsource & 0xFFFF);
+    dest->monchan = static_cast<uint16_t>(monsource >> 16);
     src_offset += 4;
-    dest->monchan = 0;  // New field; set to 0.
     // outvalue and trigtype are unchanged
     dest->outvalue = *reinterpret_cast<const int32_t*>(&src_payload[src_offset]);
     src_offset += 4;
@@ -147,8 +148,9 @@ size_t cbproto::PacketTranslator::translate_CHANINFO_current_to_pre410(const cbP
     constexpr size_t payload_to_union = offsetof(cbPKT_CHANINFO, eopchar) + sizeof(pkt.eopchar) - cbPKT_HEADER_SIZE;
     memcpy(dest_payload, &pkt.chan, payload_to_union);
     size_t dest_offset = payload_to_union;
-    // Expand 4.1's uint16_t moninst to 3.11's uint32_t monsource; ignore uint16_t monchan.
-    *reinterpret_cast<uint32_t*>(&dest_payload[dest_offset]) = static_cast<uint32_t>(pkt.moninst);
+    // Merge uint16_t moninst/monchan (4.1) into uint32_t monsource (3.11) to match CCFUtilsBinary.
+    *reinterpret_cast<uint32_t*>(&dest_payload[dest_offset]) =
+        (static_cast<uint32_t>(pkt.monchan) << 16) | static_cast<uint32_t>(pkt.moninst);
     dest_offset += 4;
     // outvalue is unchanged
     *reinterpret_cast<int32_t*>(&dest_payload[dest_offset]) = pkt.outvalue;
