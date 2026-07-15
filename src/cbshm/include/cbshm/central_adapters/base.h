@@ -13,6 +13,7 @@
 #include <cstring>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <cbutil/result.h>
 #include <cbshm/native_types.h>
 #include <cbproto/types.h>
@@ -20,12 +21,18 @@
 
 namespace cbshm {
 
+struct CentralAdapterArgs;
+class CentralAdapterBase;
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Base-class adapter that provides information used to fetch pointers to Central's shared memory
 ///
 class CentralBootstrapAdapterBase {
 public:
     virtual ~CentralBootstrapAdapterBase() = default;
+
+    // Max instrument count
+    virtual uint32_t getMaxProcs() const = 0;
 
     // Buffer sizes
     virtual size_t getConfigBufferSize() const = 0;
@@ -37,6 +44,19 @@ public:
     virtual size_t getReceiveBufferLen() const = 0;
     virtual size_t getTransmitBufferLen() const = 0;
     virtual size_t getTransmitBufferLocalLen() const = 0;
+
+    // Adapter construction
+    virtual std::unique_ptr<CentralAdapterBase> makeAdapter(const CentralAdapterArgs& args) const = 0;
+};
+
+struct CentralAdapterArgs {
+    uint8_t instrument_idx;
+    void* cfg_ptr;
+    void* rec_ptr;
+    void* xmt_ptr;
+    void* xmt_local_ptr;
+    void* status_ptr;
+    void* spike_ptr;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -106,9 +126,6 @@ protected:
 
 public:
     virtual ~CentralAdapterBase() = default;
-
-    // Max instrument count
-    virtual uint32_t getMaxProcs() const = 0;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // DANGER !!!

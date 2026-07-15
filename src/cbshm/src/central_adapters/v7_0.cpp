@@ -14,6 +14,10 @@ namespace cbshm {
 
 namespace central_v7_0 {
 
+uint32_t BootstrapAdapter::getMaxProcs() const {
+    return cbMAXPROCS;
+}
+
 size_t BootstrapAdapter::getConfigBufferSize() const {
     return sizeof(cbCFGBUFF);
 }
@@ -48,6 +52,10 @@ size_t BootstrapAdapter::getTransmitBufferLen() const {
 
 size_t BootstrapAdapter::getTransmitBufferLocalLen() const {
     return cbXMT_LOCAL_BUFFLEN;
+}
+
+std::unique_ptr<CentralAdapterBase> BootstrapAdapter::makeAdapter(const CentralAdapterArgs& args) const {
+    return std::make_unique<Adapter>(args);
 }
 
 void Adapter::fromLegacy(::cbPKT_HEADER& cur, const cbPKT_HEADER& leg) const {
@@ -928,19 +936,15 @@ void Adapter::toLegacy(cbPKT_SPK& leg, const ::cbPKT_SPK& cur) const {
     copyArr(leg.wave, cur.wave);
 }
 
-Adapter::Adapter(uint8_t instrument_idx, void* cfg_ptr, void* rec_ptr, void* xmt_ptr, void* xmt_local_ptr, void* status_ptr, void* spike_ptr)
-    : instrument_idx(instrument_idx)
-    , cfg(static_cast<cbCFGBUFF*>(cfg_ptr))
-    , rec(static_cast<cbRECBUFF*>(rec_ptr))
-    , xmt(static_cast<cbXMTBUFF*>(xmt_ptr))
-    , xmt_local(static_cast<cbXMTBUFFLOCAL*>(xmt_local_ptr))
-    , status(static_cast<cbPcStatus*>(status_ptr))
-    , spike(static_cast<cbSPKBUFF*>(spike_ptr))
+Adapter::Adapter(const CentralAdapterArgs& args)
+    : instrument_idx(args.instrument_idx)
+    , cfg(static_cast<cbCFGBUFF*>(args.cfg_ptr))
+    , rec(static_cast<cbRECBUFF*>(args.rec_ptr))
+    , xmt(static_cast<cbXMTBUFF*>(args.xmt_ptr))
+    , xmt_local(static_cast<cbXMTBUFFLOCAL*>(args.xmt_local_ptr))
+    , status(static_cast<cbPcStatus*>(args.status_ptr))
+    , spike(static_cast<cbSPKBUFF*>(args.spike_ptr))
 {}
-
-uint32_t Adapter::getMaxProcs() const {
-    return cbMAXPROCS;
-}
 
 uint32_t& Adapter::getRecReceived() {
     return rec->received;

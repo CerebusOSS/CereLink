@@ -22,6 +22,9 @@ namespace central_v7_0 {
 ///
 class BootstrapAdapter : public ::cbshm::CentralBootstrapAdapterBase {
 public:
+    // Max instrument count
+    uint32_t getMaxProcs() const override;
+
     // Buffer sizes
     size_t getConfigBufferSize() const override;
     size_t getReceiveBufferSize() const override;
@@ -32,6 +35,9 @@ public:
     size_t getReceiveBufferLen() const override;
     size_t getTransmitBufferLen() const override;
     size_t getTransmitBufferLocalLen() const override;
+
+    // Adapter construction
+    std::unique_ptr<CentralAdapterBase> makeAdapter(const CentralAdapterArgs& args) const override;
 };
 
 ///
@@ -126,19 +132,8 @@ private:
     void toLegacy(cbPKT_SPK& leg, const ::cbPKT_SPK& cur) const;
 
 public:
-    Adapter(
-        uint8_t instrument_idx,
-        void* cfg_ptr,
-        void* rec_ptr,
-        void* xmt_ptr,
-        void* xmt_local_ptr,
-        void* status_ptr,
-        void* spike_ptr
-    );
+    explicit Adapter(const CentralAdapterArgs& args);
     ~Adapter() = default;
-
-    // Max instrument count
-    uint32_t getMaxProcs() const override;
 
     // Receive buffer access
     uint32_t& getRecReceived() override;

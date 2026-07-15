@@ -102,9 +102,9 @@ protected:
         xmt_local.assign(kStubRingSize, 0);
         spike.assign(needsFullSpikeBuffer() ? boot.getSpikeBufferSize() : kStubRingSize, 0);
 
-        adapter = std::make_unique<typename T::Adapter>(
+        adapter = std::make_unique<typename T::Adapter>(CentralAdapterArgs{
             kInstrument, cfg.data(), rec.data(), xmt.data(),
-            xmt_local.data(), status.data(), spike.data());
+            xmt_local.data(), status.data(), spike.data() });
     }
 };
 
@@ -125,6 +125,10 @@ protected:
 
 TYPED_TEST_SUITE(AdapterFixture, AllVersions);
 
+TYPED_TEST(AdapterFixture, MaxProcsIsSane) {
+    EXPECT_GE(this->boot.getMaxProcs(), 1u);
+}
+
 TYPED_TEST(AdapterFixture, BootstrapSizesArePositive) {
     // Every buffer must have a non-zero size or the adapter would map nothing.
     EXPECT_GT(this->boot.getConfigBufferSize(), 0u);
@@ -136,10 +140,6 @@ TYPED_TEST(AdapterFixture, BootstrapSizesArePositive) {
     EXPECT_GT(this->boot.getReceiveBufferLen(), 0u);
     EXPECT_GT(this->boot.getTransmitBufferLen(), 0u);
     EXPECT_GT(this->boot.getTransmitBufferLocalLen(), 0u);
-}
-
-TYPED_TEST(AdapterFixture, MaxProcsIsSane) {
-    EXPECT_GE(this->adapter->getMaxProcs(), 1u);
 }
 
 TYPED_TEST(AdapterFixture, ProcInfoRoundTrip) {

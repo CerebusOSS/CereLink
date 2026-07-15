@@ -415,6 +415,11 @@ struct ShmemSession::Impl {
                     bootstrap_adapter = std::make_unique<central::BootstrapAdapter>();
                     break;
             }
+
+            // Validate the instrument number against the detected version's instrument count.
+            if (inst.toOneBased() > bootstrap_adapter->getMaxProcs()) {
+                return Result<void>::error("Instrument ID exceeds the maximum instrument count");
+            }
         } else {
             // The compatibility protocol is ignored for NATIVE or CENTRAL
             // layouts and is always current for STANDALONE mode.
@@ -565,33 +570,18 @@ struct ShmemSession::Impl {
             return Result<void>::error("Failed to create/open signal semaphore: " + std::string(strerror(errno)));
         }
 #endif
-        
-        if (mode == Mode::CLIENT && layout == ShmemLayout::CENTRAL) {
-            // Select the adapter for compatibility with Central's shared memory.
-            switch (central_version) {
-                case CentralVersion::V7_0:
-                    adapter = std::make_unique<central_v7_0::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
-                    break;
-                case CentralVersion::V7_5:
-                    adapter = std::make_unique<central_v7_5::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
-                    break;
-                case CentralVersion::V7_6:
-                    adapter = std::make_unique<central_v7_6::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
-                    break;
-                case CentralVersion::V7_7:
-                    adapter = std::make_unique<central_v7_7::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
-                    break;
-                default:
-                    /* fallthrough */
-                case CentralVersion::CURRENT:
-                    adapter = std::make_unique<central::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
-                    break;
-            }
-        } else {
-            // The adapter is used to fetch the byte offset of fields in the transmit/receive buffers.
-            // TODO: Add helper methods in Impl for fetching byte offsets of transmit/receive buffer fields without relying on the Central adapter.
-            adapter = std::make_unique<central::Adapter>(inst.toIndex(), cfg_buffer_raw, rec_buffer_raw, xmt_buffer_raw, xmt_local_buffer_raw, status_buffer_raw, spike_buffer_raw);
-        }
+
+        // In NATIVE mode, the adapter is only used to fetch the byte offsets of fields in the transmit/receive buffers.
+        // TODO: Add helper methods in Impl for fetching byte offsets of transmit/receive buffer fields without relying on the Central adapter.
+        adapter = bootstrap_adapter->makeAdapter({
+            inst.toIndex(),
+            cfg_buffer_raw,
+            rec_buffer_raw,
+            xmt_buffer_raw,
+            xmt_local_buffer_raw,
+            status_buffer_raw,
+            spike_buffer_raw
+        });
 
         // Initialize buffers in standalone mode
         if (mode == Mode::STANDALONE && layout == ShmemLayout::NATIVE) {
@@ -824,7 +814,7 @@ uint32_t ShmemSession::getMaxProcs() const {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         return cbMAXPROCS;
     } else {
-        return m_impl->adapter->getMaxProcs();
+        return m_impl->bootstrap_adapter->getMaxProcs();
     }
 }
 
