@@ -47,6 +47,7 @@ cbutil::Result<CentralVersion> detectCentralVersion() {
     PROCESSENTRY32 process_entry{};
     process_entry.dwSize = sizeof(process_entry);
     if (! Process32First(snapshot, &process_entry)) {
+        CloseHandle(snapshot);
         return cbutil::Result<CentralVersion>::error("Failed to get the first process from the running processes snapshot");
     }
 
@@ -58,6 +59,7 @@ cbutil::Result<CentralVersion> detectCentralVersion() {
             break;
         }
     } while(Process32Next(snapshot, &process_entry));
+    CloseHandle(snapshot);
     if (central_pid == 0) {
         return cbutil::Result<CentralVersion>::error("Failed to find Central among the currently running processes. Is Central running?");
     }
@@ -109,9 +111,9 @@ cbutil::Result<CentralVersion> detectCentralVersion() {
     std::string app_version = std::string(value, value_size - 1); // strip trailing null byte
 
     // Get the indicies of both dots in the version string
-    size_t ldot_idx = app_version.find("."); 
+    size_t ldot_idx = app_version.find(".");
     size_t rdot_idx = app_version.rfind(".");
-    if (ldot_idx == std::string::npos || rdot_idx == std::string::npos) {
+    if (ldot_idx == std::string::npos || rdot_idx == std::string::npos || ldot_idx == rdot_idx) {
         return cbutil::Result<CentralVersion>::error("Failed to find both dots separating the major, minor, and patch version values in '" + app_version + "'");
     }
 
