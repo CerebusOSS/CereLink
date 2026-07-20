@@ -244,7 +244,7 @@ struct ShmemSession::Impl {
         , rec_buffer_len(0)
         , rec_tailindex(0)
         , rec_tailwrap(0)
-        , central_version(CentralVersion::UNKNOWN)
+        , central_version(CentralVersion::CURRENT)
         , compat_protocol(CBPROTO_PROTOCOL_CURRENT)
     {}
 
@@ -409,9 +409,9 @@ struct ShmemSession::Impl {
                 case CentralVersion::V7_7:
                     bootstrap_adapter = std::make_unique<central_v7_7::BootstrapAdapter>();
                     break;
-                default:
-                    /* fallthrough */
                 case CentralVersion::CURRENT:
+                    /* fallthrough */
+                default:
                     bootstrap_adapter = std::make_unique<central::BootstrapAdapter>();
                     break;
             }

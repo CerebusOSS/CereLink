@@ -15,6 +15,7 @@
 
     #include <vector>
     #include <charconv>
+    #include <cstring>
 #endif
 
 #include <cbshm/central_version.h>
@@ -52,9 +53,10 @@ cbutil::Result<CentralVersion> detectCentralVersion() {
     }
 
     // Enumerate the running processes and identify Central by it's process name.
+    // Windows process names are case insensitive, so the executable may be reported with any casing and must be compared in a case-insensitive way.
     DWORD central_pid = 0;
     do {
-        if (std::string(process_entry.szExeFile) == "Central.exe") {
+        if (_stricmp(process_entry.szExeFile, "Central.exe") == 0) {
             central_pid = process_entry.th32ProcessID;
             break;
         }
@@ -142,38 +144,43 @@ cbutil::Result<CentralVersion> detectCentralVersion() {
 
     // Convert application version to protocol version
     switch(major_version) {
-        case 7:
-            switch (minor_version) {
-                default:
-                    return cbutil::Result<CentralVersion>::ok(CentralVersion::CURRENT);
-                    // return cbutil::Result<CentralVersion>::error("Unrecognized minor version number in version '" + app_version + "'");
-                case 8:
-                    return cbutil::Result<CentralVersion>::ok(CentralVersion::CURRENT);
-                case 7:
-                    return cbutil::Result<CentralVersion>::ok(CentralVersion::V7_7);
-                case 6:
-                    return cbutil::Result<CentralVersion>::ok(CentralVersion::V7_6);
-                case 5:
-                    return cbutil::Result<CentralVersion>::ok(CentralVersion::V7_5);
-                case 0:
-                    return cbutil::Result<CentralVersion>::ok(CentralVersion::V7_0);
-            }
-            break;
-        case 6:
-            /* fallthrough */
-        case 5:
-            /* fallthrough */
-        case 4:
-            /* fallthrough */
-        case 3:
+        case 1:
             /* fallthrough */
         case 2:
             /* fallthrough */
-        case 1:
+        case 3:
+            /* fallthrough */
+        case 4:
+            /* fallthrough */
+        case 5:
+            /* fallthrough */
+        case 6:
             return cbutil::Result<CentralVersion>::error("Unsupported major version number in version '" + app_version + "'. Please update Central to a newer version");
+        case 7:
+            switch (minor_version) {
+                case 0:
+                    return cbutil::Result<CentralVersion>::ok(CentralVersion::V7_0);
+                case 1:
+                    /* fallthrough */
+                case 2:
+                    /* fallthrough */
+                case 3:
+                    /* fallthrough */
+                case 4:
+                    return cbutil::Result<CentralVersion>::error("Unrecognized minor version number in version '" + app_version + "'");
+                case 5:
+                    return cbutil::Result<CentralVersion>::ok(CentralVersion::V7_5);
+                case 6:
+                    return cbutil::Result<CentralVersion>::ok(CentralVersion::V7_6);
+                case 7:
+                    return cbutil::Result<CentralVersion>::ok(CentralVersion::V7_7);
+                case 8:
+                    /* fallthrough */
+                default:
+                    return cbutil::Result<CentralVersion>::ok(CentralVersion::CURRENT);
+            }
         default:
-            return cbutil::Result<CentralVersion>::ok(CentralVersion::UNKNOWN);
-            // return cbutil::Result<CentralVersion>::error("Unrecognized major version number in version '" + app_version + "'" );
+            return cbutil::Result<CentralVersion>::error("Unrecognized major version number in version '" + app_version + "'" );
     }
 #else
     return cbutil::Result<CentralVersion>::error("Compatibility with Central requires Windows");
@@ -182,10 +189,6 @@ cbutil::Result<CentralVersion> detectCentralVersion() {
 
 cbproto_protocol_version_t getProtocolVersion(CentralVersion version) {
     switch (version) {
-        default:
-            /* fallthrough */
-        case CentralVersion::UNKNOWN:
-            return CBPROTO_PROTOCOL_UNKNOWN;
         case CentralVersion::V7_0:
             return CBPROTO_PROTOCOL_311;
         case CentralVersion::V7_5:
@@ -195,6 +198,8 @@ cbproto_protocol_version_t getProtocolVersion(CentralVersion version) {
         case CentralVersion::V7_7:
             return CBPROTO_PROTOCOL_410;
         case CentralVersion::CURRENT:
+            /* fallthrough */
+        default:
             return CBPROTO_PROTOCOL_CURRENT;
     }
 }

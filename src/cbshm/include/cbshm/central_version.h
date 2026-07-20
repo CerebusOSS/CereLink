@@ -17,7 +17,6 @@
 namespace cbshm {
 
 enum class CentralVersion {
-    UNKNOWN,
     V7_0,
     V7_5,
     V7_6,
