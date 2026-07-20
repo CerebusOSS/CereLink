@@ -11,9 +11,7 @@
 ///   central_client 1         # Instance 1 (for multi-instance setups)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "cbproto/instrument_id.h"
-#include <cbsdk/cbsdk.h>
-#include <cbsdk/sdk_session.h>
+#include <cbproto/instrument_id.h>
 #include <cbshm/shmem_session.h>
 #include <cbproto/cbproto.h>
 #include <iostream>

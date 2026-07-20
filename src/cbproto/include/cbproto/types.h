@@ -72,7 +72,7 @@ constexpr uint32_t cbMAXPROCS = 1;   ///< Number of processors per NSP
 
 constexpr uint32_t cbNUM_FE_CHANS = 256; ///< Front-end channels per NSP
 
-// @}
+/// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Channel Counts

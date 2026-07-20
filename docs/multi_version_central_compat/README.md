@@ -142,7 +142,7 @@ All translators and adapters use the cbproto types, so these methods must be fix
 editor tests/unit/test_central_adapters.cpp
 ```
 
-Add `#include <cbshm/central_adapters/<version>.h>` near the top of the file, define a `VersionTraits` alias for the version (e.g. `using V7_9 = VersionTraits<central_v7_9::BootstrapAdapter, central_v7_9::Adapter>;`), and add that alias to the `AllVersions` type list so the round-trip invariants run against it.  If the added version's protocol has the NSP-status and Gemini fields (protocol 4.0+), also add the alias to the `NspWritableVersions` type list; otherwise leave it out and cover its divergent behavior with dedicated tests.  The test file has no entry in `tests/unit/CMakeLists.txt` to update — it already compiles every version through these type lists.
+Add `#include <cbshm/central_adapters/<version>.h>` near the top of the file, define a `VersionTraits` alias for the version (e.g. `using V7_9 = VersionTraits<central_v7_9::BootstrapAdapter, central_v7_9::Adapter>;`), and add that alias to the `AllVersions` type list so the round-trip invariants run against it.  If the added version's protocol diverges from the others (e.g. the NSP-status and Gemini fields introduced in protocol 4.0+), cover that behavior with dedicated tests.  The test file has no entry in `tests/unit/CMakeLists.txt` to update — it already compiles every version through the `AllVersions` type list.
 
 
 ### Add an older protocol version
@@ -231,7 +231,7 @@ Append `src/central_adapters/<version>.cpp` to the `CBSHMEM_SOURCES` environment
 editor tests/unit/test_central_adapters.cpp
 ```
 
-Add `#include <cbshm/central_adapters/<version>.h>` near the top of the file, define a `VersionTraits` alias for the version (e.g. `using V7_1 = VersionTraits<central_v7_1::BootstrapAdapter, central_v7_1::Adapter>;`), and add that alias to the `AllVersions` type list so the round-trip invariants run against it.  If the added version's protocol has the NSP-status and Gemini fields (protocol 4.0+), also add the alias to the `NspWritableVersions` type list; otherwise leave it out and cover its divergent behavior with dedicated tests.  The test file has no entry in `tests/unit/CMakeLists.txt` to update — it already compiles every version through these type lists.
+Add `#include <cbshm/central_adapters/<version>.h>` near the top of the file, define a `VersionTraits` alias for the version (e.g. `using V7_1 = VersionTraits<central_v7_1::BootstrapAdapter, central_v7_1::Adapter>;`), and add that alias to the `AllVersions` type list so the round-trip invariants run against it.  If the added version's protocol diverges from the others (e.g. the NSP-status and Gemini fields introduced in protocol 4.0+), cover that behavior with dedicated tests.  The test file has no entry in `tests/unit/CMakeLists.txt` to update — it already compiles every version through the `AllVersions` type list.
 
 
 ## Remove a protocol version

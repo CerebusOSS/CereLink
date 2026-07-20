@@ -420,17 +420,17 @@ public:
     const SdkConfig& getConfig() const;
 
     /// Get system information
-    /// @return Pointer to system info packet, or nullptr if not available
+    /// @return Result containing a copy of the system info packet, or an error if not available
     Result<cbPKT_SYSINFO> getSysInfo() const;
 
     /// Get channel information
     /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
-    /// @return Pointer to channel info, or nullptr if invalid/unavailable
+    /// @return Result containing a copy of the channel info, or an error if invalid/unavailable
     Result<cbPKT_CHANINFO> getChanInfo(uint32_t chan_id) const;
 
     /// Get sample group information
     /// @param group_id Group ID (1-6)
-    /// @return Pointer to group info, or nullptr if invalid/unavailable
+    /// @return Result containing a copy of the group info, or an error if invalid/unavailable
     Result<cbPKT_GROUPINFO> getGroupInfo(uint32_t group_id) const;
 
     /// Compute the list of channel IDs belonging to a sample group by
@@ -445,7 +445,7 @@ public:
 
     /// Get filter information
     /// @param filter_id Filter ID (0 to cbMAXFILTS-1)
-    /// @return Pointer to filter info, or nullptr if invalid/unavailable
+    /// @return Result containing a copy of the filter info, or an error if invalid/unavailable
     Result<cbPKT_FILTINFO> getFilterInfo(uint32_t filter_id) const;
 
     /// Get current device run level
