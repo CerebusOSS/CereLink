@@ -15,7 +15,7 @@ namespace cbshm {
 namespace central_v7_5 {
 
 uint32_t BootstrapAdapter::getMaxProcs() const {
-    return cbMAXPROCS;
+    return CENTRAL_cbMAXPROCS;
 }
 
 size_t BootstrapAdapter::getConfigBufferSize() const {
@@ -43,15 +43,15 @@ size_t BootstrapAdapter::getSpikeBufferSize() const {
 }
 
 size_t BootstrapAdapter::getReceiveBufferLen() const {
-    return cbRECBUFFLEN;
+    return CENTRAL_cbRECBUFFLEN;
 }
 
 size_t BootstrapAdapter::getTransmitBufferLen() const {
-    return cbXMT_GLOBAL_BUFFLEN;
+    return CENTRAL_cbXMT_GLOBAL_BUFFLEN;
 }
 
 size_t BootstrapAdapter::getTransmitBufferLocalLen() const {
-    return cbXMT_LOCAL_BUFFLEN;
+    return CENTRAL_cbXMT_LOCAL_BUFFLEN;
 }
 
 std::unique_ptr<CentralAdapterBase> BootstrapAdapter::makeAdapter(const CentralAdapterArgs& args) const {
@@ -399,7 +399,7 @@ void Adapter::fromLegacy(::cbPKT_FILECFG& cur, const cbPKT_FILECFG& leg) const {
 
 void Adapter::fromLegacy(NativeConfigBuffer& cur, const cbCFGBUFF& leg) const {
     // TODO: VERIFY that each list that's assumed to be instrument-independent is in fact independent from any particular instrument.
-    cur.version = cbVERSION_MAJOR * 100 + cbVERSION_MINOR; // Central's version field contains garbage data, so replace it with the protocol version
+    cur.version = CENTRAL_cbVERSION_MAJOR * 100 + CENTRAL_cbVERSION_MINOR; // Central's version field contains garbage data, so replace it with the protocol version
     cur.sysflags = leg.sysflags;
     cur.instrument_status = static_cast<decltype(cur.instrument_status)>(InstrumentStatus::ACTIVE);
     fromLegacy(cur.sysinfo, leg.sysinfo);

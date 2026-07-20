@@ -206,6 +206,25 @@ gtest_discover_tests(cbsdk_tests
 
 message(STATUS "Unit tests configured for cbsdk (prefixed with 'device.' for CI filtering)")
 
+# cbsdk C-compilation test.
+add_executable(cbsdk_c_compile_test test_cbsdk_c_compile.c)
+
+set_target_properties(cbsdk_c_compile_test PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED ON
+    C_EXTENSIONS OFF
+)
+
+target_include_directories(cbsdk_c_compile_test
+    BEFORE PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/cbsdk/include
+        ${PROJECT_SOURCE_DIR}/src/cbproto/include
+)
+
+add_test(NAME cbsdk_c_api_header_compiles COMMAND cbsdk_c_compile_test)
+
+message(STATUS "Unit tests configured for cbsdk C-compilation test")
+
 # CMP parser tests (no device needed)
 add_executable(cmp_parser_tests
     test_cmp_parser.cpp

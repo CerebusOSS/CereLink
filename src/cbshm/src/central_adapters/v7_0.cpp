@@ -15,7 +15,7 @@ namespace cbshm {
 namespace central_v7_0 {
 
 uint32_t BootstrapAdapter::getMaxProcs() const {
-    return cbMAXPROCS;
+    return CENTRAL_cbMAXPROCS;
 }
 
 size_t BootstrapAdapter::getConfigBufferSize() const {
@@ -43,15 +43,15 @@ size_t BootstrapAdapter::getSpikeBufferSize() const {
 }
 
 size_t BootstrapAdapter::getReceiveBufferLen() const {
-    return cbRECBUFFLEN;
+    return CENTRAL_cbRECBUFFLEN;
 }
 
 size_t BootstrapAdapter::getTransmitBufferLen() const {
-    return cbXMT_GLOBAL_BUFFLEN;
+    return CENTRAL_cbXMT_GLOBAL_BUFFLEN;
 }
 
 size_t BootstrapAdapter::getTransmitBufferLocalLen() const {
-    return cbXMT_LOCAL_BUFFLEN;
+    return CENTRAL_cbXMT_LOCAL_BUFFLEN;
 }
 
 std::unique_ptr<CentralAdapterBase> BootstrapAdapter::makeAdapter(const CentralAdapterArgs& args) const {
@@ -482,7 +482,7 @@ void Adapter::fromLegacy(NativePCStatus& cur, const cbPcStatus& leg) const {
         ? NativeNSPStatus::NSP_INIT
         : NativeNSPStatus::NSP_FOUND;
     cur.m_nNumNTrodesPerInstrument = 0;
-    for (uint32_t n = 0; n < cbMAXNTRODES; ++n) {
+    for (uint32_t n = 0; n < CENTRAL_cbMAXNTRODES; ++n) {
         // Central considers an N-Trode slot valid when its packet header chid is non-zero.
         if (cfg->isNTrodeInfo[n].cbpkt_header.chid != 0)
             ++cur.m_nNumNTrodesPerInstrument;

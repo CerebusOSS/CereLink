@@ -14,8 +14,6 @@
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-// TODO: Move version annotations to src/cbshm/include/cbshm/central_types/
-
 #ifndef CBPROTO_TYPES_H
 #define CBPROTO_TYPES_H
 
@@ -25,13 +23,15 @@
 #pragma pack(push, 1)
 
 #ifdef __cplusplus
+extern "C" {
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Protocol Version
 /// @{
 
-constexpr uint32_t cbVERSION_MAJOR = 4;
-constexpr uint32_t cbVERSION_MINOR = 2;
+#define cbVERSION_MAJOR  4
+#define cbVERSION_MINOR  2
 
 /// @}
 
@@ -40,7 +40,6 @@ constexpr uint32_t cbVERSION_MINOR = 2;
 /// @{
 
 /// @brief Processor time type
-/// VER: 4.0+ 64-bit processor time
 /// Protocol 4.0+ uses 64-bit timestamps
 /// Protocol 3.x uses 32-bit timestamps (compile with CBPROTO_311)
 #ifdef CBPROTO_311
@@ -56,21 +55,36 @@ typedef int16_t A2D_DATA;
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @name Maximum Entity Ranges #1
+/// @name Maximum Entity Ranges
 ///
 /// Ground truth from upstream/cbproto/cbproto.h lines 237-262
 /// These define the maximum number of instruments, channels, etc.
 /// @{
 
-constexpr uint32_t cbNSP1 = 1;   ///< First instrument ID (1-based)
-constexpr uint32_t cbNSP2 = 2;   ///< Second instrument ID (1-based)
-constexpr uint32_t cbNSP3 = 3;   ///< Third instrument ID (1-based)
-constexpr uint32_t cbNSP4 = 4;   ///< Fourth instrument ID (1-based)
+#define cbNSP1          1   ///< First instrument ID (1-based)
+#define cbNSP2          2   ///< Second instrument ID (1-based)
+#define cbNSP3          3   ///< Third instrument ID (1-based)
+#define cbNSP4          4   ///< Fourth instrument ID (1-based)
 
-constexpr uint32_t cbMAXOPEN = 4;   ///< Maximum number of open cbhwlib's (instruments)
-constexpr uint32_t cbMAXPROCS = 1;   ///< Number of processors per NSP
+#define cbMAXOPEN       4   ///< Maximum number of open cbhwlib's (instruments)
+#define cbMAXPROCS      1   ///< Number of processors per NSP
 
-constexpr uint32_t cbNUM_FE_CHANS = 256; ///< Front-end channels per NSP
+#define cbNUM_FE_CHANS  256 ///< Front-end channels per NSP
+
+#define cbRAWGROUP      6   ///< Group number for raw data feed
+#define cbMAXGROUPS     8   ///< Number of sample rate groups
+#define cbMAXFILTS      32  ///< Maximum number of filters
+#define cbFIRST_DIGITAL_FILTER  13  ///< (0-based) filter number, must be less than cbMAXFILTS
+#define cbNUM_DIGITAL_FILTERS   4   ///< Number of custom digital filters
+#define cbMAXHOOPS      4   ///< Maximum number of hoops for spike sorting
+#define cbMAXSITES      4   ///< Maximum number of electrodes in an n-trode group
+#define cbMAXSITEPLOTS  ((cbMAXSITES - 1) * cbMAXSITES / 2)  ///< Combination of 2 out of n
+#define cbMAXUNITS      5   ///< Maximum number of sorted units per channel
+#define cbMAXNTRODES    (cbNUM_ANALOG_CHANS / 2)  ///< Maximum n-trodes (stereotrode minimum)
+#define cbMAX_PNTS      128 ///< Maximum spike waveform points
+#define cbMAXVIDEOSOURCE 1  ///< Maximum number of video sources
+#define cbMAXTRACKOBJ   20  ///< Maximum number of trackable objects
+#define cbMAX_AOUT_TRIGGER 5 ///< Maximum number of per-channel (analog output, or digital output) triggers
 
 /// @}
 
@@ -81,67 +95,43 @@ constexpr uint32_t cbNUM_FE_CHANS = 256; ///< Front-end channels per NSP
 /// Note: Some channel counts depend on cbMAXPROCS
 /// @{
 
-constexpr uint32_t cbNUM_ANAIN_CHANS = (16 * cbMAXPROCS);   ///< Analog input channels
-constexpr uint32_t cbNUM_ANALOG_CHANS = (cbNUM_FE_CHANS + cbNUM_ANAIN_CHANS);  ///< Total analog inputs
-constexpr uint32_t cbNUM_ANAOUT_CHANS = (4 * cbMAXPROCS);    ///< Analog output channels
-constexpr uint32_t cbNUM_AUDOUT_CHANS = (2 * cbMAXPROCS);    ///< Audio output channels
-constexpr uint32_t cbNUM_ANALOGOUT_CHANS = (cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS);  ///< Total analog outputs
-constexpr uint32_t cbNUM_DIGIN_CHANS = (1 * cbMAXPROCS);    ///< Digital input channels
-constexpr uint32_t cbNUM_SERIAL_CHANS = (1 * cbMAXPROCS);    ///< Serial input channels
-constexpr uint32_t cbNUM_DIGOUT_CHANS = (4 * cbMAXPROCS);    ///< Digital output channels
+#define cbNUM_ANAIN_CHANS       (16 * cbMAXPROCS)   ///< Analog input channels
+#define cbNUM_ANALOG_CHANS      (cbNUM_FE_CHANS + cbNUM_ANAIN_CHANS)  ///< Total analog inputs
+#define cbNUM_ANAOUT_CHANS      (4 * cbMAXPROCS)    ///< Analog output channels
+#define cbNUM_AUDOUT_CHANS      (2 * cbMAXPROCS)    ///< Audio output channels
+#define cbNUM_ANALOGOUT_CHANS   (cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS)  ///< Total analog outputs
+#define cbNUM_DIGIN_CHANS       (1 * cbMAXPROCS)    ///< Digital input channels
+#define cbNUM_SERIAL_CHANS      (1 * cbMAXPROCS)    ///< Serial input channels
+#define cbNUM_DIGOUT_CHANS      (4 * cbMAXPROCS)    ///< Digital output channels
 
 /// @brief Number of analog/audio output channels with gain
 /// This is the number of AOUT channels with gain. Conveniently, the 4 Analog Outputs
 /// and the 2 Audio Outputs are right next to each other in the channel numbering sequence.
-constexpr uint32_t AOUT_NUM_GAIN_CHANS = (cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS);
+#define AOUT_NUM_GAIN_CHANS     (cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS)
 
 /// @brief Total number of channels
-constexpr uint32_t cbMAXCHANS = (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS + \
-                     cbNUM_DIGIN_CHANS + cbNUM_SERIAL_CHANS + cbNUM_DIGOUT_CHANS);
+#define cbMAXCHANS  (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS + \
+                     cbNUM_DIGIN_CHANS + cbNUM_SERIAL_CHANS + cbNUM_DIGOUT_CHANS)
 
-constexpr uint32_t cbFIRST_FE_CHAN = 0;   ///< First Front end channel (0-based)
+#define cbFIRST_FE_CHAN       0   ///< First Front end channel (0-based)
 
 // Bank definitions - if any channel types exceed cbCHAN_PER_BANK, banks must be increased
-constexpr uint32_t cbCHAN_PER_BANK = 32;                          ///< Channels per bank
-constexpr uint32_t cbNUM_FE_BANKS = (cbNUM_FE_CHANS / cbCHAN_PER_BANK); ///< Front end banks
-constexpr uint32_t cbNUM_ANAIN_BANKS = 1;                           ///< Analog Input banks
-constexpr uint32_t cbNUM_ANAOUT_BANKS = 1;                           ///< Analog Output banks
-constexpr uint32_t cbNUM_AUDOUT_BANKS = 1;                           ///< Audio Output banks
-constexpr uint32_t cbNUM_DIGIN_BANKS = 1;                           ///< Digital Input banks
-constexpr uint32_t cbNUM_SERIAL_BANKS = 1;                           ///< Serial Input banks
-constexpr uint32_t cbNUM_DIGOUT_BANKS = 1;                           ///< Digital Output banks
+#define cbCHAN_PER_BANK       32                          ///< Channels per bank
+#define cbNUM_FE_BANKS        (cbNUM_FE_CHANS / cbCHAN_PER_BANK) ///< Front end banks
+#define cbNUM_ANAIN_BANKS     1                           ///< Analog Input banks
+#define cbNUM_ANAOUT_BANKS    1                           ///< Analog Output banks
+#define cbNUM_AUDOUT_BANKS    1                           ///< Audio Output banks
+#define cbNUM_DIGIN_BANKS     1                           ///< Digital Input banks
+#define cbNUM_SERIAL_BANKS    1                           ///< Serial Input banks
+#define cbNUM_DIGOUT_BANKS    1                           ///< Digital Output banks
 
-constexpr uint32_t cbMAXBANKS = (cbNUM_FE_BANKS + cbNUM_ANAIN_BANKS + cbNUM_ANAOUT_BANKS + \
+#define cbMAXBANKS  (cbNUM_FE_BANKS + cbNUM_ANAIN_BANKS + cbNUM_ANAOUT_BANKS + \
                      cbNUM_AUDOUT_BANKS + cbNUM_DIGIN_BANKS + cbNUM_SERIAL_BANKS + \
-                     cbNUM_DIGOUT_BANKS);
+                     cbNUM_DIGOUT_BANKS)
 
-constexpr uint32_t SCALE_LNC_COUNT = 17;
-constexpr uint32_t SCALE_CONTINUOUS_COUNT = 17;
-constexpr uint32_t SCALE_SPIKE_COUNT = 23;
-
-/// @}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @name Maximum Entity Ranges #2
-///
-/// Ground truth from upstream/cbproto/cbproto.h lines 237-262
-/// These define the maximum number of instruments, channels, etc.
-/// @{
-
-constexpr uint32_t cbRAWGROUP = 6;   ///< Group number for raw data feed
-constexpr uint32_t cbMAXGROUPS = 8;   ///< Number of sample rate groups
-constexpr uint32_t cbMAXFILTS = 32;  ///< Maximum number of filters
-constexpr uint32_t cbFIRST_DIGITAL_FILTER = 13;  ///< (0-based) filter number, must be less than cbMAXFILTS
-constexpr uint32_t cbNUM_DIGITAL_FILTERS = 4;   ///< Number of custom digital filters
-constexpr uint32_t cbMAXHOOPS = 4;   ///< Maximum number of hoops for spike sorting
-constexpr uint32_t cbMAXSITES = 4;   ///< Maximum number of electrodes in an n-trode group
-constexpr uint32_t cbMAXSITEPLOTS = ((cbMAXSITES - 1) * cbMAXSITES / 2);  ///< Combination of 2 out of n
-constexpr uint32_t cbMAXUNITS = 5;   ///< Maximum number of sorted units per channel
-constexpr uint32_t cbMAXNTRODES = (cbNUM_ANALOG_CHANS / 2);  ///< Maximum n-trodes (stereotrode minimum)
-constexpr uint32_t cbMAX_PNTS = 128; ///< Maximum spike waveform points
-constexpr uint32_t cbMAXVIDEOSOURCE = 1;  ///< Maximum number of video sources
-constexpr uint32_t cbMAXTRACKOBJ = 20;  ///< Maximum number of trackable objects
-constexpr uint32_t cbMAX_AOUT_TRIGGER = 5; ///< Maximum number of per-channel (analog output, or digital output) triggers
+#define SCALE_LNC_COUNT        17
+#define SCALE_CONTINUOUS_COUNT 17
+#define SCALE_SPIKE_COUNT      23
 
 /// @}
 
@@ -151,32 +141,32 @@ constexpr uint32_t cbMAX_AOUT_TRIGGER = 5; ///< Maximum number of per-channel (a
 /// Ground truth from upstream/cbproto/cbproto.h lines 193-211
 /// @{
 
-inline constexpr const char* cbNET_UDP_ADDR_INST = "192.168.137.1";     ///< Cerebus default address
-inline constexpr const char* cbNET_UDP_ADDR_CNT = "192.168.137.128";   ///< Gemini NSP default control address
-inline constexpr const char* cbNET_UDP_ADDR_BCAST = "192.168.137.255";   ///< NSP default broadcast address
-constexpr uint32_t cbNET_UDP_PORT_BCAST = 51002;               ///< Neuroflow Data Port
-constexpr uint32_t cbNET_UDP_PORT_CNT = 51001;               ///< Neuroflow Control Port
+#define cbNET_UDP_ADDR_INST     "192.168.137.1"     ///< Cerebus default address
+#define cbNET_UDP_ADDR_CNT      "192.168.137.128"   ///< Gemini NSP default control address
+#define cbNET_UDP_ADDR_BCAST    "192.168.137.255"   ///< NSP default broadcast address
+#define cbNET_UDP_PORT_BCAST    51002               ///< Neuroflow Data Port
+#define cbNET_UDP_PORT_CNT      51001               ///< Neuroflow Control Port
 
 // Maximum UDP datagram size used to transport cerebus packets, taken from MTU size
-constexpr uint32_t cbCER_UDP_SIZE_MAX = 58080;               ///< Note that multiple packets may reside in one udp datagram as aggregate
+#define cbCER_UDP_SIZE_MAX      58080               ///< Note that multiple packets may reside in one udp datagram as aggregate
 
 // Gemini network configuration
-constexpr uint32_t cbNET_TCP_PORT_GEMINI = 51005;             ///< Neuroflow Data Port
-inline constexpr const char* cbNET_TCP_ADDR_GEMINI_HUB = "192.168.137.200"; ///< NSP default control address
+#define cbNET_TCP_PORT_GEMINI       51005             ///< Neuroflow Data Port
+#define cbNET_TCP_ADDR_GEMINI_HUB   "192.168.137.200" ///< NSP default control address
 
-inline constexpr const char* cbNET_UDP_ADDR_HOST = "192.168.137.199";   ///< Cerebus (central) default address
-inline constexpr const char* cbNET_UDP_ADDR_GEMINI_NSP = "192.168.137.128";   ///< NSP default control address
-inline constexpr const char* cbNET_UDP_ADDR_GEMINI_HUB = "192.168.137.200";   ///< HUB default control address
-inline constexpr const char* cbNET_UDP_ADDR_GEMINI_HUB2 = "192.168.137.201";   ///< HUB2 default control address
-inline constexpr const char* cbNET_UDP_ADDR_GEMINI_HUB3 = "192.168.137.202";   ///< HUB3 default control address
-constexpr uint32_t cbNET_UDP_PORT_GEMINI_NSP = 51001;               ///< Gemini NSP Port
-constexpr uint32_t cbNET_UDP_PORT_GEMINI_HUB = 51002;               ///< Gemini HUB Port
-constexpr uint32_t cbNET_UDP_PORT_GEMINI_HUB2 = 51003;               ///< Gemini HUB2 Port
-constexpr uint32_t cbNET_UDP_PORT_GEMINI_HUB3 = 51004;               ///< Gemini HUB3 Port
+#define cbNET_UDP_ADDR_HOST         "192.168.137.199"   ///< Cerebus (central) default address
+#define cbNET_UDP_ADDR_GEMINI_NSP   "192.168.137.128"   ///< NSP default control address
+#define cbNET_UDP_ADDR_GEMINI_HUB   "192.168.137.200"   ///< HUB default control address
+#define cbNET_UDP_ADDR_GEMINI_HUB2  "192.168.137.201"   ///< HUB2 default control address
+#define cbNET_UDP_ADDR_GEMINI_HUB3  "192.168.137.202"   ///< HUB3 default control address
+#define cbNET_UDP_PORT_GEMINI_NSP   51001               ///< Gemini NSP Port
+#define cbNET_UDP_PORT_GEMINI_HUB   51002               ///< Gemini HUB Port
+#define cbNET_UDP_PORT_GEMINI_HUB2  51003               ///< Gemini HUB2 Port
+#define cbNET_UDP_PORT_GEMINI_HUB3  51004               ///< Gemini HUB3 Port
 
 // Protocol types
-constexpr uint32_t PROTOCOL_UDP = 0;   ///< UDP protocol
-constexpr uint32_t PROTOCOL_TCP = 1;   ///< TCP protocol
+#define PROTOCOL_UDP        0   ///< UDP protocol
+#define PROTOCOL_TCP        1   ///< TCP protocol
 
 /// @}
 
@@ -184,12 +174,12 @@ constexpr uint32_t PROTOCOL_TCP = 1;   ///< TCP protocol
 /// @name String Length Constants
 /// @{
 
-constexpr uint32_t cbLEN_STR_UNIT = 8;       ///< Length of unit string
-constexpr uint32_t cbLEN_STR_LABEL = 16;      ///< Length of label string
-constexpr uint32_t cbLEN_STR_FILT_LABEL = 16;      ///< Length of filter label string
-constexpr uint32_t cbLEN_STR_IDENT = 64;      ///< Length of identity string
-constexpr uint32_t cbLEN_STR_COMMENT = 256;     ///< Length of comment string
-constexpr uint32_t cbMAX_COMMENT = 128;     ///< Maximum comment length (must be multiple of 4)
+#define cbLEN_STR_UNIT          8       ///< Length of unit string
+#define cbLEN_STR_LABEL         16      ///< Length of label string
+#define cbLEN_STR_FILT_LABEL    16      ///< Length of filter label string
+#define cbLEN_STR_IDENT         64      ///< Length of identity string
+#define cbLEN_STR_COMMENT       256     ///< Length of comment string
+#define cbMAX_COMMENT           128     ///< Maximum comment length (must be multiple of 4)
 
 /// @}
 
@@ -199,33 +189,33 @@ constexpr uint32_t cbMAX_COMMENT = 128;     ///< Maximum comment length (must be
 
 typedef unsigned int cbRESULT;
 
-constexpr uint32_t cbRESULT_OK = 0;   ///< Function executed normally
-constexpr uint32_t cbRESULT_NOLIBRARY = 1;   ///< The library was not properly initialized
-constexpr uint32_t cbRESULT_NOCENTRALAPP = 2;   ///< Unable to access the central application
-constexpr uint32_t cbRESULT_LIBINITERROR = 3;   ///< Error attempting to initialize library error
-constexpr uint32_t cbRESULT_MEMORYUNAVAIL = 4;   ///< Not enough memory available to complete the operation
-constexpr uint32_t cbRESULT_INVALIDADDRESS = 5;   ///< Invalid Processor or Bank address
-constexpr uint32_t cbRESULT_INVALIDCHANNEL = 6;   ///< Invalid channel ID passed to function
-constexpr uint32_t cbRESULT_INVALIDFUNCTION = 7;   ///< Channel exists, but requested function is not available
-constexpr uint32_t cbRESULT_NOINTERNALCHAN = 8;   ///< No internal channels available to connect hardware stream
-constexpr uint32_t cbRESULT_HARDWAREOFFLINE = 9;   ///< Hardware is offline or unavailable
-constexpr uint32_t cbRESULT_DATASTREAMING = 10;   ///< Hardware is streaming data and cannot be configured
-constexpr uint32_t cbRESULT_NONEWDATA = 11;   ///< There is no new data to be read in
-constexpr uint32_t cbRESULT_DATALOST = 12;   ///< The Central App incoming data buffer has wrapped
-constexpr uint32_t cbRESULT_INVALIDNTRODE = 13;   ///< Invalid NTrode number passed to function
-constexpr uint32_t cbRESULT_BUFRECALLOCERR = 14;   ///< Receive buffer could not be allocated
-constexpr uint32_t cbRESULT_BUFGXMTALLOCERR = 15;   ///< Global transmit buffer could not be allocated
-constexpr uint32_t cbRESULT_BUFLXMTALLOCERR = 16;   ///< Local transmit buffer could not be allocated
-constexpr uint32_t cbRESULT_BUFCFGALLOCERR = 17;   ///< Configuration buffer could not be allocated
-constexpr uint32_t cbRESULT_BUFPCSTATALLOCERR = 18;   ///< PC status buffer could not be allocated
-constexpr uint32_t cbRESULT_BUFSPKALLOCERR = 19;   ///< Spike cache buffer could not be allocated
-constexpr uint32_t cbRESULT_EVSIGERR = 20;   ///< Couldn't create shared event signal
-constexpr uint32_t cbRESULT_SOCKERR = 21;   ///< Generic socket creation error
-constexpr uint32_t cbRESULT_SOCKOPTERR = 22;   ///< Socket option error (possibly permission issue)
-constexpr uint32_t cbRESULT_SOCKMEMERR = 23;   ///< Socket memory assignment error
-constexpr uint32_t cbRESULT_INSTINVALID = 24;   ///< Invalid range or instrument address
-constexpr uint32_t cbRESULT_SOCKBIND = 25;   ///< Cannot bind to any address (possibly no Instrument network)
-constexpr uint32_t cbRESULT_SYSLOCK = 26;   ///< Cannot (un)lock the system resources (possibly resource busy)
+#define cbRESULT_OK                 0   ///< Function executed normally
+#define cbRESULT_NOLIBRARY          1   ///< The library was not properly initialized
+#define cbRESULT_NOCENTRALAPP       2   ///< Unable to access the central application
+#define cbRESULT_LIBINITERROR       3   ///< Error attempting to initialize library error
+#define cbRESULT_MEMORYUNAVAIL      4   ///< Not enough memory available to complete the operation
+#define cbRESULT_INVALIDADDRESS     5   ///< Invalid Processor or Bank address
+#define cbRESULT_INVALIDCHANNEL     6   ///< Invalid channel ID passed to function
+#define cbRESULT_INVALIDFUNCTION    7   ///< Channel exists, but requested function is not available
+#define cbRESULT_NOINTERNALCHAN     8   ///< No internal channels available to connect hardware stream
+#define cbRESULT_HARDWAREOFFLINE    9   ///< Hardware is offline or unavailable
+#define cbRESULT_DATASTREAMING     10   ///< Hardware is streaming data and cannot be configured
+#define cbRESULT_NONEWDATA         11   ///< There is no new data to be read in
+#define cbRESULT_DATALOST          12   ///< The Central App incoming data buffer has wrapped
+#define cbRESULT_INVALIDNTRODE     13   ///< Invalid NTrode number passed to function
+#define cbRESULT_BUFRECALLOCERR    14   ///< Receive buffer could not be allocated
+#define cbRESULT_BUFGXMTALLOCERR   15   ///< Global transmit buffer could not be allocated
+#define cbRESULT_BUFLXMTALLOCERR   16   ///< Local transmit buffer could not be allocated
+#define cbRESULT_BUFCFGALLOCERR    17   ///< Configuration buffer could not be allocated
+#define cbRESULT_BUFPCSTATALLOCERR 18   ///< PC status buffer could not be allocated
+#define cbRESULT_BUFSPKALLOCERR    19   ///< Spike cache buffer could not be allocated
+#define cbRESULT_EVSIGERR          20   ///< Couldn't create shared event signal
+#define cbRESULT_SOCKERR           21   ///< Generic socket creation error
+#define cbRESULT_SOCKOPTERR        22   ///< Socket option error (possibly permission issue)
+#define cbRESULT_SOCKMEMERR        23   ///< Socket memory assignment error
+#define cbRESULT_INSTINVALID       24   ///< Invalid range or instrument address
+#define cbRESULT_SOCKBIND          25   ///< Cannot bind to any address (possibly no Instrument network)
+#define cbRESULT_SYSLOCK           26   ///< Cannot (un)lock the system resources (possibly resource busy)
 
 /// @}
 
@@ -240,15 +230,15 @@ constexpr uint32_t cbRESULT_SYSLOCK = 26;   ///< Cannot (un)lock the system reso
 typedef struct {
     PROCTIME time;        ///< System clock timestamp
     uint16_t chid;        ///< Channel identifier
-    uint16_t type;        ///< Packet type // VER: 4.1+, type changed to uint16_t from uint8_t
+    uint16_t type;        ///< Packet type
     uint16_t dlen;        ///< Length of data field in 32-bit chunks
     uint8_t  instrument;  ///< Instrument number (0-based in packet, despite cbNSP1=1!)
     uint8_t  reserved;    ///< Reserved for future use
 } cbPKT_HEADER;
 
-constexpr uint32_t cbPKT_MAX_SIZE = 1024;                    ///< Maximum packet size in bytes
-constexpr uint32_t cbPKT_HEADER_SIZE = sizeof(cbPKT_HEADER);    ///< Packet header size in bytes
-constexpr uint32_t cbPKT_HEADER_32SIZE = (cbPKT_HEADER_SIZE / 4); ///< Packet header size in uint32_t's
+#define cbPKT_MAX_SIZE      1024                    ///< Maximum packet size in bytes
+#define cbPKT_HEADER_SIZE   sizeof(cbPKT_HEADER)    ///< Packet header size in bytes
+#define cbPKT_HEADER_32SIZE (cbPKT_HEADER_SIZE / 4) ///< Packet header size in uint32_t's
 
 /// @}
 
@@ -273,8 +263,6 @@ typedef struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Old Packet Header and Generic (for CCF file compatibility)
 ///
-/// VER: 3.11 and older
-///
 /// Ground truth from upstream/cbproto/cbproto.h lines 385-420
 /// @{
 
@@ -288,7 +276,7 @@ typedef struct {
     uint8_t  dlen;    ///< length of data field in 32-bit chunks
 } cbPKT_HEADER_OLD;
 
-constexpr uint32_t cbPKT_HEADER_SIZE_OLD = sizeof(cbPKT_HEADER_OLD);    ///< define the size of the old packet header in bytes
+#define cbPKT_HEADER_SIZE_OLD       sizeof(cbPKT_HEADER_OLD)    ///< define the size of the old packet header in bytes
 
 /// @brief Old Generic Cerebus packet data structure (1024 bytes total)
 ///
@@ -308,14 +296,14 @@ typedef struct {
 /// @{
 
 // Filter type flags (used in cbFILTDESC hptype/lptype fields)
-constexpr uint32_t cbFILTTYPE_PHYSICAL = 0x0001;
-constexpr uint32_t cbFILTTYPE_DIGITAL = 0x0002;
-constexpr uint32_t cbFILTTYPE_ADAPTIVE = 0x0004;
-constexpr uint32_t cbFILTTYPE_NONLINEAR = 0x0008;
-constexpr uint32_t cbFILTTYPE_BUTTERWORTH = 0x0100;
-constexpr uint32_t cbFILTTYPE_CHEBYCHEV = 0x0200;
-constexpr uint32_t cbFILTTYPE_BESSEL = 0x0400;
-constexpr uint32_t cbFILTTYPE_ELLIPTICAL = 0x0800;
+#define  cbFILTTYPE_PHYSICAL      0x0001
+#define  cbFILTTYPE_DIGITAL       0x0002
+#define  cbFILTTYPE_ADAPTIVE      0x0004
+#define  cbFILTTYPE_NONLINEAR     0x0008
+#define  cbFILTTYPE_BUTTERWORTH   0x0100
+#define  cbFILTTYPE_CHEBYCHEV     0x0200
+#define  cbFILTTYPE_BESSEL        0x0400
+#define  cbFILTTYPE_ELLIPTICAL    0x0800
 
 /// @brief Filter description structure
 ///
@@ -430,161 +418,161 @@ typedef struct {
 /// @{
 
 // System packets
-constexpr uint32_t cbPKTTYPE_SYSHEARTBEAT = 0x00;    ///< System heartbeat packet
-constexpr uint32_t cbPKTTYPE_SYSPROTOCOLMONITOR = 0x01;    ///< Protocol monitoring packet
-constexpr uint32_t cbPKTTYPE_PREVREPSTREAM = 0x02;    ///< Preview reply stream
-constexpr uint32_t cbPKTTYPE_PREVREP = 0x03;    ///< Preview reply
-constexpr uint32_t cbPKTTYPE_PREVREPLNC = 0x04;    ///< Preview reply LNC // VER: 4.2+, changed to 0x04 from 0x01
-constexpr uint32_t cbPKTTYPE_REPCONFIGALL = 0x08;    ///< Response that NSP got your request
-constexpr uint32_t cbPKTTYPE_SYSREP = 0x10;    ///< System reply
-constexpr uint32_t cbPKTTYPE_SYSREPSPKLEN = 0x11;    ///< System reply spike length
-constexpr uint32_t cbPKTTYPE_SYSREPRUNLEV = 0x12;    ///< System reply runlevel
+#define cbPKTTYPE_SYSHEARTBEAT          0x00    ///< System heartbeat packet
+#define cbPKTTYPE_SYSPROTOCOLMONITOR    0x01    ///< Protocol monitoring packet
+#define cbPKTTYPE_PREVREPSTREAM         0x02    ///< Preview reply stream
+#define cbPKTTYPE_PREVREP               0x03    ///< Preview reply
+#define cbPKTTYPE_PREVREPLNC            0x04    ///< Preview reply LNC
+#define cbPKTTYPE_REPCONFIGALL          0x08    ///< Response that NSP got your request
+#define cbPKTTYPE_SYSREP                0x10    ///< System reply
+#define cbPKTTYPE_SYSREPSPKLEN          0x11    ///< System reply spike length
+#define cbPKTTYPE_SYSREPRUNLEV          0x12    ///< System reply runlevel
 
 // Processor, bank, and filter information packets
-constexpr uint32_t cbPKTTYPE_PROCREP = 0x21;    ///< Processor information reply
-constexpr uint32_t cbPKTTYPE_BANKREP = 0x22;    ///< Bank information reply
-constexpr uint32_t cbPKTTYPE_FILTREP = 0x23;    ///< Filter information reply
-constexpr uint32_t cbPKTTYPE_CHANRESETREP = 0x24;    ///< Channel reset reply
-constexpr uint32_t cbPKTTYPE_ADAPTFILTREP = 0x25;    ///< Adaptive filter reply
-constexpr uint32_t cbPKTTYPE_REFELECFILTREP = 0x26;    ///< Reference electrode filter reply
-constexpr uint32_t cbPKTTYPE_REPNTRODEINFO = 0x27;    ///< N-Trode information reply
-constexpr uint32_t cbPKTTYPE_LNCREP = 0x28;    ///< LNC reply
-constexpr uint32_t cbPKTTYPE_VIDEOSYNCHREP = 0x29;    ///< Video sync reply
+#define cbPKTTYPE_PROCREP               0x21    ///< Processor information reply
+#define cbPKTTYPE_BANKREP               0x22    ///< Bank information reply
+#define cbPKTTYPE_FILTREP               0x23    ///< Filter information reply
+#define cbPKTTYPE_CHANRESETREP          0x24    ///< Channel reset reply
+#define cbPKTTYPE_ADAPTFILTREP          0x25    ///< Adaptive filter reply
+#define cbPKTTYPE_REFELECFILTREP        0x26    ///< Reference electrode filter reply
+#define cbPKTTYPE_REPNTRODEINFO         0x27    ///< N-Trode information reply
+#define cbPKTTYPE_LNCREP                0x28    ///< LNC reply
+#define cbPKTTYPE_VIDEOSYNCHREP         0x29    ///< Video sync reply
 
 // Sample group and configuration packets
-constexpr uint32_t cbPKTTYPE_GROUPREP = 0x30;    ///< Sample group information reply
-constexpr uint32_t cbPKTTYPE_COMMENTREP = 0x31;    ///< Comment reply
-constexpr uint32_t cbPKTTYPE_NMREP = 0x32;    ///< NeuroMotive (NM) reply
-constexpr uint32_t cbPKTTYPE_WAVEFORMREP = 0x33;    ///< Waveform reply
-constexpr uint32_t cbPKTTYPE_STIMULATIONREP = 0x34;    ///< Stimulation reply
+#define cbPKTTYPE_GROUPREP              0x30    ///< Sample group information reply
+#define cbPKTTYPE_COMMENTREP            0x31    ///< Comment reply
+#define cbPKTTYPE_NMREP                 0x32    ///< NeuroMotive (NM) reply
+#define cbPKTTYPE_WAVEFORMREP           0x33    ///< Waveform reply
+#define cbPKTTYPE_STIMULATIONREP        0x34    ///< Stimulation reply
 
 // Channel information packets - Reply (0x40-0x4F)
-constexpr uint32_t cbPKTTYPE_CHANREP = 0x40;    ///< Channel information reply
-constexpr uint32_t cbPKTTYPE_CHANREPLABEL = 0x41;    ///< Channel label reply
-constexpr uint32_t cbPKTTYPE_CHANREPSCALE = 0x42;    ///< Channel scale reply
-constexpr uint32_t cbPKTTYPE_CHANREPDOUT = 0x43;    ///< Channel digital output reply
-constexpr uint32_t cbPKTTYPE_CHANREPDINP = 0x44;    ///< Channel digital input reply
-constexpr uint32_t cbPKTTYPE_CHANREPAOUT = 0x45;    ///< Channel analog output reply
-constexpr uint32_t cbPKTTYPE_CHANREPDISP = 0x46;    ///< Channel display reply
-constexpr uint32_t cbPKTTYPE_CHANREPAINP = 0x47;    ///< Channel analog input reply
-constexpr uint32_t cbPKTTYPE_CHANREPSMP = 0x48;    ///< Channel sampling reply
-constexpr uint32_t cbPKTTYPE_CHANREPSPK = 0x49;    ///< Channel spike reply
-constexpr uint32_t cbPKTTYPE_CHANREPSPKTHR = 0x4A;    ///< Channel spike threshold reply
-constexpr uint32_t cbPKTTYPE_CHANREPSPKHPS = 0x4B;    ///< Channel spike hoops reply
-constexpr uint32_t cbPKTTYPE_CHANREPUNITOVERRIDES = 0x4C;    ///< Channel unit overrides reply
-constexpr uint32_t cbPKTTYPE_CHANREPNTRODEGROUP = 0x4D;    ///< Channel n-trode group reply
-constexpr uint32_t cbPKTTYPE_CHANREPREJECTAMPLITUDE = 0x4E;   ///< Channel reject amplitude reply
-constexpr uint32_t cbPKTTYPE_CHANREPAUTOTHRESHOLD = 0x4F;    ///< Channel auto threshold reply
+#define cbPKTTYPE_CHANREP               0x40    ///< Channel information reply
+#define cbPKTTYPE_CHANREPLABEL          0x41    ///< Channel label reply
+#define cbPKTTYPE_CHANREPSCALE          0x42    ///< Channel scale reply
+#define cbPKTTYPE_CHANREPDOUT           0x43    ///< Channel digital output reply
+#define cbPKTTYPE_CHANREPDINP           0x44    ///< Channel digital input reply
+#define cbPKTTYPE_CHANREPAOUT           0x45    ///< Channel analog output reply
+#define cbPKTTYPE_CHANREPDISP           0x46    ///< Channel display reply
+#define cbPKTTYPE_CHANREPAINP           0x47    ///< Channel analog input reply
+#define cbPKTTYPE_CHANREPSMP            0x48    ///< Channel sampling reply
+#define cbPKTTYPE_CHANREPSPK            0x49    ///< Channel spike reply
+#define cbPKTTYPE_CHANREPSPKTHR         0x4A    ///< Channel spike threshold reply
+#define cbPKTTYPE_CHANREPSPKHPS         0x4B    ///< Channel spike hoops reply
+#define cbPKTTYPE_CHANREPUNITOVERRIDES  0x4C    ///< Channel unit overrides reply
+#define cbPKTTYPE_CHANREPNTRODEGROUP    0x4D    ///< Channel n-trode group reply
+#define cbPKTTYPE_CHANREPREJECTAMPLITUDE 0x4E   ///< Channel reject amplitude reply
+#define cbPKTTYPE_CHANREPAUTOTHRESHOLD  0x4F    ///< Channel auto threshold reply
 
 // Spike sorting packets - Reply (0x50-0x5F)
-constexpr uint32_t cbPKTTYPE_SS_MODELALLREP = 0x50;    ///< Spike sorting model all reply
-constexpr uint32_t cbPKTTYPE_SS_MODELREP = 0x51;    ///< Spike sorting model reply
-constexpr uint32_t cbPKTTYPE_SS_DETECTREP = 0x52;    ///< Spike sorting detect reply
-constexpr uint32_t cbPKTTYPE_SS_ARTIF_REJECTREP = 0x53;    ///< Spike sorting artifact reject reply
-constexpr uint32_t cbPKTTYPE_SS_NOISE_BOUNDARYREP = 0x54;    ///< Spike sorting noise boundary reply
-constexpr uint32_t cbPKTTYPE_SS_STATISTICSREP = 0x55;    ///< Spike sorting statistics reply
-constexpr uint32_t cbPKTTYPE_SS_RESETREP = 0x56;    ///< Spike sorting reset reply
-constexpr uint32_t cbPKTTYPE_SS_STATUSREP = 0x57;    ///< Spike sorting status reply
-constexpr uint32_t cbPKTTYPE_SS_RESET_MODEL_REP = 0x58;    ///< Spike sorting reset model reply
-constexpr uint32_t cbPKTTYPE_SS_RECALCREP = 0x59;    ///< Spike sorting recalculate reply
-constexpr uint32_t cbPKTTYPE_FS_BASISREP = 0x5B;    ///< Feature space basis reply
-constexpr uint32_t cbPKTTYPE_NPLAYREP = 0x5C;    ///< NPlay reply
-constexpr uint32_t cbPKTTYPE_SET_DOUTREP = 0x5D;    ///< Set digital output reply
-constexpr uint32_t cbPKTTYPE_TRIGGERREP = 0x5E;    ///< Trigger reply
-constexpr uint32_t cbPKTTYPE_VIDEOTRACKREP = 0x5F;    ///< Video track reply
+#define cbPKTTYPE_SS_MODELALLREP        0x50    ///< Spike sorting model all reply
+#define cbPKTTYPE_SS_MODELREP           0x51    ///< Spike sorting model reply
+#define cbPKTTYPE_SS_DETECTREP          0x52    ///< Spike sorting detect reply
+#define cbPKTTYPE_SS_ARTIF_REJECTREP    0x53    ///< Spike sorting artifact reject reply
+#define cbPKTTYPE_SS_NOISE_BOUNDARYREP  0x54    ///< Spike sorting noise boundary reply
+#define cbPKTTYPE_SS_STATISTICSREP      0x55    ///< Spike sorting statistics reply
+#define cbPKTTYPE_SS_RESETREP           0x56    ///< Spike sorting reset reply
+#define cbPKTTYPE_SS_STATUSREP          0x57    ///< Spike sorting status reply
+#define cbPKTTYPE_SS_RESET_MODEL_REP    0x58    ///< Spike sorting reset model reply
+#define cbPKTTYPE_SS_RECALCREP          0x59    ///< Spike sorting recalculate reply
+#define cbPKTTYPE_FS_BASISREP           0x5B    ///< Feature space basis reply
+#define cbPKTTYPE_NPLAYREP              0x5C    ///< NPlay reply
+#define cbPKTTYPE_SET_DOUTREP           0x5D    ///< Set digital output reply
+#define cbPKTTYPE_TRIGGERREP            0x5E    ///< Trigger reply
+#define cbPKTTYPE_VIDEOTRACKREP         0x5F    ///< Video track reply
 
 // File and configuration packets - Reply (0x60-0x6F)
-constexpr uint32_t cbPKTTYPE_REPFILECFG = 0x61;    ///< File configuration reply
-constexpr uint32_t cbPKTTYPE_REPUNITSELECTION = 0x62;    ///< Unit selection reply
-constexpr uint32_t cbPKTTYPE_LOGREP = 0x63;    ///< Log reply
-constexpr uint32_t cbPKTTYPE_REPPATIENTINFO = 0x64;    ///< Patient info reply
-constexpr uint32_t cbPKTTYPE_REPIMPEDANCE = 0x65;    ///< Impedance reply
-constexpr uint32_t cbPKTTYPE_REPINITIMPEDANCE = 0x66;    ///< Initial impedance reply
-constexpr uint32_t cbPKTTYPE_REPPOLL = 0x67;    ///< Poll reply
-constexpr uint32_t cbPKTTYPE_REPMAPFILE = 0x68;    ///< Map file reply
+#define cbPKTTYPE_REPFILECFG            0x61    ///< File configuration reply
+#define cbPKTTYPE_REPUNITSELECTION      0x62    ///< Unit selection reply
+#define cbPKTTYPE_LOGREP                0x63    ///< Log reply
+#define cbPKTTYPE_REPPATIENTINFO        0x64    ///< Patient info reply
+#define cbPKTTYPE_REPIMPEDANCE          0x65    ///< Impedance reply
+#define cbPKTTYPE_REPINITIMPEDANCE      0x66    ///< Initial impedance reply
+#define cbPKTTYPE_REPPOLL               0x67    ///< Poll reply
+#define cbPKTTYPE_REPMAPFILE            0x68    ///< Map file reply
 
 // Update packets
-constexpr uint32_t cbPKTTYPE_UPDATEREP = 0x71;    ///< Update reply
+#define cbPKTTYPE_UPDATEREP             0x71    ///< Update reply
 
 // Preview packets - Set
-constexpr uint32_t cbPKTTYPE_PREVSETSTREAM = 0x82;    ///< Preview set stream
-constexpr uint32_t cbPKTTYPE_PREVSET = 0x83;    ///< Preview set
-constexpr uint32_t cbPKTTYPE_PREVSETLNC = 0x84;    ///< Preview set LNC // VER: 4.2+, changed to 0x84 from 0x81
+#define cbPKTTYPE_PREVSETSTREAM         0x82    ///< Preview set stream
+#define cbPKTTYPE_PREVSET               0x83    ///< Preview set
+#define cbPKTTYPE_PREVSETLNC            0x84    ///< Preview set LNC
 
 // System packets - Request (0x88-0x9F)
-constexpr uint32_t cbPKTTYPE_REQCONFIGALL = 0x88;    ///< Request for ALL configuration information
-constexpr uint32_t cbPKTTYPE_SYSSET = 0x90;    ///< System set
-constexpr uint32_t cbPKTTYPE_SYSSETSPKLEN = 0x91;    ///< System set spike length
-constexpr uint32_t cbPKTTYPE_SYSSETRUNLEV = 0x92;    ///< System set runlevel
+#define cbPKTTYPE_REQCONFIGALL          0x88    ///< Request for ALL configuration information
+#define cbPKTTYPE_SYSSET                0x90    ///< System set
+#define cbPKTTYPE_SYSSETSPKLEN          0x91    ///< System set spike length
+#define cbPKTTYPE_SYSSETRUNLEV          0x92    ///< System set runlevel
 
 // Filter and configuration packets - Set (0xA0-0xAF)
-constexpr uint32_t cbPKTTYPE_FILTSET = 0xA3;    ///< Filter set
-constexpr uint32_t cbPKTTYPE_CHANRESET = 0xA4;    ///< Channel reset
-constexpr uint32_t cbPKTTYPE_ADAPTFILTSET = 0xA5;    ///< Adaptive filter set
-constexpr uint32_t cbPKTTYPE_REFELECFILTSET = 0xA6;    ///< Reference electrode filter set
-constexpr uint32_t cbPKTTYPE_SETNTRODEINFO = 0xA7;    ///< N-Trode information set
-constexpr uint32_t cbPKTTYPE_LNCSET = 0xA8;    ///< LNC set
-constexpr uint32_t cbPKTTYPE_VIDEOSYNCHSET = 0xA9;    ///< Video sync set
+#define cbPKTTYPE_FILTSET               0xA3    ///< Filter set
+#define cbPKTTYPE_CHANRESET             0xA4    ///< Channel reset
+#define cbPKTTYPE_ADAPTFILTSET          0xA5    ///< Adaptive filter set
+#define cbPKTTYPE_REFELECFILTSET        0xA6    ///< Reference electrode filter set
+#define cbPKTTYPE_SETNTRODEINFO         0xA7    ///< N-Trode information set
+#define cbPKTTYPE_LNCSET                0xA8    ///< LNC set
+#define cbPKTTYPE_VIDEOSYNCHSET         0xA9    ///< Video sync set
 
 // Sample group and waveform packets - Set (0xB0-0xBF)
-constexpr uint32_t cbPKTTYPE_GROUPSET = 0xB0;    ///< Sample group set
-constexpr uint32_t cbPKTTYPE_COMMENTSET = 0xB1;    ///< Comment set
-constexpr uint32_t cbPKTTYPE_NMSET = 0xB2;    ///< NeuroMotive set
-constexpr uint32_t cbPKTTYPE_WAVEFORMSET = 0xB3;    ///< Waveform set
-constexpr uint32_t cbPKTTYPE_STIMULATIONSET = 0xB4;    ///< Stimulation set
+#define cbPKTTYPE_GROUPSET              0xB0    ///< Sample group set
+#define cbPKTTYPE_COMMENTSET            0xB1    ///< Comment set
+#define cbPKTTYPE_NMSET                 0xB2    ///< NeuroMotive set
+#define cbPKTTYPE_WAVEFORMSET           0xB3    ///< Waveform set
+#define cbPKTTYPE_STIMULATIONSET        0xB4    ///< Stimulation set
 
 // Channel information packets - Set (0xC0-0xCF)
-constexpr uint32_t cbPKTTYPE_CHANSET = 0xC0;    ///< Channel information set
-constexpr uint32_t cbPKTTYPE_CHANSETLABEL = 0xC1;    ///< Channel label set
-constexpr uint32_t cbPKTTYPE_CHANSETSCALE = 0xC2;    ///< Channel scale set
-constexpr uint32_t cbPKTTYPE_CHANSETDOUT = 0xC3;    ///< Channel digital output set
-constexpr uint32_t cbPKTTYPE_CHANSETDINP = 0xC4;    ///< Channel digital input set
-constexpr uint32_t cbPKTTYPE_CHANSETAOUT = 0xC5;    ///< Channel analog output set
-constexpr uint32_t cbPKTTYPE_CHANSETDISP = 0xC6;    ///< Channel display set
-constexpr uint32_t cbPKTTYPE_CHANSETAINP = 0xC7;    ///< Channel analog input set
-constexpr uint32_t cbPKTTYPE_CHANSETSMP = 0xC8;    ///< Channel sampling set
-constexpr uint32_t cbPKTTYPE_CHANSETSPK = 0xC9;    ///< Channel spike set
-constexpr uint32_t cbPKTTYPE_CHANSETSPKTHR = 0xCA;    ///< Channel spike threshold set
-constexpr uint32_t cbPKTTYPE_CHANSETSPKHPS = 0xCB;    ///< Channel spike hoops set
-constexpr uint32_t cbPKTTYPE_CHANSETUNITOVERRIDES = 0xCC;    ///< Channel unit overrides set
-constexpr uint32_t cbPKTTYPE_CHANSETNTRODEGROUP = 0xCD;    ///< Channel n-trode group set
-constexpr uint32_t cbPKTTYPE_CHANSETREJECTAMPLITUDE = 0xCE;   ///< Channel reject amplitude set
-constexpr uint32_t cbPKTTYPE_CHANSETAUTOTHRESHOLD = 0xCF;    ///< Channel auto threshold set
+#define cbPKTTYPE_CHANSET               0xC0    ///< Channel information set
+#define cbPKTTYPE_CHANSETLABEL          0xC1    ///< Channel label set
+#define cbPKTTYPE_CHANSETSCALE          0xC2    ///< Channel scale set
+#define cbPKTTYPE_CHANSETDOUT           0xC3    ///< Channel digital output set
+#define cbPKTTYPE_CHANSETDINP           0xC4    ///< Channel digital input set
+#define cbPKTTYPE_CHANSETAOUT           0xC5    ///< Channel analog output set
+#define cbPKTTYPE_CHANSETDISP           0xC6    ///< Channel display set
+#define cbPKTTYPE_CHANSETAINP           0xC7    ///< Channel analog input set
+#define cbPKTTYPE_CHANSETSMP            0xC8    ///< Channel sampling set
+#define cbPKTTYPE_CHANSETSPK            0xC9    ///< Channel spike set
+#define cbPKTTYPE_CHANSETSPKTHR         0xCA    ///< Channel spike threshold set
+#define cbPKTTYPE_CHANSETSPKHPS         0xCB    ///< Channel spike hoops set
+#define cbPKTTYPE_CHANSETUNITOVERRIDES  0xCC    ///< Channel unit overrides set
+#define cbPKTTYPE_CHANSETNTRODEGROUP    0xCD    ///< Channel n-trode group set
+#define cbPKTTYPE_CHANSETREJECTAMPLITUDE 0xCE   ///< Channel reject amplitude set
+#define cbPKTTYPE_CHANSETAUTOTHRESHOLD  0xCF    ///< Channel auto threshold set
 
 // Spike sorting packets - Set (0xD0-0xDF)
-constexpr uint32_t cbPKTTYPE_SS_MODELALLSET = 0xD0;    ///< Spike sorting model all set
-constexpr uint32_t cbPKTTYPE_SS_MODELSET = 0xD1;    ///< Spike sorting model set
-constexpr uint32_t cbPKTTYPE_SS_DETECTSET = 0xD2;    ///< Spike sorting detect set
-constexpr uint32_t cbPKTTYPE_SS_ARTIF_REJECTSET = 0xD3;    ///< Spike sorting artifact reject set
-constexpr uint32_t cbPKTTYPE_SS_NOISE_BOUNDARYSET = 0xD4;    ///< Spike sorting noise boundary set
-constexpr uint32_t cbPKTTYPE_SS_STATISTICSSET = 0xD5;    ///< Spike sorting statistics set
-constexpr uint32_t cbPKTTYPE_SS_RESETSET = 0xD6;    ///< Spike sorting reset set
-constexpr uint32_t cbPKTTYPE_SS_STATUSSET = 0xD7;    ///< Spike sorting status set
-constexpr uint32_t cbPKTTYPE_SS_RESET_MODEL_SET = 0xD8;    ///< Spike sorting reset model set
-constexpr uint32_t cbPKTTYPE_SS_RECALCSET = 0xD9;    ///< Spike sorting recalculate set
-constexpr uint32_t cbPKTTYPE_FS_BASISSET = 0xDB;    ///< Feature space basis set
-constexpr uint32_t cbPKTTYPE_NPLAYSET = 0xDC;    ///< NPlay set
-constexpr uint32_t cbPKTTYPE_SET_DOUTSET = 0xDD;    ///< Set digital output set
-constexpr uint32_t cbPKTTYPE_TRIGGERSET = 0xDE;    ///< Trigger set
-constexpr uint32_t cbPKTTYPE_VIDEOTRACKSET = 0xDF;    ///< Video track set
+#define cbPKTTYPE_SS_MODELALLSET        0xD0    ///< Spike sorting model all set
+#define cbPKTTYPE_SS_MODELSET           0xD1    ///< Spike sorting model set
+#define cbPKTTYPE_SS_DETECTSET          0xD2    ///< Spike sorting detect set
+#define cbPKTTYPE_SS_ARTIF_REJECTSET    0xD3    ///< Spike sorting artifact reject set
+#define cbPKTTYPE_SS_NOISE_BOUNDARYSET  0xD4    ///< Spike sorting noise boundary set
+#define cbPKTTYPE_SS_STATISTICSSET      0xD5    ///< Spike sorting statistics set
+#define cbPKTTYPE_SS_RESETSET           0xD6    ///< Spike sorting reset set
+#define cbPKTTYPE_SS_STATUSSET          0xD7    ///< Spike sorting status set
+#define cbPKTTYPE_SS_RESET_MODEL_SET    0xD8    ///< Spike sorting reset model set
+#define cbPKTTYPE_SS_RECALCSET          0xD9    ///< Spike sorting recalculate set
+#define cbPKTTYPE_FS_BASISSET           0xDB    ///< Feature space basis set
+#define cbPKTTYPE_NPLAYSET              0xDC    ///< NPlay set
+#define cbPKTTYPE_SET_DOUTSET           0xDD    ///< Set digital output set
+#define cbPKTTYPE_TRIGGERSET            0xDE    ///< Trigger set
+#define cbPKTTYPE_VIDEOTRACKSET         0xDF    ///< Video track set
 
 // Packet type masks and conversion constants
-constexpr uint32_t cbPKTTYPE_MASKED_REFLECTED = 0xE0;    ///< Masked reflected packet type
-constexpr uint32_t cbPKTTYPE_COMPARE_MASK_REFLECTED = 0xF0;    ///< Compare mask for reflected packets
-constexpr uint32_t cbPKTTYPE_REFLECTED_CONVERSION_MASK = 0x7F;    ///< Reflected conversion mask
+#define cbPKTTYPE_MASKED_REFLECTED              0xE0    ///< Masked reflected packet type
+#define cbPKTTYPE_COMPARE_MASK_REFLECTED        0xF0    ///< Compare mask for reflected packets
+#define cbPKTTYPE_REFLECTED_CONVERSION_MASK     0x7F    ///< Reflected conversion mask
 
 // File and configuration packets - Set (0xE0-0xEF)
-constexpr uint32_t cbPKTTYPE_SETFILECFG = 0xE1;    ///< File configuration set
-constexpr uint32_t cbPKTTYPE_SETUNITSELECTION = 0xE2;    ///< Unit selection set
-constexpr uint32_t cbPKTTYPE_LOGSET = 0xE3;    ///< Log set
-constexpr uint32_t cbPKTTYPE_SETPATIENTINFO = 0xE4;    ///< Patient info set
-constexpr uint32_t cbPKTTYPE_SETIMPEDANCE = 0xE5;    ///< Impedance set
-constexpr uint32_t cbPKTTYPE_SETINITIMPEDANCE = 0xE6;    ///< Initial impedance set
-constexpr uint32_t cbPKTTYPE_SETPOLL = 0xE7;    ///< Poll set
-constexpr uint32_t cbPKTTYPE_SETMAPFILE = 0xE8;    ///< Map file set
+#define cbPKTTYPE_SETFILECFG            0xE1    ///< File configuration set
+#define cbPKTTYPE_SETUNITSELECTION      0xE2    ///< Unit selection set
+#define cbPKTTYPE_LOGSET                0xE3    ///< Log set
+#define cbPKTTYPE_SETPATIENTINFO        0xE4    ///< Patient info set
+#define cbPKTTYPE_SETIMPEDANCE          0xE5    ///< Impedance set
+#define cbPKTTYPE_SETINITIMPEDANCE      0xE6    ///< Initial impedance set
+#define cbPKTTYPE_SETPOLL               0xE7    ///< Poll set
+#define cbPKTTYPE_SETMAPFILE            0xE8    ///< Map file set
 
 // Update packets - Set
-constexpr uint32_t cbPKTTYPE_UPDATESET = 0xF1;    ///< Update set
+#define cbPKTTYPE_UPDATESET             0xF1    ///< Update set
 
 /// @}
 
@@ -592,7 +580,7 @@ constexpr uint32_t cbPKTTYPE_UPDATESET = 0xF1;    ///< Update set
 /// @name Channel Constants
 /// @{
 
-constexpr uint32_t cbPKTCHAN_CONFIGURATION = 0x8000;  ///< Channel # to mean configuration
+#define cbPKTCHAN_CONFIGURATION         0x8000  ///< Channel # to mean configuration
 
 /// @}
 
@@ -603,14 +591,14 @@ constexpr uint32_t cbPKTCHAN_CONFIGURATION = 0x8000;  ///< Channel # to mean con
 /// These flags define the capabilities of each channel
 /// @{
 
-constexpr uint32_t cbCHAN_EXISTS = 0x00000001;  ///< Channel id is allocated
-constexpr uint32_t cbCHAN_CONNECTED = 0x00000002;  ///< Channel is connected and mapped and ready to use
-constexpr uint32_t cbCHAN_ISOLATED = 0x00000004;  ///< Channel is electrically isolated
-constexpr uint32_t cbCHAN_AINP = 0x00000100;  ///< Channel has analog input capabilities
-constexpr uint32_t cbCHAN_AOUT = 0x00000200;  ///< Channel has analog output capabilities
-constexpr uint32_t cbCHAN_DINP = 0x00000400;  ///< Channel has digital input capabilities
-constexpr uint32_t cbCHAN_DOUT = 0x00000800;  ///< Channel has digital output capabilities
-constexpr uint32_t cbCHAN_GYRO = 0x00001000;  ///< Channel has gyroscope/accelerometer/magnetometer/temperature capabilities
+#define cbCHAN_EXISTS       0x00000001  ///< Channel id is allocated
+#define cbCHAN_CONNECTED    0x00000002  ///< Channel is connected and mapped and ready to use
+#define cbCHAN_ISOLATED     0x00000004  ///< Channel is electrically isolated
+#define cbCHAN_AINP         0x00000100  ///< Channel has analog input capabilities
+#define cbCHAN_AOUT         0x00000200  ///< Channel has analog output capabilities
+#define cbCHAN_DINP         0x00000400  ///< Channel has digital input capabilities
+#define cbCHAN_DOUT         0x00000800  ///< Channel has digital output capabilities
+#define cbCHAN_GYRO         0x00001000  ///< Channel has gyroscope/accelerometer/magnetometer/temperature capabilities
 
 /// @}
 
@@ -620,28 +608,28 @@ constexpr uint32_t cbCHAN_GYRO = 0x00001000;  ///< Channel has gyroscope/acceler
 /// Ground truth from upstream/cbproto/cbproto.h lines 569-590
 /// @{
 
-constexpr uint32_t cbDINP_SERIALMASK = 0x000000FF;  ///< Bit mask used to detect RS232 Serial Baud Rates
-constexpr uint32_t cbDINP_BAUD2400 = 0x00000001;  ///< RS232 Serial Port operates at 2400   (n-8-1)
-constexpr uint32_t cbDINP_BAUD9600 = 0x00000002;  ///< RS232 Serial Port operates at 9600   (n-8-1)
-constexpr uint32_t cbDINP_BAUD19200 = 0x00000004;  ///< RS232 Serial Port operates at 19200  (n-8-1)
-constexpr uint32_t cbDINP_BAUD38400 = 0x00000008;  ///< RS232 Serial Port operates at 38400  (n-8-1)
-constexpr uint32_t cbDINP_BAUD57600 = 0x00000010;  ///< RS232 Serial Port operates at 57600  (n-8-1)
-constexpr uint32_t cbDINP_BAUD115200 = 0x00000020;  ///< RS232 Serial Port operates at 115200 (n-8-1)
-constexpr uint32_t cbDINP_1BIT = 0x00000100;  ///< Port has a single input bit (eg single BNC input)
-constexpr uint32_t cbDINP_8BIT = 0x00000200;  ///< Port has 8 input bits
-constexpr uint32_t cbDINP_16BIT = 0x00000400;  ///< Port has 16 input bits
-constexpr uint32_t cbDINP_32BIT = 0x00000800;  ///< Port has 32 input bits
-constexpr uint32_t cbDINP_ANYBIT = 0x00001000;  ///< Capture the port value when any bit changes.
-constexpr uint32_t cbDINP_WRDSTRB = 0x00002000;  ///< Capture the port when a word-write line is strobed
-constexpr uint32_t cbDINP_PKTCHAR = 0x00004000;  ///< Capture packets using an End of Packet Character
-constexpr uint32_t cbDINP_PKTSTRB = 0x00008000;  ///< Capture packets using an End of Packet Logic Input
-constexpr uint32_t cbDINP_MONITOR = 0x00010000;  ///< Port controls other ports or system events
-constexpr uint32_t cbDINP_REDGE = 0x00020000;  ///< Capture the port value when any bit changes lo-2-hi (rising edge)
-constexpr uint32_t cbDINP_FEDGE = 0x00040000;  ///< Capture the port value when any bit changes hi-2-lo (falling edge)
-constexpr uint32_t cbDINP_STRBANY = 0x00080000;  ///< Capture packets using 8-bit strobe/8-bit any Input
-constexpr uint32_t cbDINP_STRBRIS = 0x00100000;  ///< Capture packets using 8-bit strobe/8-bit rising edge Input
-constexpr uint32_t cbDINP_STRBFAL = 0x00200000;  ///< Capture packets using 8-bit strobe/8-bit falling edge Input
-constexpr uint32_t cbDINP_MASK = (cbDINP_ANYBIT | cbDINP_WRDSTRB | cbDINP_PKTCHAR | cbDINP_PKTSTRB | cbDINP_MONITOR | cbDINP_REDGE | cbDINP_FEDGE | cbDINP_STRBANY | cbDINP_STRBRIS | cbDINP_STRBFAL);
+#define  cbDINP_SERIALMASK   0x000000FF  ///< Bit mask used to detect RS232 Serial Baud Rates
+#define  cbDINP_BAUD2400     0x00000001  ///< RS232 Serial Port operates at 2400   (n-8-1)
+#define  cbDINP_BAUD9600     0x00000002  ///< RS232 Serial Port operates at 9600   (n-8-1)
+#define  cbDINP_BAUD19200    0x00000004  ///< RS232 Serial Port operates at 19200  (n-8-1)
+#define  cbDINP_BAUD38400    0x00000008  ///< RS232 Serial Port operates at 38400  (n-8-1)
+#define  cbDINP_BAUD57600    0x00000010  ///< RS232 Serial Port operates at 57600  (n-8-1)
+#define  cbDINP_BAUD115200   0x00000020  ///< RS232 Serial Port operates at 115200 (n-8-1)
+#define  cbDINP_1BIT         0x00000100  ///< Port has a single input bit (eg single BNC input)
+#define  cbDINP_8BIT         0x00000200  ///< Port has 8 input bits
+#define  cbDINP_16BIT        0x00000400  ///< Port has 16 input bits
+#define  cbDINP_32BIT        0x00000800  ///< Port has 32 input bits
+#define  cbDINP_ANYBIT       0x00001000  ///< Capture the port value when any bit changes.
+#define  cbDINP_WRDSTRB      0x00002000  ///< Capture the port when a word-write line is strobed
+#define  cbDINP_PKTCHAR      0x00004000  ///< Capture packets using an End of Packet Character
+#define  cbDINP_PKTSTRB      0x00008000  ///< Capture packets using an End of Packet Logic Input
+#define  cbDINP_MONITOR      0x00010000  ///< Port controls other ports or system events
+#define  cbDINP_REDGE        0x00020000  ///< Capture the port value when any bit changes lo-2-hi (rising edge)
+#define  cbDINP_FEDGE        0x00040000  ///< Capture the port value when any bit changes hi-2-lo (falling edge)
+#define  cbDINP_STRBANY      0x00080000  ///< Capture packets using 8-bit strobe/8-bit any Input
+#define  cbDINP_STRBRIS      0x00100000  ///< Capture packets using 8-bit strobe/8-bit rising edge Input
+#define  cbDINP_STRBFAL      0x00200000  ///< Capture packets using 8-bit strobe/8-bit falling edge Input
+#define  cbDINP_MASK         (cbDINP_ANYBIT | cbDINP_WRDSTRB | cbDINP_PKTCHAR | cbDINP_PKTSTRB | cbDINP_MONITOR | cbDINP_REDGE | cbDINP_FEDGE | cbDINP_STRBANY | cbDINP_STRBRIS | cbDINP_STRBFAL)
 
 /// @}
 
@@ -651,38 +639,38 @@ constexpr uint32_t cbDINP_MASK = (cbDINP_ANYBIT | cbDINP_WRDSTRB | cbDINP_PKTCHA
 /// Ground truth from upstream/cbproto/cbproto.h lines 599-630
 /// @{
 
-constexpr uint32_t cbDOUT_SERIALMASK = 0x000000FF;  ///< Port operates as an RS232 Serial Connection
-constexpr uint32_t cbDOUT_BAUD2400 = 0x00000001;  ///< Serial Port operates at 2400   (n-8-1)
-constexpr uint32_t cbDOUT_BAUD9600 = 0x00000002;  ///< Serial Port operates at 9600   (n-8-1)
-constexpr uint32_t cbDOUT_BAUD19200 = 0x00000004;  ///< Serial Port operates at 19200  (n-8-1)
-constexpr uint32_t cbDOUT_BAUD38400 = 0x00000008;  ///< Serial Port operates at 38400  (n-8-1)
-constexpr uint32_t cbDOUT_BAUD57600 = 0x00000010;  ///< Serial Port operates at 57600  (n-8-1)
-constexpr uint32_t cbDOUT_BAUD115200 = 0x00000020;  ///< Serial Port operates at 115200 (n-8-1)
-constexpr uint32_t cbDOUT_1BIT = 0x00000100;  ///< Port has a single output bit (eg single BNC output)
-constexpr uint32_t cbDOUT_8BIT = 0x00000200;  ///< Port has 8 output bits
-constexpr uint32_t cbDOUT_16BIT = 0x00000400;  ///< Port has 16 output bits
-constexpr uint32_t cbDOUT_32BIT = 0x00000800;  ///< Port has 32 output bits
-constexpr uint32_t cbDOUT_VALUE = 0x00010000;  ///< Port can be manually configured
-constexpr uint32_t cbDOUT_TRACK = 0x00020000;  ///< Port should track the most recently selected channel
-constexpr uint32_t cbDOUT_FREQUENCY = 0x00040000;  ///< Port can output a frequency
-constexpr uint32_t cbDOUT_TRIGGERED = 0x00080000;  ///< Port can be triggered
-constexpr uint32_t cbDOUT_MONITOR_UNIT0 = 0x01000000;  ///< Can monitor unit 0 = UNCLASSIFIED
-constexpr uint32_t cbDOUT_MONITOR_UNIT1 = 0x02000000;  ///< Can monitor unit 1
-constexpr uint32_t cbDOUT_MONITOR_UNIT2 = 0x04000000;  ///< Can monitor unit 2
-constexpr uint32_t cbDOUT_MONITOR_UNIT3 = 0x08000000;  ///< Can monitor unit 3
-constexpr uint32_t cbDOUT_MONITOR_UNIT4 = 0x10000000;  ///< Can monitor unit 4
-constexpr uint32_t cbDOUT_MONITOR_UNIT5 = 0x20000000;  ///< Can monitor unit 5
-constexpr uint32_t cbDOUT_MONITOR_UNIT_ALL = 0x3F000000;  ///< Can monitor ALL units
-constexpr uint32_t cbDOUT_MONITOR_SHIFT_TO_FIRST_UNIT = 24;  ///< This tells us how many bit places to get to unit 1
+#define  cbDOUT_SERIALMASK          0x000000FF  ///< Port operates as an RS232 Serial Connection
+#define  cbDOUT_BAUD2400            0x00000001  ///< Serial Port operates at 2400   (n-8-1)
+#define  cbDOUT_BAUD9600            0x00000002  ///< Serial Port operates at 9600   (n-8-1)
+#define  cbDOUT_BAUD19200           0x00000004  ///< Serial Port operates at 19200  (n-8-1)
+#define  cbDOUT_BAUD38400           0x00000008  ///< Serial Port operates at 38400  (n-8-1)
+#define  cbDOUT_BAUD57600           0x00000010  ///< Serial Port operates at 57600  (n-8-1)
+#define  cbDOUT_BAUD115200          0x00000020  ///< Serial Port operates at 115200 (n-8-1)
+#define  cbDOUT_1BIT                0x00000100  ///< Port has a single output bit (eg single BNC output)
+#define  cbDOUT_8BIT                0x00000200  ///< Port has 8 output bits
+#define  cbDOUT_16BIT               0x00000400  ///< Port has 16 output bits
+#define  cbDOUT_32BIT               0x00000800  ///< Port has 32 output bits
+#define  cbDOUT_VALUE               0x00010000  ///< Port can be manually configured
+#define  cbDOUT_TRACK               0x00020000  ///< Port should track the most recently selected channel
+#define  cbDOUT_FREQUENCY           0x00040000  ///< Port can output a frequency
+#define  cbDOUT_TRIGGERED           0x00080000  ///< Port can be triggered
+#define  cbDOUT_MONITOR_UNIT0       0x01000000  ///< Can monitor unit 0 = UNCLASSIFIED
+#define  cbDOUT_MONITOR_UNIT1       0x02000000  ///< Can monitor unit 1
+#define  cbDOUT_MONITOR_UNIT2       0x04000000  ///< Can monitor unit 2
+#define  cbDOUT_MONITOR_UNIT3       0x08000000  ///< Can monitor unit 3
+#define  cbDOUT_MONITOR_UNIT4       0x10000000  ///< Can monitor unit 4
+#define  cbDOUT_MONITOR_UNIT5       0x20000000  ///< Can monitor unit 5
+#define  cbDOUT_MONITOR_UNIT_ALL    0x3F000000  ///< Can monitor ALL units
+#define  cbDOUT_MONITOR_SHIFT_TO_FIRST_UNIT 24  ///< This tells us how many bit places to get to unit 1
 
 // Trigger types for Digital Output channels
-constexpr uint32_t cbDOUT_TRIGGER_NONE = 0;   ///< instant software trigger
-constexpr uint32_t cbDOUT_TRIGGER_DINPRISING = 1;   ///< digital input rising edge trigger
-constexpr uint32_t cbDOUT_TRIGGER_DINPFALLING = 2;   ///< digital input falling edge trigger
-constexpr uint32_t cbDOUT_TRIGGER_SPIKEUNIT = 3;   ///< spike unit
-constexpr uint32_t cbDOUT_TRIGGER_NM = 4;   ///< comment RGBA color (A being big byte)
-constexpr uint32_t cbDOUT_TRIGGER_RECORDINGSTART = 5;   ///< recording start trigger
-constexpr uint32_t cbDOUT_TRIGGER_EXTENSION = 6;   ///< extension trigger
+#define  cbDOUT_TRIGGER_NONE            0   ///< instant software trigger
+#define  cbDOUT_TRIGGER_DINPRISING      1   ///< digital input rising edge trigger
+#define  cbDOUT_TRIGGER_DINPFALLING     2   ///< digital input falling edge trigger
+#define  cbDOUT_TRIGGER_SPIKEUNIT       3   ///< spike unit
+#define  cbDOUT_TRIGGER_NM              4   ///< comment RGBA color (A being big byte)
+#define  cbDOUT_TRIGGER_RECORDINGSTART  5   ///< recording start trigger
+#define  cbDOUT_TRIGGER_EXTENSION       6   ///< extension trigger
 
 /// @}
 
@@ -692,33 +680,33 @@ constexpr uint32_t cbDOUT_TRIGGER_EXTENSION = 6;   ///< extension trigger
 /// Ground truth from upstream/cbproto/cbproto.h lines 696-723
 /// @{
 
-constexpr uint32_t cbAINP_RAWPREVIEW = 0x00000001;      ///< Generate scrolling preview data for the raw channel
-constexpr uint32_t cbAINP_LNC = 0x00000002;      ///< Line Noise Cancellation
-constexpr uint32_t cbAINP_LNCPREVIEW = 0x00000004;      ///< Retrieve the LNC correction waveform
-constexpr uint32_t cbAINP_SMPSTREAM = 0x00000010;      ///< stream the analog input stream directly to disk
-constexpr uint32_t cbAINP_SMPFILTER = 0x00000020;      ///< Digitally filter the analog input stream
-constexpr uint32_t cbAINP_RAWSTREAM = 0x00000040;      ///< Raw data stream available
-constexpr uint32_t cbAINP_SPKSTREAM = 0x00000100;      ///< Spike Stream is available
-constexpr uint32_t cbAINP_SPKFILTER = 0x00000200;      ///< Selectable Filters
-constexpr uint32_t cbAINP_SPKPREVIEW = 0x00000400;      ///< Generate scrolling preview of the spike channel
-constexpr uint32_t cbAINP_SPKPROC = 0x00000800;      ///< Channel is able to do online spike processing
-constexpr uint32_t cbAINP_OFFSET_CORRECT_CAP = 0x00001000;      ///< Offset correction mode (0-disabled 1-enabled)
+#define  cbAINP_RAWPREVIEW          0x00000001      ///< Generate scrolling preview data for the raw channel
+#define  cbAINP_LNC                 0x00000002      ///< Line Noise Cancellation
+#define  cbAINP_LNCPREVIEW          0x00000004      ///< Retrieve the LNC correction waveform
+#define  cbAINP_SMPSTREAM           0x00000010      ///< stream the analog input stream directly to disk
+#define  cbAINP_SMPFILTER           0x00000020      ///< Digitally filter the analog input stream
+#define  cbAINP_RAWSTREAM           0x00000040      ///< Raw data stream available
+#define  cbAINP_SPKSTREAM           0x00000100      ///< Spike Stream is available
+#define  cbAINP_SPKFILTER           0x00000200      ///< Selectable Filters
+#define  cbAINP_SPKPREVIEW          0x00000400      ///< Generate scrolling preview of the spike channel
+#define  cbAINP_SPKPROC             0x00000800      ///< Channel is able to do online spike processing
+#define  cbAINP_OFFSET_CORRECT_CAP  0x00001000      ///< Offset correction mode (0-disabled 1-enabled)
 
-constexpr uint32_t cbAINP_LNC_OFF = 0x00000000;      ///< Line Noise Cancellation disabled
-constexpr uint32_t cbAINP_LNC_RUN_HARD = 0x00000001;      ///< Hardware-based LNC running and adapting according to the adaptation const
-constexpr uint32_t cbAINP_LNC_RUN_SOFT = 0x00000002;      ///< Software-based LNC running and adapting according to the adaptation const
-constexpr uint32_t cbAINP_LNC_HOLD = 0x00000004;      ///< LNC running, but not adapting
-constexpr uint32_t cbAINP_LNC_MASK = 0x00000007;      ///< Mask for LNC Flags
-constexpr uint32_t cbAINP_REFELEC_LFPSPK = 0x00000010;      ///< Apply reference electrode to LFP & Spike
-constexpr uint32_t cbAINP_REFELEC_SPK = 0x00000020;      ///< Apply reference electrode to Spikes only
-constexpr uint32_t cbAINP_REFELEC_MASK = 0x00000030;      ///< Mask for Reference Electrode flags
-constexpr uint32_t cbAINP_RAWSTREAM_ENABLED = 0x00000040;      ///< Raw data stream enabled
-constexpr uint32_t cbAINP_OFFSET_CORRECT = 0x00000100;      ///< Offset correction mode (0-disabled 1-enabled)
+#define  cbAINP_LNC_OFF             0x00000000      ///< Line Noise Cancellation disabled
+#define  cbAINP_LNC_RUN_HARD        0x00000001      ///< Hardware-based LNC running and adapting according to the adaptation const
+#define  cbAINP_LNC_RUN_SOFT        0x00000002      ///< Software-based LNC running and adapting according to the adaptation const
+#define  cbAINP_LNC_HOLD            0x00000004      ///< LNC running, but not adapting
+#define  cbAINP_LNC_MASK            0x00000007      ///< Mask for LNC Flags
+#define  cbAINP_REFELEC_LFPSPK      0x00000010      ///< Apply reference electrode to LFP & Spike
+#define  cbAINP_REFELEC_SPK         0x00000020      ///< Apply reference electrode to Spikes only
+#define  cbAINP_REFELEC_MASK        0x00000030      ///< Mask for Reference Electrode flags
+#define  cbAINP_RAWSTREAM_ENABLED   0x00000040      ///< Raw data stream enabled
+#define  cbAINP_OFFSET_CORRECT      0x00000100      ///< Offset correction mode (0-disabled 1-enabled)
 
 // Preview request packet identifiers
-constexpr uint32_t cbAINPPREV_LNC = 0x81;
-constexpr uint32_t cbAINPPREV_STREAM = 0x82;
-constexpr uint32_t cbAINPPREV_ALL = 0x83;
+#define cbAINPPREV_LNC    0x81
+#define cbAINPPREV_STREAM 0x82
+#define cbAINPPREV_ALL    0x83
 
 /// @}
 
@@ -728,28 +716,28 @@ constexpr uint32_t cbAINPPREV_ALL = 0x83;
 /// Ground truth from upstream/cbproto/cbproto.h lines 728-749
 /// @{
 
-constexpr uint32_t cbAINPSPK_EXTRACT = 0x00000001;  ///< Time-stamp and packet to first superthreshold peak
-constexpr uint32_t cbAINPSPK_REJART = 0x00000002;  ///< Reject around clipped signals on multiple channels
-constexpr uint32_t cbAINPSPK_REJCLIP = 0x00000004;  ///< Reject clipped signals on the channel
-constexpr uint32_t cbAINPSPK_ALIGNPK = 0x00000008;  ///<
-constexpr uint32_t cbAINPSPK_REJAMPL = 0x00000010;  ///< Reject based on amplitude
-constexpr uint32_t cbAINPSPK_THRLEVEL = 0x00000100;  ///< Analog level threshold detection
-constexpr uint32_t cbAINPSPK_THRENERGY = 0x00000200;  ///< Energy threshold detection
-constexpr uint32_t cbAINPSPK_THRAUTO = 0x00000400;  ///< Auto threshold detection
-constexpr uint32_t cbAINPSPK_SPREADSORT = 0x00001000;  ///< Enable Auto spread Sorting
-constexpr uint32_t cbAINPSPK_CORRSORT = 0x00002000;  ///< Enable Auto Histogram Correlation Sorting
-constexpr uint32_t cbAINPSPK_PEAKMAJSORT = 0x00004000;  ///< Enable Auto Histogram Peak Major Sorting
-constexpr uint32_t cbAINPSPK_PEAKFISHSORT = 0x00008000;  ///< Enable Auto Histogram Peak Fisher Sorting
-constexpr uint32_t cbAINPSPK_HOOPSORT = 0x00010000;  ///< Enable Manual Hoop Sorting
-constexpr uint32_t cbAINPSPK_PCAMANSORT = 0x00020000;  ///< Enable Manual PCA Sorting
-constexpr uint32_t cbAINPSPK_PCAKMEANSORT = 0x00040000;  ///< Enable K-means PCA Sorting
-constexpr uint32_t cbAINPSPK_PCAEMSORT = 0x00080000;  ///< Enable EM-clustering PCA Sorting
-constexpr uint32_t cbAINPSPK_PCADBSORT = 0x00100000;  ///< Enable DBSCAN PCA Sorting
-constexpr uint32_t cbAINPSPK_AUTOSORT = (cbAINPSPK_SPREADSORT | cbAINPSPK_CORRSORT | cbAINPSPK_PEAKMAJSORT | cbAINPSPK_PEAKFISHSORT); ///< old auto sorting methods
-constexpr uint32_t cbAINPSPK_NOSORT = 0x00000000;  ///< No sorting
-constexpr uint32_t cbAINPSPK_PCAAUTOSORT = (cbAINPSPK_PCAKMEANSORT | cbAINPSPK_PCAEMSORT | cbAINPSPK_PCADBSORT);  ///< All PCA sorting auto algorithms
-constexpr uint32_t cbAINPSPK_PCASORT = (cbAINPSPK_PCAMANSORT | cbAINPSPK_PCAAUTOSORT);  ///< All PCA sorting algorithms
-constexpr uint32_t cbAINPSPK_ALLSORT = (cbAINPSPK_AUTOSORT | cbAINPSPK_HOOPSORT | cbAINPSPK_PCASORT); ///< All sorting algorithms
+#define  cbAINPSPK_EXTRACT      0x00000001  ///< Time-stamp and packet to first superthreshold peak
+#define  cbAINPSPK_REJART       0x00000002  ///< Reject around clipped signals on multiple channels
+#define  cbAINPSPK_REJCLIP      0x00000004  ///< Reject clipped signals on the channel
+#define  cbAINPSPK_ALIGNPK      0x00000008  ///<
+#define  cbAINPSPK_REJAMPL      0x00000010  ///< Reject based on amplitude
+#define  cbAINPSPK_THRLEVEL     0x00000100  ///< Analog level threshold detection
+#define  cbAINPSPK_THRENERGY    0x00000200  ///< Energy threshold detection
+#define  cbAINPSPK_THRAUTO      0x00000400  ///< Auto threshold detection
+#define  cbAINPSPK_SPREADSORT   0x00001000  ///< Enable Auto spread Sorting
+#define  cbAINPSPK_CORRSORT     0x00002000  ///< Enable Auto Histogram Correlation Sorting
+#define  cbAINPSPK_PEAKMAJSORT  0x00004000  ///< Enable Auto Histogram Peak Major Sorting
+#define  cbAINPSPK_PEAKFISHSORT 0x00008000  ///< Enable Auto Histogram Peak Fisher Sorting
+#define  cbAINPSPK_HOOPSORT     0x00010000  ///< Enable Manual Hoop Sorting
+#define  cbAINPSPK_PCAMANSORT   0x00020000  ///< Enable Manual PCA Sorting
+#define  cbAINPSPK_PCAKMEANSORT 0x00040000  ///< Enable K-means PCA Sorting
+#define  cbAINPSPK_PCAEMSORT    0x00080000  ///< Enable EM-clustering PCA Sorting
+#define  cbAINPSPK_PCADBSORT    0x00100000  ///< Enable DBSCAN PCA Sorting
+#define  cbAINPSPK_AUTOSORT     (cbAINPSPK_SPREADSORT | cbAINPSPK_CORRSORT | cbAINPSPK_PEAKMAJSORT | cbAINPSPK_PEAKFISHSORT) ///< old auto sorting methods
+#define  cbAINPSPK_NOSORT       0x00000000  ///< No sorting
+#define  cbAINPSPK_PCAAUTOSORT  (cbAINPSPK_PCAKMEANSORT | cbAINPSPK_PCAEMSORT | cbAINPSPK_PCADBSORT)  ///< All PCA sorting auto algorithms
+#define  cbAINPSPK_PCASORT      (cbAINPSPK_PCAMANSORT | cbAINPSPK_PCAAUTOSORT)  ///< All PCA sorting algorithms
+#define  cbAINPSPK_ALLSORT      (cbAINPSPK_AUTOSORT | cbAINPSPK_HOOPSORT | cbAINPSPK_PCASORT) ///< All sorting algorithms
 
 /// @}
 
@@ -759,17 +747,17 @@ constexpr uint32_t cbAINPSPK_ALLSORT = (cbAINPSPK_AUTOSORT | cbAINPSPK_HOOPSORT 
 /// Ground truth from upstream/cbproto/cbproto.h lines 768-778
 /// @{
 
-constexpr uint32_t cbAOUT_AUDIO = 0x00000001;  ///< Channel is physically optimized for audio output
-constexpr uint32_t cbAOUT_SCALE = 0x00000002;  ///< Output a static value
-constexpr uint32_t cbAOUT_TRACK = 0x00000004;  ///< Output a static value
-constexpr uint32_t cbAOUT_STATIC = 0x00000008;  ///< Output a static value
-constexpr uint32_t cbAOUT_MONITORRAW = 0x00000010;  ///< Monitor an analog signal line - RAW data
-constexpr uint32_t cbAOUT_MONITORLNC = 0x00000020;  ///< Monitor an analog signal line - Line Noise Cancelation
-constexpr uint32_t cbAOUT_MONITORSMP = 0x00000040;  ///< Monitor an analog signal line - Continuous
-constexpr uint32_t cbAOUT_MONITORSPK = 0x00000080;  ///< Monitor an analog signal line - spike
-constexpr uint32_t cbAOUT_STIMULATE = 0x00000100;  ///< Stimulation waveform functions are available.
-constexpr uint32_t cbAOUT_WAVEFORM = 0x00000200;  ///< Custom Waveform
-constexpr uint32_t cbAOUT_EXTENSION = 0x00000400;  ///< Output Waveform from Extension
+#define  cbAOUT_AUDIO        0x00000001  ///< Channel is physically optimized for audio output
+#define  cbAOUT_SCALE        0x00000002  ///< Output a static value
+#define  cbAOUT_TRACK        0x00000004  ///< Output a static value
+#define  cbAOUT_STATIC       0x00000008  ///< Output a static value
+#define  cbAOUT_MONITORRAW   0x00000010  ///< Monitor an analog signal line - RAW data
+#define  cbAOUT_MONITORLNC   0x00000020  ///< Monitor an analog signal line - Line Noise Cancelation
+#define  cbAOUT_MONITORSMP   0x00000040  ///< Monitor an analog signal line - Continuous
+#define  cbAOUT_MONITORSPK   0x00000080  ///< Monitor an analog signal line - spike
+#define  cbAOUT_STIMULATE    0x00000100  ///< Stimulation waveform functions are available.
+#define  cbAOUT_WAVEFORM     0x00000200  ///< Custom Waveform
+#define  cbAOUT_EXTENSION    0x00000400  ///< Output Waveform from Extension
 
 /// @}
 
@@ -780,15 +768,15 @@ constexpr uint32_t cbAOUT_EXTENSION = 0x00000400;  ///< Output Waveform from Ext
 /// These define the system runlevel states
 /// @{
 
-constexpr uint32_t cbRUNLEVEL_UPDATE = 78;
-constexpr uint32_t cbRUNLEVEL_STARTUP = 10;
-constexpr uint32_t cbRUNLEVEL_HARDRESET = 20;
-constexpr uint32_t cbRUNLEVEL_STANDBY = 30;
-constexpr uint32_t cbRUNLEVEL_RESET = 40;
-constexpr uint32_t cbRUNLEVEL_RUNNING = 50;
-constexpr uint32_t cbRUNLEVEL_STRESSED = 60;
-constexpr uint32_t cbRUNLEVEL_ERROR = 70;
-constexpr uint32_t cbRUNLEVEL_SHUTDOWN = 80;
+#define cbRUNLEVEL_UPDATE       78
+#define cbRUNLEVEL_STARTUP      10
+#define cbRUNLEVEL_HARDRESET    20
+#define cbRUNLEVEL_STANDBY      30
+#define cbRUNLEVEL_RESET        40
+#define cbRUNLEVEL_RUNNING      50
+#define cbRUNLEVEL_STRESSED     60
+#define cbRUNLEVEL_ERROR        70
+#define cbRUNLEVEL_SHUTDOWN     80
 
 /// @}
 
@@ -797,8 +785,8 @@ constexpr uint32_t cbRUNLEVEL_SHUTDOWN = 80;
 ///
 /// These define the system runflags
 /// @{
-constexpr uint32_t cbRUNFLAGS_NONE = 0;
-constexpr uint32_t cbRUNFLAGS_LOCK = 1; // Lock recording after reset
+#define cbRUNFLAGS_NONE          0
+#define cbRUNFLAGS_LOCK          1 // Lock recording after reset
 /// @}
 
 
@@ -808,6 +796,10 @@ constexpr uint32_t cbRUNFLAGS_LOCK = 1; // Lock recording after reset
 /// Ground truth from upstream/cbproto/cbproto.h
 /// @{
 
+#define cbPKTTYPE_SYSHEARTBEAT    0x00
+#define cbPKTDLEN_SYSHEARTBEAT    ((sizeof(cbPKT_SYSHEARTBEAT)/4) - cbPKT_HEADER_32SIZE)
+#define HEARTBEAT_MS              10
+
 /// @brief PKT Set:N/A  Rep:0x00 - System Heartbeat packet
 ///
 /// Ground truth from upstream/cbproto/cbproto.h lines 903-914
@@ -815,9 +807,6 @@ constexpr uint32_t cbRUNFLAGS_LOCK = 1; // Lock recording after reset
 typedef struct {
     cbPKT_HEADER cbpkt_header;  ///< packet header
 } cbPKT_SYSHEARTBEAT;
-
-constexpr uint32_t cbPKTDLEN_SYSHEARTBEAT = ((sizeof(cbPKT_SYSHEARTBEAT)/4) - cbPKT_HEADER_32SIZE);
-constexpr uint32_t HEARTBEAT_MS = 10;
 
 /// @brief PKT Set:0x92 Rep:0x12 - System info
 ///
@@ -833,7 +822,13 @@ typedef struct {
     uint32_t runflags;    ///< Lock recording after reset
 } cbPKT_SYSINFO;
 
-constexpr uint32_t cbPKTDLEN_SYSINFO = ((sizeof(cbPKT_SYSINFO)/4) - cbPKT_HEADER_32SIZE);
+#define cbPKTDLEN_SYSINFO       ((sizeof(cbPKT_SYSINFO)/4) - cbPKT_HEADER_32SIZE)
+
+/// @brief Old system info packet
+///
+/// Ground truth from upstream/cbproto/cbproto.h lines 1086-1099
+/// Used for backward compatibility with old CCF files
+#define cbPKTDLEN_OLDSYSINFO       ((sizeof(cbPKT_OLDSYSINFO)/4) - 2)
 
 typedef struct {
     uint32_t time;        ///< system clock timestamp
@@ -849,12 +844,6 @@ typedef struct {
     uint32_t runflags;
 } cbPKT_OLDSYSINFO;
 
-/// @brief Old system info packet
-///
-/// Ground truth from upstream/cbproto/cbproto.h lines 1086-1099
-/// Used for backward compatibility with old CCF files
-constexpr uint32_t cbPKTDLEN_OLDSYSINFO = ((sizeof(cbPKT_OLDSYSINFO)/4) - 2);
-
 /// @brief PKT Set:N/A  Rep:0x01 - System protocol monitor
 ///
 /// Packets are sent via UDP. This packet is sent by the NSP periodically (approximately every 10ms)
@@ -868,10 +857,10 @@ typedef struct {
 
     uint32_t sentpkts;    ///< Packets sent since last cbPKT_SYSPROTOCOLMONITOR (or 0 if timestamp=0)
                           ///< The cbPKT_SYSPROTOCOLMONITOR packets are counted as well so this must be >= 1
-    uint32_t counter;     ///< Counter of cbPKT_SYSPROTOCOLMONITOR packets sent since beginning of NSP time // VER: 4.1+ ONLY
+    uint32_t counter;     ///< Counter of cbPKT_SYSPROTOCOLMONITOR packets sent since beginning of NSP time
 } cbPKT_SYSPROTOCOLMONITOR;
 
-constexpr uint32_t cbPKTDLEN_SYSPROTOCOLMONITOR = ((sizeof(cbPKT_SYSPROTOCOLMONITOR)/4) - cbPKT_HEADER_32SIZE);
+#define cbPKTDLEN_SYSPROTOCOLMONITOR    ((sizeof(cbPKT_SYSPROTOCOLMONITOR)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xB1 Rep:0x31 - Comment annotation packet
 ///
@@ -888,8 +877,8 @@ typedef struct {
     char   comment[cbMAX_COMMENT]; //!< Comment
 } cbPKT_COMMENT;
 
-constexpr uint32_t cbPKTDLEN_COMMENT = ((sizeof(cbPKT_COMMENT)/4) - cbPKT_HEADER_32SIZE);
-constexpr uint32_t cbPKTDLEN_COMMENTSHORT = (cbPKTDLEN_COMMENT - ((sizeof(uint8_t)*cbMAX_COMMENT)/4));
+#define cbPKTDLEN_COMMENT       ((sizeof(cbPKT_COMMENT)/4) - cbPKT_HEADER_32SIZE)
+#define cbPKTDLEN_COMMENTSHORT  (cbPKTDLEN_COMMENT - ((sizeof(uint8_t)*cbMAX_COMMENT)/4))
 
 /// @}
 
@@ -900,9 +889,16 @@ constexpr uint32_t cbPKTDLEN_COMMENTSHORT = (cbPKTDLEN_COMMENT - ((sizeof(uint8_
 /// @{
 
 // PCA collection states
-constexpr uint32_t cbPCA_START_COLLECTION = 0;  ///< start collecting samples
-constexpr uint32_t cbPCA_START_BASIS = 1;  ///< start basis calculation
-constexpr uint32_t cbPCA_MANUAL_LAST_SAMPLE = 2;  ///< the manual-only PCA, samples at zero, calculates PCA basis at 1 and stops at 2
+#define cbPCA_START_COLLECTION            0  ///< start collecting samples
+#define cbPCA_START_BASIS                 1  ///< start basis calculation
+#define cbPCA_MANUAL_LAST_SAMPLE          2  ///< the manual-only PCA, samples at zero, calculates PCA basis at 1 and stops at 2
+
+// Stream preview flags
+#define cbSTREAMPREV_NONE               0x00000000
+#define cbSTREAMPREV_PCABASIS_NONEMPTY  0x00000001
+
+#define cbPKTTYPE_PREVREPSTREAM  0x02
+#define cbPKTDLEN_PREVREPSTREAM  ((sizeof(cbPKT_STREAMPREV)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief Preview packet
 ///
@@ -926,11 +922,8 @@ typedef struct {
     uint32_t nFlags;      ///< cbSTREAMPREV_*
 } cbPKT_STREAMPREV;
 
-// Stream preview flags
-constexpr uint32_t cbSTREAMPREV_NONE = 0x00000000;
-constexpr uint32_t cbSTREAMPREV_PCABASIS_NONEMPTY = 0x00000001;
-
-constexpr uint32_t cbPKTDLEN_PREVREPSTREAM = ((sizeof(cbPKT_STREAMPREV)/4) - cbPKT_HEADER_32SIZE);
+#define cbPKTTYPE_PREVREPLNC    0x04
+#define cbPKTDLEN_PREVREPLNC    ((sizeof(cbPKT_LNCPREV)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief Preview packet - Line Noise preview
 ///
@@ -941,8 +934,6 @@ typedef struct {
     uint32_t freq;        ///< Estimated line noise frequency * 1000 (zero means not valid)
     int16_t  wave[300];   ///< lnc cancellation waveform (downsampled by 2)
 } cbPKT_LNCPREV;
-
-constexpr uint32_t cbPKTDLEN_PREVREPLNC = ((sizeof(cbPKT_LNCPREV)/4) - cbPKT_HEADER_32SIZE);
 
 /// @}
 
@@ -967,11 +958,11 @@ typedef struct {
     uint32_t sortcount;   ///< number of channels supported for spike sorting (reserved for future)
     uint32_t unitcount;   ///< number of supported units for spike sorting    (reserved for future)
     uint32_t hoopcount;   ///< number of supported units for spike sorting    (reserved for future)
-    uint32_t reserved;    ///< reserved for future use, set to 0 // VER: 4.2+, renamed to reserved from sortmethod
+    uint32_t reserved;    ///< reserved for future use, set to 0
     uint32_t version;     ///< current version of libraries
 } cbPKT_PROCINFO;
 
-constexpr uint32_t cbPKTDLEN_PROCINFO = ((sizeof(cbPKT_PROCINFO)/4) - cbPKT_HEADER_32SIZE);
+#define cbPKTDLEN_PROCINFO  ((sizeof(cbPKT_PROCINFO)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:N/A  Rep:0x22 - Information about the banks in the processor
 typedef struct {
@@ -986,7 +977,7 @@ typedef struct {
     uint32_t chancount;   ///< number of channel identifiers claimed by this bank
 } cbPKT_BANKINFO;
 
-constexpr uint32_t cbPKTDLEN_BANKINFO = ((sizeof(cbPKT_BANKINFO)/4) - cbPKT_HEADER_32SIZE);
+#define cbPKTDLEN_BANKINFO  ((sizeof(cbPKT_BANKINFO)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xA3 Rep:0x23 - Filter Information Packet
 ///
@@ -1015,7 +1006,7 @@ typedef struct {
     double sos2b2;      ///< filter coefficient
 } cbPKT_FILTINFO;
 
-constexpr uint32_t cbPKTDLEN_FILTINFO = ((sizeof(cbPKT_FILTINFO)/4) - cbPKT_HEADER_32SIZE);
+#define cbPKTDLEN_FILTINFO  ((sizeof(cbPKT_FILTINFO)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xB0 Rep:0x30 - Sample Group (GROUP) Information Packets
 ///
@@ -1032,8 +1023,8 @@ typedef struct {
     uint16_t list[cbNUM_ANALOG_CHANS];   ///< variable length list. The max size is the total number of analog channels
 } cbPKT_GROUPINFO;
 
-constexpr uint32_t cbPKTDLEN_GROUPINFO = ((sizeof(cbPKT_GROUPINFO)/4) - cbPKT_HEADER_32SIZE);
-constexpr uint32_t cbPKTDLEN_GROUPINFOSHORT = (8);       // basic length without list
+#define cbPKTDLEN_GROUPINFO  ((sizeof(cbPKT_GROUPINFO)/4) - cbPKT_HEADER_32SIZE)
+#define cbPKTDLEN_GROUPINFOSHORT  (8)       // basic length without list
 
 /// @brief PKT Set:0xCx Rep:0x4x - Channel Information
 ///
@@ -1066,7 +1057,6 @@ typedef struct {
     uint32_t     eopchar;        ///< digital input capablities (given by cbDINP_* flags)
     union {
         struct {    // separate system channel to instrument specific channel number
-            // VER: 4.1+, monsource is split into moninst and monchan
             uint16_t  moninst;        ///< instrument of channel to monitor
             uint16_t  monchan;        ///< channel to monitor
             int32_t   outvalue;       ///< output value
@@ -1078,11 +1068,8 @@ typedef struct {
         };
     };
     uint8_t               trigtype;       ///< trigger type (see cbDOUT_TRIGGER_*)
-    // VER: 4.1+, triginst and padding added
-    // ---------
     uint8_t               reserved[2];    ///< 2 bytes reserved
     uint8_t               triginst;       ///< instrument of the trigger channel
-    // ---------
     uint16_t              trigchan;       ///< trigger channel
     uint16_t              trigval;        ///< trigger value
     uint32_t              ainpopts;       ///< analog input options (composed of cbAINP* flags)
@@ -1105,14 +1092,17 @@ typedef struct {
     cbHOOP              spkhoops[cbMAXUNITS][cbMAXHOOPS];   ///< spike hoop sorting set
 } cbPKT_CHANINFO;
 
-constexpr uint32_t cbPKTDLEN_CHANINFO = ((sizeof(cbPKT_CHANINFO)/4) - cbPKT_HEADER_32SIZE);
-constexpr uint32_t cbPKTDLEN_CHANINFOSHORT = (cbPKTDLEN_CHANINFO - ((sizeof(cbHOOP)*cbMAXUNITS*cbMAXHOOPS)/4));
+#define cbPKTDLEN_CHANINFO      ((sizeof(cbPKT_CHANINFO)/4) - cbPKT_HEADER_32SIZE)
+#define cbPKTDLEN_CHANINFOSHORT (cbPKTDLEN_CHANINFO - ((sizeof(cbHOOP)*cbMAXUNITS*cbMAXHOOPS)/4))
 
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Spike Data Packets
 /// @{
+
+#define cbPKTDLEN_SPK   ((sizeof(cbPKT_SPK)/4) - cbPKT_HEADER_32SIZE)
+#define cbPKTDLEN_SPKSHORT (cbPKTDLEN_SPK - ((sizeof(int16_t)*cbMAX_PNTS)/4))
 
 /// @brief Data packet - Spike waveform data
 ///
@@ -1130,9 +1120,6 @@ typedef struct {
     int16_t  wave[cbMAX_PNTS];    ///< datapoints of each sample of the waveform. Room for all possible points collected
     ///< wave must be the last item in the structure because it can be variable length to a max of cbMAX_PNTS
 } cbPKT_SPK;
-
-constexpr uint32_t cbPKTDLEN_SPK = ((sizeof(cbPKT_SPK)/4) - cbPKT_HEADER_32SIZE);
-constexpr uint32_t cbPKTDLEN_SPKSHORT = (cbPKTDLEN_SPK - ((sizeof(int16_t)*cbMAX_PNTS)/4));
 
 /// @brief Gyro Data packet - Gyro input data value.
 ///
@@ -1171,8 +1158,8 @@ typedef struct {
 /// @name Digital Input/Output Data Packets
 /// @{
 
-constexpr uint32_t DINP_EVENT_ANYBIT = 0x00000001;  ///< Digital input event: any bit changed;
-constexpr uint32_t DINP_EVENT_STROBE = 0x00000002;  ///< Digital input event: strobe detected;
+#define DINP_EVENT_ANYBIT   0x00000001  ///< Digital input event: any bit changed
+#define DINP_EVENT_STROBE   0x00000002  ///< Digital input event: strobe detected
 
 /// @brief Data packet - Digital input data value
 ///
@@ -1211,6 +1198,8 @@ enum
     0xFF80,         // this is here to select all digital input bits in raster when expanded
 };
 
+#define cbPKTDLEN_UNITSELECTION ((sizeof(cbPKT_UNIT_SELECTION) / 4) - cbPKT_HEADER_32SIZE)
+
 /// @brief Unit Selection
 ///
 /// Packet which says that these channels are now selected
@@ -1219,10 +1208,8 @@ typedef struct
     cbPKT_HEADER cbpkt_header;  ///< packet header
 
     int32_t  lastchan;         ///< Which channel was clicked last.
-    uint16_t   abyUnitSelections[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - sizeof(int32_t))];     ///< one for each channel, channels are 0 based here, shows units selected // VER: 4.0+, changed from cbMAXCHANS
+    uint16_t   abyUnitSelections[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - sizeof(int32_t))];     ///< one for each channel, channels are 0 based here, shows units selected
 } cbPKT_UNIT_SELECTION;
-
-constexpr uint32_t cbPKTDLEN_UNITSELECTION = ((sizeof(cbPKT_UNIT_SELECTION) / 4) - cbPKT_HEADER_32SIZE);
 
 /// @}
 
@@ -1231,6 +1218,10 @@ constexpr uint32_t cbPKTDLEN_UNITSELECTION = ((sizeof(cbPKT_UNIT_SELECTION) / 4)
 ///
 /// Ground truth from upstream/cbproto/cbproto.h lines 1264-1308
 /// @{
+
+#define cbPKTTYPE_CHANRESETREP  0x24        ///< NSP->PC response...ignore all values
+#define cbPKTTYPE_CHANRESET     0xA4        ///< PC->NSP request
+#define cbPKTDLEN_CHANRESET ((sizeof(cbPKT_CHANRESET) / 4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xA4 Rep:0x24 - Channel reset packet
 ///
@@ -1254,8 +1245,8 @@ typedef struct {
     uint8_t  dinpopts;       ///< digital input options (composed of cbDINP_* flags)
     uint8_t  aoutopts;       ///< analog output options
     uint8_t  eopchar;        ///< the end of packet character
-    uint8_t  moninst;        ///< instrument number of channel to monitor // VER: 4.2+, renamed from monsource
-    uint8_t  monchan;        ///< channel to monitor // VER: 4.2+ ONLY
+    uint8_t  moninst;        ///< instrument number of channel to monitor
+    uint8_t  monchan;        ///< channel to monitor
     uint8_t  outvalue;       ///< output value
     uint8_t  ainpopts;       ///< analog input options (composed of cbAINP_* flags)
     uint8_t  lncrate;        ///< line noise cancellation filter adaptation rate
@@ -1273,8 +1264,6 @@ typedef struct {
     uint8_t  spkhoops;       ///< spike hoop sorting set
 } cbPKT_CHANRESET;
 
-constexpr uint32_t cbPKTDLEN_CHANRESET = ((sizeof(cbPKT_CHANRESET) / 4) - cbPKT_HEADER_32SIZE);
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1283,10 +1272,14 @@ constexpr uint32_t cbPKTDLEN_CHANRESET = ((sizeof(cbPKT_CHANRESET) / 4) - cbPKT_
 /// Ground truth from upstream/cbproto/cbproto.h lines 1310-1333
 /// @{
 
+#define cbPKTTYPE_ADAPTFILTREP  0x25        ///< NSP->PC response
+#define cbPKTTYPE_ADAPTFILTSET  0xA5        ///< PC->NSP request
+#define cbPKTDLEN_ADAPTFILTINFO ((sizeof(cbPKT_ADAPTFILTINFO) / 4) - cbPKT_HEADER_32SIZE)
+
 // Adaptive filter settings
-constexpr uint32_t ADAPT_FILT_DISABLED = 0;
-constexpr uint32_t ADAPT_FILT_ALL = 1;
-constexpr uint32_t ADAPT_FILT_SPIKES = 2;
+#define ADAPT_FILT_DISABLED     0
+#define ADAPT_FILT_ALL          1
+#define ADAPT_FILT_SPIKES       2
 
 /// @brief PKT Set:0xA5 Rep:0x25 - Adaptive filtering
 ///
@@ -1303,8 +1296,6 @@ typedef struct {
 
 } cbPKT_ADAPTFILTINFO;
 
-constexpr uint32_t cbPKTDLEN_ADAPTFILTINFO = ((sizeof(cbPKT_ADAPTFILTINFO) / 4) - cbPKT_HEADER_32SIZE);
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1313,10 +1304,14 @@ constexpr uint32_t cbPKTDLEN_ADAPTFILTINFO = ((sizeof(cbPKT_ADAPTFILTINFO) / 4) 
 /// Ground truth from upstream/cbproto/cbproto.h lines 1335-1355
 /// @{
 
+#define cbPKTTYPE_REFELECFILTREP  0x26        ///< NSP->PC response
+#define cbPKTTYPE_REFELECFILTSET  0xA6        ///< PC->NSP request
+#define cbPKTDLEN_REFELECFILTINFO ((sizeof(cbPKT_REFELECFILTINFO) / 4) - cbPKT_HEADER_32SIZE)
+
 // Reference electrode filter settings
-constexpr uint32_t REFELEC_FILT_DISABLED = 0;
-constexpr uint32_t REFELEC_FILT_ALL = 1;
-constexpr uint32_t REFELEC_FILT_SPIKES = 2;
+#define REFELEC_FILT_DISABLED   0
+#define REFELEC_FILT_ALL        1
+#define REFELEC_FILT_SPIKES     2
 
 /// @brief PKT Set:0xA6 Rep:0x26 - Reference Electrode Information.
 ///
@@ -1330,8 +1325,6 @@ typedef struct {
     uint32_t nRefChan;       ///< The reference channel (1 based).
 } cbPKT_REFELECFILTINFO;
 
-constexpr uint32_t cbPKTDLEN_REFELECFILTINFO = ((sizeof(cbPKT_REFELECFILTINFO) / 4) - cbPKT_HEADER_32SIZE);
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1339,6 +1332,10 @@ constexpr uint32_t cbPKTDLEN_REFELECFILTINFO = ((sizeof(cbPKT_REFELECFILTINFO) /
 ///
 /// Ground truth from upstream/cbproto/cbproto.h lines 1910-1926
 /// @{
+
+#define cbPKTTYPE_LNCREP       0x28        ///< NSP->PC response
+#define cbPKTTYPE_LNCSET       0xA8        ///< PC->NSP request
+#define cbPKTDLEN_LNC ((sizeof(cbPKT_LNC) / 4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xA8 Rep:0x28 - Line Noise Cancellation
 ///
@@ -1352,8 +1349,6 @@ typedef struct
     uint32_t lncGlobalMode;  ///< reserved
 } cbPKT_LNC;
 
-constexpr uint32_t cbPKTDLEN_LNC = ((sizeof(cbPKT_LNC) / 4) - cbPKT_HEADER_32SIZE);
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1361,6 +1356,10 @@ constexpr uint32_t cbPKTDLEN_LNC = ((sizeof(cbPKT_LNC) / 4) - cbPKT_HEADER_32SIZ
 ///
 /// Ground truth from upstream/cbproto/cbproto.h lines 1113-1128
 /// @{
+
+#define cbPKTTYPE_VIDEOSYNCHREP   0x29  ///< NSP->PC response
+#define cbPKTTYPE_VIDEOSYNCHSET   0xA9  ///< PC->NSP request
+#define cbPKTDLEN_VIDEOSYNCH  ((sizeof(cbPKT_VIDEOSYNCH)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xA9 Rep:0x29 - Video/external synchronization packet.
 ///
@@ -1375,8 +1374,6 @@ typedef struct {
     uint16_t id;         ///< video source id
 } cbPKT_VIDEOSYNCH;
 
-constexpr uint32_t cbPKTDLEN_VIDEOSYNCH = ((sizeof(cbPKT_VIDEOSYNCH)/4) - cbPKT_HEADER_32SIZE);
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1386,16 +1383,22 @@ constexpr uint32_t cbPKTDLEN_VIDEOSYNCH = ((sizeof(cbPKT_VIDEOSYNCH)/4) - cbPKT_
 /// @{
 
 // file config options
-constexpr uint32_t cbFILECFG_OPT_NONE = 0x00000000;  ///< Launch File dialog, set file info, start or stop recording
-constexpr uint32_t cbFILECFG_OPT_KEEPALIVE = 0x00000001;  ///< Keep-alive message
-constexpr uint32_t cbFILECFG_OPT_REC = 0x00000002;  ///< Recording is in progress
-constexpr uint32_t cbFILECFG_OPT_STOP = 0x00000003;  ///< Recording stopped
-constexpr uint32_t cbFILECFG_OPT_NMREC = 0x00000004;  ///< NeuroMotive recording status
-constexpr uint32_t cbFILECFG_OPT_CLOSE = 0x00000005;  ///< Close file application
-constexpr uint32_t cbFILECFG_OPT_SYNCH = 0x00000006;  ///< Recording datetime
-constexpr uint32_t cbFILECFG_OPT_OPEN = 0x00000007;  ///< Launch File dialog, do not set or do anything
-constexpr uint32_t cbFILECFG_OPT_TIMEOUT = 0x00000008;  ///< Keep alive not received so it timed out
-constexpr uint32_t cbFILECFG_OPT_PAUSE = 0x00000009;  ///< Recording paused
+#define cbFILECFG_OPT_NONE          0x00000000  ///< Launch File dialog, set file info, start or stop recording
+#define cbFILECFG_OPT_KEEPALIVE     0x00000001  ///< Keep-alive message
+#define cbFILECFG_OPT_REC           0x00000002  ///< Recording is in progress
+#define cbFILECFG_OPT_STOP          0x00000003  ///< Recording stopped
+#define cbFILECFG_OPT_NMREC         0x00000004  ///< NeuroMotive recording status
+#define cbFILECFG_OPT_CLOSE         0x00000005  ///< Close file application
+#define cbFILECFG_OPT_SYNCH         0x00000006  ///< Recording datetime
+#define cbFILECFG_OPT_OPEN          0x00000007  ///< Launch File dialog, do not set or do anything
+#define cbFILECFG_OPT_TIMEOUT       0x00000008  ///< Keep alive not received so it timed out
+#define cbFILECFG_OPT_PAUSE         0x00000009  ///< Recording paused
+
+// file save configuration packet
+#define cbPKTTYPE_REPFILECFG 0x61
+#define cbPKTTYPE_SETFILECFG 0xE1
+#define cbPKTDLEN_FILECFG ((sizeof(cbPKT_FILECFG)/4) - cbPKT_HEADER_32SIZE)
+#define cbPKTDLEN_FILECFGSHORT (cbPKTDLEN_FILECFG - ((sizeof(char)*3*cbLEN_STR_COMMENT)/4)) ///< used for keep-alive messages
 
 /// @brief PKT Set:0xE1 Rep:0x61 - File configuration packet
 ///
@@ -1418,10 +1421,6 @@ typedef struct {
     char   comment[cbLEN_STR_COMMENT];  ///< comment to include in the file
 } cbPKT_FILECFG;
 
-// file save configuration packet
-constexpr uint32_t cbPKTDLEN_FILECFG = ((sizeof(cbPKT_FILECFG)/4) - cbPKT_HEADER_32SIZE);
-constexpr uint32_t cbPKTDLEN_FILECFGSHORT = (cbPKTDLEN_FILECFG - ((sizeof(char)*3*cbLEN_STR_COMMENT)/4)); ///< used for keep-alive messages
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1431,20 +1430,24 @@ constexpr uint32_t cbPKTDLEN_FILECFGSHORT = (cbPKTDLEN_FILECFG - ((sizeof(char)*
 /// @{
 
 // Log modes
-constexpr uint32_t cbLOG_MODE_NONE = 0;   ///< Normal log
-constexpr uint32_t cbLOG_MODE_CRITICAL = 1;   ///< Critical log
-constexpr uint32_t cbLOG_MODE_RPC = 2;   ///< PC->NSP: Remote Procedure Call (RPC)
-constexpr uint32_t cbLOG_MODE_PLUGINFO = 3;   ///< NSP->PC: Plugin information
-constexpr uint32_t cbLOG_MODE_RPC_RES = 4;   ///< NSP->PC: Remote Procedure Call Results
-constexpr uint32_t cbLOG_MODE_PLUGINERR = 5;   ///< NSP->PC: Plugin error information
-constexpr uint32_t cbLOG_MODE_RPC_END = 6;   ///< NSP->PC: Last RPC packet
-constexpr uint32_t cbLOG_MODE_RPC_KILL = 7;   ///< PC->NSP: terminate last RPC
-constexpr uint32_t cbLOG_MODE_RPC_INPUT = 8;   ///< PC->NSP: RPC command input
-constexpr uint32_t cbLOG_MODE_UPLOAD_RES = 9;   ///< NSP->PC: Upload result
-constexpr uint32_t cbLOG_MODE_ENDPLUGIN = 10;   ///< PC->NSP: Signal the plugin to end
-constexpr uint32_t cbLOG_MODE_NSP_REBOOT = 11;   ///< PC->NSP: Reboot the NSP
+#define cbLOG_MODE_NONE         0   ///< Normal log
+#define cbLOG_MODE_CRITICAL     1   ///< Critical log
+#define cbLOG_MODE_RPC          2   ///< PC->NSP: Remote Procedure Call (RPC)
+#define cbLOG_MODE_PLUGINFO     3   ///< NSP->PC: Plugin information
+#define cbLOG_MODE_RPC_RES      4   ///< NSP->PC: Remote Procedure Call Results
+#define cbLOG_MODE_PLUGINERR    5   ///< NSP->PC: Plugin error information
+#define cbLOG_MODE_RPC_END      6   ///< NSP->PC: Last RPC packet
+#define cbLOG_MODE_RPC_KILL     7   ///< PC->NSP: terminate last RPC
+#define cbLOG_MODE_RPC_INPUT    8   ///< PC->NSP: RPC command input
+#define cbLOG_MODE_UPLOAD_RES   9   ///< NSP->PC: Upload result
+#define cbLOG_MODE_ENDPLUGIN   10   ///< PC->NSP: Signal the plugin to end
+#define cbLOG_MODE_NSP_REBOOT  11   ///< PC->NSP: Reboot the NSP
 
-constexpr uint32_t cbMAX_LOG = 130;  ///< Maximum log description // VER: 4.2+, changed to 130 from 128
+#define cbMAX_LOG          130  ///< Maximum log description
+#define cbPKTTYPE_LOGREP   0x63 ///< NPLAY->PC response
+#define cbPKTTYPE_LOGSET   0xE3 ///< PC->NPLAY request
+#define cbPKTDLEN_LOG    ((sizeof(cbPKT_LOG)/4) - cbPKT_HEADER_32SIZE)
+#define cbPKTDLEN_LOGSHORT    (cbPKTDLEN_LOG - ((sizeof(char)*cbMAX_LOG)/4)) ///< All but description
 
 /// @brief PKT Set:0xE3 Rep:0x63 - Log packet
 ///
@@ -1457,9 +1460,6 @@ typedef struct {
     char   desc[cbMAX_LOG];        ///< description of the change (will fill the rest of the packet)
 } cbPKT_LOG;
 
-constexpr uint32_t cbPKTDLEN_LOG = ((sizeof(cbPKT_LOG)/4) - cbPKT_HEADER_32SIZE);
-constexpr uint32_t cbPKTDLEN_LOGSHORT = (cbPKTDLEN_LOG - ((sizeof(char)*cbMAX_LOG)/4)); ///< All but description
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1468,7 +1468,11 @@ constexpr uint32_t cbPKTDLEN_LOGSHORT = (cbPKTDLEN_LOG - ((sizeof(char)*cbMAX_LO
 /// Ground truth from upstream/cbproto/cbproto.h lines 1586-1605
 /// @{
 
-constexpr uint32_t cbMAX_PATIENTSTRING = 128;     ///< Maximum patient string length
+#define cbMAX_PATIENTSTRING  128     ///< Maximum patient string length
+
+#define cbPKTTYPE_REPPATIENTINFO 0x64
+#define cbPKTTYPE_SETPATIENTINFO 0xE4
+#define cbPKTDLEN_PATIENTINFO ((sizeof(cbPKT_PATIENTINFO)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xE4 Rep:0x64 - Patient information packet.
 ///
@@ -1484,8 +1488,6 @@ typedef struct {
     uint32_t DOBYear;     ///< Patient birth year
 } cbPKT_PATIENTINFO;
 
-constexpr uint32_t cbPKTDLEN_PATIENTINFO = ((sizeof(cbPKT_PATIENTINFO)/4) - cbPKT_HEADER_32SIZE);
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1494,6 +1496,10 @@ constexpr uint32_t cbPKTDLEN_PATIENTINFO = ((sizeof(cbPKT_PATIENTINFO)/4) - cbPK
 /// Ground truth from upstream/cbproto/cbproto.h lines 1607-1659
 /// @{
 
+#define cbPKTTYPE_REPIMPEDANCE   0x65
+#define cbPKTTYPE_SETIMPEDANCE   0xE5
+#define cbPKTDLEN_IMPEDANCE ((sizeof(cbPKT_IMPEDANCE)/4) - cbPKT_HEADER_32SIZE)
+
 /// @brief *Deprecated* Send impedance data
 typedef struct {
     cbPKT_HEADER cbpkt_header;  ///< packet header
@@ -1501,7 +1507,9 @@ typedef struct {
     float  data[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE) / sizeof(float)];  ///< variable length address list
 } cbPKT_IMPEDANCE;
 
-constexpr uint32_t cbPKTDLEN_IMPEDANCE = ((sizeof(cbPKT_IMPEDANCE)/4) - cbPKT_HEADER_32SIZE);
+#define cbPKTTYPE_REPINITIMPEDANCE   0x66
+#define cbPKTTYPE_SETINITIMPEDANCE   0xE6
+#define cbPKTDLEN_INITIMPEDANCE ((sizeof(cbPKT_INITIMPEDANCE)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief *Deprecated* Initiate impedance calculations
 typedef struct {
@@ -1510,8 +1518,6 @@ typedef struct {
     uint32_t initiate;    ///< on set call -> 1 to start autoimpedance
                         ///< on response -> 1 initiated
 } cbPKT_INITIMPEDANCE;
-
-constexpr uint32_t cbPKTDLEN_INITIMPEDANCE = ((sizeof(cbPKT_INITIMPEDANCE)/4) - cbPKT_HEADER_32SIZE);
 
 /// @}
 
@@ -1522,17 +1528,21 @@ constexpr uint32_t cbPKTDLEN_INITIMPEDANCE = ((sizeof(cbPKT_INITIMPEDANCE)/4) - 
 /// @{
 
 // Poll packet command
-constexpr uint32_t cbPOLL_MODE_NONE = 0;   ///< no command (parameters)
-constexpr uint32_t cbPOLL_MODE_APPSTATUS = 1;   ///< Poll or response to poll about the status of an application
+#define cbPOLL_MODE_NONE            0   ///< no command (parameters)
+#define cbPOLL_MODE_APPSTATUS       1   ///< Poll or response to poll about the status of an application
 
 // Poll packet status flags
-constexpr uint32_t cbPOLL_FLAG_NONE = 0;   ///< no flag (parameters)
-constexpr uint32_t cbPOLL_FLAG_RESPONSE = 1;   ///< Response to the query
+#define cbPOLL_FLAG_NONE            0   ///< no flag (parameters)
+#define cbPOLL_FLAG_RESPONSE        1   ///< Response to the query
 
 // Extra information
-constexpr uint32_t cbPOLL_EXT_NONE = 0;   ///< No extra information
-constexpr uint32_t cbPOLL_EXT_EXISTS = 1;   ///< App exists
-constexpr uint32_t cbPOLL_EXT_RUNNING = 2;   ///< App is running
+#define cbPOLL_EXT_NONE             0   ///< No extra information
+#define cbPOLL_EXT_EXISTS           1   ///< App exists
+#define cbPOLL_EXT_RUNNING          2   ///< App is running
+
+#define cbPKTTYPE_REPPOLL   0x67
+#define cbPKTTYPE_SETPOLL   0xE7
+#define cbPKTDLEN_POLL ((sizeof(cbPKT_POLL)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief *Deprecated* Poll for packet mechanism
 typedef struct {
@@ -1546,8 +1556,6 @@ typedef struct {
     uint32_t  res[32];       ///< reserved for the future
 } cbPKT_POLL;
 
-constexpr uint32_t cbPKTDLEN_POLL = ((sizeof(cbPKT_POLL)/4) - cbPKT_HEADER_32SIZE);
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1555,6 +1563,10 @@ constexpr uint32_t cbPKTDLEN_POLL = ((sizeof(cbPKT_POLL)/4) - cbPKT_HEADER_32SIZ
 ///
 /// Ground truth from upstream/cbproto/cbproto.h lines 1661-1673
 /// @{
+
+#define cbPKTTYPE_REPMAPFILE 0x68
+#define cbPKTTYPE_SETMAPFILE 0xE8
+#define cbPKTDLEN_MAPFILE ((sizeof(cbPKT_MAPFILE)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xE8 Rep:0x68 - Map file
 ///
@@ -1565,8 +1577,6 @@ typedef struct {
     char   filename[512];   ///< filename of the mapfile to use
 } cbPKT_MAPFILE;
 
-constexpr uint32_t cbPKTDLEN_MAPFILE = ((sizeof(cbPKT_MAPFILE)/4) - cbPKT_HEADER_32SIZE);
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1576,20 +1586,25 @@ constexpr uint32_t cbPKTDLEN_MAPFILE = ((sizeof(cbPKT_MAPFILE)/4) - cbPKT_HEADER
 /// @{
 
 // Spike sorting algorithm identifiers
-constexpr uint32_t cbAUTOALG_NONE = 0;   ///< No sorting
-constexpr uint32_t cbAUTOALG_SPREAD = 1;   ///< Auto spread
-constexpr uint32_t cbAUTOALG_HIST_CORR_MAJ = 2;   ///< Auto Hist Correlation
-constexpr uint32_t cbAUTOALG_HIST_PEAK_COUNT_MAJ = 3;   ///< Auto Hist Peak Maj
-constexpr uint32_t cbAUTOALG_HIST_PEAK_COUNT_FISH = 4;   ///< Auto Hist Peak Fish
-constexpr uint32_t cbAUTOALG_PCA = 5;   ///< Manual PCA
-constexpr uint32_t cbAUTOALG_HOOPS = 6;   ///< Manual Hoops
-constexpr uint32_t cbAUTOALG_PCA_KMEANS = 7;   ///< K-means PCA
-constexpr uint32_t cbAUTOALG_PCA_EM = 8;   ///< EM-clustering PCA
-constexpr uint32_t cbAUTOALG_PCA_DBSCAN = 9;   ///< DBSCAN PCA
+#define cbAUTOALG_NONE                 0   ///< No sorting
+#define cbAUTOALG_SPREAD               1   ///< Auto spread
+#define cbAUTOALG_HIST_CORR_MAJ        2   ///< Auto Hist Correlation
+#define cbAUTOALG_HIST_PEAK_COUNT_MAJ  3   ///< Auto Hist Peak Maj
+#define cbAUTOALG_HIST_PEAK_COUNT_FISH 4   ///< Auto Hist Peak Fish
+#define cbAUTOALG_PCA                  5   ///< Manual PCA
+#define cbAUTOALG_HOOPS                6   ///< Manual Hoops
+#define cbAUTOALG_PCA_KMEANS           7   ///< K-means PCA
+#define cbAUTOALG_PCA_EM               8   ///< EM-clustering PCA
+#define cbAUTOALG_PCA_DBSCAN           9   ///< DBSCAN PCA
 
 // Spike sorting mode commands
-constexpr uint32_t cbAUTOALG_MODE_SETTING = 0;   ///< Change the settings and leave sorting the same (PC->NSP request)
-constexpr uint32_t cbAUTOALG_MODE_APPLY = 1;   ///< Change settings and apply this sorting to all channels (PC->NSP request)
+#define cbAUTOALG_MODE_SETTING         0   ///< Change the settings and leave sorting the same (PC->NSP request)
+#define cbAUTOALG_MODE_APPLY           1   ///< Change settings and apply this sorting to all channels (PC->NSP request)
+
+// SS Model All constants
+#define cbPKTTYPE_SS_MODELALLREP   0x50        ///< NSP->PC response
+#define cbPKTTYPE_SS_MODELALLSET   0xD0        ///< PC->NSP request
+#define cbPKTDLEN_SS_MODELALLSET ((sizeof(cbPKT_SS_MODELALLSET) / 4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xD0 Rep:0x50 - Get the spike sorting model for all channels (Histogram Peak Count)
 ///
@@ -1598,8 +1613,11 @@ typedef struct {
     cbPKT_HEADER cbpkt_header;  ///< packet header
 } cbPKT_SS_MODELALLSET;
 
-// SS Model All constants
-constexpr uint32_t cbPKTDLEN_SS_MODELALLSET = ((sizeof(cbPKT_SS_MODELALLSET) / 4) - cbPKT_HEADER_32SIZE);
+// SS Model constants
+#define cbPKTTYPE_SS_MODELREP      0x51        ///< NSP->PC response
+#define cbPKTTYPE_SS_MODELSET      0xD1        ///< PC->NSP request
+#define cbPKTDLEN_SS_MODELSET ((sizeof(cbPKT_SS_MODELSET) / 4) - cbPKT_HEADER_32SIZE)
+#define MAX_REPEL_POINTS 3
 
 /// @brief PKT Set:0xD1 Rep:0x51 - Get the spike sorting model for a single channel (Histogram Peak Count)
 ///
@@ -1627,9 +1645,10 @@ typedef struct {
     float  sigma_e_squared;
 } cbPKT_SS_MODELSET;
 
-// SS Model constants
-constexpr uint32_t cbPKTDLEN_SS_MODELSET = ((sizeof(cbPKT_SS_MODELSET) / 4) - cbPKT_HEADER_32SIZE);
-constexpr uint32_t MAX_REPEL_POINTS = 3;
+// SS Detect constants
+#define cbPKTTYPE_SS_DETECTREP  0x52        ///< NSP->PC response
+#define cbPKTTYPE_SS_DETECTSET  0xD2        ///< PC->NSP request
+#define cbPKTDLEN_SS_DETECT ((sizeof(cbPKT_SS_DETECT) / 4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xD2 Rep:0x52 - Auto threshold parameters
 ///
@@ -1641,8 +1660,10 @@ typedef struct {
     float  fMultiplier;    ///< multiplier
 } cbPKT_SS_DETECT;
 
-// SS Detect constants
-constexpr uint32_t cbPKTDLEN_SS_DETECT = ((sizeof(cbPKT_SS_DETECT) / 4) - cbPKT_HEADER_32SIZE);
+// SS Artifact Reject constants
+#define cbPKTTYPE_SS_ARTIF_REJECTREP  0x53        ///< NSP->PC response
+#define cbPKTTYPE_SS_ARTIF_REJECTSET  0xD3        ///< PC->NSP request
+#define cbPKTDLEN_SS_ARTIF_REJECT ((sizeof(cbPKT_SS_ARTIF_REJECT) / 4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xD3 Rep:0x53 - Artifact reject
 ///
@@ -1654,8 +1675,10 @@ typedef struct {
     uint32_t nRefractoryCount;   ///< for how many samples (30 kHz) is a neuron refractory, so can't re-trigger
 } cbPKT_SS_ARTIF_REJECT;
 
-// SS Artifact Reject constants
-constexpr uint32_t cbPKTDLEN_SS_ARTIF_REJECT = ((sizeof(cbPKT_SS_ARTIF_REJECT) / 4) - cbPKT_HEADER_32SIZE);
+// SS Noise Boundary constants
+#define cbPKTTYPE_SS_NOISE_BOUNDARYREP  0x54        ///< NSP->PC response
+#define cbPKTTYPE_SS_NOISE_BOUNDARYSET  0xD4        ///< PC->NSP request
+#define cbPKTDLEN_SS_NOISE_BOUNDARY ((sizeof(cbPKT_SS_NOISE_BOUNDARY) / 4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xD4 Rep:0x54 - Noise boundary
 ///
@@ -1668,8 +1691,10 @@ typedef struct {
     float  afS[3][3];   ///< an array of the axes for the ellipsoid
 } cbPKT_SS_NOISE_BOUNDARY;
 
-// SS Noise Boundary constants
-constexpr uint32_t cbPKTDLEN_SS_NOISE_BOUNDARY = ((sizeof(cbPKT_SS_NOISE_BOUNDARY) / 4) - cbPKT_HEADER_32SIZE);
+// SS Statistics constants
+#define cbPKTTYPE_SS_STATISTICSREP  0x55        ///< NSP->PC response
+#define cbPKTTYPE_SS_STATISTICSSET  0xD5        ///< PC->NSP request
+#define cbPKTDLEN_SS_STATISTICS ((sizeof(cbPKT_SS_STATISTICS) / 4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xD5 Rep:0x55 - Spike sourting statistics (Histogram peak count)
 typedef struct {
@@ -1698,8 +1723,10 @@ typedef struct {
                                                 ///< the same PCA basis before next
 } cbPKT_SS_STATISTICS;
 
-// SS Statistics constants
-constexpr uint32_t cbPKTDLEN_SS_STATISTICS = ((sizeof(cbPKT_SS_STATISTICS) / 4) - cbPKT_HEADER_32SIZE);
+// SS Status constants
+#define cbPKTTYPE_SS_STATUSREP  0x57        ///< NSP->PC response
+#define cbPKTTYPE_SS_STATUSSET  0xD7        ///< PC->NSP request
+#define cbPKTDLEN_SS_STATUS ((sizeof(cbPKT_SS_STATUS) / 4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xD7 Rep:0x57 - Spike sorting status (Histogram peak count)
 ///
@@ -1711,8 +1738,10 @@ typedef struct {
     cbAdaptControl cntlNumUnits;    ///<
 } cbPKT_SS_STATUS;
 
-// SS Status constants
-constexpr uint32_t cbPKTDLEN_SS_STATUS = ((sizeof(cbPKT_SS_STATUS) / 4) - cbPKT_HEADER_32SIZE);
+// SS Reset constants
+#define cbPKTTYPE_SS_RESETREP       0x56        ///< NSP->PC response
+#define cbPKTTYPE_SS_RESETSET       0xD6        ///< PC->NSP request
+#define cbPKTDLEN_SS_RESET ((sizeof(cbPKT_SS_RESET) / 4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xD6 Rep:0x56 - Spike sorting reset
 ///
@@ -1722,8 +1751,10 @@ typedef struct
     cbPKT_HEADER cbpkt_header;  ///< packet header
 } cbPKT_SS_RESET;
 
-// SS Reset constants
-constexpr uint32_t cbPKTDLEN_SS_RESET = ((sizeof(cbPKT_SS_RESET) / 4) - cbPKT_HEADER_32SIZE);
+// SS Reset Model constants
+#define cbPKTTYPE_SS_RESET_MODEL_REP    0x58        ///< NSP->PC response
+#define cbPKTTYPE_SS_RESET_MODEL_SET    0xD8        ///< PC->NSP request
+#define cbPKTDLEN_SS_RESET_MODEL ((sizeof(cbPKT_SS_RESET_MODEL) / 4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xD8 Rep:0x58 - Spike sorting reset model
 ///
@@ -1733,17 +1764,19 @@ typedef struct
     cbPKT_HEADER cbpkt_header;  ///< packet header
 } cbPKT_SS_RESET_MODEL;
 
-// SS Reset Model constants
-constexpr uint32_t cbPKTDLEN_SS_RESET_MODEL = ((sizeof(cbPKT_SS_RESET_MODEL) / 4) - cbPKT_HEADER_32SIZE);
-
 // Feature space commands and status changes
-constexpr uint32_t cbPCA_RECALC_START = 0;    ///< PC ->NSP start recalculation
-constexpr uint32_t cbPCA_RECALC_STOPPED = 1;    ///< NSP->PC  finished recalculation
-constexpr uint32_t cbPCA_COLLECTION_STARTED = 2;    ///< NSP->PC  waveform collection started
-constexpr uint32_t cbBASIS_CHANGE = 3;    ///< Change the basis of feature space
-constexpr uint32_t cbUNDO_BASIS_CHANGE = 4;
-constexpr uint32_t cbREDO_BASIS_CHANGE = 5;
-constexpr uint32_t cbINVALIDATE_BASIS = 6;
+#define cbPCA_RECALC_START             0    ///< PC ->NSP start recalculation
+#define cbPCA_RECALC_STOPPED           1    ///< NSP->PC  finished recalculation
+#define cbPCA_COLLECTION_STARTED       2    ///< NSP->PC  waveform collection started
+#define cbBASIS_CHANGE                 3    ///< Change the basis of feature space
+#define cbUNDO_BASIS_CHANGE            4
+#define cbREDO_BASIS_CHANGE            5
+#define cbINVALIDATE_BASIS             6
+
+// SS Recalc constants
+#define cbPKTTYPE_SS_RECALCREP       0x59        ///< NSP->PC response
+#define cbPKTTYPE_SS_RECALCSET       0xD9        ///< PC->NSP request
+#define cbPKTDLEN_SS_RECALC ((sizeof(cbPKT_SS_RECALC) / 4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xD9 Rep:0x59 - Spike Sorting recalculate PCA
 ///
@@ -1756,9 +1789,6 @@ typedef struct
     uint32_t mode;           ///< cbPCA_RECALC_START -> Start PCA basis, cbPCA_RECALC_STOPPED-> PCA basis stopped, cbPCA_COLLECTION_STARTED -> PCA waveform collection started
 } cbPKT_SS_RECALC;
 
-// SS Recalc constants
-constexpr uint32_t cbPKTDLEN_SS_RECALC = ((sizeof(cbPKT_SS_RECALC) / 4) - cbPKT_HEADER_32SIZE);
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1766,6 +1796,11 @@ constexpr uint32_t cbPKTDLEN_SS_RECALC = ((sizeof(cbPKT_SS_RECALC) / 4) - cbPKT_
 ///
 /// Ground truth from upstream/cbproto/cbproto.h lines 1889-1909
 /// @{
+
+#define cbPKTTYPE_FS_BASISREP       0x5B        ///< NSP->PC response
+#define cbPKTTYPE_FS_BASISSET       0xDB        ///< PC->NSP request
+#define cbPKTDLEN_FS_BASIS ((sizeof(cbPKT_FS_BASIS) / 4) - cbPKT_HEADER_32SIZE)
+#define cbPKTDLEN_FS_BASISSHORT (cbPKTDLEN_FS_BASIS - ((sizeof(float)* cbMAX_PNTS * 3)/4))
 
 /// @brief PKT Set:0xDB Rep:0x5B - Feature Space Basis
 ///
@@ -1781,9 +1816,6 @@ typedef struct
     /// basis must be the last item in the structure because it can be variable length to a max of cbMAX_PNTS
     float  basis[cbMAX_PNTS][3];    ///< Room for all possible points collected
 } cbPKT_FS_BASIS;
-
-constexpr uint32_t cbPKTDLEN_FS_BASIS = ((sizeof(cbPKT_FS_BASIS) / 4) - cbPKT_HEADER_32SIZE);
-constexpr uint32_t cbPKTDLEN_FS_BASISSHORT = (cbPKTDLEN_FS_BASIS - ((sizeof(float)* cbMAX_PNTS * 3)/4));
 
 /// @}
 
@@ -1801,12 +1833,12 @@ typedef struct {
 } cbVIDEOSOURCE;
 
 // Track object types
-constexpr uint32_t cbTRACKOBJ_TYPE_UNDEFINED = 0;  ///< Undefined track object type
-constexpr uint32_t cbTRACKOBJ_TYPE_2DMARKERS = 1;  ///< 2D marker tracking
-constexpr uint32_t cbTRACKOBJ_TYPE_2DBLOB = 2;  ///< 2D blob tracking
-constexpr uint32_t cbTRACKOBJ_TYPE_3DMARKERS = 3;  ///< 3D marker tracking
-constexpr uint32_t cbTRACKOBJ_TYPE_2DBOUNDARY = 4;  ///< 2D boundary tracking
-constexpr uint32_t cbTRACKOBJ_TYPE_1DSIZE = 5;  ///< 1D size tracking
+#define cbTRACKOBJ_TYPE_UNDEFINED  0  ///< Undefined track object type
+#define cbTRACKOBJ_TYPE_2DMARKERS  1  ///< 2D marker tracking
+#define cbTRACKOBJ_TYPE_2DBLOB     2  ///< 2D blob tracking
+#define cbTRACKOBJ_TYPE_3DMARKERS  3  ///< 3D marker tracking
+#define cbTRACKOBJ_TYPE_2DBOUNDARY 4  ///< 2D boundary tracking
+#define cbTRACKOBJ_TYPE_1DSIZE     5  ///< 1D size tracking
 
 /// @brief Track object structure for NeuroMotive
 typedef struct {
@@ -1816,26 +1848,30 @@ typedef struct {
 } cbTRACKOBJ;
 
 // NeuroMotive status
-constexpr uint32_t cbNM_STATUS_IDLE = 0;  ///< NeuroMotive is idle
-constexpr uint32_t cbNM_STATUS_EXIT = 1;  ///< NeuroMotive is exiting
-constexpr uint32_t cbNM_STATUS_REC = 2;  ///< NeuroMotive is recording
-constexpr uint32_t cbNM_STATUS_PLAY = 3;  ///< NeuroMotive is playing video file
-constexpr uint32_t cbNM_STATUS_CAP = 4;  ///< NeuroMotive is capturing from camera
-constexpr uint32_t cbNM_STATUS_STOP = 5;  ///< NeuroMotive is stopping
-constexpr uint32_t cbNM_STATUS_PAUSED = 6;  ///< NeuroMotive is paused
-constexpr uint32_t cbNM_STATUS_COUNT = 7;  ///< This is the count of status options
+#define cbNM_STATUS_IDLE                0  ///< NeuroMotive is idle
+#define cbNM_STATUS_EXIT                1  ///< NeuroMotive is exiting
+#define cbNM_STATUS_REC                 2  ///< NeuroMotive is recording
+#define cbNM_STATUS_PLAY                3  ///< NeuroMotive is playing video file
+#define cbNM_STATUS_CAP                 4  ///< NeuroMotive is capturing from camera
+#define cbNM_STATUS_STOP                5  ///< NeuroMotive is stopping
+#define cbNM_STATUS_PAUSED              6  ///< NeuroMotive is paused
+#define cbNM_STATUS_COUNT               7  ///< This is the count of status options
 
 // NeuroMotive commands and status changes (cbPKT_NM.mode)
-constexpr uint32_t cbNM_MODE_NONE = 0;  ///< No command
-constexpr uint32_t cbNM_MODE_CONFIG = 1;  ///< Ask NeuroMotive for configuration
-constexpr uint32_t cbNM_MODE_SETVIDEOSOURCE = 2;  ///< Configure video source
-constexpr uint32_t cbNM_MODE_SETTRACKABLE = 3;  ///< Configure trackable
-constexpr uint32_t cbNM_MODE_STATUS = 4;  ///< NeuroMotive status reporting (cbNM_STATUS_*)
-constexpr uint32_t cbNM_MODE_TSCOUNT = 5;  ///< Timestamp count (value is the period with 0 to disable this mode)
-constexpr uint32_t cbNM_MODE_SYNCHCLOCK = 6;  ///< Start (or stop) synchronization clock (fps*1000 specified by value, zero fps to stop capture)
-constexpr uint32_t cbNM_MODE_ASYNCHCLOCK = 7;  ///< Asynchronous clock
+#define cbNM_MODE_NONE                  0  ///< No command
+#define cbNM_MODE_CONFIG                1  ///< Ask NeuroMotive for configuration
+#define cbNM_MODE_SETVIDEOSOURCE        2  ///< Configure video source
+#define cbNM_MODE_SETTRACKABLE          3  ///< Configure trackable
+#define cbNM_MODE_STATUS                4  ///< NeuroMotive status reporting (cbNM_STATUS_*)
+#define cbNM_MODE_TSCOUNT               5  ///< Timestamp count (value is the period with 0 to disable this mode)
+#define cbNM_MODE_SYNCHCLOCK            6  ///< Start (or stop) synchronization clock (fps*1000 specified by value, zero fps to stop capture)
+#define cbNM_MODE_ASYNCHCLOCK           7  ///< Asynchronous clock
 
-constexpr uint32_t cbNM_FLAG_NONE = 0;  ///< No flags
+#define cbNM_FLAG_NONE                  0  ///< No flags
+
+#define cbPKTTYPE_NMREP   0x32  ///< NSP->PC response
+#define cbPKTTYPE_NMSET   0xB2  ///< PC->NSP request
+#define cbPKTDLEN_NM  ((sizeof(cbPKT_NM)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xB2 Rep:0x32 - NeuroMotive packet structure
 ///
@@ -1851,8 +1887,6 @@ typedef struct {
         char   name[cbLEN_STR_LABEL];      ///< name associated with this mode
     };
 } cbPKT_NM;
-
-constexpr uint32_t cbPKTDLEN_NM = ((sizeof(cbPKT_NM)/4) - cbPKT_HEADER_32SIZE);
 
 /// @}
 
@@ -1870,6 +1904,10 @@ enum cbNTRODEINFO_FS_MODE {
     cbNTRODEINFO_FS_COUNT      ///< Number of feature space modes
 };
 
+#define cbPKTTYPE_REPNTRODEINFO      0x27        ///< NSP->PC response
+#define cbPKTTYPE_SETNTRODEINFO      0xA7        ///< PC->NSP request
+#define cbPKTDLEN_NTRODEINFO         ((sizeof(cbPKT_NTRODEINFO) / 4) - cbPKT_HEADER_32SIZE)
+
 /// @brief PKT Set:0xA7 Rep:0x27 - N-Trode information packets
 ///
 /// Sets information about an N-Trode.  The user can change the name, number of sites, sites (channels)
@@ -1884,8 +1922,6 @@ typedef struct {
     uint16_t nChan[cbMAXSITES];  ///< group of channels in this NTrode
 } cbPKT_NTRODEINFO;
 
-constexpr uint32_t cbPKTDLEN_NTRODEINFO = ((sizeof(cbPKT_NTRODEINFO) / 4) - cbPKT_HEADER_32SIZE);
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1894,7 +1930,7 @@ constexpr uint32_t cbPKTDLEN_NTRODEINFO = ((sizeof(cbPKT_NTRODEINFO) / 4) - cbPK
 /// Ground truth from upstream/cbproto/cbproto.h lines 1943-2008
 /// @{
 
-constexpr uint32_t cbMAX_WAVEFORM_PHASES = ((cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - 24) / 4);   ///< Maximum number of phases in a waveform
+#define cbMAX_WAVEFORM_PHASES  ((cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - 24) / 4)   ///< Maximum number of phases in a waveform
 
 /// @brief Analog output waveform data
 ///
@@ -1918,18 +1954,23 @@ typedef struct
 } cbWaveformData;
 
 // Signal generator waveform type
-constexpr uint32_t cbWAVEFORM_MODE_NONE = 0;   ///< waveform is disabled
-constexpr uint32_t cbWAVEFORM_MODE_PARAMETERS = 1;   ///< waveform is a repeated sequence
-constexpr uint32_t cbWAVEFORM_MODE_SINE = 2;   ///< waveform is a sinusoids
+#define cbWAVEFORM_MODE_NONE          0   ///< waveform is disabled
+#define cbWAVEFORM_MODE_PARAMETERS    1   ///< waveform is a repeated sequence
+#define cbWAVEFORM_MODE_SINE          2   ///< waveform is a sinusoids
 
 // Signal generator waveform trigger type
-constexpr uint32_t cbWAVEFORM_TRIGGER_NONE = 0;   ///< instant software trigger
-constexpr uint32_t cbWAVEFORM_TRIGGER_DINPREG = 1;   ///< digital input rising edge trigger
-constexpr uint32_t cbWAVEFORM_TRIGGER_DINPFEG = 2;   ///< digital input falling edge trigger
-constexpr uint32_t cbWAVEFORM_TRIGGER_SPIKEUNIT = 3;   ///< spike unit
-constexpr uint32_t cbWAVEFORM_TRIGGER_COMMENTCOLOR = 4;   ///< comment RGBA color (A being big byte)
-constexpr uint32_t cbWAVEFORM_TRIGGER_RECORDINGSTART = 5;   ///< recording start trigger
-constexpr uint32_t cbWAVEFORM_TRIGGER_EXTENSION = 6;   ///< extension trigger
+#define cbWAVEFORM_TRIGGER_NONE              0   ///< instant software trigger
+#define cbWAVEFORM_TRIGGER_DINPREG           1   ///< digital input rising edge trigger
+#define cbWAVEFORM_TRIGGER_DINPFEG           2   ///< digital input falling edge trigger
+#define cbWAVEFORM_TRIGGER_SPIKEUNIT         3   ///< spike unit
+#define cbWAVEFORM_TRIGGER_COMMENTCOLOR      4   ///< comment RGBA color (A being big byte)
+#define cbWAVEFORM_TRIGGER_RECORDINGSTART    5   ///< recording start trigger
+#define cbWAVEFORM_TRIGGER_EXTENSION         6   ///< extension trigger
+
+// AOUT signal generator waveform data
+#define cbPKTTYPE_WAVEFORMREP       0x33        ///< NSP->PC response
+#define cbPKTTYPE_WAVEFORMSET       0xB3        ///< PC->NSP request
+#define cbPKTDLEN_WAVEFORM   ((sizeof(cbPKT_AOUT_WAVEFORM)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xB3 Rep:0x33 - AOUT waveform
 ///
@@ -1946,11 +1987,8 @@ typedef struct {
     /// Waveform parameter information
     uint16_t  mode;              ///< Can be any of cbWAVEFORM_MODE_*
     uint32_t  repeats;           ///< Number of repeats (0 means forever)
-    // VER: 4.1+, uint16_t trig split into trig and trigInst
-    // ---------
     uint8_t   trig;              ///< Can be any of cbWAVEFORM_TRIGGER_*
     uint8_t   trigInst;          ///< Instrument the trigChan belongs
-    // ---------
     uint16_t  trigChan;          ///< Depends on trig:
                                  ///  for cbWAVEFORM_TRIGGER_DINP* 1-based trigChan (1-16) is digin1, (17-32) is digin2, ...
                                  ///  for cbWAVEFORM_TRIGGER_SPIKEUNIT 1-based trigChan (1-156) is channel number
@@ -1961,9 +1999,6 @@ typedef struct {
     cbWaveformData wave;         ///< Actual waveform data
 } cbPKT_AOUT_WAVEFORM;
 
-// AOUT signal generator waveform data
-constexpr uint32_t cbPKTDLEN_WAVEFORM = ((sizeof(cbPKT_AOUT_WAVEFORM)/4) - cbPKT_HEADER_32SIZE);
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1971,6 +2006,10 @@ constexpr uint32_t cbPKTDLEN_WAVEFORM = ((sizeof(cbPKT_AOUT_WAVEFORM)/4) - cbPKT
 ///
 /// Ground truth from upstream/cbproto/cbproto.h lines 2010-2022
 /// @{
+
+#define cbPKTTYPE_STIMULATIONREP       0x34        ///< NSP->PC response
+#define cbPKTTYPE_STIMULATIONSET       0xB4        ///< PC->NSP request
+#define cbPKTDLEN_STIMULATION   ((sizeof(cbPKT_STIMULATION)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xB4 Rep:0x34 - Stimulation command
 ///
@@ -1981,8 +2020,6 @@ typedef struct {
     uint8_t commandBytes[40];   ///< series of bytes to control stimulation
 } cbPKT_STIMULATION;
 
-constexpr uint32_t cbPKTDLEN_STIMULATION = ((sizeof(cbPKT_STIMULATION)/4) - cbPKT_HEADER_32SIZE);
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1992,36 +2029,41 @@ constexpr uint32_t cbPKTDLEN_STIMULATION = ((sizeof(cbPKT_STIMULATION)/4) - cbPK
 /// @{
 
 // Audio commands "val"
-constexpr uint32_t cbAUDIO_CMD_NONE = 0;   ///< PC->NPLAY query audio status
+#define cbAUDIO_CMD_NONE             0   ///< PC->NPLAY query audio status
 
 // nPlay file version (first byte NSx version, second byte NEV version)
-constexpr uint32_t cbNPLAY_FILE_NS21 = 1;   ///< NSX 2.1 file
-constexpr uint32_t cbNPLAY_FILE_NS22 = 2;   ///< NSX 2.2 file
-constexpr uint32_t cbNPLAY_FILE_NS30 = 3;   ///< NSX 3.0 file
-constexpr uint32_t cbNPLAY_FILE_NEV21 = (1 << 8);   ///< Nev 2.1 file
-constexpr uint32_t cbNPLAY_FILE_NEV22 = (2 << 8);   ///< Nev 2.2 file
-constexpr uint32_t cbNPLAY_FILE_NEV23 = (3 << 8);   ///< Nev 2.3 file
-constexpr uint32_t cbNPLAY_FILE_NEV30 = (4 << 8);   ///< Nev 3.0 file
+#define cbNPLAY_FILE_NS21            1   ///< NSX 2.1 file
+#define cbNPLAY_FILE_NS22            2   ///< NSX 2.2 file
+#define cbNPLAY_FILE_NS30            3   ///< NSX 3.0 file
+#define cbNPLAY_FILE_NEV21           (1 << 8)   ///< Nev 2.1 file
+#define cbNPLAY_FILE_NEV22           (2 << 8)   ///< Nev 2.2 file
+#define cbNPLAY_FILE_NEV23           (3 << 8)   ///< Nev 2.3 file
+#define cbNPLAY_FILE_NEV30           (4 << 8)   ///< Nev 3.0 file
 
 // nPlay commands and status changes (cbPKT_NPLAY.mode)
-constexpr uint32_t cbNPLAY_FNAME_LEN = (cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - 40);   ///< length of the file name (with terminating null)
-constexpr uint32_t cbNPLAY_MODE_NONE = 0;    ///< no command (parameters)
-constexpr uint32_t cbNPLAY_MODE_PAUSE = 1;    ///< PC->NPLAY pause if "val" is non-zero, un-pause otherwise
-constexpr uint32_t cbNPLAY_MODE_SEEK = 2;    ///< PC->NPLAY seek to time "val"
-constexpr uint32_t cbNPLAY_MODE_CONFIG = 3;    ///< PC<->NPLAY request full config
-constexpr uint32_t cbNPLAY_MODE_OPEN = 4;    ///< PC->NPLAY open new file in "val" for playback
-constexpr uint32_t cbNPLAY_MODE_PATH = 5;    ///< PC->NPLAY use the directory path in fname
-constexpr uint32_t cbNPLAY_MODE_CONFIGMAIN = 6;    ///< PC<->NPLAY request main config packet
-constexpr uint32_t cbNPLAY_MODE_STEP = 7;    ///< PC<->NPLAY run "val" procTime steps and pause, then send cbNPLAY_FLAG_STEPPED
-constexpr uint32_t cbNPLAY_MODE_SINGLE = 8;    ///< PC->NPLAY single mode if "val" is non-zero, wrap otherwise
-constexpr uint32_t cbNPLAY_MODE_RESET = 9;    ///< PC->NPLAY reset nPlay
-constexpr uint32_t cbNPLAY_MODE_NEVRESORT = 10;   ///< PC->NPLAY resort NEV if "val" is non-zero, do not if otherwise
-constexpr uint32_t cbNPLAY_MODE_AUDIO_CMD = 11;   ///< PC->NPLAY perform audio command in "val" (cbAUDIO_CMD_*), with option "opt"
+#define cbNPLAY_FNAME_LEN            (cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - 40)   ///< length of the file name (with terminating null)
+#define cbNPLAY_MODE_NONE            0    ///< no command (parameters)
+#define cbNPLAY_MODE_PAUSE           1    ///< PC->NPLAY pause if "val" is non-zero, un-pause otherwise
+#define cbNPLAY_MODE_SEEK            2    ///< PC->NPLAY seek to time "val"
+#define cbNPLAY_MODE_CONFIG          3    ///< PC<->NPLAY request full config
+#define cbNPLAY_MODE_OPEN            4    ///< PC->NPLAY open new file in "val" for playback
+#define cbNPLAY_MODE_PATH            5    ///< PC->NPLAY use the directory path in fname
+#define cbNPLAY_MODE_CONFIGMAIN      6    ///< PC<->NPLAY request main config packet
+#define cbNPLAY_MODE_STEP            7    ///< PC<->NPLAY run "val" procTime steps and pause, then send cbNPLAY_FLAG_STEPPED
+#define cbNPLAY_MODE_SINGLE          8    ///< PC->NPLAY single mode if "val" is non-zero, wrap otherwise
+#define cbNPLAY_MODE_RESET           9    ///< PC->NPLAY reset nPlay
+#define cbNPLAY_MODE_NEVRESORT       10   ///< PC->NPLAY resort NEV if "val" is non-zero, do not if otherwise
+#define cbNPLAY_MODE_AUDIO_CMD       11   ///< PC->NPLAY perform audio command in "val" (cbAUDIO_CMD_*), with option "opt"
 
-constexpr uint32_t cbNPLAY_FLAG_NONE = 0x00;  ///< no flag
-constexpr uint32_t cbNPLAY_FLAG_CONF = 0x01;  ///< NPLAY->PC config packet ("val" is "fname" file index)
-constexpr uint32_t cbNPLAY_FLAG_MAIN = (0x02 | cbNPLAY_FLAG_CONF);  ///< NPLAY->PC main config packet ("val" is file version)
-constexpr uint32_t cbNPLAY_FLAG_DONE = 0x02;  ///< NPLAY->PC step command done
+#define cbNPLAY_FLAG_NONE            0x00  ///< no flag
+#define cbNPLAY_FLAG_CONF            0x01  ///< NPLAY->PC config packet ("val" is "fname" file index)
+#define cbNPLAY_FLAG_MAIN           (0x02 | cbNPLAY_FLAG_CONF)  ///< NPLAY->PC main config packet ("val" is file version)
+#define cbNPLAY_FLAG_DONE            0x02  ///< NPLAY->PC step command done
+
+// nPlay configuration packet(sent on restart together with config packet)
+#define cbPKTTYPE_NPLAYREP   0x5C ///< NPLAY->PC response
+#define cbPKTTYPE_NPLAYSET   0xDC ///< PC->NPLAY request
+#define cbPKTDLEN_NPLAY    ((sizeof(cbPKT_NPLAY)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xDC Rep:0x5C - nPlay configuration packet
 ///
@@ -2042,9 +2084,6 @@ typedef struct {
     char  fname[cbNPLAY_FNAME_LEN];   ///< This is a String with the file name.
 } cbPKT_NPLAY;
 
-// nPlay configuration packet(sent on restart together with config packet)
-constexpr uint32_t cbPKTDLEN_NPLAY = ((sizeof(cbPKT_NPLAY)/4) - cbPKT_HEADER_32SIZE);
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2052,6 +2091,10 @@ constexpr uint32_t cbPKTDLEN_NPLAY = ((sizeof(cbPKT_NPLAY)/4) - cbPKT_HEADER_32S
 ///
 /// Ground truth from upstream/cbproto/cbproto.h lines 1928-1941
 /// @{
+
+#define cbPKTTYPE_SET_DOUTREP       0x5D        ///< NSP->PC response
+#define cbPKTTYPE_SET_DOUTSET       0xDD        ///< PC->NSP request
+#define cbPKTDLEN_SET_DOUT ((sizeof(cbPKT_SET_DOUT) / 4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xDD Rep:0x5D - Set Digital Output
 ///
@@ -2063,8 +2106,6 @@ typedef struct {
     uint16_t value;       ///< Which value to set? zero = 0; non-zero = 1 (output is 1 bit)
 } cbPKT_SET_DOUT;
 
-constexpr uint32_t cbPKTDLEN_SET_DOUT = ((sizeof(cbPKT_SET_DOUT) / 4) - cbPKT_HEADER_32SIZE);
-
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2073,9 +2114,13 @@ constexpr uint32_t cbPKTDLEN_SET_DOUT = ((sizeof(cbPKT_SET_DOUT) / 4) - cbPKT_HE
 /// Ground truth from upstream/cbproto/cbproto.h lines 967-1005
 /// @{
 
-constexpr uint32_t cbTRIGGER_MODE_UNDEFINED = 0;
-constexpr uint32_t cbTRIGGER_MODE_BUTTONPRESS = 1; ///< Patient button press event
-constexpr uint32_t cbTRIGGER_MODE_EVENTRESET = 2; ///< event reset
+#define cbTRIGGER_MODE_UNDEFINED        0
+#define cbTRIGGER_MODE_BUTTONPRESS      1 ///< Patient button press event
+#define cbTRIGGER_MODE_EVENTRESET       2 ///< event reset
+
+#define cbPKTTYPE_TRIGGERREP   0x5E ///< NPLAY->PC response
+#define cbPKTTYPE_TRIGGERSET   0xDE ///< PC->NPLAY request
+#define cbPKTDLEN_TRIGGER    ((sizeof(cbPKT_TRIGGER)/4) - cbPKT_HEADER_32SIZE)
 
 /// @brief PKT Set:0xDE Rep:0x5E - Trigger Packet used for Cervello system
 typedef struct {
@@ -2084,9 +2129,12 @@ typedef struct {
     uint32_t mode;        ///< cbTRIGGER_MODE_*
 } cbPKT_TRIGGER;
 
-constexpr uint32_t cbPKTDLEN_TRIGGER = ((sizeof(cbPKT_TRIGGER)/4) - cbPKT_HEADER_32SIZE);
+#define cbMAX_TRACKCOORDS (128) ///< Maximum number of coordinates (must be an even number)
+#define cbPKTTYPE_VIDEOTRACKREP   0x5F ///< NPLAY->PC response
+#define cbPKTTYPE_VIDEOTRACKSET   0xDF ///< PC->NPLAY request
+#define cbPKTDLEN_VIDEOTRACK    ((sizeof(cbPKT_VIDEOTRACK)/4) - cbPKT_HEADER_32SIZE)
+#define cbPKTDLEN_VIDEOTRACKSHORT (cbPKTDLEN_VIDEOTRACK - ((sizeof(uint16_t)*cbMAX_TRACKCOORDS)/4))
 
-constexpr uint32_t cbMAX_TRACKCOORDS = (128); ///< Maximum number of coordinates (must be an even number)
 /// @brief PKT Set:0xDF Rep:0x5F - Video tracking event packet
 typedef struct {
     cbPKT_HEADER cbpkt_header;  ///< packet header
@@ -2101,9 +2149,6 @@ typedef struct {
         uint32_t sizes[cbMAX_TRACKCOORDS / 2];
     };
 } cbPKT_VIDEOTRACK;
-
-constexpr uint32_t cbPKTDLEN_VIDEOTRACK = ((sizeof(cbPKT_VIDEOTRACK)/4) - cbPKT_HEADER_32SIZE);
-constexpr uint32_t cbPKTDLEN_VIDEOTRACKSHORT = (cbPKTDLEN_VIDEOTRACK - ((sizeof(uint16_t)*cbMAX_TRACKCOORDS)/4));
 
 /// @}
 
@@ -2151,6 +2196,11 @@ typedef struct {
 /// Ground truth from upstream/cbproto/cbproto.h lines 800-838
 /// @{
 
+#define cbRUNLEVEL_UPDATE   78
+#define cbPKTTYPE_UPDATESET 0xF1
+#define cbPKTTYPE_UPDATEREP 0x71
+#define cbPKTDLEN_UPDATE    (sizeof(cbPKT_UPDATE)/4)-2
+
 /// @brief PKT Set:0xF1 Rep:0x71 - Update Packet
 ///
 /// Update the firmware of the NSP.  This will copy data received into files in a temporary location and if
@@ -2165,7 +2215,7 @@ typedef struct {
     uint8_t  block[512];      ///< block data
 } cbPKT_UPDATE;
 
-constexpr uint32_t cbPKTDLEN_UPDATE = (sizeof(cbPKT_UPDATE)/4)-2;
+#define cbPKTDLEN_UPDATE_OLD    (sizeof(cbPKT_UPDATE_OLD)/4)-2
 
 /// @brief PKT Set:0xF1 Rep:0x71 - Old Update Packet
 ///
@@ -2185,11 +2235,11 @@ typedef struct {
     uint8_t  block[512];      ///< block data
 } cbPKT_UPDATE_OLD;
 
-constexpr uint32_t cbPKTDLEN_UPDATE_OLD = (sizeof(cbPKT_UPDATE_OLD)/4)-2; // VER: 4.2+ ONLY
-
 /// @}
 
-#endif // __cplusplus
+#ifdef __cplusplus
+}
+#endif
 
 #pragma pack(pop)
 

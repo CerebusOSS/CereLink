@@ -28,8 +28,8 @@ namespace central_v7_5 {
 /// @name Protocol Version
 /// @{
 
-constexpr uint32_t cbVERSION_MAJOR = 4;
-constexpr uint32_t cbVERSION_MINOR = 0;
+constexpr uint32_t CENTRAL_cbVERSION_MAJOR = 4;
+constexpr uint32_t CENTRAL_cbVERSION_MINOR = 0;
 
 /// @}
 
@@ -38,48 +38,48 @@ constexpr uint32_t cbVERSION_MINOR = 0;
 /// @{
 
 // These MUST match Central's constants
-constexpr uint32_t cbMAXPROCS = 2;          ///< Central supports up to 2 NSPs
-constexpr uint32_t cbNUM_FE_CHANS = 512;    ///< Central supports 512 FE channels
-constexpr uint32_t cbMAXGROUPS = 8;         ///< Sample rate groups
-constexpr uint32_t cbMAXFILTS = 32;         ///< Digital filters
-constexpr uint32_t cbMAXVIDEOSOURCE = 1;    ///< Maximum number of video sources
-constexpr uint32_t cbMAXTRACKOBJ = 20;      ///< Maximum number of trackable objects
-constexpr uint32_t cbMAXHOOPS = 4;          ///< Maximum number of hoops for spike sorting
-constexpr uint32_t cbMAXSITES = 4;          ///< Maximum number of electrodes in an n-trode group
-constexpr uint32_t cbMAXSITEPLOTS = ((cbMAXSITES - 1) * cbMAXSITES / 2);  ///< Combination of 2 out of n
-constexpr uint32_t cbMAXUNITS = 5;          ///< Maximum number of sorted units per channel
-constexpr uint32_t cbMAX_PNTS = 128;        ///< Maximum spike waveform points
-constexpr uint32_t cbMAX_AOUT_TRIGGER = 5;  ///< Maximum number of per-channel (analog output, or digital output) triggers
+constexpr uint32_t CENTRAL_cbMAXPROCS = 2;          ///< Central supports up to 2 NSPs
+constexpr uint32_t CENTRAL_cbNUM_FE_CHANS = 512;    ///< Central supports 512 FE channels
+constexpr uint32_t CENTRAL_cbMAXGROUPS = 8;         ///< Sample rate groups
+constexpr uint32_t CENTRAL_cbMAXFILTS = 32;         ///< Digital filters
+constexpr uint32_t CENTRAL_cbMAXVIDEOSOURCE = 1;    ///< Maximum number of video sources
+constexpr uint32_t CENTRAL_cbMAXTRACKOBJ = 20;      ///< Maximum number of trackable objects
+constexpr uint32_t CENTRAL_cbMAXHOOPS = 4;          ///< Maximum number of hoops for spike sorting
+constexpr uint32_t CENTRAL_cbMAXSITES = 4;          ///< Maximum number of electrodes in an n-trode group
+constexpr uint32_t CENTRAL_cbMAXSITEPLOTS = ((CENTRAL_cbMAXSITES - 1) * CENTRAL_cbMAXSITES / 2);  ///< Combination of 2 out of n
+constexpr uint32_t CENTRAL_cbMAXUNITS = 5;          ///< Maximum number of sorted units per channel
+constexpr uint32_t CENTRAL_cbMAX_PNTS = 128;        ///< Maximum spike waveform points
+constexpr uint32_t CENTRAL_cbMAX_AOUT_TRIGGER = 5;  ///< Maximum number of per-channel (analog output, or digital output) triggers
 
 // Channel counts
-constexpr uint32_t cbNUM_ANAIN_CHANS = 16 * cbMAXPROCS;
-constexpr uint32_t cbNUM_ANALOG_CHANS = cbNUM_FE_CHANS + cbNUM_ANAIN_CHANS;
-constexpr uint32_t cbNUM_ANAOUT_CHANS = 4 * cbMAXPROCS;
-constexpr uint32_t cbNUM_AUDOUT_CHANS = 2 * cbMAXPROCS;
-constexpr uint32_t cbNUM_ANALOGOUT_CHANS = cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS;
-constexpr uint32_t cbNUM_DIGIN_CHANS = 1 * cbMAXPROCS;
-constexpr uint32_t cbNUM_SERIAL_CHANS = 1 * cbMAXPROCS;
-constexpr uint32_t cbNUM_DIGOUT_CHANS = 4 * cbMAXPROCS;
+constexpr uint32_t CENTRAL_cbNUM_ANAIN_CHANS = 16 * CENTRAL_cbMAXPROCS;
+constexpr uint32_t CENTRAL_cbNUM_ANALOG_CHANS = CENTRAL_cbNUM_FE_CHANS + CENTRAL_cbNUM_ANAIN_CHANS;
+constexpr uint32_t CENTRAL_cbNUM_ANAOUT_CHANS = 4 * CENTRAL_cbMAXPROCS;
+constexpr uint32_t CENTRAL_cbNUM_AUDOUT_CHANS = 2 * CENTRAL_cbMAXPROCS;
+constexpr uint32_t CENTRAL_cbNUM_ANALOGOUT_CHANS = CENTRAL_cbNUM_ANAOUT_CHANS + CENTRAL_cbNUM_AUDOUT_CHANS;
+constexpr uint32_t CENTRAL_cbNUM_DIGIN_CHANS = 1 * CENTRAL_cbMAXPROCS;
+constexpr uint32_t CENTRAL_cbNUM_SERIAL_CHANS = 1 * CENTRAL_cbMAXPROCS;
+constexpr uint32_t CENTRAL_cbNUM_DIGOUT_CHANS = 4 * CENTRAL_cbMAXPROCS;
 
 // Total channels
-constexpr uint32_t cbMAXCHANS = (cbNUM_ANALOG_CHANS + cbNUM_ANALOGOUT_CHANS +
-                                          cbNUM_DIGIN_CHANS + cbNUM_SERIAL_CHANS +
-                                          cbNUM_DIGOUT_CHANS);
+constexpr uint32_t CENTRAL_cbMAXCHANS = (CENTRAL_cbNUM_ANALOG_CHANS + CENTRAL_cbNUM_ANALOGOUT_CHANS +
+                                          CENTRAL_cbNUM_DIGIN_CHANS + CENTRAL_cbNUM_SERIAL_CHANS +
+                                          CENTRAL_cbNUM_DIGOUT_CHANS);
 
 // Bank definitions
-constexpr uint32_t cbCHAN_PER_BANK = 32;
-constexpr uint32_t cbNUM_FE_BANKS = cbNUM_FE_CHANS / cbCHAN_PER_BANK;
-constexpr uint32_t cbNUM_ANAIN_BANKS = 1;
-constexpr uint32_t cbNUM_ANAOUT_BANKS = 1;
-constexpr uint32_t cbNUM_AUDOUT_BANKS = 1;
-constexpr uint32_t cbNUM_DIGIN_BANKS = 1;
-constexpr uint32_t cbNUM_SERIAL_BANKS = 1;
-constexpr uint32_t cbNUM_DIGOUT_BANKS = 1;
+constexpr uint32_t CENTRAL_cbCHAN_PER_BANK = 32;
+constexpr uint32_t CENTRAL_cbNUM_FE_BANKS = CENTRAL_cbNUM_FE_CHANS / CENTRAL_cbCHAN_PER_BANK;
+constexpr uint32_t CENTRAL_cbNUM_ANAIN_BANKS = 1;
+constexpr uint32_t CENTRAL_cbNUM_ANAOUT_BANKS = 1;
+constexpr uint32_t CENTRAL_cbNUM_AUDOUT_BANKS = 1;
+constexpr uint32_t CENTRAL_cbNUM_DIGIN_BANKS = 1;
+constexpr uint32_t CENTRAL_cbNUM_SERIAL_BANKS = 1;
+constexpr uint32_t CENTRAL_cbNUM_DIGOUT_BANKS = 1;
 
-constexpr uint32_t cbMAXBANKS = (cbNUM_FE_BANKS + cbNUM_ANAIN_BANKS +
-                                          cbNUM_ANAOUT_BANKS + cbNUM_AUDOUT_BANKS +
-                                          cbNUM_DIGIN_BANKS + cbNUM_SERIAL_BANKS +
-                                          cbNUM_DIGOUT_BANKS);
+constexpr uint32_t CENTRAL_cbMAXBANKS = (CENTRAL_cbNUM_FE_BANKS + CENTRAL_cbNUM_ANAIN_BANKS +
+                                          CENTRAL_cbNUM_ANAOUT_BANKS + CENTRAL_cbNUM_AUDOUT_BANKS +
+                                          CENTRAL_cbNUM_DIGIN_BANKS + CENTRAL_cbNUM_SERIAL_BANKS +
+                                          CENTRAL_cbNUM_DIGOUT_BANKS);
 
 /// @}
 
@@ -88,24 +88,24 @@ constexpr uint32_t cbMAXBANKS = (cbNUM_FE_BANKS + cbNUM_ANAIN_BANKS +
 /// @{
 
 /// Max UDP packet size (from Central)
-constexpr uint32_t cbCER_UDP_SIZE_MAX = 58080;
+constexpr uint32_t CENTRAL_cbCER_UDP_SIZE_MAX = 58080;
 
 /// Transmit buffer sizes (Central-compatible)
-constexpr uint32_t cbXMT_GLOBAL_BUFFLEN = ((cbCER_UDP_SIZE_MAX / 4) * 5000 + 2);  ///< Room for 5000 packet-sized slots
-constexpr uint32_t cbXMT_LOCAL_BUFFLEN = ((cbCER_UDP_SIZE_MAX / 4) * 2000 + 2);   ///< Room for 2000 packet-sized slots
+constexpr uint32_t CENTRAL_cbXMT_GLOBAL_BUFFLEN = ((CENTRAL_cbCER_UDP_SIZE_MAX / 4) * 5000 + 2);  ///< Room for 5000 packet-sized slots
+constexpr uint32_t CENTRAL_cbXMT_LOCAL_BUFFLEN = ((CENTRAL_cbCER_UDP_SIZE_MAX / 4) * 2000 + 2);   ///< Room for 2000 packet-sized slots
 
 /// N-Trode count
-constexpr uint32_t cbMAXNTRODES = cbNUM_ANALOG_CHANS / 2;  ///< = 272
+constexpr uint32_t CENTRAL_cbMAXNTRODES = CENTRAL_cbNUM_ANALOG_CHANS / 2;  ///< = 272
 
 /// Analog output gain channels (Central's multi-instrument count)
-constexpr uint32_t AOUT_NUM_GAIN_CHANS = cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS;  ///< = 12
+constexpr uint32_t CENTRAL_AOUT_NUM_GAIN_CHANS = CENTRAL_cbNUM_ANAOUT_CHANS + CENTRAL_cbNUM_AUDOUT_CHANS;  ///< = 12
 
 /// Spike cache constants
-constexpr uint32_t cbPKT_SPKCACHEPKTCNT = 400;                          ///< Packets per channel cache
-constexpr uint32_t cbPKT_SPKCACHELINECNT = cbMAXCHANS;          ///< One cache per channel (Central uses cbMAXCHANS, not cbNUM_ANALOG_CHANS)
+constexpr uint32_t CENTRAL_cbPKT_SPKCACHEPKTCNT = 400;                          ///< Packets per channel cache
+constexpr uint32_t CENTRAL_cbPKT_SPKCACHELINECNT = CENTRAL_cbMAXCHANS;          ///< One cache per channel (Central uses cbMAXCHANS, not cbNUM_ANALOG_CHANS)
 
 /// Receive buffer size
-constexpr uint32_t cbRECBUFFLEN = cbNUM_FE_CHANS * 32768 * 4;
+constexpr uint32_t CENTRAL_cbRECBUFFLEN = CENTRAL_cbNUM_FE_CHANS * 32768 * 4;
 
 /// @}
 
@@ -113,12 +113,12 @@ constexpr uint32_t cbRECBUFFLEN = cbNUM_FE_CHANS * 32768 * 4;
 /// @name String Length Constants
 /// @{
 
-constexpr uint32_t cbLEN_STR_UNIT = 8;       ///< Length of unit string
-constexpr uint32_t cbLEN_STR_LABEL = 16;      ///< Length of label string
-constexpr uint32_t cbLEN_STR_FILT_LABEL = 16;      ///< Length of filter label string
-constexpr uint32_t cbLEN_STR_IDENT = 64;      ///< Length of identity string
-constexpr uint32_t cbLEN_STR_COMMENT = 256;     ///< Length of comment string
-constexpr uint32_t cbMAX_COMMENT = 128;     ///< Maximum comment length (must be multiple of 4)
+constexpr uint32_t CENTRAL_cbLEN_STR_UNIT = 8;       ///< Length of unit string
+constexpr uint32_t CENTRAL_cbLEN_STR_LABEL = 16;      ///< Length of label string
+constexpr uint32_t CENTRAL_cbLEN_STR_FILT_LABEL = 16;      ///< Length of filter label string
+constexpr uint32_t CENTRAL_cbLEN_STR_IDENT = 64;      ///< Length of identity string
+constexpr uint32_t CENTRAL_cbLEN_STR_COMMENT = 256;     ///< Length of comment string
+constexpr uint32_t CENTRAL_cbMAX_COMMENT = 128;     ///< Maximum comment length (must be multiple of 4)
 
 /// @}
 
@@ -138,8 +138,8 @@ typedef struct {
     uint8_t  reserved[2]; ///< Reserved for future use
 } cbPKT_HEADER;
 
-constexpr uint32_t cbPKT_MAX_SIZE = 1024;                    ///< Maximum packet size in bytes
-constexpr uint32_t cbPKT_HEADER_SIZE = sizeof(cbPKT_HEADER);    ///< Packet header size in bytes
+constexpr uint32_t CENTRAL_cbPKT_MAX_SIZE = 1024;                    ///< Maximum packet size in bytes
+constexpr uint32_t CENTRAL_cbPKT_HEADER_SIZE = sizeof(cbPKT_HEADER);    ///< Packet header size in bytes
 
 /// @brief Option table for Central application
 ///
@@ -192,7 +192,7 @@ typedef struct {
 
     uint32_t proc;        ///< index of the bank
     uint32_t idcode;      ///< manufacturer part and rom ID code of the Signal Processor
-    char   ident[cbLEN_STR_IDENT];   ///< ID string with the equipment name of the Signal Processor
+    char   ident[CENTRAL_cbLEN_STR_IDENT];   ///< ID string with the equipment name of the Signal Processor
     uint32_t chanbase;    ///< lowest channel number of channel id range claimed by this processor
     uint32_t chancount;   ///< number of channel identifiers claimed by this processor
     uint32_t bankcount;   ///< number of signal banks supported by the processor
@@ -212,8 +212,8 @@ typedef struct {
     uint32_t proc;        ///< the address of the processor on which the bank resides
     uint32_t bank;        ///< the address of the bank reported by the packet
     uint32_t idcode;      ///< manufacturer part and rom ID code of the module addressed to this bank
-    char   ident[cbLEN_STR_IDENT];   ///< ID string with the equipment name of the Signal Bank hardware module
-    char   label[cbLEN_STR_LABEL];   ///< Label on the instrument for the signal bank, eg "Analog In"
+    char   ident[CENTRAL_cbLEN_STR_IDENT];   ///< ID string with the equipment name of the Signal Bank hardware module
+    char   label[CENTRAL_cbLEN_STR_LABEL];   ///< Label on the instrument for the signal bank, eg "Analog In"
     uint32_t chanbase;    ///< lowest channel number of channel id range claimed by this bank
     uint32_t chancount;   ///< number of channel identifiers claimed by this bank
 } cbPKT_BANKINFO;
@@ -227,10 +227,10 @@ typedef struct {
 
     uint32_t proc;       ///< processor number
     uint32_t group;      ///< group number
-    char   label[cbLEN_STR_LABEL];  ///< sampling group label
+    char   label[CENTRAL_cbLEN_STR_LABEL];  ///< sampling group label
     uint32_t period;     ///< sampling period for the group
     uint32_t length;     ///< number of channels in the list
-    uint16_t list[cbNUM_ANALOG_CHANS];   ///< variable length list. The max size is the total number of analog channels
+    uint16_t list[CENTRAL_cbNUM_ANALOG_CHANS];   ///< variable length list. The max size is the total number of analog channels
 } cbPKT_GROUPINFO;
 
 /// @brief PKT Set:0xA3 Rep:0x23 - Filter Information Packet
@@ -241,7 +241,7 @@ typedef struct {
 
     uint32_t proc;       ///<
     uint32_t filt;       ///<
-    char   label[cbLEN_STR_FILT_LABEL];  // name of the filter
+    char   label[CENTRAL_cbLEN_STR_FILT_LABEL];  // name of the filter
     uint32_t hpfreq;     ///< high-pass corner frequency in milliHertz
     uint32_t hporder;    ///< high-pass filter order
     uint32_t hptype;     ///< high-pass filter type
@@ -296,14 +296,14 @@ typedef struct {
     int32_t   anamin;     ///< the minimum analog value present in the signal
     int32_t   anamax;     ///< the maximum analog value present in the signal
     int32_t   anagain;    ///< the gain applied to the default analog values to get the analog values
-    char    anaunit[cbLEN_STR_UNIT]; ///< the unit for the analog signal (eg, "uV" or "MPa")
+    char    anaunit[CENTRAL_cbLEN_STR_UNIT]; ///< the unit for the analog signal (eg, "uV" or "MPa")
 } cbSCALING;
 
 /// @brief Filter description structure
 ///
 /// Filter description used in cbPKT_CHANINFO
 typedef struct {
-    char    label[cbLEN_STR_FILT_LABEL];
+    char    label[CENTRAL_cbLEN_STR_FILT_LABEL];
     uint32_t  hpfreq;     ///< high-pass corner frequency in milliHertz
     uint32_t  hporder;    ///< high-pass filter order
     uint32_t  hptype;     ///< high-pass filter type
@@ -354,7 +354,7 @@ typedef struct {
     cbFILTDESC phyfiltin;      ///< physical channel filter definition
     cbSCALING  physcalout;     ///< physical channel scaling information
     cbFILTDESC phyfiltout;     ///< physical channel filter definition
-    char       label[cbLEN_STR_LABEL];   ///< Label of the channel (null terminated if <16 characters)
+    char       label[CENTRAL_cbLEN_STR_LABEL];   ///< Label of the channel (null terminated if <16 characters)
     uint32_t     userflags;      ///< User flags for the channel state
     int32_t      position[4];    ///< reserved for future position information
     cbSCALING  scalin;         ///< user-defined scaling information for AINP
@@ -393,8 +393,8 @@ typedef struct {
     int16_t               amplrejpos;     ///< Amplitude rejection positive value
     int16_t               amplrejneg;     ///< Amplitude rejection negative value
     uint32_t              refelecchan;    ///< Software reference electrode channel
-    cbMANUALUNITMAPPING unitmapping[cbMAXUNITS];            ///< manual unit mapping
-    cbHOOP              spkhoops[cbMAXUNITS][cbMAXHOOPS];   ///< spike hoop sorting set
+    cbMANUALUNITMAPPING unitmapping[CENTRAL_cbMAXUNITS];            ///< manual unit mapping
+    cbHOOP              spkhoops[CENTRAL_cbMAXUNITS][CENTRAL_cbMAXHOOPS];   ///< spike hoop sorting set
 } cbPKT_CHANINFO;
 
 /// @brief PKT Set:0xDB Rep:0x5B - Feature Space Basis
@@ -409,7 +409,7 @@ typedef struct
     uint32_t mode;           ///< cbBASIS_CHANGE, cbUNDO_BASIS_CHANGE, cbREDO_BASIS_CHANGE, cbINVALIDATE_BASIS ...
     uint32_t fs;             ///< Feature space: cbAUTOALG_PCA
     /// basis must be the last item in the structure because it can be variable length to a max of cbMAX_PNTS
-    float  basis[cbMAX_PNTS][3];    ///< Room for all possible points collected
+    float  basis[CENTRAL_cbMAX_PNTS][3];    ///< Room for all possible points collected
 } cbPKT_FS_BASIS;
 
 /// @brief PKT Set:0xD1 Rep:0x51 - Get the spike sorting model for a single channel (Histogram Peak Count)
@@ -518,13 +518,13 @@ typedef struct {
 ///
 /// Groups all spike-sorting related configuration packets together.
 typedef struct {
-    cbPKT_FS_BASIS          asBasis[cbMAXCHANS];    ///< PCA basis values per channel
-    cbPKT_SS_MODELSET       asSortModel[cbMAXCHANS][cbMAXUNITS + 2];    ///< Sorting models/rules per channel
+    cbPKT_FS_BASIS          asBasis[CENTRAL_cbMAXCHANS];    ///< PCA basis values per channel
+    cbPKT_SS_MODELSET       asSortModel[CENTRAL_cbMAXCHANS][CENTRAL_cbMAXUNITS + 2];    ///< Sorting models/rules per channel
 
     //////// These are spike sorting options
     cbPKT_SS_DETECT         pktDetect;        ///< Detection parameters
     cbPKT_SS_ARTIF_REJECT   pktArtifReject;   ///< Artifact rejection parameters
-    cbPKT_SS_NOISE_BOUNDARY pktNoiseBoundary[cbMAXCHANS]; ///< Noise boundaries per channel
+    cbPKT_SS_NOISE_BOUNDARY pktNoiseBoundary[CENTRAL_cbMAXCHANS]; ///< Noise boundaries per channel
     cbPKT_SS_STATISTICS     pktStatistics;    ///< Spike statistics
     cbPKT_SS_STATUS         pktStatus;        ///< Spike sorting status
 } cbSPIKE_SORTING;
@@ -536,14 +536,14 @@ typedef struct {
     cbPKT_HEADER cbpkt_header;  ///< packet header
 
     uint32_t ntrode;         ///< ntrode with which we are working (1-based)
-    char   label[cbLEN_STR_LABEL];   ///< Label of the Ntrode (null terminated if < 16 characters)
-    cbMANUALUNITMAPPING ellipses[cbMAXSITEPLOTS][cbMAXUNITS];  ///< unit mapping
+    char   label[CENTRAL_cbLEN_STR_LABEL];   ///< Label of the Ntrode (null terminated if < 16 characters)
+    cbMANUALUNITMAPPING ellipses[CENTRAL_cbMAXSITEPLOTS][CENTRAL_cbMAXUNITS];  ///< unit mapping
     uint16_t nSite;          ///< number channels in this NTrode ( 0 <= nSite <= cbMAXSITES)
     uint16_t fs;             ///< NTrode feature space cbNTRODEINFO_FS_*
-    uint16_t nChan[cbMAXSITES];  ///< group of channels in this NTrode
+    uint16_t nChan[CENTRAL_cbMAXSITES];  ///< group of channels in this NTrode
 } cbPKT_NTRODEINFO;
 
-constexpr uint32_t cbMAX_WAVEFORM_PHASES = ((cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - 24) / 4);   ///< Maximum number of phases in a waveform
+constexpr uint32_t CENTRAL_cbMAX_WAVEFORM_PHASES = ((CENTRAL_cbPKT_MAX_SIZE - CENTRAL_cbPKT_HEADER_SIZE - 24) / 4);   ///< Maximum number of phases in a waveform
 
 /// @brief Analog output waveform data
 ///
@@ -560,8 +560,8 @@ typedef struct
             uint16_t seq;            ///< Wave sequence number (for file playback)
             uint16_t seqTotal;       ///< total number of sequences
             uint16_t phases;         ///< Number of valid phases in this wave (maximum is cbMAX_WAVEFORM_PHASES)
-            uint16_t duration[cbMAX_WAVEFORM_PHASES];     ///< array of durations for each phase
-            int16_t  amplitude[cbMAX_WAVEFORM_PHASES];    ///< array of amplitude for each phase
+            uint16_t duration[CENTRAL_cbMAX_WAVEFORM_PHASES];     ///< array of durations for each phase
+            int16_t  amplitude[CENTRAL_cbMAX_WAVEFORM_PHASES];    ///< array of amplitude for each phase
         };
     };
 } cbWaveformData;
@@ -604,7 +604,7 @@ typedef struct
     uint32_t lncGlobalMode;  ///< reserved
 } cbPKT_LNC;
 
-constexpr uint32_t cbNPLAY_FNAME_LEN = (cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - 40);   ///< length of the file name (with terminating null)
+constexpr uint32_t CENTRAL_cbNPLAY_FNAME_LEN = (CENTRAL_cbPKT_MAX_SIZE - CENTRAL_cbPKT_HEADER_SIZE - 40);   ///< length of the file name (with terminating null)
 
 /// @brief PKT Set:0xDC Rep:0x5C - nPlay configuration packet
 ///
@@ -622,18 +622,18 @@ typedef struct {
     uint16_t mode;        ///< cbNPLAY_MODE_* command to nPlay
     uint16_t flags;       ///< cbNPLAY_FLAG_* status of nPlay
     float speed;          ///< positive means fast forward, negative means rewind, 0 means go as fast as you can.
-    char  fname[cbNPLAY_FNAME_LEN];   ///< This is a String with the file name.
+    char  fname[CENTRAL_cbNPLAY_FNAME_LEN];   ///< This is a String with the file name.
 } cbPKT_NPLAY;
 
 /// @brief NeuroMotive video source
 typedef struct {
-    char    name[cbLEN_STR_LABEL];  ///< filename of the video file
+    char    name[CENTRAL_cbLEN_STR_LABEL];  ///< filename of the video file
     float   fps;                    ///< nominal record fps
 } cbVIDEOSOURCE;
 
 /// @brief Track object structure for NeuroMotive
 typedef struct {
-    char     name[cbLEN_STR_LABEL];  ///< name of the object
+    char     name[CENTRAL_cbLEN_STR_LABEL];  ///< name of the object
     uint16_t type;                   ///< trackable type (cbTRACKOBJ_TYPE_*)
     uint16_t pointCount;             ///< maximum number of points
 } cbTRACKOBJ;
@@ -651,12 +651,12 @@ typedef struct {
     uint32_t extctrl;        ///< If cbFILECFG_OPT_REC this is split number (0 for non-TOC)
                            ///< If cbFILECFG_OPT_STOP this is error code (0 means no error)
 
-    char   username[cbLEN_STR_COMMENT];     ///< name of computer issuing the packet
+    char   username[CENTRAL_cbLEN_STR_COMMENT];     ///< name of computer issuing the packet
     union {
-        char   filename[cbLEN_STR_COMMENT]; ///< filename to record to
-        char   datetime[cbLEN_STR_COMMENT]; ///<
+        char   filename[CENTRAL_cbLEN_STR_COMMENT]; ///< filename to record to
+        char   datetime[CENTRAL_cbLEN_STR_COMMENT]; ///<
     };
-    char   comment[cbLEN_STR_COMMENT];  ///< comment to include in the file
+    char   comment[CENTRAL_cbLEN_STR_COMMENT];  ///< comment to include in the file
 } cbPKT_FILECFG;
 
 /// @}
@@ -681,20 +681,20 @@ struct cbCFGBUFF {
     cbOPTIONTABLE     optiontable;
     cbCOLORTABLE      colortable;
     cbPKT_SYSINFO     sysinfo;
-    cbPKT_PROCINFO    procinfo[cbMAXPROCS];
-    cbPKT_BANKINFO    bankinfo[cbMAXPROCS][cbMAXBANKS];
-    cbPKT_GROUPINFO   groupinfo[cbMAXPROCS][cbMAXGROUPS];
-    cbPKT_FILTINFO    filtinfo[cbMAXPROCS][cbMAXFILTS];
-    cbPKT_ADAPTFILTINFO adaptinfo[cbMAXPROCS];
-    cbPKT_REFELECFILTINFO refelecinfo[cbMAXPROCS];
-    cbPKT_CHANINFO    chaninfo[cbMAXCHANS];
+    cbPKT_PROCINFO    procinfo[CENTRAL_cbMAXPROCS];
+    cbPKT_BANKINFO    bankinfo[CENTRAL_cbMAXPROCS][CENTRAL_cbMAXBANKS];
+    cbPKT_GROUPINFO   groupinfo[CENTRAL_cbMAXPROCS][CENTRAL_cbMAXGROUPS];
+    cbPKT_FILTINFO    filtinfo[CENTRAL_cbMAXPROCS][CENTRAL_cbMAXFILTS];
+    cbPKT_ADAPTFILTINFO adaptinfo[CENTRAL_cbMAXPROCS];
+    cbPKT_REFELECFILTINFO refelecinfo[CENTRAL_cbMAXPROCS];
+    cbPKT_CHANINFO    chaninfo[CENTRAL_cbMAXCHANS];
     cbSPIKE_SORTING   isSortingOptions;
-    cbPKT_NTRODEINFO  isNTrodeInfo[cbMAXNTRODES];
-    cbPKT_AOUT_WAVEFORM isWaveform[AOUT_NUM_GAIN_CHANS][cbMAX_AOUT_TRIGGER];
-    cbPKT_LNC         isLnc[cbMAXPROCS];
+    cbPKT_NTRODEINFO  isNTrodeInfo[CENTRAL_cbMAXNTRODES];
+    cbPKT_AOUT_WAVEFORM isWaveform[CENTRAL_AOUT_NUM_GAIN_CHANS][CENTRAL_cbMAX_AOUT_TRIGGER];
+    cbPKT_LNC         isLnc[CENTRAL_cbMAXPROCS];
     cbPKT_NPLAY       isNPlay;
-    cbVIDEOSOURCE     isVideoSource[cbMAXVIDEOSOURCE];
-    cbTRACKOBJ        isTrackObj[cbMAXTRACKOBJ];
+    cbVIDEOSOURCE     isVideoSource[CENTRAL_cbMAXVIDEOSOURCE];
+    cbTRACKOBJ        isTrackObj[CENTRAL_cbMAXTRACKOBJ];
     cbPKT_FILECFG     fileinfo;
     // hwndCentral omitted (at end, variable size, not needed by CereLink)
 };
@@ -714,7 +714,7 @@ struct cbXMTBUFF {
     uint32_t tailindex;                                     ///< One past last emptied position (read index)
     uint32_t last_valid_index;                              ///< Greatest valid starting index
     uint32_t bufferlen;                                     ///< Number of indices in buffer
-    uint32_t buffer[cbXMT_GLOBAL_BUFFLEN];          ///< Ring buffer for packet data
+    uint32_t buffer[CENTRAL_cbXMT_GLOBAL_BUFFLEN];          ///< Ring buffer for packet data
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -729,7 +729,7 @@ struct cbXMTBUFFLOCAL {
     uint32_t tailindex;                                     ///< One past last emptied position (read index)
     uint32_t last_valid_index;                              ///< Greatest valid starting index
     uint32_t bufferlen;                                     ///< Number of indices in buffer
-    uint32_t buffer[cbXMT_LOCAL_BUFFLEN];           ///< Ring buffer for packet data
+    uint32_t buffer[CENTRAL_cbXMT_LOCAL_BUFFLEN];           ///< Ring buffer for packet data
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -746,7 +746,7 @@ typedef struct {
     int16_t  nPeak;       ///< highest datapoint of the waveform
     int16_t  nValley;     ///< lowest datapoint of the waveform
 
-    int16_t  wave[cbMAX_PNTS];    ///< datapoints of each sample of the waveform. Room for all possible points collected
+    int16_t  wave[CENTRAL_cbMAX_PNTS];    ///< datapoints of each sample of the waveform. Room for all possible points collected
     ///< wave must be the last item in the structure because it can be variable length to a max of cbMAX_PNTS
 } cbPKT_SPK;
 
@@ -762,7 +762,7 @@ struct cbSPKCACHE {
     uint32_t pktsize;                                       ///< Size of individual packet
     uint32_t head;                                          ///< Where to place next packet (circular)
     uint32_t valid;                                         ///< How many packets since last config
-    cbPKT_SPK spkpkt[cbPKT_SPKCACHEPKTCNT];        ///< Circular buffer of cached spikes
+    cbPKT_SPK spkpkt[CENTRAL_cbPKT_SPKCACHEPKTCNT];        ///< Circular buffer of cached spikes
 };
 
 struct cbSPKBUFF {
@@ -770,7 +770,7 @@ struct cbSPKBUFF {
     uint32_t chidmax;                                       ///< Maximum channel ID
     uint32_t linesize;                                      ///< Size of each cache line
     uint32_t spkcount;                                      ///< Total spike count
-    cbSPKCACHE cache[cbPKT_SPKCACHELINECNT]; ///< Per-channel spike caches
+    cbSPKCACHE cache[CENTRAL_cbPKT_SPKCACHELINECNT]; ///< Per-channel spike caches
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -806,12 +806,12 @@ typedef struct
     cbPKT_HEADER cbpkt_header;  ///< packet header
 
     int32_t  lastchan;         ///< Which channel was clicked last.
-    uint16_t   abyUnitSelections[(cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE - sizeof(int32_t))];     ///< one for each channel, channels are 0 based here, shows units selected
+    uint16_t   abyUnitSelections[(CENTRAL_cbPKT_MAX_SIZE - CENTRAL_cbPKT_HEADER_SIZE - sizeof(int32_t))];     ///< one for each channel, channels are 0 based here, shows units selected
 } cbPKT_UNIT_SELECTION;
 
 struct cbPcStatus {
     // Public data
-    cbPKT_UNIT_SELECTION isSelection[cbMAXPROCS];   ///< Unit selection per instrument
+    cbPKT_UNIT_SELECTION isSelection[CENTRAL_cbMAXPROCS];   ///< Unit selection per instrument
 
     // Status fields (was private in cbPcStatus)
     int32_t  m_iBlockRecording;                             ///< Recording block counter
@@ -826,8 +826,8 @@ struct cbPcStatus {
     uint32_t m_nNumSerialChans;                             ///< Number of serial channels
     uint32_t m_nNumDigoutChans;                             ///< Number of digital output channels
     uint32_t m_nNumTotalChans;                              ///< Total channel count
-    NSPStatus m_nNspStatus[cbMAXPROCS];             ///< NSP status per instrument
-    uint32_t m_nNumNTrodesPerInstrument[cbMAXPROCS];///< NTrode count per instrument
+    NSPStatus m_nNspStatus[CENTRAL_cbMAXPROCS];             ///< NSP status per instrument
+    uint32_t m_nNumNTrodesPerInstrument[CENTRAL_cbMAXPROCS];///< NTrode count per instrument
     uint32_t m_nGeminiSystem;                               ///< Gemini system flag
 };
 
@@ -839,7 +839,7 @@ struct cbRECBUFF {
     PROCTIME lasttime;                          ///< Last timestamp
     uint32_t headwrap;                          ///< Head wrap counter
     uint32_t headindex;                         ///< Current head index
-    uint32_t buffer[cbRECBUFFLEN];      ///< Packet buffer
+    uint32_t buffer[CENTRAL_cbRECBUFFLEN];      ///< Packet buffer
 };
 
 } // namespace central_v7_5
