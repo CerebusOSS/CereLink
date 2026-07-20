@@ -689,10 +689,10 @@ constexpr uint32_t cbXMT_GLOBAL_BUFFLEN = ((cbCER_UDP_SIZE_MAX / 4) * 5000 + 2);
 constexpr uint32_t cbXMT_LOCAL_BUFFLEN = ((cbCER_UDP_SIZE_MAX / 4) * 2000 + 2);   ///< Room for 2000 packet-sized slots
 
 /// N-Trode count (Central uses cbNUM_FE_CHANS / 2, not cbNUM_ANALOG_CHANS / 2)
-constexpr uint32_t cbMAXNTRODES = cbNUM_FE_CHANS / 2;  ///< = 384
+constexpr uint32_t cbMAXNTRODES = cbNUM_FE_CHANS / 2;  ///< = 256
 
 /// Analog output gain channels (Central's multi-instrument count)
-constexpr uint32_t AOUT_NUM_GAIN_CHANS = cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS;  ///< = 24
+constexpr uint32_t AOUT_NUM_GAIN_CHANS = cbNUM_ANAOUT_CHANS + cbNUM_AUDOUT_CHANS;  ///< = 18
 
 /// Spike cache constants
 constexpr uint32_t cbPKT_SPKCACHEPKTCNT = 400;                          ///< Packets per channel cache
