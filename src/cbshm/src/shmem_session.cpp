@@ -253,7 +253,8 @@ struct ShmemSession::Impl {
     }
 
     void close() {
-        if (!is_open) return;
+        // Close regardless of the is_open state to allow for cleanup if
+        // open() fails while is_open is false.
 
         // Unmap shared memory
 #ifdef _WIN32
