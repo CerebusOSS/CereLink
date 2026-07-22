@@ -439,7 +439,6 @@ struct ShmemSession::Impl {
             spike_buffer_size = sizeof(NativeSpikeBuffer);
             rec_buffer_len = NATIVE_cbRECBUFFLEN;
         } else {
-            // These adapter methods work regardless of the state of the internal pointer
             cfg_buffer_size = bootstrap_adapter->getConfigBufferSize();
             rec_buffer_size = bootstrap_adapter->getReceiveBufferSize();
             xmt_buffer_size = bootstrap_adapter->getTransmitBufferSize();

@@ -9,8 +9,6 @@
 /// buffers used by Central and cbsdk clients.
 ///
 /// Key Design Principles:
-/// - Uses Central-compatible buffer layout (cbMAXPROCS=4, not 1)
-/// - Mode-independent indexing (always uses packet.instrument)
 /// - Thread-safe for concurrent access
 /// - Platform-abstracted (Windows/macOS/Linux)
 ///
@@ -56,9 +54,6 @@ enum class ShmemLayout {
 ///
 /// Manages lifecycle of shared memory buffers that are compatible with Central's layout.
 /// Implements correct indexing for multi-instrument systems.
-///
-/// CRITICAL: Even in STANDALONE mode, uses Central-compatible layout (cbMAXPROCS=4)
-/// so that subsequent CLIENT connections work correctly.
 ///
 class ShmemSession {
 public:
@@ -114,9 +109,6 @@ public:
     ShmemLayout getLayout() const;
 
     /// @brief Get the maximum number of instruments
-    ///
-    /// With the NATIVE layout, always returns 1.
-    /// With the CENTRAL layout, returns the value of cbMAXPROCS.
     ///
     /// @return the maximum instrument count
     uint32_t getMaxProcs() const;
@@ -272,15 +264,14 @@ public:
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
-    /// @name Packet Routing (THE KEY FIX)
+    /// @name Packet Routing
     /// @{
 
-    /// @brief Store a packet in shared memory using correct indexing
+    /// @brief Store a packet in the shared memory receive buffer
     ///
-    /// CRITICAL FIX: This method ALWAYS uses packet.cbpkt_header.instrument
-    /// as the array index, regardless of mode. This ensures:
-    /// - Standalone mode: packets go to correct slot for later CLIENT access
-    /// - Client mode: packets go to same slot Central would use
+    /// Appends the packet to the receive ring buffer. Instrument selection is
+    /// applied on the read side (readReceiveBuffer), which filters against the
+    /// session's configured instrument.
     ///
     /// @param pkt Generic packet to store
     /// @return Result indicating success or failure
@@ -502,4 +493,4 @@ private:
 
 } // namespace cbshm
 
-#endif // CBSHMEM_SHMEM_SESSION_H
+#endif // CBSHM_SHMEM_SESSION_H
