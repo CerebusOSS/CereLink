@@ -80,7 +80,7 @@ editor src/cbshm/src/central_adapters/<version>.cpp
 editor src/cbshm/include/cbshm/central_types/<version>.h
 ```
 
-If the added version contains changes to types or constants that are not already in the header, add them by copying directly from Central or cbproto.  Verify your changes by diffing the existing version header with the added version header.
+If the added version contains changes to types or constants that are not already in the header, add them by copying directly from Central or cbproto.  Update the hardcoded sizes within the static_assert expressions to match ground truth in Central and cbproto.  Verify your changes by diffing the existing version header with the added version header.
 
 #### 6. Rectify the translators and adapter for the added version
 
@@ -187,7 +187,7 @@ editor src/cbshm/src/central_adapters/<version>.cpp
 editor src/cbshm/include/cbshm/central_types/<version>.h
 ```
 
-If the added version contains changes to types or constants that are not already in the header, add them by copying directly from Central or cbproto.  Verify your changes by diffing the existing version header with the added version header.
+If the added version contains changes to types or constants that are not already in the header, add them by copying directly from Central or cbproto.  Update the hardcoded sizes within the static_assert expressions to match ground truth in Central and cbproto.  Verify your changes by diffing the existing version header with the added version header.
 
 #### 6. Rectify the translators and adapter for the added version
 

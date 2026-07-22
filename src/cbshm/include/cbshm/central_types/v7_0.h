@@ -9,6 +9,8 @@
 /// ensure compatibility with Central when it creates shared memory.
 ///
 /// CRITICAL: These structures MUST match Central's cbhwlib.h exactly!
+/// The size of each structure must be compared to a size computed from ground
+/// truth in cbhwlib.h (Central).
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -137,6 +139,7 @@ typedef struct {
     uint8_t  type;        ///< Packet type
     uint8_t  dlen;        ///< Length of data field in 32-bit chunks
 } cbPKT_HEADER;
+static_assert(sizeof(cbPKT_HEADER) == 8);
 
 constexpr uint32_t CENTRAL_cbPKT_MAX_SIZE = 1024;                    ///< Maximum packet size in bytes
 constexpr uint32_t CENTRAL_cbPKT_HEADER_SIZE = sizeof(cbPKT_HEADER);    ///< Packet header size in bytes
@@ -148,6 +151,7 @@ typedef struct {
     float fRMSAutoThresholdDistance;    ///< multiplier to use for autothresholding when using RMS to guess noise
     uint32_t reserved[31];              ///< Reserved for future use
 } cbOPTIONTABLE;
+static_assert(sizeof(cbOPTIONTABLE) == 128);
 
 /// @brief Color table for Central application
 ///
@@ -169,6 +173,7 @@ typedef struct {
     uint32_t disptemp[5];       ///< Display temporary colors
     uint32_t disprsvd[14];      ///< Reserved display colors
 } cbCOLORTABLE;
+static_assert(sizeof(cbCOLORTABLE) == 384);
 
 /// @brief PKT Set:0x92 Rep:0x12 - System info
 ///
@@ -183,6 +188,7 @@ typedef struct {
     uint32_t runlevel;    ///< System runlevel
     uint32_t runflags;    ///< Lock recording after reset
 } cbPKT_SYSINFO;
+static_assert(sizeof(cbPKT_SYSINFO) == 32);
 
 /// @brief PKT Set:N/A  Rep:0x21 - Info about the processor
 ///
@@ -204,6 +210,7 @@ typedef struct {
     uint32_t sortmethod;  ///< sort method (0=manual, 1=automatic spike sorting)
     uint32_t version;     ///< current version of libraries
 } cbPKT_PROCINFO;
+static_assert(sizeof(cbPKT_PROCINFO) == 120);
 
 /// @brief PKT Set:N/A  Rep:0x22 - Information about the banks in the processor
 typedef struct {
@@ -217,6 +224,7 @@ typedef struct {
     uint32_t chanbase;    ///< lowest channel number of channel id range claimed by this bank
     uint32_t chancount;   ///< number of channel identifiers claimed by this bank
 } cbPKT_BANKINFO;
+static_assert(sizeof(cbPKT_BANKINFO) == 108);
 
 /// @brief PKT Set:0xB0 Rep:0x30 - Sample Group (GROUP) Information Packets
 ///
@@ -232,6 +240,7 @@ typedef struct {
     uint32_t length;     ///< number of channels in the list
     uint16_t list[CENTRAL_cbNUM_ANALOG_CHANS];   ///< variable length list. The max size is the total number of analog channels
 } cbPKT_GROUPINFO;
+static_assert(sizeof(cbPKT_GROUPINFO) == 584);
 
 /// @brief PKT Set:0xA3 Rep:0x23 - Filter Information Packet
 ///
@@ -259,6 +268,7 @@ typedef struct {
     double sos2b1;      ///< filter coefficient
     double sos2b2;      ///< filter coefficient
 } cbPKT_FILTINFO;
+static_assert(sizeof(cbPKT_FILTINFO) == 128);
 
 /// @brief PKT Set:0xA5 Rep:0x25 - Adaptive filtering
 ///
@@ -274,6 +284,7 @@ typedef struct {
     uint32_t nRefChan2;      ///< The second reference channel (1 based).
 
 } cbPKT_ADAPTFILTINFO;
+static_assert(sizeof(cbPKT_ADAPTFILTINFO) == 28);
 
 /// @brief PKT Set:0xA6 Rep:0x26 - Reference Electrode Information.
 ///
@@ -286,6 +297,7 @@ typedef struct {
     uint32_t nMode;          ///< 0=disabled, 1=filter continuous & spikes, 2=filter spikes
     uint32_t nRefChan;       ///< The reference channel (1 based).
 } cbPKT_REFELECFILTINFO;
+static_assert(sizeof(cbPKT_REFELECFILTINFO) == 20);
 
 /// @brief Scaling structure
 ///
@@ -298,6 +310,7 @@ typedef struct {
     int32_t   anagain;    ///< the gain applied to the default analog values to get the analog values
     char    anaunit[CENTRAL_cbLEN_STR_UNIT]; ///< the unit for the analog signal (eg, "uV" or "MPa")
 } cbSCALING;
+static_assert(sizeof(cbSCALING) == 24);
 
 /// @brief Filter description structure
 ///
@@ -311,6 +324,7 @@ typedef struct {
     uint32_t  lporder;    ///< low-pass filter order
     uint32_t  lptype;     ///< low-pass filter type
 } cbFILTDESC;
+static_assert(sizeof(cbFILTDESC) == 40);
 
 /// @brief Manual Unit Mapping structure
 ///
@@ -323,6 +337,7 @@ typedef struct {
     uint32_t      bValid;         ///< is this unit in use at this time?
                                   ///< BOOL implemented as uint32_t - for structure alignment at paragraph boundary
 } cbMANUALUNITMAPPING;
+static_assert(sizeof(cbMANUALUNITMAPPING) == 32);
 
 /// @brief Hoop definition structure
 ///
@@ -333,6 +348,7 @@ typedef struct {
     int16_t  min;   ///< minimum value for the hoop window
     int16_t  max;   ///< maximum value for the hoop window
 } cbHOOP;
+static_assert(sizeof(cbHOOP) == 8);
 
 /// @brief PKT Set:0xCx Rep:0x4x - Channel Information
 ///
@@ -396,6 +412,7 @@ typedef struct {
     cbMANUALUNITMAPPING unitmapping[CENTRAL_cbMAXUNITS];            ///< manual unit mapping
     cbHOOP              spkhoops[CENTRAL_cbMAXUNITS][CENTRAL_cbMAXHOOPS];   ///< spike hoop sorting set
 } cbPKT_CHANINFO;
+static_assert(sizeof(cbPKT_CHANINFO) == 669);
 
 /// @brief PKT Set:0xDB Rep:0x5B - Feature Space Basis
 ///
@@ -411,6 +428,7 @@ typedef struct
     /// basis must be the last item in the structure because it can be variable length to a max of cbMAX_PNTS
     float  basis[CENTRAL_cbMAX_PNTS][3];    ///< Room for all possible points collected
 } cbPKT_FS_BASIS;
+static_assert(sizeof(cbPKT_FS_BASIS) == 1556);
 
 /// @brief PKT Set:0xD1 Rep:0x51 - Get the spike sorting model for a single channel (Histogram Peak Count)
 ///
@@ -437,6 +455,7 @@ typedef struct {
     float  mu_e;
     float  sigma_e_squared;
 } cbPKT_SS_MODELSET;
+static_assert(sizeof(cbPKT_SS_MODELSET) == 92);
 
 /// @brief PKT Set:0xD2 Rep:0x52 - Auto threshold parameters
 ///
@@ -447,6 +466,7 @@ typedef struct {
     float  fThreshold;     ///< current detection threshold
     float  fMultiplier;    ///< multiplier
 } cbPKT_SS_DETECT;
+static_assert(sizeof(cbPKT_SS_DETECT) == 16);
 
 /// @brief PKT Set:0xD3 Rep:0x53 - Artifact reject
 ///
@@ -457,6 +477,7 @@ typedef struct {
     uint32_t nMaxSimulChans;     ///< how many channels can fire exactly at the same time???
     uint32_t nRefractoryCount;   ///< for how many samples (30 kHz) is a neuron refractory, so can't re-trigger
 } cbPKT_SS_ARTIF_REJECT;
+static_assert(sizeof(cbPKT_SS_ARTIF_REJECT) == 16);
 
 /// @brief PKT Set:0xD4 Rep:0x54 - Noise boundary
 ///
@@ -468,6 +489,7 @@ typedef struct {
     float  afc[3];      ///< the center of the ellipsoid
     float  afS[3][3];   ///< an array of the axes for the ellipsoid
 } cbPKT_SS_NOISE_BOUNDARY;
+static_assert(sizeof(cbPKT_SS_NOISE_BOUNDARY) == 60);
 
 /// @brief PKT Set:0xD5 Rep:0x55 - Spike sourting statistics (Histogram peak count)
 typedef struct {
@@ -495,6 +517,7 @@ typedef struct {
                                                 ///< nWaveBasisSize * nWaveSampleSize is the number of waves/spikes to run against
                                                 ///< the same PCA basis before next
 } cbPKT_SS_STATISTICS;
+static_assert(sizeof(cbPKT_SS_STATISTICS) == 56);
 
 /// @brief Adaptive Control structure
 typedef struct {
@@ -502,6 +525,7 @@ typedef struct {
     float fTimeOutMinutes;    ///< how many minutes until time out
     float fElapsedMinutes;    ///< the amount of time that has elapsed
 } cbAdaptControl;
+static_assert(sizeof(cbAdaptControl) == 12);
 
 /// @brief PKT Set:0xD7 Rep:0x57 - Spike sorting status (Histogram peak count)
 ///
@@ -512,6 +536,7 @@ typedef struct {
     cbAdaptControl cntlUnitStats;   ///<
     cbAdaptControl cntlNumUnits;    ///<
 } cbPKT_SS_STATUS;
+static_assert(sizeof(cbPKT_SS_STATUS) == 32);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Spike sorting configuration
@@ -528,6 +553,7 @@ typedef struct {
     cbPKT_SS_STATISTICS     pktStatistics;    ///< Spike statistics
     cbPKT_SS_STATUS         pktStatus;        ///< Spike sorting status
 } cbSPIKE_SORTING;
+static_assert(sizeof(cbSPIKE_SORTING) == 641240);
 
 /// @brief PKT Set:0xA7 Rep:0x27 - N-Trode information packets
 ///
@@ -542,6 +568,7 @@ typedef struct {
     uint16_t fs;             ///< NTrode feature space cbNTRODEINFO_FS_*
     uint16_t nChan[CENTRAL_cbMAXSITES];  ///< group of channels in this NTrode
 } cbPKT_NTRODEINFO;
+static_assert(sizeof(cbPKT_NTRODEINFO) == 1000);
 
 constexpr uint32_t CENTRAL_cbMAX_WAVEFORM_PHASES = ((CENTRAL_cbPKT_MAX_SIZE - CENTRAL_cbPKT_HEADER_SIZE - 24) / 4);   ///< Maximum number of phases in a waveform
 
@@ -565,6 +592,7 @@ typedef struct
         };
     };
 } cbWaveformData;
+static_assert(sizeof(cbWaveformData) == 1000);
 
 /// @brief PKT Set:0xB3 Rep:0x33 - AOUT waveform
 ///
@@ -591,6 +619,7 @@ typedef struct {
     uint8_t   active;            ///< status of trigger
     cbWaveformData wave;         ///< Actual waveform data
 } cbPKT_AOUT_WAVEFORM;
+static_assert(sizeof(cbPKT_AOUT_WAVEFORM) == 1024);
 
 /// @brief PKT Set:0xA8 Rep:0x28 - Line Noise Cancellation
 ///
@@ -603,8 +632,9 @@ typedef struct
     uint32_t lncRefChan;     ///< Reference channel for lnc synch (1-based)
     uint32_t lncGlobalMode;  ///< reserved
 } cbPKT_LNC;
+static_assert(sizeof(cbPKT_LNC) == 20);
 
-constexpr uint32_t CENTRAL_cbNPLAY_FNAME_LEN = (CENTRAL_cbPKT_MAX_SIZE - CENTRAL_cbPKT_HEADER_SIZE - 40);   ///< length of the file name (with terminating null)
+constexpr uint32_t CENTRAL_cbNPLAY_FNAME_LEN = 992;   ///< length of the file name (with terminating null)
 
 /// @brief PKT Set:0xDC Rep:0x5C - nPlay configuration packet
 ///
@@ -624,12 +654,14 @@ typedef struct {
     float speed;          ///< positive means fast forward, negative means rewind, 0 means go as fast as you can.
     char  fname[CENTRAL_cbNPLAY_FNAME_LEN];   ///< This is a String with the file name.
 } cbPKT_NPLAY;
+static_assert(sizeof(cbPKT_NPLAY) == 1024);
 
 /// @brief NeuroMotive video source
 typedef struct {
     char    name[CENTRAL_cbLEN_STR_LABEL];  ///< filename of the video file
     float   fps;                    ///< nominal record fps
 } cbVIDEOSOURCE;
+static_assert(sizeof(cbVIDEOSOURCE) == 20);
 
 /// @brief Track object structure for NeuroMotive
 typedef struct {
@@ -637,6 +669,7 @@ typedef struct {
     uint16_t type;                   ///< trackable type (cbTRACKOBJ_TYPE_*)
     uint16_t pointCount;             ///< maximum number of points
 } cbTRACKOBJ;
+static_assert(sizeof(cbTRACKOBJ) == 20);
 
 /// @brief PKT Set:0xE1 Rep:0x61 - File configuration packet
 ///
@@ -658,6 +691,7 @@ typedef struct {
     };
     char   comment[CENTRAL_cbLEN_STR_COMMENT];  ///< comment to include in the file
 } cbPKT_FILECFG;
+static_assert(sizeof(cbPKT_FILECFG) == 792);
 
 /// @}
 
@@ -698,6 +732,7 @@ struct cbCFGBUFF {
     cbPKT_FILECFG     fileinfo;
     // hwndCentral omitted (at end, variable size, not needed by CereLink)
 };
+static_assert(sizeof(cbCFGBUFF) == 1011212);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Transmit buffer for outgoing packets (Global - sent to device)
@@ -716,6 +751,7 @@ struct cbXMTBUFF {
     uint32_t bufferlen;                                     ///< Number of indices in buffer
     uint32_t buffer[CENTRAL_cbXMT_GLOBAL_BUFFLEN];          ///< Ring buffer for packet data
 };
+static_assert(sizeof(cbXMTBUFF) == 7260028);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Local transmit buffer (IPC-only packets)
@@ -731,6 +767,7 @@ struct cbXMTBUFFLOCAL {
     uint32_t bufferlen;                                     ///< Number of indices in buffer
     uint32_t buffer[CENTRAL_cbXMT_LOCAL_BUFFLEN];           ///< Ring buffer for packet data
 };
+static_assert(sizeof(cbXMTBUFFLOCAL) == 2904028);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Data packet - Spike waveform data
@@ -749,6 +786,7 @@ typedef struct {
     int16_t  wave[CENTRAL_cbMAX_PNTS];    ///< datapoints of each sample of the waveform. Room for all possible points collected
     ///< wave must be the last item in the structure because it can be variable length to a max of cbMAX_PNTS
 } cbPKT_SPK;
+static_assert(sizeof(cbPKT_SPK) == 280);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Spike cache buffer
@@ -764,6 +802,7 @@ struct cbSPKCACHE {
     uint32_t valid;                                         ///< How many packets since last config
     cbPKT_SPK spkpkt[CENTRAL_cbPKT_SPKCACHEPKTCNT];        ///< Circular buffer of cached spikes
 };
+static_assert(sizeof(cbSPKCACHE) == 112020);
 
 struct cbSPKBUFF {
     uint32_t flags;                                         ///< Status flags
@@ -772,6 +811,7 @@ struct cbSPKBUFF {
     uint32_t spkcount;                                      ///< Total spike count
     cbSPKCACHE cache[CENTRAL_cbPKT_SPKCACHELINECNT]; ///< Per-channel spike caches
 };
+static_assert(sizeof(cbSPKBUFF) == 30469456);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Instrument status flags (bit field)
@@ -808,6 +848,7 @@ typedef struct
     int32_t  lastchan;         ///< Which channel was clicked last.
     uint16_t   abyUnitSelections[CENTRAL_cbMAXCHANS];     ///< one for each channel, channels are 0 based here, shows units selected
 } cbPKT_UNIT_SELECTION;
+static_assert(sizeof(cbPKT_UNIT_SELECTION) == 580);
 
 struct cbPcStatus {
     // Public data
@@ -828,6 +869,7 @@ struct cbPcStatus {
     uint32_t m_nNumTotalChans;                              ///< Total channel count
     // VER: Everything below here added at 4.0+
 };
+static_assert(sizeof(cbPcStatus) == 628);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Receive buffer for incoming packets (simplified for Phase 2)
@@ -839,6 +881,7 @@ struct cbRECBUFF {
     uint32_t headindex;                         ///< Current head index
     uint32_t buffer[CENTRAL_cbRECBUFFLEN];      ///< Packet buffer
 };
+static_assert(sizeof(cbRECBUFF) == 134217744);
 
 } // namespace central_v7_0
 
