@@ -108,6 +108,14 @@ public:
     /// @return CENTRAL or NATIVE
     ShmemLayout getLayout() const;
 
+    /// @brief Get the instrument this session is bound to
+    ///
+    /// Fixed at creation. For the CENTRAL layout this is the instrument whose
+    /// packets readReceiveBuffer() returns; for NATIVE it is always index 0.
+    ///
+    /// @return the session's instrument ID
+    cbproto::InstrumentId getInstrument() const;
+
     /// @brief Get the maximum number of instruments
     ///
     /// @return the maximum instrument count

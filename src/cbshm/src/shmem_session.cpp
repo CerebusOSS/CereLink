@@ -391,6 +391,13 @@ struct ShmemSession::Impl {
             return Result<void>::error("Invalid instrument ID");
         }
 
+        // NATIVE segments are per-device (single instrument), so a session on
+        // this layout is always bound to index 0 regardless of the (valid) id
+        // supplied by the caller.
+        if (layout == ShmemLayout::NATIVE) {
+            inst = cbproto::InstrumentId::fromIndex(0);
+        }
+
         if (mode == Mode::CLIENT && layout == ShmemLayout::CENTRAL) {
             // Detect protocol version for CLIENT + CENTRAL mode
             auto central_result = detectCentralVersion();
@@ -803,6 +810,10 @@ Mode ShmemSession::getMode() const {
 
 ShmemLayout ShmemSession::getLayout() const {
     return m_impl->layout;
+}
+
+cbproto::InstrumentId ShmemSession::getInstrument() const {
+    return m_impl->inst;
 }
 
 uint32_t ShmemSession::getMaxProcs() const {
@@ -1977,8 +1988,12 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
         }
 
         // Filter packets so only those from the selected instrument are read.
-        uint8_t pkt_instrument = packets[packets_read].cbpkt_header.instrument;
-        if (pkt_instrument != m_impl->inst.toIndex()) {
+        // Only meaningful for the CENTRAL layout, where one shared receive
+        // buffer holds every instrument's packets and the instrument field is
+        // the demux key. NATIVE segments are per-device (single source), so
+        // filtering them would only drop valid data for a non-index-0 device.
+        if (m_impl->layout == ShmemLayout::CENTRAL &&
+            packets[packets_read].cbpkt_header.instrument != m_impl->inst.toIndex()) {
             continue;  // Skip this packet, don't increment packets_read
         }
 

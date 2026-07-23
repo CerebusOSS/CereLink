@@ -1264,6 +1264,16 @@ Result<void> SdkSession::start() {
                             probe.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
                             probe.cbpkt_header.type = cbPKTTYPE_NPLAYSET;
                             probe.cbpkt_header.dlen = cbPKTDLEN_NPLAY;
+                            // Address the probe to this session's instrument so
+                            // the fabric routes it to the correct hub and the
+                            // echoed NPLAYREP carries the matching instrument
+                            // index — otherwise a non-index-0 session's reply is
+                            // dropped by readReceiveBuffer's instrument filter.
+                            // Use the session's bound instrument (0 for NATIVE)
+                            // so the probe and the filter compare the same value
+                            // by construction.
+                            probe.cbpkt_header.instrument =
+                                impl->shmem_session->getInstrument().toPacketField();
                             probe.mode = 0xFFFF;
                             probe.stime = static_cast<uint64_t>(
                                 std::chrono::duration_cast<std::chrono::nanoseconds>(
