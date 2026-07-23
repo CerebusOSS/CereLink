@@ -193,6 +193,9 @@ struct ShmemSession::Impl {
     // Runtime receive buffer length (replaces hardcoded CENTRAL_cbRECBUFFLEN)
     uint32_t rec_buffer_len;
 
+    // Reserved tail zone for the receive ring wrap.
+    uint32_t rec_reserve_len;
+
     // Receive buffer read tracking (for CLIENT mode reading)
     uint32_t rec_tailindex;      // Our read position in receive buffer
     uint32_t rec_tailwrap;       // Our wrap counter
@@ -242,6 +245,7 @@ struct ShmemSession::Impl {
         , status_buffer_size(0)
         , spike_buffer_size(0)
         , rec_buffer_len(0)
+        , rec_reserve_len(0)
         , rec_tailindex(0)
         , rec_tailwrap(0)
         , central_version(CentralVersion::CURRENT)
@@ -438,6 +442,7 @@ struct ShmemSession::Impl {
             status_buffer_size = sizeof(NativePCStatus);
             spike_buffer_size = sizeof(NativeSpikeBuffer);
             rec_buffer_len = NATIVE_cbRECBUFFLEN;
+            rec_reserve_len = cbCER_UDP_SIZE_MAX / sizeof(NativeReceiveBuffer::buffer[0]);
         } else {
             cfg_buffer_size = bootstrap_adapter->getConfigBufferSize();
             rec_buffer_size = bootstrap_adapter->getReceiveBufferSize();
@@ -446,6 +451,7 @@ struct ShmemSession::Impl {
             status_buffer_size = bootstrap_adapter->getStatusBufferSize();
             spike_buffer_size = bootstrap_adapter->getSpikeBufferSize();
             rec_buffer_len = bootstrap_adapter->getReceiveBufferLen();
+            rec_reserve_len = bootstrap_adapter->getReceiveReserveLen();
         }
 
 #ifdef _WIN32
@@ -670,80 +676,69 @@ struct ShmemSession::Impl {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    // Packet Routing (THE KEY FIX!)
+    // Packet Routing
 
     /// @brief Write a packet to the receive buffer ring.
     ///
-    /// Cross-process publication: the consumer (CLIENT) reads head_index and
-    /// then reads packet bytes up to that index.  On weak memory ordering
-    /// architectures (e.g. ARM/Apple Silicon) the head_index update must be
-    /// release-ordered with respect to the preceding memcpy and wrap update,
-    /// otherwise the consumer can observe an advanced head_index but stale
-    /// or partial bytes — which manifests as misaligned packets.
+    /// Wrap convention (matches Central's InstNetwork.cpp receive path): the
+    /// packet is written at @c head, then @c head is advanced past it, then —
+    /// once @c head passes @c rec_buffer_len minus @c rec_reserve_words (a
+    /// reserved tail zone one max UDP datagram wide) — @c head is reset to 0
+    /// and the wrap counter is bumped.  The consumer applies the IDENTICAL rule
+    /// to its own tail (see readReceiveBuffer), so producer and consumer wrap
+    /// in lockstep with no in-band marker and without ever reading the stale
+    /// bytes left between the last packet and @c rec_buffer_len.  Because the
+    /// reserve is far larger than any single packet, the packet written at
+    /// @c head never extends past @c rec_buffer_len.
     ///
-    /// Wrap padding: when a packet would not fit at @c head, the writer wraps
-    /// to offset 0.  The skipped bytes between the previous packet and
-    /// @c buflen would otherwise leave the consumer's tail stranded inside
-    /// random gap data after the wrap.  We pad the gap with a synthetic "wrap
-    /// marker" packet (chid=0, type=0, non-zero dlen) so the consumer can
-    /// advance tail through it cleanly and drop into the wrap.  Wrap policy
-    /// also ensures the gap left after each write is either 0 or large
-    /// enough (>= cbPKT_HEADER_32SIZE) to fit a marker.
+    /// Cross-process publication (paired with the consumer's seqlock snapshot
+    /// in readReceiveBuffer): the packet memcpy happens-before the release
+    /// stores below.  On a wrap the wrap counter is published FIRST and
+    /// head_index LAST, so a consumer that reads a stable head_index is
+    /// guaranteed a settled wrap counter; the release/acquire pairing also
+    /// keeps the packet bytes visible before the advance on weak memory
+    /// architectures (ARM/Apple Silicon).
     Result<void> writeToReceiveBuffer(const cbPKT_GENERIC& pkt) {
         if (!rec_buffer_raw) {
             return Result<void>::error("Receive buffer not initialized");
         }
 
-        uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
+        uint32_t pkt_len = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
 
-        if (pkt_size_words > rec_buffer_len) {
-            return Result<void>::error("Packet too large for receive buffwither");
+        // The length of the reserve length matches the maximum UDP packet
+        // length, which is dependent on the connection mode (NATIVE vs.
+        // CENTRAL) and the version of Central if mode is CENTRAL.
+        // All packets must fit within the reserve zone.  This ensures that
+        // the last packet is adjacent to or intersects with the reserve zone.
+        // Currently subsumed by the cbPKT_GENERIC size check, but guards the
+        // reserve-zone invariant if the reserve ever shrinks below it.
+        if (pkt_len > rec_reserve_len) {
+            return Result<void>::error("Packet exceeds the length of the reserve zone at the end of the receive buffer");
+        }
+
+        // The reader discards packets larger than cbPKT_GENERIC.
+        if (pkt_len > (sizeof(cbPKT_GENERIC) / sizeof(uint32_t))) {
+            return Result<void>::error("Packet exceeds cbPKT_GENERIC size");
         }
 
         uint32_t head = adapter->getRecHeadindexPtr();
         uint32_t* buf = adapter->getRecBufferPtr();
 
-        // Decide whether to wrap.  Wrap if either (a) the packet would not
-        // fit, or (b) writing it would leave a 1..3 dword tail gap that we
-        // cannot mark with a wrap-marker header on the next wrap.
-        const uint32_t end_after = head + pkt_size_words;
-        bool need_wrap = false;
-        if (end_after > rec_buffer_len) {
-            need_wrap = true;
-        } else if (end_after < rec_buffer_len &&
-                   (rec_buffer_len - end_after) < cbPKT_HEADER_32SIZE) {
-            need_wrap = true;
-        }
-
-        if (need_wrap) {
-            // Pad the gap [head, buflen) with a wrap marker so the consumer
-            // can step over it.  By the wrap-policy invariant above, gap is
-            // either 0 or >= cbPKT_HEADER_32SIZE.
-            uint32_t gap_dwords = rec_buffer_len - head;
-            if (gap_dwords >= cbPKT_HEADER_32SIZE) {
-                cbPKT_HEADER marker{};
-                marker.time = 0;
-                marker.chid = 0;
-                marker.type = 0;
-                marker.dlen = static_cast<uint16_t>(gap_dwords - cbPKT_HEADER_32SIZE);
-                marker.instrument = 0;
-                marker.reserved = 0;
-                std::memcpy(&buf[head], &marker, sizeof(cbPKT_HEADER));
-            }
-            head = 0;
-            shm_store_relaxed_u32(&adapter->getRecHeadwrapPtr(), adapter->getRecHeadwrapPtr() + 1);
-        }
-
+        // Write the packet at the current head.
         const uint32_t* pkt_data = reinterpret_cast<const uint32_t*>(&pkt);
-        std::memcpy(&buf[head], pkt_data, pkt_size_words * sizeof(uint32_t));
+        std::memcpy(&buf[head], pkt_data, pkt_len * sizeof(uint32_t));
 
         adapter->getRecReceived()++;
         adapter->setRecLasttime(pkt.cbpkt_header.time);
 
-        // Release fence: head_index store synchronizes-with the consumer's
-        // acquire load, ensuring all prior writes (marker, memcpy, wrap,
-        // lasttime) are visible before the consumer sees the new head_index.
-        shm_store_release_u32(&adapter->getRecHeadindexPtr(), head + pkt_size_words);
+        // Advance past the packet and determine whether to wrap or continue.
+        head += pkt_len;
+        if (head > (rec_buffer_len - rec_reserve_len)) {
+            head = 0;
+            shm_store_release_u32(&adapter->getRecHeadwrapPtr(),
+                                  shm_load_relaxed_u32(&adapter->getRecHeadwrapPtr()) + 1);
+        }
+        shm_store_release_u32(&adapter->getRecHeadindexPtr(), head);
 
         return Result<void>::ok();
     }
@@ -814,6 +809,7 @@ uint32_t ShmemSession::getMaxProcs() const {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         return cbMAXPROCS;
     } else {
+        // TODO: Fails if is_open == false
         return m_impl->bootstrap_adapter->getMaxProcs();
     }
 }
@@ -1101,6 +1097,7 @@ Result<void> ShmemSession::storePacket(const cbPKT_GENERIC& pkt) {
     auto rec_result = m_impl->writeToReceiveBuffer(pkt);
     if (rec_result.isError()) {
         // Log error but don't fail - config updates may still work
+        // TODO: Log error without failing (?).  Needs more investigation.
     }
 
     // NOTE: Config parsing (PROCINFO, BANKINFO, etc.) is NOT done here.
@@ -1827,8 +1824,13 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             break;
         }
 
-        if ((m_impl->rec_tailwrap + 1 == head_wrap && m_impl->rec_tailindex < head_index) ||
-            (m_impl->rec_tailwrap + 1 < head_wrap)) {
+        // Overrun detection (matches Central's cbhwlib check): the producer has
+        // lapped us if it is on a later wrap AND its head has advanced to within
+        // one reserved zone of our tail, or if it is more than a full lap ahead.
+        // In either case the bytes at our tail may already be overwritten.
+        if ((m_impl->rec_tailwrap != head_wrap &&
+             head_index + m_impl->rec_reserve_len >= m_impl->rec_tailindex) ||
+            (head_wrap > m_impl->rec_tailwrap + 1)) {
             return resyncToHead("Receive buffer overrun - data lost");
         }
 
@@ -1850,20 +1852,6 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             raw_header_32size = cbPKT_HEADER_32SIZE;  // 4
             auto* hdr = reinterpret_cast<const cbPKT_HEADER*>(&buf[m_impl->rec_tailindex]);
             raw_dlen = hdr->dlen;
-
-            // Wrap-marker packet inserted by the writer to fill the unused
-            // gap before a wrap-around (chid=0, type=0, dlen != 0).  Skip
-            // silently — advance tail past the marker without reporting it
-            // to the caller so it never reaches user callbacks.
-            if (hdr->chid == 0 && hdr->type == 0 && hdr->dlen != 0) {
-                uint32_t marker_size = cbPKT_HEADER_32SIZE + hdr->dlen;
-                m_impl->rec_tailindex += marker_size;
-                if (m_impl->rec_tailindex >= buflen) {
-                    m_impl->rec_tailindex -= buflen;
-                    m_impl->rec_tailwrap++;
-                }
-                continue;
-            }
         }
 
         uint32_t pkt_size_dwords = raw_header_32size + raw_dlen;
@@ -1876,8 +1864,14 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
 
         if (needs_translation) {
             // Copy raw bytes from ring buffer into a temp buffer for translation.
-            // Packets never straddle the buffer boundary (Central wraps before that),
-            // but we handle it defensively.
+            // Under a correct reserve-zone wrap a packet never straddles buflen:
+            // the tail is always <= buflen - reserve and pkt_size_dwords is capped
+            // at sizeof(cbPKT_GENERIC) (both enforced above), and reserve exceeds
+            // that cap, so end_index <= buflen always and the wrap branch below is
+            // unreachable.  It is retained only as a guard against an external
+            // Central writer whose wrap threshold diverges from ours (cf. the v7.0
+            // reserve desync): it degrades such a mismatch into bytes the validity
+            // checks below still catch, instead of a read past the end of the ring.
             uint32_t raw_bytes = pkt_size_dwords * sizeof(uint32_t);
             uint32_t end_index = m_impl->rec_tailindex + pkt_size_dwords;
 
@@ -1923,7 +1917,10 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             }
         } else {
             // No translation needed (4.2+, NATIVE, or CENTRAL layout).
-            // Copy directly from ring buffer to output.
+            // Copy directly from ring buffer to output.  As with the translation
+            // path above, the wrap branch is unreachable under a correct
+            // reserve-zone wrap and is retained only as a guard against an
+            // external-writer wrap-threshold mismatch.
             uint32_t end_index = m_impl->rec_tailindex + pkt_size_dwords;
 
             if (end_index <= buflen) {
@@ -1967,10 +1964,15 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             }
         }
 
-        // Advance tail past this packet (consumed from ring buffer regardless of filter)
+        // Advance tail past this packet (consumed from ring buffer regardless
+        // of filter) and apply the identical reserved-tail-zone wrap the
+        // producer uses (see writeToReceiveBuffer): once the tail passes
+        // buflen - reserve, reset to 0 and bump the wrap counter.  This keeps
+        // our tail in lockstep with the producer's head and never lands in the
+        // stale bytes between the last packet and buflen.
         m_impl->rec_tailindex += pkt_size_dwords;
-        if (m_impl->rec_tailindex >= buflen) {
-            m_impl->rec_tailindex -= buflen;
+        if (m_impl->rec_tailindex > (buflen - m_impl->rec_reserve_len)) {
+            m_impl->rec_tailindex = 0;
             m_impl->rec_tailwrap++;
         }
 
@@ -1986,33 +1988,16 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
     return Result<void>::ok();
 }
 
-Result<void> ShmemSession::getReceiveBufferStats(uint32_t& received, uint32_t& available) const {
+Result<uint32_t> ShmemSession::getReceivedPacketCount() const {
     if (!m_impl || !m_impl->is_open) {
-        return Result<void>::error("Session is not open");
+        return Result<uint32_t>::error("Session is not open");
     }
     if (!m_impl->rec_buffer_raw) {
-        return Result<void>::error("Receive buffer not initialized");
+        return Result<uint32_t>::error("Receive buffer not initialized");
     }
 
-    received = m_impl->adapter->getRecReceived();
-    uint32_t buflen = m_impl->rec_buffer_len;
-
-    uint32_t head_index = m_impl->adapter->getRecHeadindexPtr();
-    uint32_t head_wrap = m_impl->adapter->getRecHeadwrapPtr();
-
-    if (m_impl->rec_tailwrap == head_wrap) {
-        if (head_index >= m_impl->rec_tailindex) {
-            available = head_index - m_impl->rec_tailindex;
-        } else {
-            available = 0;
-        }
-    } else if (m_impl->rec_tailwrap + 1 == head_wrap) {
-        available = (buflen - m_impl->rec_tailindex) + head_index;
-    } else {
-        available = 0;
-    }
-
-    return Result<void>::ok();
+    // TODO: Do NOT rely on the Central adapter for NATIVE mode.
+    return Result<uint32_t>::ok(m_impl->adapter->getRecReceived());
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

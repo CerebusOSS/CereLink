@@ -42,6 +42,7 @@ public:
     virtual size_t getStatusBufferSize() const = 0;
     virtual size_t getSpikeBufferSize() const = 0;
     virtual size_t getReceiveBufferLen() const = 0;
+    virtual size_t getReceiveReserveLen() const = 0;
     virtual size_t getTransmitBufferLen() const = 0;
     virtual size_t getTransmitBufferLocalLen() const = 0;
 

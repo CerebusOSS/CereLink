@@ -16,6 +16,8 @@
 #include <cbproto/connection.h>    // For cbproto_protocol_version_t
 #include <cbproto/packet_translator.h>
 #include <cstring>
+#include <cstdint>
+#include <vector>
 #ifdef _WIN32
 #include <windows.h>  // GetCurrentProcessId()
 #else
@@ -1001,9 +1003,9 @@ TEST_F(NativeShmemSessionTest, StorePacket_PROCINFO) {
     ASSERT_TRUE(session.storePacket(pkt).isOk());
 
     // Verify packet was stored to receive buffer
-    uint32_t received = 0, available = 0;
-    ASSERT_TRUE(session.getReceiveBufferStats(received, available).isOk());
-    EXPECT_EQ(received, 1u);
+    auto received = session.getReceivedPacketCount();
+    ASSERT_TRUE(received.isOk());
+    EXPECT_EQ(received.value(), 1u);
 }
 
 TEST_F(NativeShmemSessionTest, StorePacket_AnyInstrument) {
@@ -1025,9 +1027,9 @@ TEST_F(NativeShmemSessionTest, StorePacket_AnyInstrument) {
     EXPECT_TRUE(store_result.isOk());
 
     // Verify it went to receive buffer
-    uint32_t received = 0, available = 0;
-    ASSERT_TRUE(session.getReceiveBufferStats(received, available).isOk());
-    EXPECT_EQ(received, 1u);
+    auto received = session.getReceivedPacketCount();
+    ASSERT_TRUE(received.isOk());
+    EXPECT_EQ(received.value(), 1u);
 }
 
 TEST_F(NativeShmemSessionTest, StorePacket_CHANINFO) {
@@ -1051,9 +1053,9 @@ TEST_F(NativeShmemSessionTest, StorePacket_CHANINFO) {
     // storePacket writes to receive buffer (config parsing at device layer)
     ASSERT_TRUE(session.storePacket(pkt).isOk());
 
-    uint32_t received = 0, available = 0;
-    ASSERT_TRUE(session.getReceiveBufferStats(received, available).isOk());
-    EXPECT_EQ(received, 1u);
+    auto received = session.getReceivedPacketCount();
+    ASSERT_TRUE(received.isOk());
+    EXPECT_EQ(received.value(), 1u);
 }
 
 TEST_F(NativeShmemSessionTest, NspStatus) {
@@ -1145,9 +1147,9 @@ TEST_F(NativeShmemSessionTest, ReceiveBufferStoreAndStats) {
     auto& session = result.value();
 
     // Initially empty
-    uint32_t received = 0, available = 0;
-    ASSERT_TRUE(session.getReceiveBufferStats(received, available).isOk());
-    EXPECT_EQ(received, 0u);
+    auto received = session.getReceivedPacketCount();
+    ASSERT_TRUE(received.isOk());
+    EXPECT_EQ(received.value(), 0u);
 
     // Store a few packets
     constexpr int NUM_PKTS = 5;
@@ -1162,10 +1164,9 @@ TEST_F(NativeShmemSessionTest, ReceiveBufferStoreAndStats) {
     }
 
     // Check stats - received count should match number of packets stored
-    ASSERT_TRUE(session.getReceiveBufferStats(received, available).isOk());
-    EXPECT_EQ(received, static_cast<uint32_t>(NUM_PKTS));
-    // available is in word-based ring buffer units, should be > 0
-    EXPECT_GT(available, 0u);
+    received = session.getReceivedPacketCount();
+    ASSERT_TRUE(received.isOk());
+    EXPECT_EQ(received.value(), static_cast<uint32_t>(NUM_PKTS));
 }
 
 TEST_F(NativeShmemSessionTest, NumTotalChans) {
@@ -1663,6 +1664,251 @@ TEST_F(OwnerLivenessTest, ClientTreatsZeroPidAsAlive) {
 // so this liveness test should be reworked as a Windows-only integration test.
 //
 // TEST_F(OwnerLivenessTest, CentralCompatAlwaysReturnsTrue) { ... }
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Receive-ring wrap regression
+///
+/// Regression for the receive-ring wrap desynchronization.  The producer and
+/// consumer both wrap their index to 0 once it passes rec_buffer_len minus a
+/// reserved tail zone (Central's convention); if the reader used a different
+/// threshold it would drift off the packet boundary at the wrap and deliver
+/// misframed/duplicated/lost packets.  This forces the NATIVE ring to wrap
+/// multiple times and asserts every packet survives intact and in order.
+/// @{
+
+TEST_F(ShmemSessionTest, ReceiveRingForcedWrapIntegrity) {
+    const auto inst = InstrumentId::fromOneBased(cbNSP1);
+    const uint8_t inst_index = static_cast<uint8_t>(inst.toIndex());
+
+    // Producer (writes the ring) and consumer (reads it) share one NATIVE
+    // segment set, exactly like a STANDALONE owner and a CLIENT reader.
+    auto producer_r = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, inst);
+    ASSERT_TRUE(producer_r.isOk()) << producer_r.error();
+    auto& producer = producer_r.value();
+
+    // A CLIENT syncs its tail to the current head (0/0) on open, so it observes
+    // only packets written after this point.
+    auto consumer_r = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name, inst);
+    ASSERT_TRUE(consumer_r.isOk()) << consumer_r.error();
+    auto& consumer = consumer_r.value();
+
+    // Max-size packets (256 words) wrap the ~268 MB ring in the fewest
+    // iterations.  dlen counts 32-bit data words after the 16-byte header.
+    constexpr uint16_t kDlen = (cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE) / 4;   // 252
+    constexpr uint32_t kPktWords = cbPKT_HEADER_32SIZE + kDlen;            // 256
+
+    // Force just over two full wraps so we exercise steady-state wrapping, not
+    // only the first crossing.
+    const uint64_t target_words =
+        2ull * NATIVE_cbRECBUFFLEN + NATIVE_cbRECBUFFLEN / 16;
+
+    auto make_pkt = [&](uint64_t seq) {
+        cbPKT_GENERIC pkt{};
+        pkt.cbpkt_header.time = static_cast<PROCTIME>(seq);
+        pkt.cbpkt_header.chid = 5;              // a real channel (<= 0x0FFF)
+        pkt.cbpkt_header.type = 0;              // continuous sample (high byte clear)
+        pkt.cbpkt_header.dlen = kDlen;
+        pkt.cbpkt_header.instrument = inst_index;
+        pkt.cbpkt_header.reserved = 0;
+        pkt.data_u32[0] = static_cast<uint32_t>(seq);         // low 32 bits of seq
+        pkt.data_u32[1] = static_cast<uint32_t>(seq >> 32);   // high 32 bits of seq
+        return pkt;
+    };
+
+    // Batch is far smaller than one lap (~262 K packets), and we drain fully
+    // after every burst, so the producer never laps the consumer.
+    constexpr size_t kBatch = 4096;
+    std::vector<cbPKT_GENERIC> read_buf(kBatch);
+
+    uint64_t written = 0;        // next sequence number to write
+    uint64_t verified = 0;       // next sequence number we expect to read
+    uint64_t written_words = 0;
+
+    while (written_words < target_words) {
+        for (size_t i = 0; i < kBatch; ++i) {
+            auto w = producer.storePacket(make_pkt(written));
+            ASSERT_TRUE(w.isOk()) << w.error() << " at seq " << written;
+            ++written;
+            written_words += kPktWords;
+        }
+
+        // Drain everything the consumer can currently see.
+        for (;;) {
+            size_t got = 0;
+            auto r = consumer.readReceiveBuffer(read_buf.data(), read_buf.size(), got);
+            ASSERT_TRUE(r.isOk()) << r.error() << " after " << verified
+                << " packets read, " << written_words << " words written";
+            if (got == 0) break;
+            for (size_t i = 0; i < got; ++i) {
+                const auto& p = read_buf[i];
+                // Sequence must be contiguous: any gap = loss, repeat = dup,
+                // mismatch = misframed bytes from a botched wrap.
+                ASSERT_EQ(static_cast<uint64_t>(p.cbpkt_header.time), verified)
+                    << "packet out of sequence at the wrap boundary";
+                ASSERT_EQ(p.data_u32[0], static_cast<uint32_t>(verified));
+                ASSERT_EQ(p.data_u32[1], static_cast<uint32_t>(verified >> 32));
+                ASSERT_EQ(p.cbpkt_header.chid, 5);
+                ASSERT_EQ(p.cbpkt_header.type, 0);
+                ASSERT_EQ(p.cbpkt_header.dlen, kDlen);
+                ASSERT_EQ(p.cbpkt_header.instrument, inst_index);
+                ++verified;
+            }
+        }
+    }
+
+    // Every packet written was read back exactly once, in order.
+    EXPECT_EQ(verified, written);
+
+    // Confirm we genuinely forced multiple wraps (wrote more than two rings).
+    EXPECT_GT(written_words, 2ull * NATIVE_cbRECBUFFLEN);
+
+    // The producer's received counter matches what we wrote.
+    auto received = producer.getReceivedPacketCount();
+    ASSERT_TRUE(received.isOk());
+    EXPECT_EQ(received.value(), static_cast<uint32_t>(written));
+}
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Receive-ring fail-safe regression
+///
+/// The receive ring has three defensive paths that a happy-path stream never
+/// exercises: the writer rejects a packet too large for the reserved tail zone
+/// (before its memcpy runs off the ring / off the source packet), and the
+/// reader resyncs to head on an overrun (producer lapped the consumer) or a
+/// desync (a header that cannot belong to a real packet).  These drive each
+/// path directly.
+/// @{
+
+// The writer must reject a packet whose size exceeds the reserved tail zone.
+// Otherwise the memcpy reads past the end of the source cbPKT_GENERIC and, when
+// head is near the wrap threshold, writes past the end of the ring.  storePacket
+// swallows the ring-write error by design, so the rejection is observed through
+// its side effects: the packet is neither counted nor delivered, and the ring
+// stays usable for the next valid packet.
+TEST_F(ShmemSessionTest, WriterRejectsPacketLargerThanReserve) {
+    const auto inst = InstrumentId::fromOneBased(cbNSP1);
+    const uint8_t inst_index = static_cast<uint8_t>(inst.toIndex());
+
+    auto producer_r = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, inst);
+    ASSERT_TRUE(producer_r.isOk()) << producer_r.error();
+    auto& producer = producer_r.value();
+    auto consumer_r = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name, inst);
+    ASSERT_TRUE(consumer_r.isOk()) << consumer_r.error();
+    auto& consumer = consumer_r.value();
+
+    // dlen = 20000 words is larger than the reserve on every layout
+    // (cbCER_UDP_SIZE_MAX / 4 <= 14520) but still representable in the 16-bit
+    // dlen field — exactly the malformed-oversized case the guard exists for.
+    cbPKT_GENERIC bad{};
+    bad.cbpkt_header.chid = 5;
+    bad.cbpkt_header.type = 0;
+    bad.cbpkt_header.dlen = 20000;
+    bad.cbpkt_header.instrument = inst_index;
+    ASSERT_TRUE(producer.storePacket(bad).isOk());
+
+    // Rejected before the received++ in writeToReceiveBuffer, so nothing landed.
+    auto received = producer.getReceivedPacketCount();
+    ASSERT_TRUE(received.isOk());
+    EXPECT_EQ(received.value(), 0u) << "oversized packet must be rejected, not written";
+
+    // The ring is still usable: a valid packet stored next round-trips intact.
+    cbPKT_GENERIC good{};
+    good.cbpkt_header.time = 42;
+    good.cbpkt_header.chid = 5;
+    good.cbpkt_header.type = 0;
+    good.cbpkt_header.dlen = 4;
+    good.cbpkt_header.instrument = inst_index;
+    good.data_u32[0] = 0xABCD1234u;
+    ASSERT_TRUE(producer.storePacket(good).isOk());
+
+    std::vector<cbPKT_GENERIC> out(4);
+    size_t got = 0;
+    ASSERT_TRUE(consumer.readReceiveBuffer(out.data(), out.size(), got).isOk());
+    ASSERT_EQ(got, 1u);
+    EXPECT_EQ(static_cast<uint64_t>(out[0].cbpkt_header.time), 42u);
+    EXPECT_EQ(out[0].data_u32[0], 0xABCD1234u);
+
+    received = producer.getReceivedPacketCount();
+    ASSERT_TRUE(received.isOk());
+    EXPECT_EQ(received.value(), 1u);
+}
+
+// When the producer laps a consumer that has not drained, the consumer's tail
+// has been overwritten.  The next read must fail safe with an overrun error
+// rather than deliver clobbered bytes.
+TEST_F(ShmemSessionTest, ReceiveRingOverrunReportsDataLost) {
+    const auto inst = InstrumentId::fromOneBased(cbNSP1);
+    const uint8_t inst_index = static_cast<uint8_t>(inst.toIndex());
+
+    auto producer_r = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, inst);
+    ASSERT_TRUE(producer_r.isOk()) << producer_r.error();
+    auto& producer = producer_r.value();
+    // Opens with tail synced to head (0/0) and never reads until the end, so the
+    // producer's wrap counter runs ahead of the still-zero tail.
+    auto consumer_r = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name, inst);
+    ASSERT_TRUE(consumer_r.isOk()) << consumer_r.error();
+    auto& consumer = consumer_r.value();
+
+    constexpr uint16_t kDlen = (cbPKT_MAX_SIZE - cbPKT_HEADER_SIZE) / 4;
+    constexpr uint32_t kPktWords = cbPKT_HEADER_32SIZE + kDlen;
+
+    cbPKT_GENERIC pkt{};
+    pkt.cbpkt_header.chid = 5;
+    pkt.cbpkt_header.type = 0;
+    pkt.cbpkt_header.dlen = kDlen;
+    pkt.cbpkt_header.instrument = inst_index;
+
+    // Fill more than one full ring so the producer's head wraps past the tail.
+    const uint64_t words_to_write = NATIVE_cbRECBUFFLEN + NATIVE_cbRECBUFFLEN / 8;
+    uint64_t w = 0;
+    while (w < words_to_write) {
+        ASSERT_TRUE(producer.storePacket(pkt).isOk());
+        w += kPktWords;
+    }
+
+    std::vector<cbPKT_GENERIC> out(16);
+    size_t got = 0;
+    auto r = consumer.readReceiveBuffer(out.data(), out.size(), got);
+    EXPECT_FALSE(r.isOk());
+    EXPECT_NE(r.error().find("overrun"), std::string::npos) << r.error();
+}
+
+// A packet the writer accepts (its size is fine; the writer does not validate
+// chid) but whose channel id cannot belong to a real packet must be caught by
+// the reader's fail-safe header validation, which resyncs instead of delivering
+// garbage to user callbacks.
+TEST_F(ShmemSessionTest, ReceiveRingDesyncReportsDataLost) {
+    const auto inst = InstrumentId::fromOneBased(cbNSP1);
+    const uint8_t inst_index = static_cast<uint8_t>(inst.toIndex());
+
+    auto producer_r = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, inst);
+    ASSERT_TRUE(producer_r.isOk()) << producer_r.error();
+    auto& producer = producer_r.value();
+    auto consumer_r = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name, inst);
+    ASSERT_TRUE(consumer_r.isOk()) << consumer_r.error();
+    auto& consumer = consumer_r.value();
+
+    // chid 0x2000 is > 0x0FFF and is not cbPKTCHAN_CONFIGURATION (0x8000), so it
+    // fails the reader's validity check.  Size stays plausible so the failure is
+    // the header check, not the implausible-size check.
+    cbPKT_GENERIC pkt{};
+    pkt.cbpkt_header.time = 7;
+    pkt.cbpkt_header.chid = 0x2000;
+    pkt.cbpkt_header.type = 0;
+    pkt.cbpkt_header.dlen = 4;
+    pkt.cbpkt_header.instrument = inst_index;
+    ASSERT_TRUE(producer.storePacket(pkt).isOk());
+
+    std::vector<cbPKT_GENERIC> out(4);
+    size_t got = 0;
+    auto r = consumer.readReceiveBuffer(out.data(), out.size(), got);
+    EXPECT_FALSE(r.isOk());
+    EXPECT_NE(r.error().find("desync"), std::string::npos) << r.error();
+}
 
 /// @}
 

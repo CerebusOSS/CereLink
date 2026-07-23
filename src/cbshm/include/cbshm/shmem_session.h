@@ -424,14 +424,10 @@ public:
     /// @return Result indicating success or failure
     Result<void> readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_packets, size_t& packets_read);
 
-    /// @brief Get current receive buffer statistics
+    /// @brief Get the number of packets read from the receive buffer
     ///
-    /// Returns information about the receive buffer state for monitoring.
-    ///
-    /// @param received Total packets received by writer
-    /// @param available Packets available to read (not yet consumed)
-    /// @return Result indicating success or failure
-    Result<void> getReceiveBufferStats(uint32_t& received, uint32_t& available) const;
+    /// @return Result<uint32_t> - total packets received by writer
+    Result<uint32_t> getReceivedPacketCount() const;
 
     /// @}
 

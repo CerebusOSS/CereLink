@@ -46,6 +46,10 @@ size_t BootstrapAdapter::getReceiveBufferLen() const {
     return CENTRAL_cbRECBUFFLEN;
 }
 
+size_t BootstrapAdapter::getReceiveReserveLen() const {
+    return CENTRAL_cbCER_UDP_SIZE_MAX / sizeof(cbRECBUFF::buffer[0]);
+}
+
 size_t BootstrapAdapter::getTransmitBufferLen() const {
     return CENTRAL_cbXMT_GLOBAL_BUFFLEN;
 }
