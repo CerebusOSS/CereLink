@@ -460,6 +460,14 @@ struct ShmemSession::Impl {
             rec_buffer_len = bootstrap_adapter->getReceiveBufferLen();
             rec_reserve_len = bootstrap_adapter->getReceiveReserveLen();
         }
+        // The reserve-zone wrap invariants (see writeToReceiveBuffer) need the
+        // reserve to hold at least one max-size packet and to leave a non-empty
+        // writable region.  Both operands are compile-time constants today;
+        // this guards against a future version header breaking the invariant.
+        if (rec_reserve_len < (cbPKT_MAX_SIZE / sizeof(uint32_t)) ||
+            rec_reserve_len >= rec_buffer_len) {
+            return Result<void>::error("Invalid receive-ring reserve length for this layout/version");
+        }
 
 #ifdef _WIN32
         // Windows implementation
@@ -672,11 +680,11 @@ struct ShmemSession::Impl {
 
         // In CLIENT mode, sync our read position to the current head so we only
         // read NEW packets, not stale data that was already in the ring buffer.
-        // Use acquire load on head_index to pair with the producer's release
-        // store (see writeToReceiveBuffer).
         if (mode == Mode::CLIENT) {
-            rec_tailindex = shm_load_acquire_u32(&adapter->getRecHeadindexPtr());
-            rec_tailwrap = shm_load_relaxed_u32(&adapter->getRecHeadwrapPtr());
+            // Use the stable-snapshot read: two plain loads could adopt a torn
+            // (old index, new wrap) pair if the producer wraps between them,
+            // parking our tail in stale bytes ahead of the producer's head.
+            loadRecHeadSnapshot(rec_tailindex, rec_tailwrap);
         }
 
         return Result<void>::ok();
@@ -684,6 +692,30 @@ struct ShmemSession::Impl {
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
     // Packet Routing
+
+    /// @brief Read a stable (head_index, head_wrap) snapshot of the receive ring.
+    ///
+    /// The producer publishes these as two separate words and, on a wrap, bumps
+    /// head_wrap *before* republishing head_index (see writeToReceiveBuffer).
+    /// There is no ordering of two independent stores that keeps the combined
+    /// position (head_wrap * buflen + head_index) monotonic across a wrap, so a
+    /// naive read can observe a torn pair (e.g. the old index with the new wrap),
+    /// which corrupts the overrun math and drops tail off a packet boundary.
+    ///
+    /// The acquire-load on head_index also pairs with the producer's
+    /// release-store, so on weak memory architectures (ARM/Apple Silicon) we
+    /// don't observe an advanced index with stale packet bytes.  The seqlock-
+    /// style retry shrinks the torn-pair window; because it cannot close it
+    /// entirely, readReceiveBuffer additionally validates every packet and
+    /// resyncs to head on any anomaly instead of trusting the pair.
+    void loadRecHeadSnapshot(uint32_t& idx_out, uint32_t& wrap_out) {
+        for (;;) {
+            uint32_t i1 = shm_load_acquire_u32(&adapter->getRecHeadindexPtr());
+            uint32_t w = shm_load_acquire_u32(&adapter->getRecHeadwrapPtr());
+            uint32_t i2 = shm_load_acquire_u32(&adapter->getRecHeadindexPtr());
+            if (i1 == i2) { idx_out = i1; wrap_out = w; return; }
+        }
+    }
 
     /// @brief Write a packet to the receive buffer ring.
     ///
@@ -730,6 +762,15 @@ struct ShmemSession::Impl {
 
         uint32_t head = adapter->getRecHeadindexPtr();
         uint32_t* buf = adapter->getRecBufferPtr();
+
+        // Defensive: a write never starts inside the reserved tail zone.  Only
+        // a foreign or corrupted segment can leave head there; re-establish the
+        // invariant instead of running the memcpy past the end of the ring.
+        if (head > (rec_buffer_len - rec_reserve_len)) {
+            shm_store_release_u32(&adapter->getRecHeadwrapPtr(),
+                                  shm_load_relaxed_u32(&adapter->getRecHeadwrapPtr()) + 1);
+            head = 0;
+        }
 
         // Write the packet at the current head.
         const uint32_t* pkt_data = reinterpret_cast<const uint32_t*>(&pkt);
@@ -820,7 +861,11 @@ uint32_t ShmemSession::getMaxProcs() const {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         return cbMAXPROCS;
     } else {
-        // TODO: Fails if is_open == false
+        // The bootstrap adapter only exists once open() has detected the
+        // Central version; before that the instrument count is unknown.
+        if (!isOpen() || !m_impl->bootstrap_adapter) {
+            return 0;
+        }
         return m_impl->bootstrap_adapter->getMaxProcs();
     }
 }
@@ -1320,6 +1365,12 @@ Result<bool> ShmemSession::dequeuePacket(cbPKT_GENERIC& pkt) {
 
     uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
 
+    // A corrupt dlen read from shared memory must not overflow the caller's
+    // cbPKT_GENERIC (the memcpy below would smash the stack).
+    if (pkt_size_words > (sizeof(cbPKT_GENERIC) / sizeof(uint32_t))) {
+        return Result<bool>::error("Corrupt packet size in transmit buffer");
+    }
+
     // Read remaining payload contiguously
     std::memcpy(&pkt_data[4], &buf[tail + 4], (pkt_size_words - 4) * sizeof(uint32_t));
 
@@ -1429,6 +1480,12 @@ Result<bool> ShmemSession::dequeueLocalPacket(cbPKT_GENERIC& pkt) {
     pkt_data[3] = buf[tail + 3];
 
     uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
+
+    // A corrupt dlen read from shared memory must not overflow the caller's
+    // cbPKT_GENERIC (the memcpy below would smash the stack).
+    if (pkt_size_words > (sizeof(cbPKT_GENERIC) / sizeof(uint32_t))) {
+        return Result<bool>::error("Corrupt packet size in local transmit buffer");
+    }
 
     // Read remaining payload contiguously
     std::memcpy(&pkt_data[4], &buf[tail + 4], (pkt_size_words - 4) * sizeof(uint32_t));
@@ -1565,11 +1622,14 @@ Result<void> ShmemSession::getSpikeCache(uint32_t channel, NativeSpikeCache& cac
         auto* spike = static_cast<NativeSpikeBuffer*>(m_impl->spike_buffer_raw);
         auto& src = spike->cache[channel];
         cache.chid = src.chid;
-        cache.pktcnt = src.pktcnt;
+        // Clamp pktcnt read from shared memory so the memcpy below cannot
+        // overflow the destination cache's spkpkt array.
+        cache.pktcnt = (src.pktcnt <= NATIVE_cbPKT_SPKCACHEPKTCNT)
+                           ? src.pktcnt : NATIVE_cbPKT_SPKCACHEPKTCNT;
         cache.pktsize = src.pktsize;
         cache.head = src.head;
         cache.valid = src.valid;
-        std::memcpy(cache.spkpkt, src.spkpkt, sizeof(cbPKT_SPK) * src.pktcnt);
+        std::memcpy(cache.spkpkt, src.spkpkt, sizeof(cbPKT_SPK) * cache.pktcnt);
     } else {
         auto res = m_impl->adapter->getSpikeCache(cache, channel);
         if (res.isError()) {
@@ -1594,11 +1654,14 @@ Result<bool> ShmemSession::getRecentSpike(uint32_t channel, cbPKT_SPK& spike) co
         }
         auto* buf = static_cast<NativeSpikeBuffer*>(m_impl->spike_buffer_raw);
         const auto& cache = buf->cache[channel];
-        if (cache.valid == 0) {
+        // pktcnt comes from shared memory: 0 would underflow the index below
+        // and an oversized value would index past the spkpkt array.
+        if (cache.valid == 0 || cache.pktcnt == 0 ||
+            cache.pktcnt > NATIVE_cbPKT_SPKCACHEPKTCNT) {
             return Result<bool>::ok(false);
         }
         uint32_t recent_idx = (cache.head == 0) ? (cache.pktcnt - 1) : (cache.head - 1);
-        spike = cache.spkpkt[recent_idx];
+        spike = cache.spkpkt[recent_idx % cache.pktcnt];
         return Result<bool>::ok(true);
     } else {
         auto cache = std::make_unique<NativeSpikeCache>();
@@ -1606,11 +1669,12 @@ Result<bool> ShmemSession::getRecentSpike(uint32_t channel, cbPKT_SPK& spike) co
         if (res.isError()) {
             return Result<bool>::error(res.error());
         }
-        if (cache->valid == 0) {
+        if (cache->valid == 0 || cache->pktcnt == 0 ||
+            cache->pktcnt > NATIVE_cbPKT_SPKCACHEPKTCNT) {
             return Result<bool>::ok(false);
         }
         uint32_t recent_idx = (cache->head == 0) ? (cache->pktcnt - 1) : (cache->head - 1);
-        spike = cache->spkpkt[recent_idx];
+        spike = cache->spkpkt[recent_idx % cache->pktcnt];
         return Result<bool>::ok(true);
     }
 }
@@ -1765,42 +1829,20 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
     uint32_t* buf = m_impl->adapter->getRecBufferPtr();
     uint32_t buflen = m_impl->rec_buffer_len;
 
-    // Read a (head_index, head_wrap) snapshot.
-    //
-    // The producer publishes these as two separate words and, on a wrap, bumps
-    // head_wrap *before* republishing head_index (see writeToReceiveBuffer).
-    // There is no ordering of two independent stores that keeps the combined
-    // position (head_wrap * buflen + head_index) monotonic across a wrap, so a
-    // naive read can observe a torn pair (e.g. the old index with the new wrap),
-    // which corrupts the overrun math and drops tail off a packet boundary.
-    //
-    // The acquire-load on head_index also pairs with the producer's
-    // release-store, so on weak memory architectures (ARM/Apple Silicon) we
-    // don't observe an advanced index with stale packet bytes.  The seqlock-
-    // style retry shrinks the torn-pair window; because it cannot close it
-    // entirely, the loop below additionally validates every packet and resyncs
-    // to head on any anomaly instead of trusting the pair (see resyncToHead).
-    auto loadHeadSnapshot = [&](uint32_t& idx_out, uint32_t& wrap_out) {
-        for (;;) {
-            uint32_t i1 = shm_load_acquire_u32(&m_impl->adapter->getRecHeadindexPtr());
-            uint32_t w = shm_load_acquire_u32(&m_impl->adapter->getRecHeadwrapPtr());
-            uint32_t i2 = shm_load_acquire_u32(&m_impl->adapter->getRecHeadindexPtr());
-            if (i1 == i2) { idx_out = i1; wrap_out = w; return; }
-        }
-    };
-
     // Fail-safe recovery: our tail no longer points at a packet boundary
     // (the producer lapped us, or we observed a torn head snapshot across a
     // wrap).  Jump tail to the current head and report the loss, rather than
     // advancing by a garbage size and delivering misinterpreted bytes to user
     // callbacks.
     auto resyncToHead = [&](const char* msg) -> Result<void> {
-        loadHeadSnapshot(m_impl->rec_tailindex, m_impl->rec_tailwrap);
+        m_impl->loadRecHeadSnapshot(m_impl->rec_tailindex, m_impl->rec_tailwrap);
         return Result<void>::error(msg);
     };
 
+    // Stable (head_index, head_wrap) snapshot; see loadRecHeadSnapshot for why
+    // a naive two-load read can observe a torn pair across a wrap.
     uint32_t head_index, head_wrap;
-    loadHeadSnapshot(head_index, head_wrap);
+    m_impl->loadRecHeadSnapshot(head_index, head_wrap);
 
     if (m_impl->rec_tailwrap == head_wrap && m_impl->rec_tailindex == head_index) {
         return Result<void>::ok();
@@ -1843,6 +1885,16 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
              head_index + m_impl->rec_reserve_len >= m_impl->rec_tailindex) ||
             (head_wrap > m_impl->rec_tailwrap + 1)) {
             return resyncToHead("Receive buffer overrun - data lost");
+        }
+
+        // Same-lap sanity: a tail ahead of head on the same wrap cannot occur
+        // in a healthy stream (we only ever follow packet boundaries the
+        // producer published).  It means a torn snapshot was adopted across a
+        // wrap and our tail is parked in stale bytes — which parse as
+        // well-formed (previous-lap) packets, so the per-packet validation
+        // below would happily deliver them.  Resync instead.
+        if (m_impl->rec_tailwrap == head_wrap && m_impl->rec_tailindex > head_index) {
+            return resyncToHead("Receive buffer desync - data lost");
         }
 
         // Parse the packet header to determine packet size based on protocol version.

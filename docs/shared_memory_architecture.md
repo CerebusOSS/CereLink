@@ -415,17 +415,41 @@ SdkSession::open(DeviceType::HUB1)
 - Tracks own `tailwrap` - increments each time reader wraps around
 - Each CLIENT maintains independent read position
 
+### Wrap Rule (reserved tail zone, matches Central)
+- The last `reserve` dwords of the ring are a reserved tail zone
+  (`cbCER_UDP_SIZE_MAX / 4`; per Central version for the CENTRAL layout via
+  `BootstrapAdapter::getReceiveReserveLen()`)
+- A packet always *starts* at or below the wrap threshold
+  (`buflen - reserve`) and may extend into the reserve, so a packet never
+  straddles the end of the buffer
+- After advancing past a packet, whichever side (writer `headindex`, reader
+  `tailindex`) is now above the threshold jumps back to 0 and increments its
+  wrap counter
+- Both sides apply the identical positional rule to the identical packet
+  boundaries, so they wrap in lockstep — there is no in-band wrap marker
+- On a wrap the writer publishes `headwrap` before `headindex`; the pair is
+  still two separate words, so readers take a seqlock-style snapshot
+  (re-reading `headindex` around the `headwrap` load) and never trust a torn
+  pair
+
 ### Synchronization Logic
 - **No new data**: `tailwrap == headwrap && tailindex == headindex`
-- **Data available**: `tailindex` < `headindex` (same wrap) or different wrap counters
-- **Buffer overrun**: `headwrap > tailwrap + 1` (writer lapped reader - data lost!)
+- **Data available**: `tailindex < headindex` (same wrap) or the writer is one
+  wrap ahead with `headindex` still safely below the unread region
+- **Buffer overrun**: the writer is on a later wrap and `headindex + reserve`
+  has reached `tailindex`, or is more than a full lap ahead — the reader
+  resyncs its tail to the writer's head and reports the data loss
+- **Desync fail-safe**: an implausible packet size, a header that cannot
+  belong to a real packet, or a tail ahead of head on the same wrap all mean
+  the tail is off a packet boundary; the reader resyncs to head and reports
+  data loss instead of delivering misinterpreted bytes
 
 ### Packet Size Calculation
 - Packet size = `header_32size + dlen` (read from the packet header, NOT the first dword)
 - Header size depends on protocol: 2 dwords (3.11), 4 dwords (4.0+)
 - `dlen` is extracted from the correct offset within the protocol-specific header struct
 - Variable-length packets
-- Handles wraparound mid-packet (copy in two parts)
+- Packets are always contiguous (the reserve-zone rule prevents mid-packet wraparound)
 
 ## Thread Architecture
 

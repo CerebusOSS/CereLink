@@ -1770,6 +1770,153 @@ TEST_F(ShmemSessionTest, ReceiveRingForcedWrapIntegrity) {
     EXPECT_EQ(received.value(), static_cast<uint32_t>(written));
 }
 
+// The forced-wrap test above uses uniform max-size packets, so the write
+// position never lands exactly ON the wrap threshold (buflen - reserve).
+// That landing is the strict-greater-than edge of the wrap rule: no wrap
+// happens, and the NEXT packet legally starts at the threshold and extends
+// into the reserve zone before wrapping.  Arrange packet sizes to hit the
+// threshold exactly and verify the consumer stays in lockstep through both
+// edges.
+TEST_F(ShmemSessionTest, ReceiveRingExactThresholdBoundary) {
+    const auto inst = InstrumentId::fromOneBased(cbNSP1);
+    const uint8_t inst_index = static_cast<uint8_t>(inst.toIndex());
+
+    auto producer_r = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, inst);
+    ASSERT_TRUE(producer_r.isOk()) << producer_r.error();
+    auto& producer = producer_r.value();
+    auto consumer_r = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name, inst);
+    ASSERT_TRUE(consumer_r.isOk()) << consumer_r.error();
+    auto& consumer = consumer_r.value();
+
+    constexpr uint32_t kReserve = cbCER_UDP_SIZE_MAX / 4;
+    constexpr uint32_t kThreshold = NATIVE_cbRECBUFFLEN - kReserve;
+    constexpr uint32_t kMaxPkt = sizeof(cbPKT_GENERIC) / sizeof(uint32_t);
+    // Smallest useful packet: header plus one data word for the sequence stamp.
+    constexpr uint32_t kMinPkt = cbPKT_HEADER_32SIZE + 1;
+
+    auto make_pkt = [&](uint32_t total_dwords, uint64_t seq) {
+        cbPKT_GENERIC pkt{};
+        pkt.cbpkt_header.time = static_cast<PROCTIME>(seq + 1);
+        pkt.cbpkt_header.chid = 5;              // a real channel (<= 0x0FFF)
+        pkt.cbpkt_header.type = 0;              // continuous sample (high byte clear)
+        pkt.cbpkt_header.dlen = static_cast<uint16_t>(total_dwords - cbPKT_HEADER_32SIZE);
+        pkt.cbpkt_header.instrument = inst_index;
+        pkt.data_u32[0] = static_cast<uint32_t>(seq);
+        return pkt;
+    };
+
+    uint64_t seq_w = 0, seq_r = 0;
+    std::vector<cbPKT_GENERIC> rb(4096);
+    auto drain = [&]() {
+        for (;;) {
+            size_t got = 0;
+            auto r = consumer.readReceiveBuffer(rb.data(), rb.size(), got);
+            ASSERT_TRUE(r.isOk()) << r.error() << " at seq " << seq_r;
+            if (got == 0) break;
+            for (size_t i = 0; i < got; ++i) {
+                ASSERT_EQ(rb[i].data_u32[0], static_cast<uint32_t>(seq_r))
+                    << "packet out of sequence at the threshold boundary";
+                ++seq_r;
+            }
+        }
+    };
+
+    // Fill with max-size packets up to the threshold, finishing with two
+    // remainder packets sized so the last one ends exactly ON the threshold.
+    uint64_t full = kThreshold / kMaxPkt;
+    uint32_t rem = kThreshold % kMaxPkt;
+    if (rem != 0 && rem < 2 * kMinPkt) {
+        // Keep the remainder packets well-formed regardless of how the
+        // constants evolve.
+        full -= 1;
+        rem += kMaxPkt;
+    }
+    for (uint64_t i = 0; i < full; ++i, ++seq_w) {
+        ASSERT_TRUE(producer.storePacket(make_pkt(kMaxPkt, seq_w)).isOk());
+        if ((i & 0xFFF) == 0) {
+            drain();
+            if (::testing::Test::HasFatalFailure()) return;
+        }
+    }
+    if (rem != 0) {
+        uint32_t first = rem / 2;
+        if (first < kMinPkt) first = kMinPkt;
+        uint32_t second = rem - first;
+        ASSERT_GE(second, kMinPkt);
+        ASSERT_TRUE(producer.storePacket(make_pkt(first, seq_w)).isOk());
+        ++seq_w;
+        ASSERT_TRUE(producer.storePacket(make_pkt(second, seq_w)).isOk());
+        ++seq_w;
+    }
+    drain();
+    if (::testing::Test::HasFatalFailure()) return;
+    // Reader is parked exactly on the threshold (no wrap yet: rule is strict >).
+    ASSERT_EQ(seq_r, seq_w) << "reader not parked exactly on the threshold";
+
+    // The next packet starts AT the threshold, extends into the reserve zone,
+    // and wraps the write position; the one after it lands at offset 0.
+    ASSERT_TRUE(producer.storePacket(make_pkt(kMaxPkt, seq_w)).isOk());
+    ++seq_w;
+    ASSERT_TRUE(producer.storePacket(make_pkt(kMaxPkt, seq_w)).isOk());
+    ++seq_w;
+    drain();
+    if (::testing::Test::HasFatalFailure()) return;
+    EXPECT_EQ(seq_r, seq_w) << "reader desynced across the wrap";
+}
+
+// A CLIENT adopts the producer's current head on open, so it must observe
+// nothing that was written before it attached and everything written after.
+TEST_F(ShmemSessionTest, ReceiveRingClientAttachMidStreamSeesOnlyNewPackets) {
+    const auto inst = InstrumentId::fromOneBased(cbNSP1);
+    const uint8_t inst_index = static_cast<uint8_t>(inst.toIndex());
+
+    auto producer_r = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, inst);
+    ASSERT_TRUE(producer_r.isOk()) << producer_r.error();
+    auto& producer = producer_r.value();
+
+    auto make_pkt = [&](uint64_t seq) {
+        cbPKT_GENERIC pkt{};
+        pkt.cbpkt_header.time = static_cast<PROCTIME>(seq + 1);
+        pkt.cbpkt_header.chid = 5;
+        pkt.cbpkt_header.type = 0;
+        pkt.cbpkt_header.dlen = 4;
+        pkt.cbpkt_header.instrument = inst_index;
+        pkt.data_u32[0] = static_cast<uint32_t>(seq);
+        return pkt;
+    };
+
+    // Write some packets before the client attaches.
+    for (uint64_t i = 0; i < 100; ++i) {
+        ASSERT_TRUE(producer.storePacket(make_pkt(i)).isOk());
+    }
+
+    auto consumer_r = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name, inst);
+    ASSERT_TRUE(consumer_r.isOk()) << consumer_r.error();
+    auto& consumer = consumer_r.value();
+
+    // The client adopted the current head: nothing to read yet.
+    cbPKT_GENERIC read_pkts[16];
+    size_t got = 123;
+    ASSERT_TRUE(consumer.readReceiveBuffer(read_pkts, 16, got).isOk());
+    EXPECT_EQ(got, 0u);
+
+    // Packets written after the attach are visible, in order, and none of the
+    // pre-attach packets leak through.
+    for (uint64_t i = 100; i < 110; ++i) {
+        ASSERT_TRUE(producer.storePacket(make_pkt(i)).isOk());
+    }
+    uint64_t expect_seq = 100;
+    for (;;) {
+        ASSERT_TRUE(consumer.readReceiveBuffer(read_pkts, 16, got).isOk());
+        if (got == 0) break;
+        for (size_t i = 0; i < got; ++i) {
+            ASSERT_EQ(read_pkts[i].data_u32[0], static_cast<uint32_t>(expect_seq));
+            ++expect_seq;
+        }
+    }
+    EXPECT_EQ(expect_seq, 110u);
+}
+
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
