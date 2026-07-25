@@ -114,7 +114,7 @@ std::vector<uint8_t> make_311_DINP(uint32_t time = 1000);
 /// @param chan Channel number
 /// @param monsource Monitor source (32-bit in 3.11, becomes moninst in 4.1+)
 /// @return Complete packet as byte vector
-std::vector<uint8_t> make_311_CHANINFO(uint32_t chan, uint32_t monsource);
+std::vector<uint8_t> make_311_CHANINFO(uint32_t chan, uint32_t monsource, uint32_t doutopts = 0);
 
 /// @}
 
@@ -160,7 +160,7 @@ cbPKT_COMMENT make_current_COMMENT(uint8_t charset, PROCTIME timeStarted,
 cbPKT_DINP make_current_DINP(uint32_t valueRead, uint32_t bitsChanged, uint32_t eventType);
 
 /// Create a current protocol CHANINFO packet
-cbPKT_CHANINFO make_current_CHANINFO(uint32_t chan, uint16_t moninst, uint16_t monchan);
+cbPKT_CHANINFO make_current_CHANINFO(uint32_t chan, uint16_t moninst, uint16_t monchan, uint32_t doutopts = 0);
 
 /// Create a current protocol CHANRESET packet (4.2+ structure)
 cbPKT_CHANRESET make_current_CHANRESET(uint32_t chan, uint8_t moninst, uint8_t monchan);

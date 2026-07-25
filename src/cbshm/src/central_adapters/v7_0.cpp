@@ -216,8 +216,20 @@ void Adapter::fromLegacy(::cbPKT_CHANINFO& cur, const cbPKT_CHANINFO& leg) const
     cur.dinpopts = leg.dinpopts;
     cur.aoutopts = leg.aoutopts;
     cur.eopchar = leg.eopchar;
-    cur.moninst = static_cast<uint16_t>(leg.monsource & 0xFFFF); // aka lowsamples
-    cur.monchan = static_cast<uint16_t>(leg.monsource >> 16); // aka highsamples
+    // monsource is mode-dependent (see this version's cbSetDoutOptions and
+    // cbSetAoutOptions in Central's cbhwlib): frequency output packs sample
+    // counts, byte-compatible with the modern lowsamples/highsamples union
+    // arm; every other mode (monitoring, triggered) stores a plain 1-based
+    // channel number, which the modern layout splits into (moninst = 0-based
+    // instrument, monchan = channel).  Pre-4.1 configs address a single
+    // instrument, so moninst is always 0.
+    if (leg.doutopts & cbDOUT_FREQUENCY) {
+        cur.moninst = static_cast<uint16_t>(leg.monsource & 0xFFFF); // aka lowsamples
+        cur.monchan = static_cast<uint16_t>(leg.monsource >> 16);    // aka highsamples
+    } else {
+        cur.moninst = 0;
+        cur.monchan = static_cast<uint16_t>(leg.monsource & 0xFFFF);
+    }
     cur.outvalue = leg.outvalue; // aka offset
     cur.trigtype = leg.trigtype;
     // skip reserved
@@ -697,7 +709,14 @@ void Adapter::toLegacy(cbPKT_CHANINFO& leg, const ::cbPKT_CHANINFO& cur) const {
     leg.dinpopts = cur.dinpopts;
     leg.aoutopts = cur.aoutopts;
     leg.eopchar = cur.eopchar;
-    leg.monsource = (static_cast<uint32_t>(cur.monchan) << 16) | static_cast<uint32_t>(cur.moninst); // aka highsamples and lowsamples
+    // Inverse of the mode-dependent split in fromLegacy: frequency output is
+    // byte-preserving; other modes store the channel number (the modern
+    // instrument field has no pre-4.1 representation and is dropped).
+    if (cur.doutopts & cbDOUT_FREQUENCY) {
+        leg.monsource = (static_cast<uint32_t>(cur.monchan) << 16) | static_cast<uint32_t>(cur.moninst);
+    } else {
+        leg.monsource = cur.monchan;
+    }
     leg.outvalue = cur.outvalue; // aka offset
     leg.trigtype = cur.trigtype;
     leg.trigchan = cur.trigchan;

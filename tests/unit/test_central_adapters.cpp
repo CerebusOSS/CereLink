@@ -302,19 +302,26 @@ TYPED_TEST(SpikeAdapterFixture, GetSpikeCacheReadsEmptyCache) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @name Divergence — bit-packed vs split fields (CHANINFO monsource, AOUT trig)
 ///
-/// v7_0/v7_5 store moninst/monchan packed into a single 32-bit monsource and
-/// trig/trigInst packed into a single 16-bit trig; v7_6+ store them as separate
-/// fields. A set→get round-trip is symmetric on every version (below), so it does
-/// NOT by itself distinguish packed from split storage. To prove the on-wire
-/// layout, inspect the raw legacy struct in the cfg buffer.
+/// v7_0/v7_5 store the moninst/monchan union arm as a single 32-bit monsource
+/// whose interpretation is mode-dependent (see the pre-4.1 cbSetDoutOptions):
+/// frequency output packs sample counts byte-compatibly with the modern
+/// lowsamples/highsamples arm, while every other mode stores a plain channel
+/// number (modern monchan, with moninst having no pre-4.1 representation).
+/// v7_6+ store the fields separately. A set→get round-trip is symmetric on
+/// every version (below), so it does NOT by itself distinguish packed from
+/// split storage. To prove the on-wire layout, inspect the raw legacy struct
+/// in the cfg buffer.
 /// @{
 
-TYPED_TEST(AdapterFixture, ChanInfoMonSourceRoundTrips) {
+TYPED_TEST(AdapterFixture, ChanInfoMonitorChannelRoundTrips) {
+    // Monitoring mode (no cbDOUT_FREQUENCY): the monitored channel must
+    // survive every version.  moninst is deliberately 0 — pre-4.1 layouts
+    // cannot represent a non-zero monitor instrument.
     const uint32_t chan_idx = 0;
     cbPKT_CHANINFO in;
     std::memset(&in, 0, sizeof(in));
     in.chan = 1;
-    in.moninst = 2;
+    in.moninst = 0;
     in.monchan = 5;
 
     ASSERT_TRUE(this->adapter->setChanInfo(chan_idx, in).isOk());
@@ -325,6 +332,29 @@ TYPED_TEST(AdapterFixture, ChanInfoMonSourceRoundTrips) {
 
     EXPECT_EQ(out.moninst, in.moninst);
     EXPECT_EQ(out.monchan, in.monchan);
+}
+
+TYPED_TEST(AdapterFixture, ChanInfoFrequencyModeSamplesRoundTrip) {
+    // Frequency-output mode (cbDOUT_FREQUENCY): the union carries the
+    // lowsamples/highsamples pair, which is byte-preserved on packed
+    // (v7_0/v7_5) and split (v7_6+) layouts alike.
+    const uint32_t chan_idx = 0;
+    cbPKT_CHANINFO in;
+    std::memset(&in, 0, sizeof(in));
+    in.chan = 1;
+    in.doutopts = cbDOUT_FREQUENCY;
+    in.lowsamples = 0x1234;
+    in.highsamples = 0x5678;
+
+    ASSERT_TRUE(this->adapter->setChanInfo(chan_idx, in).isOk());
+
+    cbPKT_CHANINFO out;
+    std::memset(&out, 0, sizeof(out));
+    ASSERT_TRUE(this->adapter->getChanInfo(out, chan_idx).isOk());
+
+    EXPECT_EQ(out.doutopts, in.doutopts);
+    EXPECT_EQ(out.lowsamples, in.lowsamples);
+    EXPECT_EQ(out.highsamples, in.highsamples);
 }
 
 // TODO(scaffold): raw-layout divergence check. Cast the cfg buffer to the
