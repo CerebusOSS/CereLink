@@ -26,8 +26,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-import time
 import threading
+import time
 from collections import deque
 
 from pycbsdk import DeviceType, SampleRate, Session
@@ -49,7 +49,7 @@ class ClockChecker:
         arrival = time.monotonic()
         try:
             converted = self._session.device_to_monotonic(header.time)
-        except Exception:
+        except RuntimeError:
             return
         with self._lock:
             self._samples.append((arrival, converted, header.time))
@@ -271,7 +271,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         clock_check(device_type, args.interval, group=args.group, timeout=args.timeout)
         return 0
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - CLI boundary: report failures, not tracebacks
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
 

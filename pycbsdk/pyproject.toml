@@ -59,6 +59,14 @@ where = ["src"]
 [tool.setuptools.package-data]
 pycbsdk = ["*.dll", "*.so", "*.so.*", "*.dylib"]
 
+[tool.ruff]
+# Declare the Python floor for the linter.  Ruff only infers this from
+# `requires-python` when it treats this file as its config, so without this
+# section it assumes a newer interpreter and suggests APIs that do not exist on
+# 3.9 (e.g. RUF007 proposing `itertools.pairwise`, added in 3.10).  Rule
+# *selection* is deliberately left at ruff's defaults.
+target-version = "py39"
+
 [tool.pytest.ini_options]
 markers = [
     "integration: tests requiring a running nPlayServer instance",

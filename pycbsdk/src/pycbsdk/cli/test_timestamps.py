@@ -30,12 +30,11 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-import time
 import threading
+import time
 from dataclasses import dataclass, field
 
 from pycbsdk import DeviceType, SampleRate, Session
-
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -235,16 +234,21 @@ def run_scenario(device_type: DeviceType, mode: str) -> list[TestResult]:
             # Launch a STANDALONE session in the background.
             # Configure 1 FRONTEND channel on RAW so group traffic flows
             # before the CLIENT connects.
+            # Built outside the argument list: implicit concatenation inside a
+            # list literal reads like separate arguments (ruff ISC004).
+            bg_script = (
+                "import time; "
+                "from pycbsdk import Session, DeviceType, SampleRate; "
+                f"s = Session(DeviceType.{device_type.name}); "
+                "time.sleep(3); "
+                "s.set_sample_group(1, 0, SampleRate.SR_RAW); "
+                "time.sleep(120)"
+            )
             bg_proc = subprocess.Popen(
                 [
                     sys.executable,
                     "-c",
-                    "import time; "
-                    f"from pycbsdk import Session, DeviceType, SampleRate; "
-                    f"s = Session(DeviceType.{device_type.name}); "
-                    "time.sleep(3); "
-                    "s.set_sample_group(1, 0, SampleRate.SR_RAW); "
-                    "time.sleep(120)",
+                    bg_script,
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
@@ -318,7 +322,7 @@ def run_scenario(device_type: DeviceType, mode: str) -> list[TestResult]:
                     )
                 )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - record any setup failure as a test result
         results.append(TestResult(f"scenario setup ({label})", False, str(e)))
     finally:
         if bg_proc is not None:

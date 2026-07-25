@@ -15,12 +15,12 @@ import time
 from collections import Counter
 
 from pycbsdk import (
-    Session,
-    DeviceType,
-    ChannelType,
-    SampleRate,
     ChanInfoField,
+    ChannelType,
+    DeviceType,
     ProtocolVersion,
+    SampleRate,
+    Session,
 )
 
 # Spike processing extract bit (cbAINPSPK_EXTRACT)
@@ -123,7 +123,7 @@ def scan_device(device_type: DeviceType, timeout: float = 3.0) -> dict | None:
 
             return info
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - any failure means the device is absent
         # Connection failed — device not present
         return {"error": str(e), "device_type": device_type.name}
 

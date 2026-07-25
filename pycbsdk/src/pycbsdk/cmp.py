@@ -338,7 +338,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         _apply(args.specs, device=args.device, timeout=args.timeout)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - CLI boundary: report failures, not tracebacks
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     return 0

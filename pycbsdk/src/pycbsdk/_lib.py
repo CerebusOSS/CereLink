@@ -6,6 +6,7 @@ Finds and loads the cbsdk shared library (libcbsdk.dll / libcbsdk.so / libcbsdk.
 
 import os
 import sys
+
 import cffi
 
 from ._cdef import CDEF
