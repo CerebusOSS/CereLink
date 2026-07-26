@@ -22,6 +22,7 @@ include(GoogleTest)
 add_executable(cbproto_tests
     test_instrument_id.cpp
     test_protocol_structures.cpp
+    test_gemini_detection.cpp
 )
 
 target_link_libraries(cbproto_tests

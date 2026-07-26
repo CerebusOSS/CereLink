@@ -41,6 +41,7 @@
 #include "cbdev/clock_sync.h"
 #include <cbproto/cbproto.h>
 #include <cbproto/config.h>
+#include <cbproto/gemini.h>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -1475,14 +1476,7 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 // Determine timestamp units from processor identity.
                 // Gemini devices report ident containing "gemini" and send nanosecond timestamps.
                 // Non-Gemini devices (e.g. NPlay: "256-Channel player...") send sample counts.
-                const auto& ident = m_impl->device_config.procinfo.ident;
-                size_t ident_len = strnlen(ident, sizeof(m_impl->device_config.procinfo.ident));
-                static constexpr char needle[] = "gemini";
-                bool is_gemini = std::search(
-                    ident, ident + ident_len,
-                    std::begin(needle), std::end(needle) - 1,  // exclude null terminator
-                    [](char a, char b) { return std::tolower(static_cast<unsigned char>(a)) == b; }
-                ) != ident + ident_len;
+                const bool is_gemini = cbproto::procInfoIsGemini(m_impl->device_config.procinfo);
 
                 m_impl->timestamps_are_nanoseconds = is_gemini;
 

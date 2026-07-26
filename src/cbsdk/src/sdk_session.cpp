@@ -21,6 +21,7 @@
 #include "cbdev/device_factory.h"
 #include "cbdev/connection.h"
 #include "cbshm/shmem_session.h"
+#include <cbproto/gemini.h>
 #include <ccfutils/ccf_config.h>
 #include <CCFUtils.h>
 #include <thread>
@@ -889,6 +890,7 @@ Result<void> SdkSession::start() {
                 if (pkt.cbpkt_header.type == cbPKTTYPE_PROCREP) {
                     const auto* procinfo = reinterpret_cast<const cbPKT_PROCINFO*>(&pkt);
                     impl->shmem_session->setProcInfo(*procinfo);
+                    impl->shmem_session->setGeminiSystem(cbproto::procInfoIsGemini(*procinfo));
                 }
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
                     const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
