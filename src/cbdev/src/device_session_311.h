@@ -57,9 +57,6 @@ public:
     /// Receive packets from device and translate from 3.11 to current format
     Result<int> receivePackets(void* buffer, size_t buffer_size) override;
 
-    /// Send packet to device, translating from current to 3.11 format
-    Result<void> sendPacket(const cbPKT_GENERIC& pkt) override;
-
     /// Send raw bytes (pass-through to underlying device)
     Result<void> sendRaw(const void* buffer, size_t size) override;
 
@@ -71,7 +68,11 @@ public:
 private:
     /// Private constructor taking a DeviceSession
     explicit DeviceSession_311(DeviceSession&& device)
-        : DeviceSessionWrapper(std::move(device)) {}
+        : DeviceSessionWrapper(std::move(device)) {
+        // Outbound packets (incl. those from delegated config helpers) are
+        // down-translated to 3.11 by the wrapped session.
+        m_device.setSendProtocol(ProtocolVersion::PROTOCOL_311);
+    }
 };
 
 } // namespace cbdev

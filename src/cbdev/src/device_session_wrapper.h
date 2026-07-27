@@ -69,13 +69,25 @@ public:
     /// Subclasses MUST override to translate from protocol format → current format
     Result<int> receivePackets(void* buffer, size_t buffer_size) override = 0;
 
-    /// Send packet with protocol translation
-    /// Subclasses MUST override to translate from current format → protocol format
-    Result<void> sendPacket(const cbPKT_GENERIC& pkt) override = 0;
-
     /// Get protocol version
     /// Subclasses MUST override to return their specific protocol version
     [[nodiscard]] ProtocolVersion getProtocolVersion() const override = 0;
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Auto-Delegated Send Path (Same for All Protocols)
+    /// @{
+
+    /// Send a packet, down-translating to the device's wire protocol.
+    /// Delegates to the wrapped session, which performs the current→legacy
+    /// translation (its send protocol was set at construction). Keeping the
+    /// translation in one place — DeviceSession::sendPacket — ensures the
+    /// high-level config helpers, which are also delegated to m_device and call
+    /// sendPacket() internally, translate identically.
+    Result<void> sendPacket(const cbPKT_GENERIC& pkt) override {
+        return m_device.sendPacket(pkt);
+    }
 
     /// @}
 

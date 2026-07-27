@@ -42,6 +42,7 @@
 #include <cbproto/cbproto.h>
 #include <cbproto/config.h>
 #include <cbproto/gemini.h>
+#include <cbproto/packet_translator.h>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -204,6 +205,11 @@ struct DeviceSession::Impl {
 
     // Device configuration (from REQCONFIGALL)
     cbproto::DeviceConfig device_config{};
+
+    // Wire protocol for OUTBOUND packets. PROTOCOL_CURRENT means send as-is;
+    // a legacy value makes sendPacket() down-translate. Set by protocol
+    // wrappers via setSendProtocol() so config helpers reach legacy firmware.
+    ProtocolVersion send_protocol = ProtocolVersion::PROTOCOL_CURRENT;
 
     // Outbound pacing for configuration packets. A device's UDP receive buffer
     // can be as small as ~8 KB (~8 CHANINFO packets); a caller that sends many
@@ -570,6 +576,12 @@ Result<int> DeviceSession::receivePackets(void* buffer, const size_t buffer_size
     return result;
 }
 
+void DeviceSession::setSendProtocol(ProtocolVersion version) {
+    if (m_impl) {
+        m_impl->send_protocol = version;
+    }
+}
+
 Result<void> DeviceSession::sendPacket(const cbPKT_GENERIC& pkt) {
     if (!m_impl || !m_impl->connected) {
         return Result<void>::error("Device not connected");
@@ -590,6 +602,17 @@ Result<void> DeviceSession::sendPacket(const cbPKT_GENERIC& pkt) {
         m_impl->last_config_send = std::chrono::steady_clock::now();
     }
 
+    // Legacy device: down-translate the current-format packet to the device's
+    // wire protocol. This is the single choke point for outbound translation:
+    // the high-level config helpers (setChannelConfig, setSystemRunLevelSync,
+    // …) all funnel through sendPacket()/sendPackets(), so routing translation
+    // here makes them work even when this session is wrapped by a protocol
+    // translator that delegates those helpers to us.
+    if (m_impl->send_protocol != ProtocolVersion::PROTOCOL_CURRENT &&
+        m_impl->send_protocol != ProtocolVersion::UNKNOWN) {
+        return sendTranslated(pkt);
+    }
+
     // Non-Gemini: convert nanosecond timestamp back to device clock ticks.
     // This is the inverse of the ticks→ns conversion in receivePackets().
     if (!m_impl->timestamps_are_nanoseconds && m_impl->ts_convert_den > 1 &&
@@ -603,6 +626,66 @@ Result<void> DeviceSession::sendPacket(const cbPKT_GENERIC& pkt) {
 
     // Calculate actual packet size from header
     // dlen is in quadlets (4-byte units), so packet size = header + (dlen * 4)
+    const size_t packet_size = cbPKT_HEADER_SIZE + (pkt.cbpkt_header.dlen * 4);
+    return sendRaw(&pkt, packet_size);
+}
+
+Result<void> DeviceSession::sendTranslated(const cbPKT_GENERIC& pkt) {
+    using cbproto::PacketTranslator;
+    using cbproto::cbPKT_HEADER_311;
+    using cbproto::cbPKT_HEADER_400;
+    using cbproto::HEADER_SIZE_311;
+    using cbproto::HEADER_SIZE_400;
+    using cbproto::HEADER_SIZE_410;
+
+    uint8_t dest[cbPKT_MAX_SIZE];
+
+    switch (m_impl->send_protocol) {
+    case ProtocolVersion::PROTOCOL_311: {
+        // 3.11 header: 32-bit tick timestamp, 8-bit type, 8-bit dlen.
+        if (pkt.cbpkt_header.type > 0xFF) {
+            return Result<void>::error("Packet type too large for protocol 3.11 (max 255)");
+        }
+        if (pkt.cbpkt_header.dlen > 0xFF) {
+            return Result<void>::error("Packet dlen too large for protocol 3.11 (max 255)");
+        }
+        auto& dest_header = *reinterpret_cast<cbPKT_HEADER_311*>(&dest[0]);
+        dest_header.time = static_cast<uint32_t>(pkt.cbpkt_header.time * 30000 / 1000000000);
+        dest_header.chid = pkt.cbpkt_header.chid;
+        dest_header.type = static_cast<uint8_t>(pkt.cbpkt_header.type);  // Narrowing!
+        dest_header.dlen = static_cast<uint8_t>(pkt.cbpkt_header.dlen);  // Narrowing!
+        const size_t dest_dlen = PacketTranslator::translatePayload_current_to_311(pkt, dest);
+        dest_header.dlen = static_cast<uint8_t>(dest_dlen);
+        return sendRaw(dest, HEADER_SIZE_311 + dest_header.dlen * 4);
+    }
+    case ProtocolVersion::PROTOCOL_400: {
+        // 4.0 header: 64-bit timestamp, 8-bit type, 16-bit dlen, 16-bit reserved.
+        auto& dest_header = *reinterpret_cast<cbPKT_HEADER_400*>(&dest[0]);
+        dest_header.time = pkt.cbpkt_header.time;
+        dest_header.chid = pkt.cbpkt_header.chid;
+        dest_header.type = static_cast<uint8_t>(pkt.cbpkt_header.type);
+        dest_header.dlen = pkt.cbpkt_header.dlen;
+        dest_header.instrument = pkt.cbpkt_header.instrument;
+        dest_header.reserved = static_cast<uint16_t>(pkt.cbpkt_header.reserved);
+        const size_t dest_dlen = PacketTranslator::translatePayload_current_to_400(pkt, dest);
+        dest_header.dlen = static_cast<uint16_t>(dest_dlen);
+        return sendRaw(dest, HEADER_SIZE_400 + dest_header.dlen * 4);
+    }
+    case ProtocolVersion::PROTOCOL_410: {
+        // 4.1 header is identical to current; only the payload may differ.
+        cbPKT_GENERIC out;
+        std::memcpy(&out, &pkt, sizeof(cbPKT_GENERIC));
+        auto* out_bytes = reinterpret_cast<uint8_t*>(&out);
+        const size_t dest_dlen = PacketTranslator::translatePayload_current_to_410(pkt, out_bytes);
+        out.cbpkt_header.dlen = dest_dlen;
+        return sendRaw(out_bytes, HEADER_SIZE_410 + out.cbpkt_header.dlen * 4);
+    }
+    default:
+        break;
+    }
+
+    // send_protocol is current/unknown — send unchanged (should not happen: the
+    // caller only routes here for legacy protocols).
     const size_t packet_size = cbPKT_HEADER_SIZE + (pkt.cbpkt_header.dlen * 4);
     return sendRaw(&pkt, packet_size);
 }

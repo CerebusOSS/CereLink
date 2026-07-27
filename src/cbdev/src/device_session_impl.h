@@ -107,6 +107,16 @@ public:
     /// @return Protocol version (PROTOCOL_CURRENT for this session)
     [[nodiscard]] ProtocolVersion getProtocolVersion() const override;
 
+    /// Set the wire protocol used when sending packets.
+    /// Defaults to PROTOCOL_CURRENT (no translation). Protocol wrappers set
+    /// this to their device's version so that sendPacket()/sendPackets() —
+    /// and therefore every high-level config helper that funnels through them
+    /// — down-translate outgoing packets to the legacy wire format. Without
+    /// this, helpers delegated to the wrapped session would send current-format
+    /// packets that legacy firmware cannot parse.
+    /// @param version Target wire protocol for outbound packets
+    void setSendProtocol(ProtocolVersion version);
+
     /// Get full device configuration
     [[nodiscard]] const cbproto::DeviceConfig& getDeviceConfig() const override;
 
@@ -339,6 +349,12 @@ private:
         std::chrono::milliseconds timeout,
         size_t count = 1
     );
+
+    /// Down-translate a current-format packet to m_impl->send_protocol and send
+    /// it. Only called from sendPacket() when send_protocol != PROTOCOL_CURRENT.
+    /// @param pkt Packet in current (4.1+) wire format
+    /// @return Success or error
+    Result<void> sendTranslated(const cbPKT_GENERIC& pkt);
 
     /// Implementation details (pImpl pattern)
     struct Impl;
