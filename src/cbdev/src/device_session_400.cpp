@@ -128,6 +128,11 @@ Result<int> DeviceSession_400::receivePackets(void* buffer, const size_t buffer_
     // Update configuration from translated packets
     if (dest_offset > 0) {
         m_device.updateConfigFromBuffer(dest_buffer, dest_offset);
+        // Non-Gemini devices timestamp in sample counts.  We bypass
+        // DeviceSession::receivePackets above, so the conversion it normally
+        // applies has to be requested explicitly -- otherwise raw ticks reach
+        // shared memory, callbacks and clock sync.
+        m_device.convertHeaderTimestampsToNs(dest_buffer, dest_offset);
     }
 
     return Result<int>::ok(static_cast<int>(dest_offset));

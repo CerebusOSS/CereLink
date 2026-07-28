@@ -268,6 +268,19 @@ public:
     /// @param bytes Number of bytes in buffer
     void updateConfigFromBuffer(const void* buffer, size_t bytes);
 
+    /// Convert packet header timestamps from device sample counts to nanoseconds.
+    ///
+    /// No-op for Gemini devices, which already timestamp in nanoseconds, and
+    /// until the conversion factors are known (they are derived from sysfreq
+    /// when PROCREP/SYSREP are processed, so call this *after*
+    /// updateConfigFromBuffer).  Rewrites every header in place.
+    ///
+    /// Protocol wrapper sessions must call this themselves: they bypass
+    /// DeviceSession::receivePackets and so do not get the conversion for free.
+    /// @param buffer Buffer containing packets in current protocol format
+    /// @param bytes Number of bytes in buffer
+    void convertHeaderTimestampsToNs(void* buffer, size_t bytes);
+
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////

@@ -555,25 +555,32 @@ Result<int> DeviceSession::receivePackets(void* buffer, const size_t buffer_size
 
         // Convert timestamps from sample counts to nanoseconds for non-Gemini devices.
         // The flag is set when PROCREP is processed in updateConfigFromBuffer above.
-        if (!m_impl->timestamps_are_nanoseconds && m_impl->ts_convert_den > 1) {
-            auto* bytes_ptr = static_cast<uint8_t*>(buffer);
-            const size_t total_bytes = result.value();
-            size_t offset = 0;
-            while (offset + cbPKT_HEADER_SIZE <= total_bytes) {
-                auto* header = reinterpret_cast<cbPKT_HEADER*>(bytes_ptr + offset);
-                const size_t packet_size = cbPKT_HEADER_SIZE + (header->dlen * 4);
-                if (offset + packet_size > total_bytes) break;
-
-                header->time = deviceTimestampToNs(
-                    header->time, m_impl->timestamps_are_nanoseconds,
-                    m_impl->ts_convert_num, m_impl->ts_convert_den);
-
-                offset += packet_size;
-            }
-        }
+        convertHeaderTimestampsToNs(buffer, static_cast<size_t>(result.value()));
     }
 
     return result;
+}
+
+void DeviceSession::convertHeaderTimestampsToNs(void* buffer, const size_t bytes) {
+    // Gemini devices already report nanoseconds, and until PROCREP/SYSREP have
+    // established sysfreq there is no factor to apply.
+    if (m_impl->timestamps_are_nanoseconds || m_impl->ts_convert_den <= 1) {
+        return;
+    }
+
+    auto* bytes_ptr = static_cast<uint8_t*>(buffer);
+    size_t offset = 0;
+    while (offset + cbPKT_HEADER_SIZE <= bytes) {
+        auto* header = reinterpret_cast<cbPKT_HEADER*>(bytes_ptr + offset);
+        const size_t packet_size = cbPKT_HEADER_SIZE + (header->dlen * 4);
+        if (offset + packet_size > bytes) break;
+
+        header->time = deviceTimestampToNs(
+            header->time, m_impl->timestamps_are_nanoseconds,
+            m_impl->ts_convert_num, m_impl->ts_convert_den);
+
+        offset += packet_size;
+    }
 }
 
 void DeviceSession::setSendProtocol(ProtocolVersion version) {

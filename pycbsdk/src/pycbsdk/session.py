@@ -845,7 +845,16 @@ class Session:
 
         Returns:
             Field value as int (widened from the native type).
+
+        Raises:
+            ValueError: If *chan_id* is outside 1..max_chans.  The underlying C
+                call has no error channel and returns 0 for an invalid channel,
+                which is indistinguishable from a real zero value, so the range
+                is checked here instead.
         """
+        max_chans = self.max_chans()
+        if not 1 <= chan_id <= max_chans:
+            raise ValueError(f"chan_id {chan_id} out of range (1..{max_chans})")
         return _get_lib().cbsdk_session_get_channel_field(
             self._session, chan_id, int(field)
         )

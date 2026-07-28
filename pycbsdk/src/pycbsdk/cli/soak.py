@@ -217,7 +217,17 @@ def phase_soak(session: Session, key: str, wraps: int) -> None:
         f"{actual:.1f} wraps ({mib:.0f} MiB through ring)",
     )
     dropped = session.stats.packets_dropped
-    record("soak/drops", dropped == 0, f"packets_dropped={dropped}")
+    if session.is_standalone:
+        record("soak/drops", dropped == 0, f"packets_dropped={dropped}")
+    else:
+        # Not a real check: SDK stats count device->shmem writes, which only a
+        # STANDALONE owner performs.  Overruns surface via on_error instead
+        # (exercised by phase_overrun_recovery).
+        record(
+            "soak/drops",
+            None,
+            "not tracked for CLIENT sessions; see overrun/detected instead",
+        )
     manual.append(f"soak: {canary.pkts:,} pkts, {mib:.0f} MiB, {actual:.1f} wraps")
 
 
@@ -390,13 +400,13 @@ def phase_api_sweep(session: Session, n_chans: int) -> None:
 
     # Every filter and every group.
     fbad = []
-    for f in range(1, session.num_filters() + 1):
+    for f in range(session.num_filters()):  # filter ids are 0-based
         try:
             if not session.get_filter_info(f):
                 fbad.append(f)
         except Exception as exc:  # noqa: BLE001 - diagnostic harness
             fbad.append(f"{f}:{exc!r}")
-    record("sweep/filters", not fbad, f"1..{session.num_filters()} bad={fbad[:5]}")
+    record("sweep/filters", not fbad, f"0..{session.num_filters() - 1} bad={fbad[:5]}")
 
     gbad = []
     for g in range(1, 7):
@@ -438,7 +448,7 @@ def phase_invalid_inputs(session: Session) -> None:
             f"field({ch})",
             lambda ch=ch: session.get_channel_field(ch, ChanInfoField.SMPGROUP),
         )
-    for f in (0, session.num_filters() + 1, 9999):
+    for f in (session.num_filters(), session.num_filters() + 1, 9999, -1):
         rejects(f"filter({f})", lambda f=f: session.get_filter_info(f))
     for g in (0, 7, 9999):
         rejects(f"group({g})", lambda g=g: session.get_group_channels(g))
@@ -470,7 +480,16 @@ def phase_label_edges(session: Session) -> None:
     for desc, value in cases:
         try:
             session.set_channel_label(ch, value, auto_sync=True)
-            got = session.get_channel_label(ch) or ""
+            # auto_sync syncs BEFORE dispatching the setter, not after, so the
+            # write is still in flight here -- reading immediately returns the
+            # previous label.  Poll until the device reports a value consistent
+            # with what we wrote (or the settle window expires).
+            got = ""
+            for _ in range(30):
+                got = session.get_channel_label(ch) or ""
+                if got == value[: len(got)] and (got or not value):
+                    break
+                time.sleep(0.1)
             prefix_ok = value.startswith(got)
             len_ok = len(got) <= 16
             n_ok = (session.get_channel_label(neighbour) or "") == (orig_n or "")
@@ -888,10 +907,12 @@ def phase_misc(session: Session, key: str) -> None:
         record("misc/time-advances", session.time > t1, f"{t1} -> {session.time}")
         session.reset_stats()
         time.sleep(1.0)
+        received = session.stats.packets_received
         record(
             "misc/stats",
-            session.stats.packets_received > 0,
-            f"received={session.stats.packets_received} after reset",
+            received > 0 if session.is_standalone else None,
+            f"received={received} after reset"
+            + ("" if session.is_standalone else " (not tracked for CLIENT sessions)"),
         )
         session.sync(timeout=5.0)
         record("misc/sync", True, "completed")

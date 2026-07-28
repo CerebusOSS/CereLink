@@ -158,8 +158,12 @@ Two things cannot be automated, both about ground truth:
 - `protocol_version` matches the installed Central (3.11 / 4.0 / 4.1 / 4.1 / 4.2)
 - Zero malformed packets in every soak — one is a real bug
 - Bytes through the ring at least 3x the ring size for that setup
-- `packets_dropped == 0` while the reader keeps up, and no unexpected
-  overrun/desync errors outside the deliberate overrun phase
+- No unexpected overrun/desync errors outside the deliberate overrun phase.
+  Note that SDK stats (`packets_received`, `packets_dropped`) are only
+  incremented on the STANDALONE device-receive path, so they stay zero for a
+  CLIENT session and cannot be used as a drop check there — the harness reports
+  them as `WARN` in that mode.  Loss detection for a client comes from the
+  `on_error` callback and the malformed-packet canary.
 - Labels, `sysfreq` and filters match Central's GUI
 - Config writes land and read back, and originals are restored
 - Session 6: each client's packet `instrument` field equals its own slot
