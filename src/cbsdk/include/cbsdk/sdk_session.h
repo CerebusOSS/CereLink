@@ -165,6 +165,14 @@ struct SdkStats {
     uint64_t receive_errors = 0;                 ///< Socket receive errors
     uint64_t send_errors = 0;                    ///< Socket send errors
 
+    // CLIENT-mode receive statistics
+    uint64_t shmem_overruns = 0;                 ///< Ring reads that lost data (CLIENT)
+    uint64_t packets_produced = 0;               ///< Producer's ring packet count; live,
+                                                 ///< not a counter.  Spans every instrument
+                                                 ///< in a Central ring, so
+                                                 ///< packets_produced - packets_received is
+                                                 ///< exact only for a single instrument.
+
     void reset() {
         packets_received_from_device = 0;
         bytes_received_from_device = 0;
@@ -178,6 +186,8 @@ struct SdkStats {
         shmem_store_errors = 0;
         receive_errors = 0;
         send_errors = 0;
+        shmem_overruns = 0;
+        packets_produced = 0;
     }
 };
 

@@ -59,9 +59,6 @@ public:
     /// @name Protocol-Specific Overrides
     /// @{
 
-    /// Receive packets from device and translate from 4.0 to current format
-    Result<int> receivePackets(void* buffer, size_t buffer_size) override;
-
     /// Send raw bytes (pass-through to underlying device)
     Result<void> sendRaw(const void* buffer, size_t size) override;
 
@@ -69,6 +66,13 @@ public:
     [[nodiscard]] ProtocolVersion getProtocolVersion() const override;
 
     /// @}
+
+protected:
+    /// Translate one datagram from 4.0 wire format to current format.
+    /// Some 4.0 payloads (e.g. CHANINFO) are smaller than current, so packets
+    /// can grow — translation goes scratch → dest, never in place.
+    Result<size_t> translateDatagram(const uint8_t* src, size_t src_bytes,
+                                     uint8_t* dest, size_t dest_cap) override;
 
 private:
     /// Private constructor taking a DeviceSession

@@ -213,6 +213,8 @@ static void to_c_stats(const cbsdk::SdkStats& cpp_stats, cbsdk_stats_t* c_stats)
     c_stats->shmem_store_errors = cpp_stats.shmem_store_errors;
     c_stats->receive_errors = cpp_stats.receive_errors;
     c_stats->send_errors = cpp_stats.send_errors;
+    c_stats->shmem_overruns = cpp_stats.shmem_overruns;
+    c_stats->packets_produced = cpp_stats.packets_produced;
 }
 
 /// Convert C chaninfo field enum to C++ ChanInfoField enum

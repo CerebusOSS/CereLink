@@ -152,6 +152,10 @@ typedef struct {
     uint64_t shmem_store_errors;             ///< Failed to store to shmem
     uint64_t receive_errors;                 ///< Socket receive errors
     uint64_t send_errors;                    ///< Socket send errors
+
+    // CLIENT-mode receive statistics
+    uint64_t shmem_overruns;                 ///< Ring reads that lost data (CLIENT)
+    uint64_t packets_produced;               ///< Producer's ring packet count (live)
 } cbsdk_stats_t;
 
 /// Channel scaling information (mirrors cbSCALING from cbproto)

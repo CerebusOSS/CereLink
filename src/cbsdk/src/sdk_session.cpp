@@ -410,6 +410,7 @@ struct SdkSession::Impl {
         std::atomic<uint64_t> shmem_store_errors{0};
         std::atomic<uint64_t> receive_errors{0};
         std::atomic<uint64_t> send_errors{0};
+        std::atomic<uint64_t> shmem_overruns{0};
 
         void reset() {
             packets_received_from_device.store(0, std::memory_order_relaxed);
@@ -423,6 +424,7 @@ struct SdkSession::Impl {
             shmem_store_errors.store(0, std::memory_order_relaxed);
             receive_errors.store(0, std::memory_order_relaxed);
             send_errors.store(0, std::memory_order_relaxed);
+            shmem_overruns.store(0, std::memory_order_relaxed);
         }
 
         SdkStats snapshot() const {
@@ -438,6 +440,7 @@ struct SdkSession::Impl {
             s.shmem_store_errors = shmem_store_errors.load(std::memory_order_relaxed);
             s.receive_errors = receive_errors.load(std::memory_order_relaxed);
             s.send_errors = send_errors.load(std::memory_order_relaxed);
+            s.shmem_overruns = shmem_overruns.load(std::memory_order_relaxed);
             return s;
         }
     };
@@ -1208,6 +1211,14 @@ Result<void> SdkSession::start() {
                     auto read_result = impl->shmem_session->readReceiveBuffer(packets, MAX_BATCH, packets_read);
                     if (read_result.isError()) {
                         impl->stats.shmem_store_errors.fetch_add(1, std::memory_order_relaxed);
+                        // Separate "we lost data" from "the read could not run at
+                        // all".  ShmemSession marks the former (overrun / desync)
+                        // with "data lost"; the latter (not open, bad args) has no
+                        // effect on the stream.  packets_dropped is NOT reused --
+                        // that counts callback-queue overflow.
+                        if (read_result.error().find("data lost") != std::string::npos) {
+                            impl->stats.shmem_overruns.fetch_add(1, std::memory_order_relaxed);
+                        }
                         std::lock_guard<std::mutex> lock(impl->user_callback_mutex);
                         if (impl->error_callback) {
                             impl->error_callback("Error reading from shared memory: " + read_result.error());
@@ -1219,8 +1230,12 @@ Result<void> SdkSession::start() {
                     if (packets_read > 0) {
                         auto t4 = std::chrono::steady_clock::now();
                         impl->stats.packets_delivered_to_callback.fetch_add(packets_read, std::memory_order_relaxed);
+                        impl->stats.packets_received_from_device.fetch_add(packets_read, std::memory_order_relaxed);
+                        uint64_t batch_bytes = 0;
                         // CLIENT mode: scan packets for clock sync replies and CMP overlays
                         for (size_t i = 0; i < packets_read; i++) {
+                            batch_bytes += static_cast<uint64_t>(
+                                cbPKT_HEADER_32SIZE + packets[i].cbpkt_header.dlen) * 4;
                             if (packets[i].cbpkt_header.type == cbPKTTYPE_NPLAYREP) {
                                 // Complete pending clock sync probe
                                 constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
@@ -1252,6 +1267,8 @@ Result<void> SdkSession::start() {
                             // when it writes chaninfo to shmem. CLIENT doesn't need to
                             // re-apply them.
                         }
+                        impl->stats.bytes_received_from_device.fetch_add(
+                            batch_bytes, std::memory_order_relaxed);
 
                         // Periodic clock sync probing (~every 5 seconds)
                         if (t4 - impl->last_clock_probe_time > std::chrono::seconds(2)) {
@@ -1421,6 +1438,16 @@ void SdkSession::setErrorCallback(ErrorCallback callback) {
 SdkStats SdkSession::getStats() const {
     SdkStats stats = m_impl->stats.snapshot();
     stats.queue_current_depth = m_impl->packet_queue.size();
+    // Live value, like queue_current_depth: the producer owns this counter in the
+    // ring, so a CLIENT can compare it against packets_received to size the loss
+    // an overrun cost it.  Exact only for a single-instrument ring -- a Central
+    // ring counts every instrument's packets, so treat it as an upper bound.
+    if (m_impl->shmem_session) {
+        auto produced = m_impl->shmem_session->getReceivedPacketCount();
+        if (produced.isOk()) {
+            stats.packets_produced = produced.value();
+        }
+    }
     return stats;
 }
 

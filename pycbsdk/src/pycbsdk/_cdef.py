@@ -111,6 +111,8 @@ typedef struct {
     uint64_t shmem_store_errors;
     uint64_t receive_errors;
     uint64_t send_errors;
+    uint64_t shmem_overruns;
+    uint64_t packets_produced;
 } cbsdk_stats_t;
 
 typedef struct {

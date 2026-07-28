@@ -227,6 +227,16 @@ class Stats:
     shmem_errors: int = 0
     receive_errors: int = 0
     send_errors: int = 0
+    shmem_overruns: int = 0
+    """Ring reads that lost data (CLIENT sessions)."""
+    packets_produced: int = 0
+    """Packets the producer has written to the ring (live, not a counter).
+
+    ``packets_produced - packets_received`` sizes the loss an overrun cost this
+    client.  A Central ring counts every instrument's packets, so that
+    difference is exact only for a single-instrument ring, otherwise an upper
+    bound.
+    """
 
 
 class Session:
@@ -608,6 +618,8 @@ class Session:
             shmem_errors=c_stats.shmem_store_errors,
             receive_errors=c_stats.receive_errors,
             send_errors=c_stats.send_errors,
+            shmem_overruns=c_stats.shmem_overruns,
+            packets_produced=c_stats.packets_produced,
         )
 
     def reset_stats(self):
@@ -845,7 +857,16 @@ class Session:
 
         Returns:
             Field value as int (widened from the native type).
+
+        Raises:
+            ValueError: If *chan_id* is outside 1..max_chans.  The underlying C
+                call has no error channel and returns 0 for an invalid channel,
+                which is indistinguishable from a real zero value, so the range
+                is checked here instead.
         """
+        max_chans = self.max_chans()
+        if not 1 <= chan_id <= max_chans:
+            raise ValueError(f"chan_id {chan_id} out of range (1..{max_chans})")
         return _get_lib().cbsdk_session_get_channel_field(
             self._session, chan_id, int(field)
         )

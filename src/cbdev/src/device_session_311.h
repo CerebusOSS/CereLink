@@ -54,9 +54,6 @@ public:
     /// @name Protocol-Specific Overrides
     /// @{
 
-    /// Receive packets from device and translate from 3.11 to current format
-    Result<int> receivePackets(void* buffer, size_t buffer_size) override;
-
     /// Send raw bytes (pass-through to underlying device)
     Result<void> sendRaw(const void* buffer, size_t size) override;
 
@@ -65,10 +62,20 @@ public:
 
     /// @}
 
+protected:
+    /// Translate one datagram from 3.11 wire format to current format.
+    /// Headers grow from 8 to 16 bytes (and some payloads grow), so translation
+    /// goes scratch → dest, never in place.
+    Result<size_t> translateDatagram(const uint8_t* src, size_t src_bytes,
+                                     uint8_t* dest, size_t dest_cap) override;
+
 private:
+    /// 3.11 devices always timestamp in sample counts at 30 kHz.
+    static constexpr uint32_t kTickHz = 30000;
+
     /// Private constructor taking a DeviceSession
     explicit DeviceSession_311(DeviceSession&& device)
-        : DeviceSessionWrapper(std::move(device)) {
+        : DeviceSessionWrapper(std::move(device), /*fixed_tick_hz=*/kTickHz) {
         // Outbound packets (incl. those from delegated config helpers) are
         // down-translated to 3.11 by the wrapped session.
         m_device.setSendProtocol(ProtocolVersion::PROTOCOL_311);
