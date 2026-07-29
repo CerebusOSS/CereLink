@@ -30,7 +30,6 @@
 #include <cstring>
 #include <iostream>
 #include <algorithm>
-#include <array>
 #include <set>
 #include <vector>
 #include <unordered_map>
@@ -255,6 +254,11 @@ struct SdkSession::Impl {
     std::atomic<bool> received_sysrepRunlev{false};
     std::mutex handshake_mutex;
     std::condition_variable handshake_cv;
+
+    // Running count of configuration replies (CHANREP/PROCREP/GROUPREP).
+    // requestConfiguration() uses this to tell "the dump arrived but its
+    // terminating SYSREP did not" apart from "the device never answered".
+    std::atomic<uint64_t> config_replies{0};
 
     // User callbacks — per-type vectors for O(1) dispatch (Phase 2, Fix 8)
     // Registered rarely (user thread), dispatched at 30k/s (callback thread).
@@ -872,6 +876,14 @@ Result<void> SdkSession::start() {
                 // members during destruction (prevents intermittent SIGSEGV in debug mode)
                 if (impl->shutting_down.load(std::memory_order_acquire)) {
                     return;
+                }
+
+                // Track configuration replies so requestConfiguration() can
+                // recognise a config dump that arrived without its terminator.
+                if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP
+                    || pkt.cbpkt_header.type == cbPKTTYPE_PROCREP
+                    || pkt.cbpkt_header.type == cbPKTTYPE_GROUPREP) {
+                    impl->config_replies.fetch_add(1, std::memory_order_relaxed);
                 }
 
                 // Check for SYSREP packets (handshake responses)
@@ -2569,6 +2581,11 @@ Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque,
 }
 
 Result<void> SdkSession::requestConfiguration(uint32_t timeout_ms) {
+    // Baseline the config-reply count so we can tell whether the device
+    // answered this particular request (see the fallback below).
+    const uint64_t config_replies_before =
+        m_impl->config_replies.load(std::memory_order_acquire);
+
     // Reset handshake state before sending
     m_impl->received_sysrep.store(false, std::memory_order_relaxed);
 
@@ -2588,8 +2605,46 @@ Result<void> SdkSession::requestConfiguration(uint32_t timeout_ms) {
         return send_result;
 
     // Wait for final SYSREP from config flood
-    if (!waitForSysrep(timeout_ms))
+    if (waitForSysrep(timeout_ms))
+        return Result<void>::ok();
+
+    // The terminating SYSREP did not arrive.
+    //
+    // The device queues the SYSREP that ends the config dump, but firmware before
+    // 7.5.1 never flushes the queue afterwards, so if nothing else drives it the
+    // terminator is never transmitted (firmware commit ae8df07 added the explicit
+    // FlushCerPktQueue() for exactly this). Affected: 7.0.x and 7.5.0.
+    //
+    // Gate on protocol version, which detection has already established by now.
+    // It is coarser than the real firmware boundary but errs safe: 4.0 spans both
+    // 7.5.0 and 7.5.1+, and the fallback is unreachable on the latter. All 4.1+
+    // firmware flushes, so there a missing terminator is a real fault.
+    const bool terminator_guaranteed =
+        m_impl->device_session
+        && m_impl->device_session->getProtocolVersion() >= cbdev::ProtocolVersion::PROTOCOL_410;
+    if (terminator_guaranteed)
         return Result<void>::error("No SYSREP response received for requestConfiguration");
+
+    // Treat the dump as complete once config replies have arrived and then gone
+    // quiet. If none arrived at all, the device really did not answer.
+    if (m_impl->config_replies.load(std::memory_order_acquire) == config_replies_before)
+        return Result<void>::error("No SYSREP response received for requestConfiguration");
+
+    constexpr auto kQuietPeriod = std::chrono::milliseconds(200);
+    constexpr auto kPollInterval = std::chrono::milliseconds(25);
+    uint64_t last_count = m_impl->config_replies.load(std::memory_order_acquire);
+    auto quiet_since = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - quiet_since < kQuietPeriod) {
+        std::this_thread::sleep_for(kPollInterval);
+        // A late terminator is still the best signal available.
+        if (m_impl->received_sysrep.load(std::memory_order_acquire))
+            return Result<void>::ok();
+        const uint64_t count = m_impl->config_replies.load(std::memory_order_acquire);
+        if (count != last_count) {
+            last_count = count;
+            quiet_since = std::chrono::steady_clock::now();
+        }
+    }
 
     return Result<void>::ok();
 }
@@ -2610,14 +2665,42 @@ Result<void> SdkSession::performStartupHandshake(uint32_t timeout_ms) {
     m_impl->received_sysrepRunlev.store(false, std::memory_order_relaxed);
     m_impl->device_runlevel.store(0, std::memory_order_relaxed);
 
+    // These steps are UDP request/response exchanges, which have no delivery
+    // guarantee, so a single lost reply must not fail session creation. The
+    // query-style steps below are therefore retried.
+    //
+    // This matters most when the device is already streaming at full rate: a
+    // REQCONFIGALL makes the device emit its whole configuration (one CHANREP
+    // per channel plus proc/sys/group info), and that burst's terminating
+    // SYSREP has to survive alongside ~16 MB/s of continuous sample data.
+    // Occasionally it doesn't, and re-requesting is the only recovery -- a
+    // longer wait cannot conjure a datagram the kernel already dropped.
+    //
+    // Only the idempotent steps retry. HARDRESET/RESET below stay single-shot
+    // because re-issuing a state transition that already took effect (and whose
+    // reply was merely lost) would disturb a device that is mid-transition.
+    constexpr int kMaxQueryAttempts = 3;
+    constexpr auto kRetryPause = std::chrono::milliseconds(50);
+
     // Quick presence check - use shorter timeout to fail fast for non-existent devices
     const uint32_t presence_check_timeout = std::min(100u, timeout_ms);
 
     // Step 1: Quick presence check - send cbRUNLEVEL_RUNNING with short timeout to fail fast
-    Result<void> result = setSystemRunLevel(cbRUNLEVEL_RUNNING, 0, 0, 0, presence_check_timeout);
+    Result<void> result = Result<void>::error("presence check not attempted");
+    for (int attempt = 0; attempt < kMaxQueryAttempts; ++attempt) {
+        if (attempt > 0) {
+            std::this_thread::sleep_for(kRetryPause);
+        }
+        result = setSystemRunLevel(cbRUNLEVEL_RUNNING, 0, 0, 0, presence_check_timeout);
+        if (result.isOk()) {
+            break;
+        }
+    }
     if (result.isError()) {
         // No response - device not on network
-        return Result<void>::error("Device not reachable (no response to initial probe - check network connection and IP address)");
+        return Result<void>::error("Device not reachable (no response to initial probe after "
+            + std::to_string(kMaxQueryAttempts)
+            + " attempts - check network connection and IP address)");
     }
 
     // Step 2: Got response - check if device is already running
@@ -2635,10 +2718,21 @@ Result<void> SdkSession::performStartupHandshake(uint32_t timeout_ms) {
 
 request_config:
     // Step 4: Request all configuration (always performed)
-    // requestConfiguration() waits internally for final SYSREP
-    result = requestConfiguration(timeout_ms);
+    // requestConfiguration() waits internally for final SYSREP.
+    // Retried: a REQCONFIGALL is a pure query, so re-sending it is harmless --
+    // the device simply re-reports the same configuration.
+    for (int attempt = 0; attempt < kMaxQueryAttempts; ++attempt) {
+        if (attempt > 0) {
+            std::this_thread::sleep_for(kRetryPause);
+        }
+        result = requestConfiguration(timeout_ms);
+        if (result.isOk()) {
+            break;
+        }
+    }
     if (result.isError()) {
-        return Result<void>::error("Failed to send REQCONFIGALL: " + result.error());
+        return Result<void>::error("Failed to send REQCONFIGALL after "
+            + std::to_string(kMaxQueryAttempts) + " attempts: " + result.error());
     }
 
     // Step 5: Get current runlevel and transition to RUNNING if needed
