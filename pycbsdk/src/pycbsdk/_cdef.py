@@ -372,6 +372,7 @@ int64_t cbsdk_get_steady_clock_ns(void);
 
 // Error handling & version
 const char* cbsdk_get_error_message(cbsdk_result_t result);
+const char* cbsdk_get_last_error(void);
 const char* cbsdk_get_version(void);
 
 """

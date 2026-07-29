@@ -187,6 +187,11 @@ def _check(result: int, msg: str = ""):
     if result != 0:
         _lib = _get_lib()
         err = ffi.string(_lib.cbsdk_get_error_message(result)).decode()
+        # The result code is only a category ("Internal error"); the detail says
+        # what actually failed. Append it when the SDK recorded one.
+        detail = ffi.string(_lib.cbsdk_get_last_error()).decode()
+        if detail and detail != err:
+            err = f"{err}: {detail}"
         raise RuntimeError(f"{msg}: {err}" if msg else err)
 
 

@@ -1197,6 +1197,19 @@ CBSDK_API int64_t cbsdk_get_steady_clock_ns(void);
 /// @return Error message string (never NULL, always valid)
 CBSDK_API const char* cbsdk_get_error_message(cbsdk_result_t result);
 
+/// Get the detailed message for the most recent failure on the calling thread.
+///
+/// cbsdk_get_error_message() only describes the result *category*; this returns
+/// the underlying text (e.g. which resource was busy), which is usually the only
+/// thing that identifies the actual fault.
+///
+/// The value is thread-local and is overwritten by the next failing call on the
+/// same thread, so copy it if you need to keep it. Returns an empty string when
+/// no detail was recorded.
+///
+/// @return Detail string (never NULL, valid until the next failing call)
+CBSDK_API const char* cbsdk_get_last_error(void);
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Version Information
 ///////////////////////////////////////////////////////////////////////////////////////////////////
