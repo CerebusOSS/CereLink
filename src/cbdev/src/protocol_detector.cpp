@@ -226,7 +226,11 @@ void receiveThread(DetectionState* state) {
             if (
                 (*reinterpret_cast<uint16_t*>(buffer + offset + 4) == cbPKTCHAN_CONFIGURATION)
                 && (buffer[offset + 6] == cbPKTTYPE_SYSREPRUNLEV)
-                && (buffer[offset + 8] == cbPKTDLEN_SYSINFO)
+                // dlen is the 4th field of the 8-byte 3.11 header:
+                // time(32) | chid(16) | type(8) | dlen(8) -- so byte 7, not 8.
+                // Byte 8 is the first payload byte (sysfreq), which never
+                // equals cbPKTDLEN_SYSINFO, so 3.11 was never detected.
+                && (buffer[offset + 7] == cbPKTDLEN_SYSINFO)
             ) {
                 state->detected_version = ProtocolVersion::PROTOCOL_311;
                 state->done = true;
@@ -441,7 +445,10 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
     runlev_400[10] = cbPKTTYPE_SYSSETRUNLEV;                                    // type (8-bit) at byte 10
     *reinterpret_cast<uint16_t*>(&runlev_400[11]) = PAYLOAD_SIZE / 4;           // dlen (16-bit) at byte 11
     // Add SYSINFO payload (all zeros: sysfreq, spikelen, spikepre, resetque)
-    *reinterpret_cast<uint32_t*>(&runlev_400[36]) = cbRUNLEVEL_RUNNING;         // runlevel (32-bit) at byte 36
+    // Payload starts at byte 16: sysfreq(16) spikelen(20) spikepre(24) resetque(28)
+    // runlevel(32) runflags(36) -- so runlevel is byte 32. Byte 36 is runflags,
+    // which the device ignores here, making the probe a no-op on 4.0 devices.
+    *reinterpret_cast<uint32_t*>(&runlev_400[32]) = cbRUNLEVEL_RUNNING;         // runlevel (32-bit) at byte 32
 
     // Prepare runlev packet in protocol 3.11 format (32-bit timestamp, 8-bit type)
     // See table in receiveThread for detailed differences.
