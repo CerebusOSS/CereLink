@@ -54,53 +54,36 @@ Result<DeviceSession_410> DeviceSession_410::create(const ConnectionParams& conf
 // IDeviceSession Implementation
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-Result<int> DeviceSession_410::receivePackets(void* buffer, const size_t buffer_size) {
-    // Receive from underlying device (in 4.10 format)
-    // Format is similar enough to current that we can receive directly into buffer.
-    // CHANRESET adds 1 byte to the payload but that packet is not actually sent by the device so we can ignore.
-    auto result = m_device.receivePacketsRaw(buffer, buffer_size);
-    if (result.isError()) {
-        return result;
-    }
+Result<size_t> DeviceSession_410::translateDatagram(const uint8_t* src, const size_t src_bytes,
+                                                    uint8_t* dest, const size_t dest_cap) {
+    // 4.10 is similar enough to current that translation happens in place
+    // (src == dest; the funnel received directly into the output buffer).
+    // CHANRESET adds 1 byte to the payload but that packet is not actually
+    // sent by the device so we can ignore.
+    (void)src;
+    (void)dest_cap;
 
-    const int bytes_received = result.value();
-    if (bytes_received == 0) {
-        return Result<int>::ok(0);  // No data available
-    }
-
-    // Translate 4.10 format to current format
-    auto* buff_bytes = static_cast<uint8_t*>(buffer);
     size_t offset = 0;
-    while (offset < static_cast<size_t>(bytes_received)) {
-        if (offset + HEADER_SIZE_410 > static_cast<size_t>(bytes_received)) {
+    while (offset < src_bytes) {
+        if (offset + HEADER_SIZE_410 > src_bytes) {
             break;  // Incomplete packet
         }
         // -- Header -- unchanged
-        auto header = *reinterpret_cast<cbPKT_HEADER*>(&buff_bytes[offset]);
+        auto header = *reinterpret_cast<cbPKT_HEADER*>(&dest[offset]);
         // -- Payload --
-        if (offset + HEADER_SIZE_410 + header.dlen * 4 > static_cast<size_t>(bytes_received)) {
+        if (offset + HEADER_SIZE_410 + header.dlen * 4 > src_bytes) {
             break;  // Incomplete packet
         }
         // For packets that have different payload structures, additional translation may be needed
         const size_t dest_dlen = PacketTranslator::translatePayload_410_to_current(
-            &buff_bytes[offset], &buff_bytes[offset]);
+            &dest[offset], &dest[offset]);
         header.dlen = dest_dlen;  // This was likely modified in place, but just in case...
 
         // Advance offsets
         offset += HEADER_SIZE_410 + header.dlen * 4;
     }
 
-    // Update configuration from translated packets (now in current format)
-    if (offset > 0) {
-        m_device.updateConfigFromBuffer(buffer, offset);
-        // Non-Gemini devices (e.g. legacy NSP) timestamp in sample counts.  We
-        // bypass DeviceSession::receivePackets above, so the conversion it
-        // normally applies has to be requested explicitly -- otherwise raw
-        // ticks reach shared memory, callbacks and clock sync.
-        m_device.convertHeaderTimestampsToNs(buffer, offset);
-    }
-
-    return Result<int>::ok(static_cast<int>(offset));
+    return Result<size_t>::ok(offset);
 }
 
 Result<void> DeviceSession_410::sendRaw(const void* buffer, const size_t size) {

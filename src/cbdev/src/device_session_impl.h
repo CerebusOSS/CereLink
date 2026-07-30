@@ -69,15 +69,6 @@ public:
     /// @note Returns 0 if no data available (EWOULDBLOCK)
     Result<int> receivePackets(void* buffer, size_t buffer_size) override;
 
-    /// Receive packets without updating configuration (used by protocol wrappers)
-    /// Low-level socket receive that does not parse or update config.
-    /// Protocol wrappers use this to receive untranslated data.
-    /// @param buffer Destination buffer for received data
-    /// @param buffer_size Maximum bytes to receive
-    /// @return Number of bytes received, or error
-    /// @note Returns 0 if no data available (EWOULDBLOCK)
-    Result<int> receivePacketsRaw(void* buffer, size_t buffer_size);
-
     /// Send single packet to device
     /// @param pkt Packet to send
     /// @return Success or error
@@ -258,32 +249,6 @@ public:
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    /// @name Configuration Management
-    /// @{
-
-    /// Update device configuration from received packet buffer
-    /// Parses the buffer for configuration packets and updates internal config accordingly.
-    /// This should be called after receiving packets (and after protocol translation for wrappers).
-    /// @param buffer Buffer containing packets in current protocol format
-    /// @param bytes Number of bytes in buffer
-    void updateConfigFromBuffer(const void* buffer, size_t bytes);
-
-    /// Convert packet header timestamps from device sample counts to nanoseconds.
-    ///
-    /// No-op for Gemini devices, which already timestamp in nanoseconds, and
-    /// until the conversion factors are known (they are derived from sysfreq
-    /// when PROCREP/SYSREP are processed, so call this *after*
-    /// updateConfigFromBuffer).  Rewrites every header in place.
-    ///
-    /// Protocol wrapper sessions must call this themselves: they bypass
-    /// DeviceSession::receivePackets and so do not get the conversion for free.
-    /// @param buffer Buffer containing packets in current protocol format
-    /// @param bytes Number of bytes in buffer
-    void convertHeaderTimestampsToNs(void* buffer, size_t bytes);
-
-    /// @}
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////
     /// @name Receive Thread and Callbacks
     /// @{
 
@@ -343,6 +308,54 @@ public:
 private:
     /// Private constructor (use create() factory)
     DeviceSession() = default;
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Receive-Path Internals (DeviceSessionWrapper only)
+    ///
+    /// These are the pieces of the receive sequence: raw socket read, config
+    /// update, timestamp normalization.  They are deliberately NOT public —
+    /// receiving without normalizing timestamps must not be an expressible
+    /// program.  DeviceSession::receivePackets composes them for the current
+    /// protocol; DeviceSessionWrapper::receivePackets (a friend) composes them
+    /// around per-protocol translation for everything else.  Protocol wrappers
+    /// themselves only implement translateDatagram() and never see these.
+    /// @{
+
+    friend class DeviceSessionWrapper;
+
+    /// Receive packets without updating configuration.
+    /// Low-level socket receive that does not parse or update config.
+    /// @param buffer Destination buffer for received data
+    /// @param buffer_size Maximum bytes to receive
+    /// @return Number of bytes received, or error
+    /// @note Returns 0 if no data available (EWOULDBLOCK)
+    Result<int> receivePacketsRaw(void* buffer, size_t buffer_size);
+
+    /// Update device configuration from received packet buffer.
+    /// Parses the buffer for configuration packets and updates internal config
+    /// accordingly.  Must run on packets already translated to the current
+    /// protocol format, and before convertHeaderTimestampsToNs (this is where
+    /// the conversion factors get established from PROCREP/SYSREP).
+    /// @param buffer Buffer containing packets in current protocol format
+    /// @param bytes Number of bytes in buffer
+    void updateConfigFromBuffer(const void* buffer, size_t bytes);
+
+    /// Convert packet header timestamps from device sample counts to nanoseconds.
+    /// No-op for Gemini devices, which already timestamp in nanoseconds, and
+    /// until the conversion factors are known.  Rewrites every header in place.
+    /// @param buffer Buffer containing packets in current protocol format
+    /// @param bytes Number of bytes in buffer
+    void convertHeaderTimestampsToNs(void* buffer, size_t bytes);
+
+    /// Seed tick→ns conversion for protocols that are non-Gemini by
+    /// construction (e.g. 3.11, whose devices always timestamp in sample
+    /// counts at a fixed clock).  Makes conversion effective from the very
+    /// first packet instead of waiting for PROCREP/SYSREP; those packets
+    /// refine the factors later if the device reports a different sysfreq.
+    /// @param tick_hz Device sample clock in Hz (e.g. 30000)
+    void presetTickTimestamps(uint32_t tick_hz);
+
+    /// @}
 
     /// Helper method to check if a channel matches a specific type based on capabilities
     /// @param chaninfo Channel information packet

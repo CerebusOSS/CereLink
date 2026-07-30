@@ -59,9 +59,6 @@ public:
     /// @name Protocol-Specific Overrides
     /// @{
 
-    /// Receive packets from device and translate from 4.10 to current format
-    Result<int> receivePackets(void* buffer, size_t buffer_size) override;
-
     /// Send raw bytes (pass-through to underlying device)
     Result<void> sendRaw(const void* buffer, size_t size) override;
 
@@ -69,6 +66,15 @@ public:
     [[nodiscard]] ProtocolVersion getProtocolVersion() const override;
 
     /// @}
+
+protected:
+    /// Translate one datagram from 4.10 wire format to current format
+    Result<size_t> translateDatagram(const uint8_t* src, size_t src_bytes,
+                                     uint8_t* dest, size_t dest_cap) override;
+
+    /// 4.10 headers are layout-identical to current and no packet the device
+    /// actually sends grows in translation, so src == dest is fine.
+    [[nodiscard]] bool translatesInPlace() const override { return true; }
 
 private:
     /// Private constructor taking a DeviceSession

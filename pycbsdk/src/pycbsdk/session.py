@@ -187,6 +187,11 @@ def _check(result: int, msg: str = ""):
     if result != 0:
         _lib = _get_lib()
         err = ffi.string(_lib.cbsdk_get_error_message(result)).decode()
+        # The result code is only a category ("Internal error"); the detail says
+        # what actually failed. Append it when the SDK recorded one.
+        detail = ffi.string(_lib.cbsdk_get_last_error()).decode()
+        if detail and detail != err:
+            err = f"{err}: {detail}"
         raise RuntimeError(f"{msg}: {err}" if msg else err)
 
 
@@ -227,6 +232,16 @@ class Stats:
     shmem_errors: int = 0
     receive_errors: int = 0
     send_errors: int = 0
+    shmem_overruns: int = 0
+    """Ring reads that lost data (CLIENT sessions)."""
+    packets_produced: int = 0
+    """Packets the producer has written to the ring (live, not a counter).
+
+    ``packets_produced - packets_received`` sizes the loss an overrun cost this
+    client.  A Central ring counts every instrument's packets, so that
+    difference is exact only for a single-instrument ring, otherwise an upper
+    bound.
+    """
 
 
 class Session:
@@ -608,6 +623,8 @@ class Session:
             shmem_errors=c_stats.shmem_store_errors,
             receive_errors=c_stats.receive_errors,
             send_errors=c_stats.send_errors,
+            shmem_overruns=c_stats.shmem_overruns,
+            packets_produced=c_stats.packets_produced,
         )
 
     def reset_stats(self):

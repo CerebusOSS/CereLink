@@ -22,6 +22,36 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <string>
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Last-Error Detail
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// The C API collapses rich C++ error strings into a small result enum, which
+/// loses the only text that says *what* actually went wrong. Stash the full
+/// message here so callers can retrieve it via cbsdk_get_last_error().
+///
+/// Thread-local: each thread reads back the detail for the call it just made,
+/// with no locking and no cross-thread clobbering.
+static thread_local std::string g_last_error;
+
+/// Record `detail` as the last error and return `code` unchanged.
+static cbsdk_result_t fail_with(cbsdk_result_t code, const std::string& detail) {
+    g_last_error = detail;
+    return code;
+}
+
+/// Classify a C++ error string into a result code, preserving the full text.
+static cbsdk_result_t classify_error(const std::string& error) {
+    if (error.find("shared memory") != std::string::npos) {
+        return fail_with(CBSDK_RESULT_SHMEM_ERROR, error);
+    }
+    if (error.find("device") != std::string::npos) {
+        return fail_with(CBSDK_RESULT_DEVICE_ERROR, error);
+    }
+    return fail_with(CBSDK_RESULT_INTERNAL_ERROR, error);
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Session Tracking & Cleanup (forward declarations; bodies after cbsdk_session_impl)
@@ -213,6 +243,8 @@ static void to_c_stats(const cbsdk::SdkStats& cpp_stats, cbsdk_stats_t* c_stats)
     c_stats->shmem_store_errors = cpp_stats.shmem_store_errors;
     c_stats->receive_errors = cpp_stats.receive_errors;
     c_stats->send_errors = cpp_stats.send_errors;
+    c_stats->shmem_overruns = cpp_stats.shmem_overruns;
+    c_stats->packets_produced = cpp_stats.packets_produced;
 }
 
 /// Convert C chaninfo field enum to C++ ChanInfoField enum
@@ -275,6 +307,8 @@ cbsdk_result_t cbsdk_session_create(cbsdk_session_t* session, const cbsdk_config
         return CBSDK_RESULT_INVALID_PARAMETER;
     }
 
+    g_last_error.clear();
+
     try {
         // Create internal implementation
         auto impl = std::make_unique<cbsdk_session_impl>();
@@ -284,15 +318,7 @@ cbsdk_result_t cbsdk_session_create(cbsdk_session_t* session, const cbsdk_config
         auto result = cbsdk::SdkSession::create(cpp_config);
 
         if (result.isError()) {
-            // Classify error
-            const std::string& error = result.error();
-            if (error.find("shared memory") != std::string::npos) {
-                return CBSDK_RESULT_SHMEM_ERROR;
-            } else if (error.find("device") != std::string::npos) {
-                return CBSDK_RESULT_DEVICE_ERROR;
-            } else {
-                return CBSDK_RESULT_INTERNAL_ERROR;
-            }
+            return classify_error(result.error());
         }
 
         impl->cpp_session = std::make_unique<cbsdk::SdkSession>(std::move(result.value()));
@@ -301,8 +327,12 @@ cbsdk_result_t cbsdk_session_create(cbsdk_session_t* session, const cbsdk_config
         track_session(*session);
         return CBSDK_RESULT_SUCCESS;
 
+    } catch (const std::exception& e) {
+        return fail_with(CBSDK_RESULT_INTERNAL_ERROR,
+                         std::string("Exception during session create: ") + e.what());
     } catch (...) {
-        return CBSDK_RESULT_INTERNAL_ERROR;
+        return fail_with(CBSDK_RESULT_INTERNAL_ERROR,
+                         "Unknown exception during session create");
     }
 }
 
@@ -464,6 +494,10 @@ const char* cbsdk_get_error_message(cbsdk_result_t result) {
         default:
             return "Unknown error";
     }
+}
+
+const char* cbsdk_get_last_error(void) {
+    return g_last_error.c_str();
 }
 
 const char* cbsdk_get_version(void) {

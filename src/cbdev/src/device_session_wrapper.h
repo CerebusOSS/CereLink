@@ -7,9 +7,15 @@
 ///
 /// DeviceSessionWrapper provides a base class for protocol-specific wrappers that handles
 /// all delegation to the wrapped DeviceSession. Subclasses only need to override:
-///   - receivePackets() - for protocol → current translation
-///   - sendPacket() - for current → protocol translation
+///   - translateDatagram() - wire format → current format for one datagram
+///   - translatesInPlace() - if the wire format can be translated in the output buffer
 ///   - getProtocolVersion() - to return the protocol version
+///
+/// receivePackets() itself is final: the base owns the receive sequence
+/// (raw read → translateDatagram → config update → timestamp normalization),
+/// so the parts every protocol must run cannot be forgotten by a wrapper —
+/// omitting the timestamp conversion is how raw sample-count ticks once
+/// reached shared memory on the 4.0/4.1 paths.
 ///
 /// All other IDeviceSession methods are automatically delegated to the wrapped device.
 ///
@@ -29,6 +35,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -46,8 +53,48 @@ protected:
     DeviceSession m_device;
 
     /// Protected constructor - only subclasses can create
-    explicit DeviceSessionWrapper(DeviceSession&& device)
-        : m_device(std::move(device)) {}
+    /// @param device        Wrapped session performing the socket I/O
+    /// @param fixed_tick_hz For protocols that are non-Gemini by construction
+    ///                      (their devices always timestamp in sample counts at
+    ///                      a fixed clock, e.g. 3.11 at 30 kHz): seeds the
+    ///                      tick→ns conversion so it is effective from the very
+    ///                      first packet instead of waiting for PROCREP/SYSREP.
+    explicit DeviceSessionWrapper(DeviceSession&& device,
+                                  std::optional<uint32_t> fixed_tick_hz = std::nullopt)
+        : m_device(std::move(device)) {
+        if (fixed_tick_hz) {
+            m_device.presetTickTimestamps(*fixed_tick_hz);
+        }
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Protocol Translation Hooks
+    /// @{
+
+    /// Translate one received datagram from this protocol's wire format to the
+    /// current packet format.
+    ///
+    /// This is the ONLY protocol-specific part of the receive path.  Header
+    /// `time` fields must be carried through in the device's native unit
+    /// (widened, not converted) — the base funnel owns the tick→ns conversion
+    /// for every protocol, keyed on the device's Gemini identity and sysfreq.
+    ///
+    /// @param src       Received wire-format bytes (equals @p dest when
+    ///                  translatesInPlace() is true)
+    /// @param src_bytes Number of valid bytes at @p src
+    /// @param dest      Destination for current-format packets
+    /// @param dest_cap  Capacity of @p dest in bytes
+    /// @return Number of current-format bytes produced (complete packets
+    ///         only), or an error (e.g. destination too small)
+    virtual Result<size_t> translateDatagram(const uint8_t* src, size_t src_bytes,
+                                             uint8_t* dest, size_t dest_cap) = 0;
+
+    /// Whether translateDatagram() can work with src == dest (the wire format
+    /// never grows a packet).  When true the funnel receives directly into the
+    /// caller's buffer and skips the bounce through a scratch buffer.
+    [[nodiscard]] virtual bool translatesInPlace() const { return false; }
+
+    /// @}
 
 public:
     virtual ~DeviceSessionWrapper() {
@@ -62,12 +109,58 @@ public:
     DeviceSessionWrapper& operator=(DeviceSessionWrapper&&) noexcept = default;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    /// @name Methods That Must Be Overridden (Protocol-Specific)
+    /// @name Receive Funnel (Same for All Protocols)
     /// @{
 
-    /// Receive packets with protocol translation
-    /// Subclasses MUST override to translate from protocol format → current format
-    Result<int> receivePackets(void* buffer, size_t buffer_size) override = 0;
+    /// Receive packets with protocol translation.
+    ///
+    /// Final on purpose: the base owns the invariant sequence so a wrapper
+    /// cannot skip a step.  Subclasses supply only translateDatagram().
+    ///   1. raw socket read (into @p buffer directly when the protocol
+    ///      translates in place, otherwise into a scratch buffer)
+    ///   2. translateDatagram()  — wire format → current format
+    ///   3. updateConfigFromBuffer() — config tracking; establishes the
+    ///      timestamp conversion factors from PROCREP/SYSREP
+    ///   4. convertHeaderTimestampsToNs() — sample counts → nanoseconds for
+    ///      non-Gemini devices
+    Result<int> receivePackets(void* buffer, size_t buffer_size) final {
+        // Stack scratch keeps this reentrant, mirroring the receive thread's
+        // own stack buffer of the same size.
+        uint8_t scratch[cbCER_UDP_SIZE_MAX];
+        const bool in_place = translatesInPlace();
+        uint8_t* recv_buf = in_place ? static_cast<uint8_t*>(buffer) : scratch;
+        const size_t recv_cap = in_place ? buffer_size : sizeof(scratch);
+
+        auto raw_result = m_device.receivePacketsRaw(recv_buf, recv_cap);
+        if (raw_result.isError()) {
+            return raw_result;
+        }
+        const int bytes_received = raw_result.value();
+        if (bytes_received == 0) {
+            return Result<int>::ok(0);  // No data available
+        }
+
+        auto translated = translateDatagram(recv_buf, static_cast<size_t>(bytes_received),
+                                            static_cast<uint8_t*>(buffer), buffer_size);
+        if (translated.isError()) {
+            return Result<int>::error(translated.error());
+        }
+        const size_t bytes = translated.value();
+        if (bytes == 0) {
+            return Result<int>::ok(0);
+        }
+
+        m_device.updateConfigFromBuffer(buffer, bytes);
+        m_device.convertHeaderTimestampsToNs(buffer, bytes);
+
+        return Result<int>::ok(static_cast<int>(bytes));
+    }
+
+    /// @}
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    /// @name Methods That Must Be Overridden (Protocol-Specific)
+    /// @{
 
     /// Get protocol version
     /// Subclasses MUST override to return their specific protocol version

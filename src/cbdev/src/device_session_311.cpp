@@ -61,46 +61,35 @@ Result<DeviceSession_311> DeviceSession_311::create(const ConnectionParams& conf
 // IDeviceSession Implementation
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-Result<int> DeviceSession_311::receivePackets(void* buffer, const size_t buffer_size) {
-    // Temporary buffer for receiving 3.11 formatted packets
-    uint8_t src_buffer[cbCER_UDP_SIZE_MAX];
-
-    // Receive from underlying device (in 3.11 format)
-    auto result = m_device.receivePacketsRaw(src_buffer, sizeof(src_buffer));
-    if (result.isError()) {
-        return result;
-    }
-
-    const int bytes_received = result.value();
-    if (bytes_received == 0) {
-        return Result<int>::ok(0);  // No data available
-    }
-
-    // Translate 3.11 format to current format
-    auto* dest_buffer = static_cast<uint8_t*>(buffer);
+Result<size_t> DeviceSession_311::translateDatagram(const uint8_t* src, const size_t src_bytes,
+                                                    uint8_t* dest, const size_t dest_cap) {
+    // Translate 3.11 format to current format.  Headers grow 8 → 16 bytes, so
+    // the funnel hands us a separate scratch buffer as `src`.
     size_t dest_offset = 0;
     size_t src_offset = 0;
-    while (src_offset < static_cast<size_t>(bytes_received)) {
+    while (src_offset < src_bytes) {
         // -- Header --
         // Check if we have enough data for a 3.11 header
-        if (src_offset + HEADER_SIZE_311 > static_cast<size_t>(bytes_received)) {
+        if (src_offset + HEADER_SIZE_311 > src_bytes) {
             break;  // Incomplete packet
         }
         // And enough room for the reformatted header in the dest buffer
-        if ((dest_offset + cbPKT_HEADER_SIZE) > buffer_size) {
-            return Result<int>::error("Output buffer too small for packet header");
+        if ((dest_offset + cbPKT_HEADER_SIZE) > dest_cap) {
+            return Result<size_t>::error("Output buffer too small for packet header");
         }
         // Copy-convert the header data
-        const auto src_header = *reinterpret_cast<const cbPKT_HEADER_311*>(&src_buffer[src_offset]);
-        auto& dest_header = *reinterpret_cast<cbPKT_HEADER *>(&dest_buffer[dest_offset]);
-        // Read 3.11 header fields using byte offsets
-        dest_header.time = static_cast<PROCTIME>(src_header.time) * 1000000000/30000;
+        const auto src_header = *reinterpret_cast<const cbPKT_HEADER_311*>(&src[src_offset]);
+        auto& dest_header = *reinterpret_cast<cbPKT_HEADER *>(&dest[dest_offset]);
+        // Read 3.11 header fields using byte offsets.  The 32-bit time is a
+        // raw 30 kHz sample count — widen it unchanged; the receive funnel
+        // owns the tick→ns conversion (seeded via kTickHz at construction).
+        dest_header.time = static_cast<PROCTIME>(src_header.time);
         dest_header.chid = src_header.chid;
         dest_header.type = static_cast<uint16_t>(src_header.type);
         dest_header.dlen = static_cast<uint16_t>(src_header.dlen);
 
         // -- Payload --
-        if (src_offset + HEADER_SIZE_311 + src_header.dlen * 4 > static_cast<size_t>(bytes_received)) {
+        if (src_offset + HEADER_SIZE_311 + src_header.dlen * 4 > src_bytes) {
             break;  // Incomplete packet
         }
         // Verify destination buffer has space.
@@ -116,12 +105,12 @@ Result<int> DeviceSession_311::receivePackets(void* buffer, const size_t buffer_
             || (dest_header.type == cbPKTTYPE_CHANRESETREP)){
             pad_quads = 1;
         }
-        if ((dest_offset + cbPKT_HEADER_SIZE + (dest_header.dlen + pad_quads) * 4) > buffer_size) {
-            return Result<int>::error("Output buffer too small for translated packets");
+        if ((dest_offset + cbPKT_HEADER_SIZE + (dest_header.dlen + pad_quads) * 4) > dest_cap) {
+            return Result<size_t>::error("Output buffer too small for translated packets");
         }
         // Translate payload
         const size_t dest_dlen = PacketTranslator::translatePayload_311_to_current(
-            &src_buffer[src_offset], &dest_buffer[dest_offset]);
+            &src[src_offset], &dest[dest_offset]);
         dest_header.dlen = dest_dlen;  // This was likely modified in place, but just in case...
 
         // Advance offsets
@@ -129,12 +118,7 @@ Result<int> DeviceSession_311::receivePackets(void* buffer, const size_t buffer_
         dest_offset += cbPKT_HEADER_SIZE + dest_header.dlen * 4;
     }
 
-    // Update configuration from translated packets
-    if (dest_offset > 0) {
-        m_device.updateConfigFromBuffer(dest_buffer, dest_offset);
-    }
-
-    return Result<int>::ok(static_cast<int>(dest_offset));
+    return Result<size_t>::ok(dest_offset);
 }
 
 Result<void> DeviceSession_311::sendRaw(const void* buffer, const size_t size) {

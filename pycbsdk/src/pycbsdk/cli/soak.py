@@ -90,8 +90,32 @@ class Canary:
                 self.bad.append((kind, int(a), int(b)))
 
 
-def open_session(device: str) -> Session:
-    return Session(DeviceType[device])
+def open_session(device: str, attempts: int = 3, delay: float = 4.0) -> Session:
+    """Open a session, retrying transient creation failures.
+
+    Kept as insurance rather than as a workaround: the known cause of
+    intermittent creation failures on this hardware -- pre-7.5.1 firmware never
+    transmitting the SYSREP that terminates a REQCONFIGALL dump -- is handled in
+    SdkSession now. A bare failure here still aborts the whole run though, and
+    in the --_hold producer the parent only reports "producer failed to start",
+    which hides the reason, so a couple of retries are worth the seconds.
+    """
+    last_exc = None
+    for attempt in range(attempts):
+        if attempt:
+            time.sleep(delay)
+        try:
+            return Session(DeviceType[device])
+        except Exception as exc:  # noqa: BLE001 - diagnostic harness
+            last_exc = exc
+            print(
+                f"  session create attempt {attempt + 1}/{attempts} failed: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+    raise RuntimeError(
+        f"could not open {device} session after {attempts} attempts: {last_exc}"
+    )
 
 
 def wait_for_packets(session: Session, timeout: float = 10.0) -> int:
@@ -137,7 +161,10 @@ def phase_config(session: Session) -> None:
     manual.append(f"sysfreq = {sysfreq}")
 
     ok = True
-    for ch in (1, 2, 64, 128):
+    # Clamp the probes to what this device actually has, so a smaller channel
+    # count is not reported as a layout fault.
+    n_chans = session.max_chans()
+    for ch in [c for c in (1, 2, 64, 128) if c <= n_chans]:
         try:
             label = session.get_channel_label(ch)
         except Exception as exc:  # noqa: BLE001 - diagnostic harness
@@ -185,8 +212,24 @@ def phase_soak(session: Session, key: str, wraps: int) -> None:
             f"almost no traffic ({rate:.0f} B/s) -- is the device streaming?",
         )
         return
+    # Fail fast when the target is unreachable instead of soaking to the cap and
+    # then reporting a wrap shortfall. A device streaming only its idle trickle
+    # (no sample group enabled, or the front-end channels live on a different
+    # device) clears the "almost no traffic" guard above but would still need
+    # hours to fill the ring.
+    cap = 1800.0
     need = wraps * ring / rate
-    duration = max(60.0, min(need, 1800.0))
+    if need > cap:
+        record(
+            "soak/rate",
+            False,
+            f"{rate / 1e6:.2f} MB/s reaches only {cap * rate / ring:.1f} of "
+            f"{wraps} wraps within the {cap:.0f}s cap "
+            f"(would need {need / 60:.0f} min) -- is a sample group enabled "
+            "on this device's front-end channels?",
+        )
+        return
+    duration = max(60.0, need)
     print(
         f"  rate {rate / 1e6:.2f} MB/s -> soaking {duration:.0f}s "
         f"for ~{duration * rate / ring:.1f} wraps"
@@ -216,17 +259,26 @@ def phase_soak(session: Session, key: str, wraps: int) -> None:
         actual >= wraps,
         f"{actual:.1f} wraps ({mib:.0f} MiB through ring)",
     )
-    dropped = session.stats.packets_dropped
+    stats = session.stats
+    dropped = stats.packets_dropped
     if session.is_standalone:
         record("soak/drops", dropped == 0, f"packets_dropped={dropped}")
     else:
-        # Not a real check: SDK stats count device->shmem writes, which only a
-        # STANDALONE owner performs.  Overruns surface via on_error instead
-        # (exercised by phase_overrun_recovery).
+        # CLIENT sessions now count what they ingest from the ring, and record
+        # ring reads that lost data, so this is a real check rather than a
+        # deferral to phase_overrun_recovery.
         record(
             "soak/drops",
-            None,
-            "not tracked for CLIENT sessions; see overrun/detected instead",
+            stats.shmem_overruns == 0,
+            f"shmem_overruns={stats.shmem_overruns}, packets_dropped={dropped}",
+        )
+        # packets_produced is a live producer-side count. On a single-instrument
+        # ring the difference is the exact shortfall; on a Central ring it counts
+        # every instrument, so treat it as an upper bound and only report it.
+        behind = stats.packets_produced - stats.packets_received
+        manual.append(
+            f"ring: produced={stats.packets_produced:,} "
+            f"received={stats.packets_received:,} (behind by {behind:,})"
         )
     manual.append(f"soak: {canary.pkts:,} pkts, {mib:.0f} MiB, {actual:.1f} wraps")
 
@@ -907,13 +959,10 @@ def phase_misc(session: Session, key: str) -> None:
         record("misc/time-advances", session.time > t1, f"{t1} -> {session.time}")
         session.reset_stats()
         time.sleep(1.0)
+        # packets_received is incremented on the shmem read path too, so a
+        # CLIENT session must also show progress after a reset.
         received = session.stats.packets_received
-        record(
-            "misc/stats",
-            received > 0 if session.is_standalone else None,
-            f"received={received} after reset"
-            + ("" if session.is_standalone else " (not tracked for CLIENT sessions)"),
-        )
+        record("misc/stats", received > 0, f"received={received} after reset")
         session.sync(timeout=5.0)
         record("misc/sync", True, "completed")
     except Exception as exc:  # noqa: BLE001 - diagnostic harness
@@ -1035,7 +1084,15 @@ def main(argv: list[str] | None = None) -> int:
             text=True,
         )
         if (producer.stdout.readline() or "").strip() != "READY":
-            print("producer failed to start", file=sys.stderr)
+            try:
+                producer.wait(timeout=5.0)
+            except subprocess.TimeoutExpired:
+                producer.kill()
+            print(
+                f"producer failed to start (exit={producer.returncode}); "
+                "its error output is above",
+                file=sys.stderr,
+            )
             return 2
         time.sleep(2.0)  # let it populate shmem
 

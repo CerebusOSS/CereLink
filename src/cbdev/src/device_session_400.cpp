@@ -57,36 +57,23 @@ Result<DeviceSession_400> DeviceSession_400::create(const ConnectionParams& conf
 // IDeviceSession Implementation
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-Result<int> DeviceSession_400::receivePackets(void* buffer, const size_t buffer_size) {
+Result<size_t> DeviceSession_400::translateDatagram(const uint8_t* src, const size_t src_bytes,
+                                                    uint8_t* dest, const size_t dest_cap) {
     // Even though the header size is the same, protocol 4.0 had the old CHANINFO structure,
     // which was 3 bytes smaller than the new structure. Given that we typically receive many
-    // CHANINFO packets in a row, we cannot reasonably write into `buffer` then 'readjust' the
-    // buffer contents, as that would require a lot of moving memory around. Thus, we write into
-    // a temporary buffer and then translate into the hopefully-large-enough `buffer`.
-    uint8_t src_buffer[cbCER_UDP_SIZE_MAX];
-
-    auto result = m_device.receivePacketsRaw(src_buffer, sizeof(src_buffer));
-    if (result.isError()) {
-        return result;
-    }
-
-    const int bytes_received = result.value();
-    if (bytes_received == 0) {
-        return Result<int>::ok(0);  // No data available
-    }
-
-    // Translate 4.0 format to current format
-    auto* dest_buffer = static_cast<uint8_t*>(buffer);
+    // CHANINFO packets in a row, we cannot reasonably translate in place, as that would
+    // require a lot of moving memory around. The funnel therefore hands us a separate
+    // scratch buffer as `src`.
     size_t dest_offset = 0;
     size_t src_offset = 0;
-    while (src_offset < static_cast<size_t>(bytes_received)) {
-        if (src_offset + HEADER_SIZE_400 > static_cast<size_t>(bytes_received)) {
+    while (src_offset < src_bytes) {
+        if (src_offset + HEADER_SIZE_400 > src_bytes) {
             break;  // Incomplete packet
         }
 
         // -- Header --
-        auto src_header = *reinterpret_cast<const cbPKT_HEADER_400*>(&src_buffer[src_offset]);
-        auto& dest_header = *reinterpret_cast<cbPKT_HEADER*>(&dest_buffer[dest_offset]);
+        auto src_header = *reinterpret_cast<const cbPKT_HEADER_400*>(&src[src_offset]);
+        auto& dest_header = *reinterpret_cast<cbPKT_HEADER*>(&dest[dest_offset]);
         //   When going from 4.0 to current, we fix the header as follows:
         //   1. Read reserved from bytes 15-16, truncate to 8-bit, write to byte 16.
         //   2. Read instrument from byte 14, write to byte 15.
@@ -101,7 +88,7 @@ Result<int> DeviceSession_400::receivePackets(void* buffer, const size_t buffer_
         dest_header.time = src_header.time;
 
         // -- Payload --
-        if (src_offset + HEADER_SIZE_400 + src_header.dlen * 4 > static_cast<size_t>(bytes_received)) {
+        if (src_offset + HEADER_SIZE_400 + src_header.dlen * 4 > src_bytes) {
             break;  // Incomplete packet
         }
         // Verify destination buffer has space. Need enough extra room for max difference in payload size.
@@ -112,12 +99,12 @@ Result<int> DeviceSession_400::receivePackets(void* buffer, const size_t buffer_
             || (dest_header.type == cbPKTTYPE_CHANRESETREP)){
             pad_quads = 1;
         }
-        if ((dest_offset + cbPKT_HEADER_SIZE + (dest_header.dlen + pad_quads) * 4) > buffer_size) {
-            return Result<int>::error("Output buffer too small for translated packets");
+        if ((dest_offset + cbPKT_HEADER_SIZE + (dest_header.dlen + pad_quads) * 4) > dest_cap) {
+            return Result<size_t>::error("Output buffer too small for translated packets");
         }
         // Translate payload
         const size_t dest_dlen = PacketTranslator::translatePayload_400_to_current(
-            &src_buffer[src_offset], &dest_buffer[dest_offset]);
+            &src[src_offset], &dest[dest_offset]);
         dest_header.dlen = dest_dlen;  // This was likely modified in place, but just in case...
 
         // Advance offsets
@@ -125,17 +112,7 @@ Result<int> DeviceSession_400::receivePackets(void* buffer, const size_t buffer_
         dest_offset += cbPKT_HEADER_SIZE + dest_header.dlen * 4;
     }
 
-    // Update configuration from translated packets
-    if (dest_offset > 0) {
-        m_device.updateConfigFromBuffer(dest_buffer, dest_offset);
-        // Non-Gemini devices timestamp in sample counts.  We bypass
-        // DeviceSession::receivePackets above, so the conversion it normally
-        // applies has to be requested explicitly -- otherwise raw ticks reach
-        // shared memory, callbacks and clock sync.
-        m_device.convertHeaderTimestampsToNs(dest_buffer, dest_offset);
-    }
-
-    return Result<int>::ok(static_cast<int>(dest_offset));
+    return Result<size_t>::ok(dest_offset);
 }
 
 Result<void> DeviceSession_400::sendRaw(const void* buffer, const size_t size) {

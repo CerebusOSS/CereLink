@@ -561,9 +561,19 @@ Result<int> DeviceSession::receivePackets(void* buffer, const size_t buffer_size
     return result;
 }
 
+void DeviceSession::presetTickTimestamps(const uint32_t tick_hz) {
+    if (tick_hz == 0) {
+        return;
+    }
+    m_impl->timestamps_are_nanoseconds = false;
+    const uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(tick_hz));
+    m_impl->ts_convert_num = 1000000000 / g;
+    m_impl->ts_convert_den = tick_hz / g;
+}
+
 void DeviceSession::convertHeaderTimestampsToNs(void* buffer, const size_t bytes) {
-    // Gemini devices already report nanoseconds, and until PROCREP/SYSREP have
-    // established sysfreq there is no factor to apply.
+    // Gemini devices already report nanoseconds, and until PROCREP/SYSREP (or
+    // presetTickTimestamps) have established sysfreq there is no factor to apply.
     if (m_impl->timestamps_are_nanoseconds || m_impl->ts_convert_den <= 1) {
         return;
     }
