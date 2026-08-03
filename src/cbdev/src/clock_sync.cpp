@@ -10,9 +10,6 @@
 #include "cbdev/clock_sync.h"
 #include <algorithm>
 #include <cmath>
-#include <cstdio>    // TEMPORARY for #198 diagnostics
-#include <cstdlib>   // TEMPORARY for #198 diagnostics
-#include <string>    // TEMPORARY for #198 diagnostics
 #include <numeric>
 #include <vector>
 
@@ -67,17 +64,6 @@ void ClockSync::addProbeSample(time_point t1_local, uint64_t t3_device_ns, time_
     sample.offset_ns = offset_ns;
     sample.rtt_ns = rtt_ns;
     sample.when = t4_local;
-
-    // TEMPORARY diagnostic for #198 — set CERELINK_CLOCK_DEBUG=1 to enable.
-    if (const char* dbg = std::getenv("CERELINK_CLOCK_DEBUG")) {
-        if (*dbg == '1') {
-            std::fprintf(stderr,
-                         "[clk] probe rtt=%.3fms offset=%lld t3=%llu n=%zu\n",
-                         rtt_ns / 1e6, static_cast<long long>(offset_ns),
-                         static_cast<unsigned long long>(t3_device_ns),
-                         m_probe_samples.size() + 1);
-        }
-    }
 
     m_probe_samples.push_back(sample);
 
@@ -282,34 +268,8 @@ ClockSync::InternalEstimate ClockSync::computeInternalEstimate() const {
     //      CENTRAL CLIENT derives one across instruments instead.
     //   3. If neither is available, use probes anyway (unreliable but
     //      better than nothing).
-    // TEMPORARY diagnostic for #198 — set CERELINK_CLOCK_DEBUG=1 to enable.
-    const auto dbg = [this](const char* which, const InternalEstimate& e) {
-        const char* d = std::getenv("CERELINK_CLOCK_DEBUG");
-        if (!d || *d != '1') return;
-        int64_t lo = 0, hi = 0;
-        if (!m_probe_samples.empty()) {
-            lo = hi = m_probe_samples.front().offset_ns;
-            for (const auto& p : m_probe_samples) {
-                lo = std::min(lo, p.offset_ns);
-                hi = std::max(hi, p.offset_ns);
-            }
-        }
-        std::fprintf(stderr,
-                     "[clk] PICK=%s probes=%zu spread=%.3fms spreadOk=%d "
-                     "data=%zu floor=%s offset=%lld unc=%.3fms\n",
-                     which, m_probe_samples.size(), (hi - lo) / 1e6,
-                     m_probe_samples.empty() ? -1 : (int)probeSpreadOk(),
-                     m_data_samples.size(),
-                     m_data_floor_ns ? std::to_string(*m_data_floor_ns).c_str() : "none",
-                     e.offset_ns ? static_cast<long long>(*e.offset_ns) : 0LL,
-                     e.uncertainty_ns / 1e6);
-    };
-
-    if (!m_probe_samples.empty() && probeSpreadOk()) {
-        auto e = bestProbe();
-        dbg("probe-reliable", e);
-        return e;
-    }
+    if (!m_probe_samples.empty() && probeSpreadOk())
+        return bestProbe();
 
     if (m_data_floor_ns.has_value()) {
         InternalEstimate e;
@@ -326,15 +286,11 @@ ClockSync::InternalEstimate ClockSync::computeInternalEstimate() const {
         // otherwise, but a sample-count term would be better still.
         e.uncertainty_ns = std::max<int64_t>(700'000,  // ONE_WAY_DELAY_ESTIMATE_NS
                                              m_data_spread_ns.value_or(0) / 2);
-        dbg("data-floor", e);
         return e;
     }
 
-    if (!m_probe_samples.empty()) {
-        auto e = bestProbe();
-        dbg("probe-unreliable", e);
-        return e;
-    }
+    if (!m_probe_samples.empty())
+        return bestProbe();
 
     return InternalEstimate{};  // offset_ns == nullopt
 }
