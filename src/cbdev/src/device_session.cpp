@@ -745,45 +745,21 @@ Result<void> DeviceSession::sendPackets(const std::vector<cbPKT_GENERIC>& pkts) 
         return Result<void>::error("Device not connected");
     }
 
-    // Send each packet as its own datagram (no coalescing).  Two concerns:
+    // Send each packet as its own datagram (no coalescing).  The receiver's
+    // kernel UDP buffer can be as small as 8 KB (~8 CHANINFO packets), so we
+    // must not send faster than it can drain -- but the pacing lives in
+    // sendPacket(), which every packet below passes through.
     //
-    // 1. Pacing: the receiver's kernel UDP buffer can be as small as 8 KB
-    //    (~8 CHANINFO packets).  We must not send faster than the receiver
-    //    can drain.
-    //
-    // 2. CPU fairness: on shared VMs (CI runners), a pure busy-wait
-    //    between sends starves nPlayServer of CPU, preventing it from
-    //    draining its buffer even when packets arrive slowly.
-    //
-    // Strategy: send a small batch, then yield the CPU so the receiver
-    // process can run.  The batch size (8) matches the worst-case kernel
-    // buffer capacity, so even if the yield takes a while the buffer
-    // won't overflow from the preceding burst.
-    // On Windows, temporarily raise the timer resolution so Sleep(1)
-    // actually sleeps ~1 ms instead of ~15 ms.  The RAII guard restores
-    // the resolution when sendPackets returns.
-#ifdef _WIN32
-    timeBeginPeriod(1);
-    struct TimerGuard { ~TimerGuard() { timeEndPeriod(1); } } timerGuard;
-#endif
-
-    constexpr size_t BATCH = 8;
-    for (size_t i = 0; i < pkts.size(); ++i) {
-        if (auto result = sendPacket(pkts[i]); result.isError()) {
+    // This loop used to add its own throttle: 8 packets back to back, then
+    // Sleep(1), with the system timer resolution raised so that sleep landed
+    // at 1 ms rather than ~15 ms.  That is redundant now, and it was the
+    // coarser of the two -- it deliberately filled the receiver's buffer
+    // before pausing (125 us per packet averaged, in bursts of 8), where
+    // sendPacket() spaces every configuration packet by 200 us and never
+    // bursts.  Removing it leaves pacing strictly gentler on the receiver.
+    for (const auto& pkt : pkts) {
+        if (auto result = sendPacket(pkt); result.isError()) {
             return result;
-        }
-        if ((i % BATCH) == (BATCH - 1)) {
-            // Pace sends so the receiver can drain its kernel UDP buffer.
-            // Sleep(1) yields for one scheduler quantum (~1 ms with the
-            // timer resolution raised above).  On POSIX, sleep_for is
-            // accurate at sub-ms granularity -- note this does NOT hold for
-            // MinGW, where it returns immediately below ~1 ms, which is why
-            // sendPacket's finer per-config gap uses waitUntil() instead.
-#ifdef _WIN32
-            Sleep(1);
-#else
-            std::this_thread::sleep_for(std::chrono::microseconds(50));
-#endif
         }
     }
 
