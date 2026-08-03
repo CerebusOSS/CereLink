@@ -24,8 +24,6 @@
 #define CBSHM_NATIVE_TYPES_H
 
 #include <cbproto/cbproto.h>
-#include <cbproto/config.h>       // For cbMAXBANKS
-#include <cbshm/central_types.h>  // For CentralSpikeCache reuse
 #include <cstdint>
 
 #pragma pack(push, 1)
@@ -45,8 +43,7 @@ constexpr uint32_t NATIVE_MAXFILTS = 32;
 constexpr uint32_t NATIVE_MAXBANKS = cbMAXBANKS;
 
 /// Receive buffer length (same formula as cbproto, using 256 FE channels)
-/// This reuses cbRECBUFFLEN from receive_buffer.h
-constexpr uint32_t NATIVE_cbRECBUFFLEN = cbRECBUFFLEN;
+constexpr uint32_t NATIVE_cbRECBUFFLEN = cbNUM_FE_CHANS * 65536 * 4 - 1; 
 
 /// Transmit buffer sizes - slots sized for cbPKT_MAX_SIZE (1024 bytes = 256 uint32_t words)
 /// instead of Central's cbCER_UDP_SIZE_MAX (58080 bytes = 14520 uint32_t words)
@@ -55,7 +52,7 @@ constexpr uint32_t NATIVE_cbXMT_GLOBAL_BUFFLEN = (NATIVE_XMT_SLOT_WORDS * 5000 +
 constexpr uint32_t NATIVE_cbXMT_LOCAL_BUFFLEN = (NATIVE_XMT_SLOT_WORDS * 2000 + 2);
 
 /// Spike cache constants (one cache per native analog channel)
-constexpr uint32_t NATIVE_cbPKT_SPKCACHEPKTCNT = CENTRAL_cbPKT_SPKCACHEPKTCNT;  // 400
+constexpr uint32_t NATIVE_cbPKT_SPKCACHEPKTCNT = 400;
 constexpr uint32_t NATIVE_cbPKT_SPKCACHELINECNT = NATIVE_NUM_ANALOG_CHANS;      // 272
 
 /// @}
@@ -113,10 +110,6 @@ typedef struct {
 
     // File recording status
     cbPKT_FILECFG fileinfo;                                     ///< File recording configuration
-
-    // Application UI configuration
-    cbOPTIONTABLE optiontable;                                  ///< Option table
-    cbCOLORTABLE colortable;                                    ///< Color table
 
     // Clock synchronization (written by STANDALONE, read by CLIENT)
     int64_t clock_offset_ns;        ///< device_ns - steady_clock_ns; the usable (consensus) offset for CLIENT readers (0 if unknown)
@@ -179,6 +172,27 @@ struct NativeSpikeBuffer {
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief Instrument status flags (bit field)
+///
+/// Used to track which instruments are active in shared memory
+///
+enum class InstrumentStatus : uint32_t {
+    INACTIVE = 0x00000000,  ///< Instrument slot is not in use
+    ACTIVE   = 0x00000001,  ///< Instrument is active and has data
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @brief PC Status buffer (flattened from cbPcStatus class)
+///
+enum class NativeNSPStatus : uint32_t {
+    NSP_INIT = 0,
+    NSP_NOIPADDR = 1,
+    NSP_NOREPLY = 2,
+    NSP_FOUND = 3,
+    NSP_INVALID = 4
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Native-mode PC status (single instrument)
 ///
 struct NativePCStatus {
@@ -196,19 +210,27 @@ struct NativePCStatus {
     uint32_t m_nNumSerialChans;                             ///< Number of serial channels
     uint32_t m_nNumDigoutChans;                             ///< Number of digital output channels
     uint32_t m_nNumTotalChans;                              ///< Total channel count
-    NSPStatus m_nNspStatus;                                 ///< NSP status (single instrument)
+    NativeNSPStatus m_nNspStatus;                                 ///< NSP status (single instrument)
     uint32_t m_nNumNTrodesPerInstrument;                    ///< NTrode count (single instrument)
     uint32_t m_nGeminiSystem;                               ///< Gemini system flag
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// @brief Native-mode receive buffer (reuses cbReceiveBuffer from receive_buffer.h)
+/// @brief Receive buffer for incoming packets
 ///
-/// The cbReceiveBuffer struct defined in receive_buffer.h already uses cbNUM_FE_CHANS=256,
-/// so it's already native-sized. We use it directly for native mode.
+/// Ring buffer that stores raw packet data received from the device.
 ///
-/// For convenience, create a type alias:
-using NativeReceiveBuffer = cbReceiveBuffer;
+/// The buffer stores packets as uint32_t words, and the headindex tracks where
+/// new data should be written. Packets are modified in-place (instrument ID, proc, bank)
+/// before being stored.
+///
+struct NativeReceiveBuffer {
+    uint32_t received;                  ///< Number of packets received
+    PROCTIME lasttime;                  ///< Last timestamp seen
+    uint32_t headwrap;                  ///< Head wrap counter (for detecting buffer wraps)
+    uint32_t headindex;                 ///< Current head index (write position)
+    uint32_t buffer[NATIVE_cbRECBUFFLEN];      ///< Ring buffer for packet data
+};
 
 } // namespace cbshm
 

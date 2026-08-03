@@ -158,7 +158,9 @@ TEST_F(DeviceSessionTest, ConnectionParams_Predefined_NPlay) {
 
     EXPECT_EQ(config.type, DeviceType::NPLAY);
     EXPECT_EQ(config.device_address, "127.0.0.1");
-    EXPECT_EQ(config.client_address, "127.0.0.1");  // Loopback, not 0.0.0.0
+    // Empty means auto-detect; createDeviceSession() resolves it to loopback
+    // for NPLAY via detectClientAddress() before probing.
+    EXPECT_EQ(config.client_address, "");
     EXPECT_EQ(config.recv_port, 51002);  // LEGACY_NSP_RECV_PORT (bcast)
     EXPECT_EQ(config.send_port, 51001);  // LEGACY_NSP_SEND_PORT (cnt)
 }

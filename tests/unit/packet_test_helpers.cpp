@@ -132,7 +132,7 @@ std::vector<uint8_t> make_311_COMMENT(const uint8_t flags, const uint32_t data,
 }
 
 
-std::vector<uint8_t> make_311_CHANINFO(const uint32_t chan, const uint32_t monsource) {
+std::vector<uint8_t> make_311_CHANINFO(const uint32_t chan, const uint32_t monsource, const uint32_t doutopts) {
     // Create a 3.11 CHANINFO packet
     constexpr uint8_t dlen = cbPKTDLEN_CHANINFO - 1;
 
@@ -144,6 +144,10 @@ std::vector<uint8_t> make_311_CHANINFO(const uint32_t chan, const uint32_t monso
 
     // chan field (first field after header)
     *reinterpret_cast<uint32_t*>(&packet[offset]) = chan;
+
+    // Modify doutopts (selects the mode-dependent monsource interpretation)
+    constexpr size_t doutopts_offset = offsetof(cbPKT_CHANINFO, doutopts) - cbPKT_HEADER_SIZE;
+    *reinterpret_cast<uint32_t*>(&packet[offset + doutopts_offset]) = doutopts;
 
     // Modify monsource
     constexpr size_t monsource_offset = offsetof(cbPKT_CHANINFO, moninst) - cbPKT_HEADER_SIZE;
@@ -246,7 +250,7 @@ cbPKT_COMMENT make_current_COMMENT(const uint8_t charset, const PROCTIME timeSta
     return pkt;
 }
 
-cbPKT_CHANINFO make_current_CHANINFO(const uint32_t chan, const uint16_t moninst, const uint16_t monchan) {
+cbPKT_CHANINFO make_current_CHANINFO(const uint32_t chan, const uint16_t moninst, const uint16_t monchan, const uint32_t doutopts) {
     cbPKT_CHANINFO pkt = {};
     pkt.cbpkt_header = make_current_header(1000, cbPKTCHAN_CONFIGURATION,
                                            cbPKTTYPE_CHANREP,
@@ -254,6 +258,7 @@ cbPKT_CHANINFO make_current_CHANINFO(const uint32_t chan, const uint16_t moninst
     pkt.chan = chan;
     pkt.moninst = moninst;
     pkt.monchan = monchan;
+    pkt.doutopts = doutopts;
     // Fill other fields with defaults
     std::memset(pkt.label, 0, sizeof(pkt.label));
     return pkt;

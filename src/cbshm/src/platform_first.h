@@ -26,6 +26,8 @@
     #ifndef NOMINMAX
         #define NOMINMAX
     #endif
+    #undef UNICODE
+    #undef _UNICODE
     #include <windows.h>
 #endif
 

@@ -13,6 +13,9 @@
 
 // Platform headers MUST be included first (before cbproto)
 #include "platform_first.h"
+#ifdef _WIN32
+    #include <atomic>
+#endif
 
 #ifndef _WIN32
     #include <sys/mman.h>
@@ -26,10 +29,21 @@
 #endif
 
 #include <cbshm/shmem_session.h>
-#include <cbshm/central_types.h>
+#include <cbshm/central_adapters/base.h>
+#include <cbshm/central_adapters/v7_8.h>
+#include <cbshm/central_adapters/v7_7.h>
+#include <cbshm/central_adapters/v7_6.h>
+#include <cbshm/central_adapters/v7_5.h>
+#include <cbshm/central_adapters/v7_0.h>
+#include <cbshm/central_types/v7_8.h>
+#include <cbshm/central_types/v7_7.h>
+#include <cbshm/central_types/v7_6.h>
+#include <cbshm/central_types/v7_5.h>
+#include <cbshm/central_types/v7_0.h>
+#include <cbshm/central_version.h>
 #include <cbshm/native_types.h>
 #include <cbproto/packet_translator.h>
-#include <atomic>
+#include <memory>
 #include <cstring>
 #include <numeric>  // std::gcd
 
@@ -79,14 +93,59 @@ inline uint32_t shm_load_relaxed_u32(const uint32_t* p) {
 #endif
 }
 
+// The seven shared-memory segment names for a session.
+struct SegmentNames {
+    std::string cfg, rec, xmt, xmt_local, status, spk, signal;
+};
+
+// Synthesize segment names for the given layout. The meaning of name_qualifier
+// depends on the layout:
+//
+// CENTRAL uses Central's fixed, well-known names. name_qualifier is the Central
+// *instance* suffix appended to each base name ("" selects the primary instance
+// cbCFGbuffer; "1" selects cbCFGbuffer1, etc.). Instruments within an instance
+// are distinguished by index within the buffers, not by name.
+//
+// NATIVE uses per-device segment names of the form
+// "cbshm_<name_qualifier>_<segment>", where name_qualifier is the device token
+// (e.g. "hub1"), matching the names a CereLink STANDALONE publishes.
+inline SegmentNames makeSegmentNames(ShmemLayout layout, const std::string& name_qualifier) {
+    if (layout == ShmemLayout::NATIVE) {
+        const std::string& device = name_qualifier;
+        return SegmentNames{
+            "cbshm_" + device + "_config",
+            "cbshm_" + device + "_receive",
+            "cbshm_" + device + "_xmt_global",
+            "cbshm_" + device + "_xmt_local",
+            "cbshm_" + device + "_status",
+            "cbshm_" + device + "_spike",
+            "cbshm_" + device + "_signal"
+        };
+    } else {
+        const std::string& suffix = name_qualifier;
+        return SegmentNames{
+            "cbCFGbuffer" + suffix,
+            "cbRECbuffer" + suffix,
+            "XmtGlobal" + suffix,
+            "XmtLocal" + suffix,
+            "cbSTATUSbuffer" + suffix,
+            "cbSPKbuffer" + suffix,
+            "cbSIGNALevent" + suffix
+        };
+    }
+}
+
 } // namespace
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Platform-specific implementation details (Pimpl idiom)
 ///
 struct ShmemSession::Impl {
+    cbproto::InstrumentId inst;
     Mode mode;
     ShmemLayout layout;
+    std::unique_ptr<CentralBootstrapAdapterBase> bootstrap_adapter;
+    std::unique_ptr<CentralAdapterBase> adapter;
     std::string cfg_name;            // Config buffer name (e.g., "cbCFGbuffer")
     std::string rec_name;            // Receive buffer name (e.g., "cbRECbuffer")
     std::string xmt_name;            // Transmit buffer name (e.g., "XmtGlobal")
@@ -134,58 +193,27 @@ struct ShmemSession::Impl {
     // Runtime receive buffer length (replaces hardcoded CENTRAL_cbRECBUFFLEN)
     uint32_t rec_buffer_len;
 
+    // Reserved tail zone for the receive ring wrap.
+    uint32_t rec_reserve_len;
+
     // Receive buffer read tracking (for CLIENT mode reading)
     uint32_t rec_tailindex;      // Our read position in receive buffer
     uint32_t rec_tailwrap;       // Our wrap counter
 
-    // Instrument filter for CENTRAL_COMPAT mode (-1 = no filter)
-    int32_t instrument_filter;
-
-    // Detected protocol version for CENTRAL_COMPAT mode
+    // Detected versions for CENTRAL mode
+    CentralVersion central_version;
     cbproto_protocol_version_t compat_protocol;
 
-    // Typed accessors for config buffer
-    CentralConfigBuffer* centralCfg() { return static_cast<CentralConfigBuffer*>(cfg_buffer_raw); }
-    const CentralConfigBuffer* centralCfg() const { return static_cast<const CentralConfigBuffer*>(cfg_buffer_raw); }
-    NativeConfigBuffer* nativeCfg() { return static_cast<NativeConfigBuffer*>(cfg_buffer_raw); }
-    const NativeConfigBuffer* nativeCfg() const { return static_cast<const NativeConfigBuffer*>(cfg_buffer_raw); }
-    CentralLegacyCFGBUFF* legacyCfg() { return static_cast<CentralLegacyCFGBUFF*>(cfg_buffer_raw); }
-    const CentralLegacyCFGBUFF* legacyCfg() const { return static_cast<const CentralLegacyCFGBUFF*>(cfg_buffer_raw); }
-
-    // Generic receive buffer header access (header fields are at identical offsets in both layouts)
-    uint32_t& recReceived() {
-        return *static_cast<uint32_t*>(rec_buffer_raw);
+    // Typed accessor for config buffer
+    NativeConfigBuffer* nativeCfg() {
+        return static_cast<NativeConfigBuffer*>(cfg_buffer_raw);
     }
-    PROCTIME& recLasttime() {
-        // lasttime is at offset sizeof(uint32_t) in both CentralReceiveBuffer and NativeReceiveBuffer
-        return *reinterpret_cast<PROCTIME*>(static_cast<char*>(rec_buffer_raw) + sizeof(uint32_t));
-    }
-    uint32_t& recHeadwrap() {
-        return *reinterpret_cast<uint32_t*>(static_cast<char*>(rec_buffer_raw) + sizeof(uint32_t) + sizeof(PROCTIME));
-    }
-    uint32_t& recHeadindex() {
-        return *reinterpret_cast<uint32_t*>(static_cast<char*>(rec_buffer_raw) + sizeof(uint32_t) + sizeof(PROCTIME) + sizeof(uint32_t));
-    }
-    uint32_t* recBuffer() {
-        return reinterpret_cast<uint32_t*>(static_cast<char*>(rec_buffer_raw) + sizeof(uint32_t) + sizeof(PROCTIME) + sizeof(uint32_t) + sizeof(uint32_t));
-    }
-
-    // Transmit buffer accessors (header fields are identical between Central and Native)
-    struct XmtHeader {
-        uint32_t transmitted;
-        uint32_t headindex;
-        uint32_t tailindex;
-        uint32_t last_valid_index;
-        uint32_t bufferlen;
-    };
-    XmtHeader* xmtGlobal() { return static_cast<XmtHeader*>(xmt_buffer_raw); }
-    uint32_t* xmtGlobalBuffer() { return reinterpret_cast<uint32_t*>(static_cast<char*>(xmt_buffer_raw) + sizeof(XmtHeader)); }
-    XmtHeader* xmtLocal() { return static_cast<XmtHeader*>(xmt_local_buffer_raw); }
-    uint32_t* xmtLocalBuffer() { return reinterpret_cast<uint32_t*>(static_cast<char*>(xmt_local_buffer_raw) + sizeof(XmtHeader)); }
 
     Impl()
-        : mode(Mode::STANDALONE)
-        , layout(ShmemLayout::CENTRAL)
+        : inst(cbproto::InstrumentId::fromIndex(0))
+        , mode(Mode::STANDALONE)
+        , layout(ShmemLayout::NATIVE)
+        , adapter(nullptr)
         , is_open(false)
 #ifdef _WIN32
         , cfg_file_mapping(nullptr)
@@ -217,9 +245,10 @@ struct ShmemSession::Impl {
         , status_buffer_size(0)
         , spike_buffer_size(0)
         , rec_buffer_len(0)
+        , rec_reserve_len(0)
         , rec_tailindex(0)
         , rec_tailwrap(0)
-        , instrument_filter(-1)
+        , central_version(CentralVersion::CURRENT)
         , compat_protocol(CBPROTO_PROTOCOL_CURRENT)
     {}
 
@@ -227,38 +256,9 @@ struct ShmemSession::Impl {
         close();
     }
 
-    /// @brief Compute buffer sizes based on layout
-    void computeBufferSizes() {
-        if (layout == ShmemLayout::NATIVE) {
-            cfg_buffer_size = sizeof(NativeConfigBuffer);
-            rec_buffer_size = sizeof(NativeReceiveBuffer);
-            xmt_buffer_size = sizeof(NativeTransmitBuffer);
-            xmt_local_buffer_size = sizeof(NativeTransmitBufferLocal);
-            status_buffer_size = sizeof(NativePCStatus);
-            spike_buffer_size = sizeof(NativeSpikeBuffer);
-            rec_buffer_len = NATIVE_cbRECBUFFLEN;
-        } else if (layout == ShmemLayout::CENTRAL_COMPAT) {
-            cfg_buffer_size = sizeof(CentralLegacyCFGBUFF);
-            // All other buffers use Central sizes (receive, xmt, spike, status are compatible)
-            rec_buffer_size = sizeof(CentralReceiveBuffer);
-            xmt_buffer_size = sizeof(CentralTransmitBuffer);
-            xmt_local_buffer_size = sizeof(CentralTransmitBufferLocal);
-            status_buffer_size = sizeof(CentralPCStatus);
-            spike_buffer_size = sizeof(CentralSpikeBuffer);
-            rec_buffer_len = CENTRAL_cbRECBUFFLEN;
-        } else {
-            cfg_buffer_size = sizeof(CentralConfigBuffer);
-            rec_buffer_size = sizeof(CentralReceiveBuffer);
-            xmt_buffer_size = sizeof(CentralTransmitBuffer);
-            xmt_local_buffer_size = sizeof(CentralTransmitBufferLocal);
-            status_buffer_size = sizeof(CentralPCStatus);
-            spike_buffer_size = sizeof(CentralSpikeBuffer);
-            rec_buffer_len = CENTRAL_cbRECBUFFLEN;
-        }
-    }
-
     void close() {
-        if (!is_open) return;
+        // Close regardless of the is_open state to allow for cleanup if
+        // open() fails while is_open is false.
 
         // Unmap shared memory
 #ifdef _WIN32
@@ -346,82 +346,6 @@ struct ShmemSession::Impl {
         is_open = false;
     }
 
-    /// @brief Write a packet to the receive buffer ring.
-    ///
-    /// Cross-process publication: the consumer (CLIENT) reads head_index and
-    /// then reads packet bytes up to that index.  On weak memory ordering
-    /// architectures (e.g. ARM/Apple Silicon) the head_index update must be
-    /// release-ordered with respect to the preceding memcpy and wrap update,
-    /// otherwise the consumer can observe an advanced head_index but stale
-    /// or partial bytes — which manifests as misaligned packets.
-    ///
-    /// Wrap padding: when a packet would not fit at @c head, the writer wraps
-    /// to offset 0.  The skipped bytes between the previous packet and
-    /// @c buflen would otherwise leave the consumer's tail stranded inside
-    /// random gap data after the wrap.  We pad the gap with a synthetic "wrap
-    /// marker" packet (chid=0, type=0, non-zero dlen) so the consumer can
-    /// advance tail through it cleanly and drop into the wrap.  Wrap policy
-    /// also ensures the gap left after each write is either 0 or large
-    /// enough (>= cbPKT_HEADER_32SIZE) to fit a marker.
-    Result<void> writeToReceiveBuffer(const cbPKT_GENERIC& pkt) {
-        if (!rec_buffer_raw) {
-            return Result<void>::error("Receive buffer not initialized");
-        }
-
-        uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
-
-        if (pkt_size_words > rec_buffer_len) {
-            return Result<void>::error("Packet too large for receive buffer");
-        }
-
-        uint32_t head = recHeadindex();
-        uint32_t* buf = recBuffer();
-
-        // Decide whether to wrap.  Wrap if either (a) the packet would not
-        // fit, or (b) writing it would leave a 1..3 dword tail gap that we
-        // cannot mark with a wrap-marker header on the next wrap.
-        const uint32_t end_after = head + pkt_size_words;
-        bool need_wrap = false;
-        if (end_after > rec_buffer_len) {
-            need_wrap = true;
-        } else if (end_after < rec_buffer_len &&
-                   (rec_buffer_len - end_after) < cbPKT_HEADER_32SIZE) {
-            need_wrap = true;
-        }
-
-        if (need_wrap) {
-            // Pad the gap [head, buflen) with a wrap marker so the consumer
-            // can step over it.  By the wrap-policy invariant above, gap is
-            // either 0 or >= cbPKT_HEADER_32SIZE.
-            uint32_t gap_dwords = rec_buffer_len - head;
-            if (gap_dwords >= cbPKT_HEADER_32SIZE) {
-                cbPKT_HEADER marker{};
-                marker.time = 0;
-                marker.chid = 0;
-                marker.type = 0;
-                marker.dlen = static_cast<uint16_t>(gap_dwords - cbPKT_HEADER_32SIZE);
-                marker.instrument = 0;
-                marker.reserved = 0;
-                std::memcpy(&buf[head], &marker, sizeof(cbPKT_HEADER));
-            }
-            head = 0;
-            shm_store_relaxed_u32(&recHeadwrap(), recHeadwrap() + 1);
-        }
-
-        const uint32_t* pkt_data = reinterpret_cast<const uint32_t*>(&pkt);
-        std::memcpy(&buf[head], pkt_data, pkt_size_words * sizeof(uint32_t));
-
-        recReceived()++;
-        recLasttime() = pkt.cbpkt_header.time;
-
-        // Release fence: head_index store synchronizes-with the consumer's
-        // acquire load, ensuring all prior writes (marker, memcpy, wrap,
-        // lasttime) are visible before the consumer sees the new head_index.
-        shm_store_release_u32(&recHeadindex(), head + pkt_size_words);
-
-        return Result<void>::ok();
-    }
-
 #ifndef _WIN32
     /// @brief POSIX helper: open/create one shared memory segment and mmap it
     /// @return Result<void*> with mapped pointer on success
@@ -463,8 +387,87 @@ struct ShmemSession::Impl {
             return Result<void>::error("Session already open");
         }
 
-        // Compute buffer sizes based on layout
-        computeBufferSizes();
+        if (!inst.isValid()) {
+            return Result<void>::error("Invalid instrument ID");
+        }
+
+        // NATIVE segments are per-device (single instrument), so a session on
+        // this layout is always bound to index 0 regardless of the (valid) id
+        // supplied by the caller.
+        if (layout == ShmemLayout::NATIVE) {
+            inst = cbproto::InstrumentId::fromIndex(0);
+        }
+
+        if (mode == Mode::CLIENT && layout == ShmemLayout::CENTRAL) {
+            // Detect protocol version for CLIENT + CENTRAL mode
+            auto central_result = detectCentralVersion();
+            if (central_result.isError()) {
+                return Result<void>::error("Failed to get Central's version: " + central_result.error());
+            }
+            central_version = central_result.value();
+            compat_protocol = getProtocolVersion(central_version);
+
+            // Select the bootstrap adapter for fetching pointers to Central's shared memory.
+            switch (central_version) {
+                case CentralVersion::V7_0:
+                    bootstrap_adapter = std::make_unique<central_v7_0::BootstrapAdapter>();
+                    break;
+                case CentralVersion::V7_5:
+                    bootstrap_adapter = std::make_unique<central_v7_5::BootstrapAdapter>();
+                    break;
+                case CentralVersion::V7_6:
+                    bootstrap_adapter = std::make_unique<central_v7_6::BootstrapAdapter>();
+                    break;
+                case CentralVersion::V7_7:
+                    bootstrap_adapter = std::make_unique<central_v7_7::BootstrapAdapter>();
+                    break;
+                case CentralVersion::CURRENT:
+                    /* fallthrough */
+                default:
+                    bootstrap_adapter = std::make_unique<central::BootstrapAdapter>();
+                    break;
+            }
+
+            // Validate the instrument number against the detected version's instrument count.
+            if (inst.toOneBased() > bootstrap_adapter->getMaxProcs()) {
+                return Result<void>::error("Instrument ID exceeds the maximum instrument count");
+            }
+        } else {
+            // The compatibility protocol is ignored for NATIVE or CENTRAL
+            // layouts and is always current for STANDALONE mode.
+            central_version = CentralVersion::CURRENT;
+            compat_protocol = CBPROTO_PROTOCOL_CURRENT;
+            bootstrap_adapter = std::make_unique<central::BootstrapAdapter>();
+        }
+
+        // Compute buffer sizes based on layout and protocol version
+        if (layout == ShmemLayout::NATIVE) {
+            cfg_buffer_size = sizeof(NativeConfigBuffer);
+            rec_buffer_size = sizeof(NativeReceiveBuffer);
+            xmt_buffer_size = sizeof(NativeTransmitBuffer);
+            xmt_local_buffer_size = sizeof(NativeTransmitBufferLocal);
+            status_buffer_size = sizeof(NativePCStatus);
+            spike_buffer_size = sizeof(NativeSpikeBuffer);
+            rec_buffer_len = NATIVE_cbRECBUFFLEN;
+            rec_reserve_len = cbCER_UDP_SIZE_MAX / sizeof(NativeReceiveBuffer::buffer[0]);
+        } else {
+            cfg_buffer_size = bootstrap_adapter->getConfigBufferSize();
+            rec_buffer_size = bootstrap_adapter->getReceiveBufferSize();
+            xmt_buffer_size = bootstrap_adapter->getTransmitBufferSize();
+            xmt_local_buffer_size = bootstrap_adapter->getTransmitBufferLocalSize();
+            status_buffer_size = bootstrap_adapter->getStatusBufferSize();
+            spike_buffer_size = bootstrap_adapter->getSpikeBufferSize();
+            rec_buffer_len = bootstrap_adapter->getReceiveBufferLen();
+            rec_reserve_len = bootstrap_adapter->getReceiveReserveLen();
+        }
+        // The reserve-zone wrap invariants (see writeToReceiveBuffer) need the
+        // reserve to hold at least one max-size packet and to leave a non-empty
+        // writable region.  Both operands are compile-time constants today;
+        // this guards against a future version header breaking the invariant.
+        if (rec_reserve_len < (cbPKT_MAX_SIZE / sizeof(uint32_t)) ||
+            rec_reserve_len >= rec_buffer_len) {
+            return Result<void>::error("Invalid receive-ring reserve length for this layout/version");
+        }
 
 #ifdef _WIN32
         // Windows implementation
@@ -589,224 +592,215 @@ struct ShmemSession::Impl {
         }
 #endif
 
+        // In NATIVE mode, the adapter is only used to fetch the byte offsets of fields in the transmit/receive buffers.
+        // TODO: Add helper methods in Impl for fetching byte offsets of transmit/receive buffer fields without relying on the Central adapter.
+        adapter = bootstrap_adapter->makeAdapter({
+            inst.toIndex(),
+            cfg_buffer_raw,
+            rec_buffer_raw,
+            xmt_buffer_raw,
+            xmt_local_buffer_raw,
+            status_buffer_raw,
+            spike_buffer_raw
+        });
+
         // Initialize buffers in standalone mode
-        if (mode == Mode::STANDALONE) {
-            initBuffers();
+        if (mode == Mode::STANDALONE && layout == ShmemLayout::NATIVE) {
+            auto* cfg = nativeCfg();
+            std::memset(cfg, 0, cfg_buffer_size);
+            cfg->version = cbVERSION_MAJOR * 100 + cbVERSION_MINOR;
+            cfg->instrument_status = static_cast<uint32_t>(InstrumentStatus::INACTIVE);
+#ifdef _WIN32
+            cfg->owner_pid = GetCurrentProcessId();
+#else
+            cfg->owner_pid = static_cast<uint32_t>(getpid());
+#endif
+
+            // Initialize receive buffer
+            std::memset(rec_buffer_raw, 0, rec_buffer_size);
+
+            // Initialize transmit buffers
+            auto* xmt = static_cast<NativeTransmitBuffer*>(xmt_buffer_raw);
+            std::memset(xmt, 0, xmt_buffer_size);
+            xmt->last_valid_index = NATIVE_cbXMT_GLOBAL_BUFFLEN - 1;
+            xmt->bufferlen = NATIVE_cbXMT_GLOBAL_BUFFLEN;
+
+            auto* xmt_local = static_cast<NativeTransmitBufferLocal*>(xmt_local_buffer_raw);
+            std::memset(xmt_local, 0, xmt_local_buffer_size);
+            xmt_local->last_valid_index = NATIVE_cbXMT_LOCAL_BUFFLEN - 1;
+            xmt_local->bufferlen = NATIVE_cbXMT_LOCAL_BUFFLEN;
+
+            // Initialize status buffer
+            auto* status = static_cast<NativePCStatus*>(status_buffer_raw);
+            std::memset(status, 0, status_buffer_size);
+            status->m_nNumFEChans = NATIVE_NUM_FE_CHANS;
+            status->m_nNumAnainChans = cbNUM_ANAIN_CHANS;
+            status->m_nNumAnalogChans = NATIVE_NUM_ANALOG_CHANS;
+            status->m_nNumAoutChans = cbNUM_ANAOUT_CHANS;
+            status->m_nNumAudioChans = cbNUM_AUDOUT_CHANS;
+            status->m_nNumAnalogoutChans = cbNUM_ANALOGOUT_CHANS;
+            status->m_nNumDiginChans = cbNUM_DIGIN_CHANS;
+            status->m_nNumSerialChans = cbNUM_SERIAL_CHANS;
+            status->m_nNumDigoutChans = cbNUM_DIGOUT_CHANS;
+            status->m_nNumTotalChans = NATIVE_MAXCHANS;
+            status->m_nNspStatus = NativeNSPStatus::NSP_INIT;
+
+            // Initialize spike cache buffer
+            auto* spike = static_cast<NativeSpikeBuffer*>(spike_buffer_raw);
+            std::memset(spike, 0, spike_buffer_size);
+            spike->chidmax = NATIVE_NUM_ANALOG_CHANS;
+            spike->linesize = sizeof(NativeSpikeCache);
+            for (uint32_t ch = 0; ch < NATIVE_cbPKT_SPKCACHELINECNT; ++ch) {
+                spike->cache[ch].chid = ch;
+                spike->cache[ch].pktcnt = NATIVE_cbPKT_SPKCACHEPKTCNT;
+                spike->cache[ch].pktsize = sizeof(cbPKT_SPK);
+            }
+        }
+
+        // Initialize transmit buffers in STANDALONE + CENTRAL mode.  When Central
+        // owns the shared memory it populates last_valid_index/bufferlen itself,
+        // but in STANDALONE we create the segments, so we must set them or
+        // enqueuePacket's wrap check sees a zero-length ring and always reports
+        // "Transmit buffer full".  (The receive/config/status/spike segments are
+        // fresh-mapped zero, which is a valid empty ring.)
+        if (mode == Mode::STANDALONE && layout == ShmemLayout::CENTRAL) {
+            std::memset(xmt_buffer_raw, 0, xmt_buffer_size);
+            std::memset(xmt_local_buffer_raw, 0, xmt_local_buffer_size);
+
+            uint32_t xmt_len = static_cast<uint32_t>(bootstrap_adapter->getTransmitBufferLen());
+            adapter->getXmtLastValidIndexPtr() = xmt_len - 1;
+            adapter->getXmtBufferlenPtr() = xmt_len;
+
+            uint32_t xmt_local_len = static_cast<uint32_t>(bootstrap_adapter->getTransmitBufferLocalLen());
+            adapter->getLocalXmtLastValidIndexPtr() = xmt_local_len - 1;
+            adapter->getLocalXmtBufferlenPtr() = xmt_local_len;
         }
 
         is_open = true;
 
         // In CLIENT mode, sync our read position to the current head so we only
         // read NEW packets, not stale data that was already in the ring buffer.
-        // Use acquire load on head_index to pair with the producer's release
-        // store (see writeToReceiveBuffer).
         if (mode == Mode::CLIENT) {
-            rec_tailindex = shm_load_acquire_u32(&recHeadindex());
-            rec_tailwrap = shm_load_relaxed_u32(&recHeadwrap());
+            // Use the stable-snapshot read: two plain loads could adopt a torn
+            // (old index, new wrap) pair if the producer wraps between them,
+            // parking our tail in stale bytes ahead of the producer's head.
+            loadRecHeadSnapshot(rec_tailindex, rec_tailwrap);
         }
-
-        // Detect protocol version for CENTRAL_COMPAT mode
-        detectCompatProtocol();
 
         return Result<void>::ok();
     }
 
-    /// @brief Initialize buffers for STANDALONE mode
-    void initBuffers() {
-        if (layout == ShmemLayout::NATIVE) {
-            initNativeBuffers();
-        } else if (layout == ShmemLayout::CENTRAL_COMPAT) {
-            initLegacyBuffers();
-        } else {
-            initCentralBuffers();
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    // Packet Routing
+
+    /// @brief Read a stable (head_index, head_wrap) snapshot of the receive ring.
+    ///
+    /// The producer publishes these as two separate words and, on a wrap, bumps
+    /// head_wrap *before* republishing head_index (see writeToReceiveBuffer).
+    /// There is no ordering of two independent stores that keeps the combined
+    /// position (head_wrap * buflen + head_index) monotonic across a wrap, so a
+    /// naive read can observe a torn pair (e.g. the old index with the new wrap),
+    /// which corrupts the overrun math and drops tail off a packet boundary.
+    ///
+    /// The acquire-load on head_index also pairs with the producer's
+    /// release-store, so on weak memory architectures (ARM/Apple Silicon) we
+    /// don't observe an advanced index with stale packet bytes.  The seqlock-
+    /// style retry shrinks the torn-pair window; because it cannot close it
+    /// entirely, readReceiveBuffer additionally validates every packet and
+    /// resyncs to head on any anomaly instead of trusting the pair.
+    void loadRecHeadSnapshot(uint32_t& idx_out, uint32_t& wrap_out) {
+        for (;;) {
+            uint32_t i1 = shm_load_acquire_u32(&adapter->getRecHeadindexPtr());
+            uint32_t w = shm_load_acquire_u32(&adapter->getRecHeadwrapPtr());
+            uint32_t i2 = shm_load_acquire_u32(&adapter->getRecHeadindexPtr());
+            if (i1 == i2) { idx_out = i1; wrap_out = w; return; }
         }
     }
 
-    void initCentralBuffers() {
-        auto* cfg = centralCfg();
-        std::memset(cfg, 0, cfg_buffer_size);
-        cfg->version = cbVERSION_MAJOR * 100 + cbVERSION_MINOR;
-        for (int i = 0; i < CENTRAL_cbMAXPROCS; ++i) {
-            cfg->instrument_status[i] = static_cast<uint32_t>(InstrumentStatus::INACTIVE);
+    /// @brief Write a packet to the receive buffer ring.
+    ///
+    /// Wrap convention (matches Central's InstNetwork.cpp receive path): the
+    /// packet is written at @c head, then @c head is advanced past it, then —
+    /// once @c head passes @c rec_buffer_len minus @c rec_reserve_words (a
+    /// reserved tail zone one max UDP datagram wide) — @c head is reset to 0
+    /// and the wrap counter is bumped.  The consumer applies the IDENTICAL rule
+    /// to its own tail (see readReceiveBuffer), so producer and consumer wrap
+    /// in lockstep with no in-band marker and without ever reading the stale
+    /// bytes left between the last packet and @c rec_buffer_len.  Because the
+    /// reserve is far larger than any single packet, the packet written at
+    /// @c head never extends past @c rec_buffer_len.
+    ///
+    /// Cross-process publication (paired with the consumer's seqlock snapshot
+    /// in readReceiveBuffer): the packet memcpy happens-before the release
+    /// stores below.  On a wrap the wrap counter is published FIRST and
+    /// head_index LAST, so a consumer that reads a stable head_index is
+    /// guaranteed a settled wrap counter; the release/acquire pairing also
+    /// keeps the packet bytes visible before the advance on weak memory
+    /// architectures (ARM/Apple Silicon).
+    Result<void> writeToReceiveBuffer(const cbPKT_GENERIC& pkt) {
+        if (!rec_buffer_raw) {
+            return Result<void>::error("Receive buffer not initialized");
         }
 
-        // Initialize receive buffer
-        std::memset(rec_buffer_raw, 0, rec_buffer_size);
+        uint32_t pkt_len = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
 
-        // Initialize transmit buffers
-        auto* xmt = static_cast<CentralTransmitBuffer*>(xmt_buffer_raw);
-        std::memset(xmt, 0, xmt_buffer_size);
-        xmt->last_valid_index = CENTRAL_cbXMT_GLOBAL_BUFFLEN - 1;
-        xmt->bufferlen = CENTRAL_cbXMT_GLOBAL_BUFFLEN;
-
-        auto* xmt_local = static_cast<CentralTransmitBufferLocal*>(xmt_local_buffer_raw);
-        std::memset(xmt_local, 0, xmt_local_buffer_size);
-        xmt_local->last_valid_index = CENTRAL_cbXMT_LOCAL_BUFFLEN - 1;
-        xmt_local->bufferlen = CENTRAL_cbXMT_LOCAL_BUFFLEN;
-
-        // Initialize status buffer
-        auto* status = static_cast<CentralPCStatus*>(status_buffer_raw);
-        std::memset(status, 0, status_buffer_size);
-        status->m_nNumFEChans = CENTRAL_cbNUM_FE_CHANS;
-        status->m_nNumAnainChans = CENTRAL_cbNUM_ANAIN_CHANS;
-        status->m_nNumAnalogChans = CENTRAL_cbNUM_ANALOG_CHANS;
-        status->m_nNumAoutChans = CENTRAL_cbNUM_ANAOUT_CHANS;
-        status->m_nNumAudioChans = CENTRAL_cbNUM_AUDOUT_CHANS;
-        status->m_nNumAnalogoutChans = CENTRAL_cbNUM_ANALOGOUT_CHANS;
-        status->m_nNumDiginChans = CENTRAL_cbNUM_DIGIN_CHANS;
-        status->m_nNumSerialChans = CENTRAL_cbNUM_SERIAL_CHANS;
-        status->m_nNumDigoutChans = CENTRAL_cbNUM_DIGOUT_CHANS;
-        status->m_nNumTotalChans = CENTRAL_cbMAXCHANS;
-        for (int i = 0; i < CENTRAL_cbMAXPROCS; ++i) {
-            status->m_nNspStatus[i] = NSPStatus::NSP_INIT;
+        // The length of the reserve length matches the maximum UDP packet
+        // length, which is dependent on the connection mode (NATIVE vs.
+        // CENTRAL) and the version of Central if mode is CENTRAL.
+        // All packets must fit within the reserve zone.  This ensures that
+        // the last packet is adjacent to or intersects with the reserve zone.
+        // Currently subsumed by the cbPKT_GENERIC size check, but guards the
+        // reserve-zone invariant if the reserve ever shrinks below it.
+        if (pkt_len > rec_reserve_len) {
+            return Result<void>::error("Packet exceeds the length of the reserve zone at the end of the receive buffer");
         }
 
-        // Initialize spike cache buffer
-        auto* spike = static_cast<CentralSpikeBuffer*>(spike_buffer_raw);
-        std::memset(spike, 0, spike_buffer_size);
-        spike->chidmax = CENTRAL_cbNUM_ANALOG_CHANS;
-        spike->linesize = sizeof(CentralSpikeCache);
-        for (uint32_t ch = 0; ch < CENTRAL_cbPKT_SPKCACHELINECNT; ++ch) {
-            spike->cache[ch].chid = ch;
-            spike->cache[ch].pktcnt = CENTRAL_cbPKT_SPKCACHEPKTCNT;
-            spike->cache[ch].pktsize = sizeof(cbPKT_SPK);
+        // The reader discards packets larger than cbPKT_GENERIC.
+        if (pkt_len > (sizeof(cbPKT_GENERIC) / sizeof(uint32_t))) {
+            return Result<void>::error("Packet exceeds cbPKT_GENERIC size");
         }
+
+        uint32_t head = adapter->getRecHeadindexPtr();
+        uint32_t* buf = adapter->getRecBufferPtr();
+
+        // Defensive: a write never starts inside the reserved tail zone.  Only
+        // a foreign or corrupted segment can leave head there; re-establish the
+        // invariant instead of running the memcpy past the end of the ring.
+        if (head > (rec_buffer_len - rec_reserve_len)) {
+            shm_store_release_u32(&adapter->getRecHeadwrapPtr(),
+                                  shm_load_relaxed_u32(&adapter->getRecHeadwrapPtr()) + 1);
+            head = 0;
+        }
+
+        // Write the packet at the current head.
+        const uint32_t* pkt_data = reinterpret_cast<const uint32_t*>(&pkt);
+        std::memcpy(&buf[head], pkt_data, pkt_len * sizeof(uint32_t));
+
+        adapter->getRecReceived()++;
+        adapter->setRecLasttime(pkt.cbpkt_header.time);
+
+        // Advance past the packet and determine whether to wrap or continue.
+        head += pkt_len;
+        if (head > (rec_buffer_len - rec_reserve_len)) {
+            head = 0;
+            shm_store_release_u32(&adapter->getRecHeadwrapPtr(),
+                                  shm_load_relaxed_u32(&adapter->getRecHeadwrapPtr()) + 1);
+        }
+        shm_store_release_u32(&adapter->getRecHeadindexPtr(), head);
+
+        return Result<void>::ok();
     }
 
-    void initLegacyBuffers() {
-        auto* cfg = legacyCfg();
-        std::memset(cfg, 0, cfg_buffer_size);
-        cfg->version = cbVERSION_MAJOR * 100 + cbVERSION_MINOR;
-
-        // Set procinfo version so detectCompatProtocol() identifies current format.
-        // In STANDALONE mode, CereLink owns the memory and writes current-format packets.
-        // MAKELONG(minor, major) = (major << 16) | minor
-        for (int i = 0; i < CENTRAL_cbMAXPROCS; ++i) {
-            cfg->procinfo[i].version = (cbVERSION_MAJOR << 16) | cbVERSION_MINOR;
+    // Helper: get sysfreq from cbPKT_SYSINFO
+    // Guaranteed to provide a frequency greater than or equal to 1
+    // or the default frequency if the true value is unavailable.
+    decltype(cbPKT_SYSINFO::sysfreq) getSysFreq() {
+        cbPKT_SYSINFO sysinfo;
+        auto res = adapter->getSysInfo(sysinfo);
+        if (res.isError() || sysinfo.sysfreq == 0) {
+            return 30000; // default
         }
-
-        // Initialize receive buffer
-        std::memset(rec_buffer_raw, 0, rec_buffer_size);
-
-        // Initialize transmit buffers (same struct as Central)
-        auto* xmt = static_cast<CentralTransmitBuffer*>(xmt_buffer_raw);
-        std::memset(xmt, 0, xmt_buffer_size);
-        xmt->last_valid_index = CENTRAL_cbXMT_GLOBAL_BUFFLEN - 1;
-        xmt->bufferlen = CENTRAL_cbXMT_GLOBAL_BUFFLEN;
-
-        auto* xmt_local = static_cast<CentralTransmitBufferLocal*>(xmt_local_buffer_raw);
-        std::memset(xmt_local, 0, xmt_local_buffer_size);
-        xmt_local->last_valid_index = CENTRAL_cbXMT_LOCAL_BUFFLEN - 1;
-        xmt_local->bufferlen = CENTRAL_cbXMT_LOCAL_BUFFLEN;
-
-        // Initialize status buffer (same struct as Central)
-        auto* status = static_cast<CentralPCStatus*>(status_buffer_raw);
-        std::memset(status, 0, status_buffer_size);
-        status->m_nNumFEChans = CENTRAL_cbNUM_FE_CHANS;
-        status->m_nNumAnainChans = CENTRAL_cbNUM_ANAIN_CHANS;
-        status->m_nNumAnalogChans = CENTRAL_cbNUM_ANALOG_CHANS;
-        status->m_nNumAoutChans = CENTRAL_cbNUM_ANAOUT_CHANS;
-        status->m_nNumAudioChans = CENTRAL_cbNUM_AUDOUT_CHANS;
-        status->m_nNumAnalogoutChans = CENTRAL_cbNUM_ANALOGOUT_CHANS;
-        status->m_nNumDiginChans = CENTRAL_cbNUM_DIGIN_CHANS;
-        status->m_nNumSerialChans = CENTRAL_cbNUM_SERIAL_CHANS;
-        status->m_nNumDigoutChans = CENTRAL_cbNUM_DIGOUT_CHANS;
-        status->m_nNumTotalChans = CENTRAL_cbMAXCHANS;
-        for (int i = 0; i < CENTRAL_cbMAXPROCS; ++i) {
-            status->m_nNspStatus[i] = NSPStatus::NSP_INIT;
-        }
-
-        // Initialize spike cache buffer (same struct as Central)
-        auto* spike = static_cast<CentralSpikeBuffer*>(spike_buffer_raw);
-        std::memset(spike, 0, spike_buffer_size);
-        spike->chidmax = CENTRAL_cbNUM_ANALOG_CHANS;
-        spike->linesize = sizeof(CentralSpikeCache);
-        for (uint32_t ch = 0; ch < CENTRAL_cbPKT_SPKCACHELINECNT; ++ch) {
-            spike->cache[ch].chid = ch;
-            spike->cache[ch].pktcnt = CENTRAL_cbPKT_SPKCACHEPKTCNT;
-            spike->cache[ch].pktsize = sizeof(cbPKT_SPK);
-        }
-    }
-
-    void initNativeBuffers() {
-        auto* cfg = nativeCfg();
-        std::memset(cfg, 0, cfg_buffer_size);
-        cfg->version = cbVERSION_MAJOR * 100 + cbVERSION_MINOR;
-        cfg->instrument_status = static_cast<uint32_t>(InstrumentStatus::INACTIVE);
-#ifdef _WIN32
-        cfg->owner_pid = GetCurrentProcessId();
-#else
-        cfg->owner_pid = static_cast<uint32_t>(getpid());
-#endif
-
-        // Initialize receive buffer
-        std::memset(rec_buffer_raw, 0, rec_buffer_size);
-
-        // Initialize transmit buffers
-        auto* xmt = static_cast<NativeTransmitBuffer*>(xmt_buffer_raw);
-        std::memset(xmt, 0, xmt_buffer_size);
-        xmt->last_valid_index = NATIVE_cbXMT_GLOBAL_BUFFLEN - 1;
-        xmt->bufferlen = NATIVE_cbXMT_GLOBAL_BUFFLEN;
-
-        auto* xmt_local = static_cast<NativeTransmitBufferLocal*>(xmt_local_buffer_raw);
-        std::memset(xmt_local, 0, xmt_local_buffer_size);
-        xmt_local->last_valid_index = NATIVE_cbXMT_LOCAL_BUFFLEN - 1;
-        xmt_local->bufferlen = NATIVE_cbXMT_LOCAL_BUFFLEN;
-
-        // Initialize status buffer
-        auto* status = static_cast<NativePCStatus*>(status_buffer_raw);
-        std::memset(status, 0, status_buffer_size);
-        status->m_nNumFEChans = NATIVE_NUM_FE_CHANS;
-        status->m_nNumAnainChans = cbNUM_ANAIN_CHANS;
-        status->m_nNumAnalogChans = NATIVE_NUM_ANALOG_CHANS;
-        status->m_nNumAoutChans = cbNUM_ANAOUT_CHANS;
-        status->m_nNumAudioChans = cbNUM_AUDOUT_CHANS;
-        status->m_nNumAnalogoutChans = cbNUM_ANALOGOUT_CHANS;
-        status->m_nNumDiginChans = cbNUM_DIGIN_CHANS;
-        status->m_nNumSerialChans = cbNUM_SERIAL_CHANS;
-        status->m_nNumDigoutChans = cbNUM_DIGOUT_CHANS;
-        status->m_nNumTotalChans = NATIVE_MAXCHANS;
-        status->m_nNspStatus = NSPStatus::NSP_INIT;
-
-        // Initialize spike cache buffer
-        auto* spike = static_cast<NativeSpikeBuffer*>(spike_buffer_raw);
-        std::memset(spike, 0, spike_buffer_size);
-        spike->chidmax = NATIVE_NUM_ANALOG_CHANS;
-        spike->linesize = sizeof(NativeSpikeCache);
-        for (uint32_t ch = 0; ch < NATIVE_cbPKT_SPKCACHELINECNT; ++ch) {
-            spike->cache[ch].chid = ch;
-            spike->cache[ch].pktcnt = NATIVE_cbPKT_SPKCACHEPKTCNT;
-            spike->cache[ch].pktsize = sizeof(cbPKT_SPK);
-        }
-    }
-
-    /// @brief Detect protocol version from config buffer (CENTRAL_COMPAT only)
-    void detectCompatProtocol() {
-        if (layout != ShmemLayout::CENTRAL_COMPAT) {
-            compat_protocol = CBPROTO_PROTOCOL_CURRENT;
-            return;
-        }
-
-        auto* cfg = legacyCfg();
-        if (!cfg) {
-            compat_protocol = CBPROTO_PROTOCOL_CURRENT;
-            return;
-        }
-
-        // procinfo[0].version = MAKELONG(minor, major) = (major << 16) | minor
-        uint32_t ver = cfg->procinfo[0].version;
-        uint16_t major = (ver >> 16) & 0xFFFF;
-        uint16_t minor = ver & 0xFFFF;
-
-        if (major < 4) {
-            compat_protocol = CBPROTO_PROTOCOL_311;
-        } else if (major == 4 && minor == 0) {
-            compat_protocol = CBPROTO_PROTOCOL_400;
-        } else if (major == 4 && minor == 1) {
-            compat_protocol = CBPROTO_PROTOCOL_410;
-        } else {
-            compat_protocol = CBPROTO_PROTOCOL_CURRENT;
-        }
+        return sysinfo.sysfreq;
     }
 };
 
@@ -822,21 +816,22 @@ ShmemSession::~ShmemSession() = default;
 ShmemSession::ShmemSession(ShmemSession&& other) noexcept = default;
 ShmemSession& ShmemSession::operator=(ShmemSession&& other) noexcept = default;
 
-Result<ShmemSession> ShmemSession::create(const std::string& cfg_name, const std::string& rec_name,
-                                           const std::string& xmt_name, const std::string& xmt_local_name,
-                                           const std::string& status_name, const std::string& spk_name,
-                                           const std::string& signal_event_name, Mode mode,
-                                           ShmemLayout layout) {
+Result<ShmemSession> ShmemSession::create(Mode mode, ShmemLayout layout,
+                                          const std::string& name_qualifier,
+                                          cbproto::InstrumentId id) {
+    SegmentNames names = makeSegmentNames(layout, name_qualifier);
+
     ShmemSession session;
-    session.m_impl->cfg_name = cfg_name;
-    session.m_impl->rec_name = rec_name;
-    session.m_impl->xmt_name = xmt_name;
-    session.m_impl->xmt_local_name = xmt_local_name;
-    session.m_impl->status_name = status_name;
-    session.m_impl->spk_name = spk_name;
-    session.m_impl->signal_event_name = signal_event_name;
+    session.m_impl->cfg_name = names.cfg;
+    session.m_impl->rec_name = names.rec;
+    session.m_impl->xmt_name = names.xmt;
+    session.m_impl->xmt_local_name = names.xmt_local;
+    session.m_impl->status_name = names.status;
+    session.m_impl->spk_name = names.spk;
+    session.m_impl->signal_event_name = names.signal;
     session.m_impl->mode = mode;
     session.m_impl->layout = layout;
+    session.m_impl->inst = id;
 
     auto result = session.m_impl->open();
     if (result.isError()) {
@@ -858,162 +853,118 @@ ShmemLayout ShmemSession::getLayout() const {
     return m_impl->layout;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
-// Instrument Status Management
+cbproto::InstrumentId ShmemSession::getInstrument() const {
+    return m_impl->inst;
+}
 
-Result<bool> ShmemSession::isInstrumentActive(cbproto::InstrumentId id) const {
-    if (!isOpen()) {
-        return Result<bool>::error("Session not open");
-    }
-    if (!id.isValid()) {
-        return Result<bool>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
-
+uint32_t ShmemSession::getMaxProcs() const {
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<bool>::error("Native mode: single instrument only (index 0)");
-        }
-        bool active = (m_impl->nativeCfg()->instrument_status == static_cast<uint32_t>(InstrumentStatus::ACTIVE));
-        return Result<bool>::ok(active);
-    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
-        // CentralLegacyCFGBUFF has no instrument_status field;
-        // if the shared memory exists, instruments are as Central configured them
-        return Result<bool>::ok(true);
+        return cbMAXPROCS;
     } else {
-        bool active = (m_impl->centralCfg()->instrument_status[idx] == static_cast<uint32_t>(InstrumentStatus::ACTIVE));
-        return Result<bool>::ok(active);
+        // The bootstrap adapter only exists once open() has detected the
+        // Central version; before that the instrument count is unknown.
+        if (!isOpen() || !m_impl->bootstrap_adapter) {
+            return 0;
+        }
+        return m_impl->bootstrap_adapter->getMaxProcs();
     }
 }
 
-Result<void> ShmemSession::setInstrumentActive(cbproto::InstrumentId id, bool active) {
+cbproto_protocol_version_t ShmemSession::getCompatProtocolVersion() const {
+    return m_impl->compat_protocol;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Instrument Status Management
+
+Result<bool> ShmemSession::isInstrumentActive() const {
+    if (!isOpen()) {
+        return Result<bool>::error("Session not open");
+    }
+
+    if (m_impl->layout == ShmemLayout::NATIVE) {
+        bool active = (m_impl->nativeCfg()->instrument_status == static_cast<uint32_t>(InstrumentStatus::ACTIVE));
+        return Result<bool>::ok(active);
+    } else {
+        // cbCFGBUFF has no instrument_status field;
+        // if the shared memory exists, instruments are as Central configured them
+        return Result<bool>::ok(true);
+    }
+}
+
+Result<void> ShmemSession::setInstrumentActive(bool active) {
     if (!isOpen()) {
         return Result<void>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<void>::error("Invalid instrument ID");
-    }
 
-    uint8_t idx = id.toIndex();
     uint32_t val = active ? static_cast<uint32_t>(InstrumentStatus::ACTIVE) : static_cast<uint32_t>(InstrumentStatus::INACTIVE);
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<void>::error("Native mode: single instrument only (index 0)");
-        }
         m_impl->nativeCfg()->instrument_status = val;
-    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
-        return Result<void>::error("CENTRAL_COMPAT mode: instrument status is read-only (no instrument_status field in Central's layout)");
     } else {
-        m_impl->centralCfg()->instrument_status[idx] = val;
+        return Result<void>::error("CENTRAL mode: instrument status is read-only (no instrument_status field in Central's layout)");
     }
 
     return Result<void>::ok();
 }
 
-Result<cbproto::InstrumentId> ShmemSession::getFirstActiveInstrument() const {
-    if (!isOpen()) {
-        return Result<cbproto::InstrumentId>::error("Session not open");
-    }
-
-    if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (m_impl->nativeCfg()->instrument_status == static_cast<uint32_t>(InstrumentStatus::ACTIVE)) {
-            return Result<cbproto::InstrumentId>::ok(cbproto::InstrumentId::fromIndex(0));
-        }
-    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
-        // No instrument_status in legacy layout; return first instrument (always "active")
-        return Result<cbproto::InstrumentId>::ok(cbproto::InstrumentId::fromIndex(0));
-    } else {
-        for (uint8_t i = 0; i < CENTRAL_cbMAXPROCS; ++i) {
-            if (m_impl->centralCfg()->instrument_status[i] == static_cast<uint32_t>(InstrumentStatus::ACTIVE)) {
-                return Result<cbproto::InstrumentId>::ok(cbproto::InstrumentId::fromIndex(i));
-            }
-        }
-    }
-
-    return Result<cbproto::InstrumentId>::error("No active instruments");
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Configuration Read Operations
 
-Result<cbPKT_PROCINFO> ShmemSession::getProcInfo(cbproto::InstrumentId id) const {
+Result<cbPKT_PROCINFO> ShmemSession::getProcInfo() const {
     if (!isOpen()) {
         return Result<cbPKT_PROCINFO>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<cbPKT_PROCINFO>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<cbPKT_PROCINFO>::error("Native mode: single instrument only");
-        }
         return Result<cbPKT_PROCINFO>::ok(m_impl->nativeCfg()->procinfo);
-    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
-        if (idx >= CENTRAL_cbMAXPROCS) return Result<cbPKT_PROCINFO>::error("instrument index out of range");
-        return Result<cbPKT_PROCINFO>::ok(m_impl->legacyCfg()->procinfo[idx]);
     } else {
-        return Result<cbPKT_PROCINFO>::ok(m_impl->centralCfg()->procinfo[idx]);
+        auto info = Result<cbPKT_PROCINFO>::ok({});
+        auto res = m_impl->adapter->getProcInfo(info.value());
+        if (res.isError()) {
+            return Result<cbPKT_PROCINFO>::error(res.error());
+        }
+        return info;
     }
 }
 
-Result<cbPKT_BANKINFO> ShmemSession::getBankInfo(cbproto::InstrumentId id, uint32_t bank) const {
+Result<cbPKT_BANKINFO> ShmemSession::getBankInfo(uint32_t bank) const {
     if (!isOpen()) {
         return Result<cbPKT_BANKINFO>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<cbPKT_BANKINFO>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
-    uint32_t max_banks = (m_impl->layout == ShmemLayout::NATIVE) ? NATIVE_MAXBANKS : CENTRAL_cbMAXBANKS;
-
-    if (bank == 0 || bank > max_banks) {
-        return Result<cbPKT_BANKINFO>::error("Bank number out of range");
-    }
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<cbPKT_BANKINFO>::error("Native mode: single instrument only");
+        if (bank == 0 || bank > NATIVE_MAXBANKS) {
+            return Result<cbPKT_BANKINFO>::error("Bank number out of range");
         }
         return Result<cbPKT_BANKINFO>::ok(m_impl->nativeCfg()->bankinfo[bank - 1]);
-    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
-        if (idx >= CENTRAL_cbMAXPROCS) return Result<cbPKT_BANKINFO>::error("instrument index out of range");
-        return Result<cbPKT_BANKINFO>::ok(m_impl->legacyCfg()->bankinfo[idx][bank - 1]);
     } else {
-        return Result<cbPKT_BANKINFO>::ok(m_impl->centralCfg()->bankinfo[idx][bank - 1]);
+        auto info = Result<cbPKT_BANKINFO>::ok({});
+        auto res = m_impl->adapter->getBankInfo(info.value(), bank);
+        if (res.isError()) {
+            return Result<cbPKT_BANKINFO>::error(res.error());
+        }
+        return info;
     }
 }
 
-Result<cbPKT_FILTINFO> ShmemSession::getFilterInfo(cbproto::InstrumentId id, uint32_t filter) const {
+Result<cbPKT_FILTINFO> ShmemSession::getFilterInfo(uint32_t filter) const {
     if (!isOpen()) {
         return Result<cbPKT_FILTINFO>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<cbPKT_FILTINFO>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
-    uint32_t max_filts = (m_impl->layout == ShmemLayout::NATIVE) ? NATIVE_MAXFILTS : CENTRAL_cbMAXFILTS;
-
-    if (filter == 0 || filter > max_filts) {
-        return Result<cbPKT_FILTINFO>::error("Filter number out of range");
-    }
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<cbPKT_FILTINFO>::error("Native mode: single instrument only");
+        if (filter == 0 || filter > NATIVE_MAXFILTS) {
+            return Result<cbPKT_FILTINFO>::error("Filter number out of range");
         }
         return Result<cbPKT_FILTINFO>::ok(m_impl->nativeCfg()->filtinfo[filter - 1]);
-    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
-        if (idx >= CENTRAL_cbMAXPROCS) return Result<cbPKT_FILTINFO>::error("instrument index out of range");
-        return Result<cbPKT_FILTINFO>::ok(m_impl->legacyCfg()->filtinfo[idx][filter - 1]);
     } else {
-        return Result<cbPKT_FILTINFO>::ok(m_impl->centralCfg()->filtinfo[idx][filter - 1]);
+        auto info = Result<cbPKT_FILTINFO>::ok({});
+        auto res = m_impl->adapter->getFilterInfo(info.value(), filter);
+        if (res.isError()) {
+            return Result<cbPKT_FILTINFO>::error(res.error());
+        }
+        return info;
     }
 }
 
@@ -1022,107 +973,105 @@ Result<cbPKT_CHANINFO> ShmemSession::getChanInfo(uint32_t channel) const {
         return Result<cbPKT_CHANINFO>::error("Session not open");
     }
 
-    uint32_t max_chans = (m_impl->layout == ShmemLayout::NATIVE) ? NATIVE_MAXCHANS : CENTRAL_cbMAXCHANS;
+    if (m_impl->layout == ShmemLayout::NATIVE) {
+        if (channel >= NATIVE_MAXCHANS) {
+            return Result<cbPKT_CHANINFO>::error("Channel index out of range");
+        }
+        return Result<cbPKT_CHANINFO>::ok(m_impl->nativeCfg()->chaninfo[channel]);
+    } else {
+        auto info = Result<cbPKT_CHANINFO>::ok({});
+        auto res = m_impl->adapter->getChanInfo(info.value(), channel);
+        if (res.isError()) {
+            return Result<cbPKT_CHANINFO>::error(res.error());
+        }
+        return info;
+    }
+}
 
-    if (channel >= max_chans) {
-        return Result<cbPKT_CHANINFO>::error("Channel index out of range");
+Result<cbPKT_SYSINFO> ShmemSession::getSysInfo() const {
+    if (!isOpen()) {
+        return Result<cbPKT_SYSINFO>::error("Session not open");
     }
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        return Result<cbPKT_CHANINFO>::ok(m_impl->nativeCfg()->chaninfo[channel]);
-    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
-        return Result<cbPKT_CHANINFO>::ok(m_impl->legacyCfg()->chaninfo[channel]);
+        return Result<cbPKT_SYSINFO>::ok(m_impl->nativeCfg()->sysinfo);
     } else {
-        return Result<cbPKT_CHANINFO>::ok(m_impl->centralCfg()->chaninfo[channel]);
+        auto info = Result<cbPKT_SYSINFO>::ok({});
+        auto res = m_impl->adapter->getSysInfo(info.value());
+        if (res.isError()) {
+            return Result<cbPKT_SYSINFO>::error(res.error());
+        }
+        return info;
     }
 }
+
+Result<cbPKT_GROUPINFO> ShmemSession::getGroupInfo(uint32_t group) const {
+    if (!isOpen()) {
+        return Result<cbPKT_GROUPINFO>::error("Session not open");
+    }
+
+    if (m_impl->layout == ShmemLayout::NATIVE) {
+        if (group >= NATIVE_MAXGROUPS) {
+            return Result<cbPKT_GROUPINFO>::error("Group index out of range");
+        }
+        return Result<cbPKT_GROUPINFO>::ok(m_impl->nativeCfg()->groupinfo[group]);
+    } else {
+        auto info = Result<cbPKT_GROUPINFO>::ok({});
+        auto res = m_impl->adapter->getGroupInfo(info.value(), group);
+        if (res.isError()) {
+            return Result<cbPKT_GROUPINFO>::error(res.error());
+        }
+        return info;
+    }
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Configuration Write Operations
 
-Result<void> ShmemSession::setProcInfo(cbproto::InstrumentId id, const cbPKT_PROCINFO& info) {
+Result<void> ShmemSession::setProcInfo(const cbPKT_PROCINFO& info) {
     if (!isOpen()) {
         return Result<void>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<void>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<void>::error("Native mode: single instrument only");
-        }
         m_impl->nativeCfg()->procinfo = info;
-    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
-        if (idx >= CENTRAL_cbMAXPROCS) return Result<void>::error("instrument index out of range");
-        m_impl->legacyCfg()->procinfo[idx] = info;
+        return Result<void>::ok();
     } else {
-        m_impl->centralCfg()->procinfo[idx] = info;
+        return m_impl->adapter->setProcInfo(info);
     }
-
-    return Result<void>::ok();
 }
 
-Result<void> ShmemSession::setBankInfo(cbproto::InstrumentId id, uint32_t bank, const cbPKT_BANKINFO& info) {
+Result<void> ShmemSession::setBankInfo(uint32_t bank, const cbPKT_BANKINFO& info) {
     if (!isOpen()) {
         return Result<void>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<void>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
-    uint32_t max_banks = (m_impl->layout == ShmemLayout::NATIVE) ? NATIVE_MAXBANKS : CENTRAL_cbMAXBANKS;
-
-    if (bank == 0 || bank > max_banks) {
-        return Result<void>::error("Bank number out of range");
-    }
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<void>::error("Native mode: single instrument only");
+        if (bank == 0 || bank > NATIVE_MAXBANKS) {
+            return Result<void>::error("Bank number out of range");
         }
         m_impl->nativeCfg()->bankinfo[bank - 1] = info;
-    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
-        if (idx >= CENTRAL_cbMAXPROCS) return Result<void>::error("instrument index out of range");
-        m_impl->legacyCfg()->bankinfo[idx][bank - 1] = info;
+        return Result<void>::ok();
     } else {
-        m_impl->centralCfg()->bankinfo[idx][bank - 1] = info;
+        return m_impl->adapter->setBankInfo(bank, info);
     }
-
-    return Result<void>::ok();
 }
 
-Result<void> ShmemSession::setFilterInfo(cbproto::InstrumentId id, uint32_t filter, const cbPKT_FILTINFO& info) {
+Result<void> ShmemSession::setFilterInfo(uint32_t filter, const cbPKT_FILTINFO& info) {
     if (!isOpen()) {
         return Result<void>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<void>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
-    uint32_t max_filts = (m_impl->layout == ShmemLayout::NATIVE) ? NATIVE_MAXFILTS : CENTRAL_cbMAXFILTS;
-
-    if (filter == 0 || filter > max_filts) {
-        return Result<void>::error("Filter number out of range");
-    }
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<void>::error("Native mode: single instrument only");
+        if (filter == 0 || filter > NATIVE_MAXFILTS) {
+            return Result<void>::error("Filter number out of range");
         }
         m_impl->nativeCfg()->filtinfo[filter - 1] = info;
-    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
-        if (idx >= CENTRAL_cbMAXPROCS) return Result<void>::error("instrument index out of range");
-        m_impl->legacyCfg()->filtinfo[idx][filter - 1] = info;
+        return Result<void>::ok();
     } else {
-        m_impl->centralCfg()->filtinfo[idx][filter - 1] = info;
+        return m_impl->adapter->setFilterInfo( filter, info);
     }
-
-    return Result<void>::ok();
 }
 
 Result<void> ShmemSession::setChanInfo(uint32_t channel, const cbPKT_CHANINFO& info) {
@@ -1130,21 +1079,15 @@ Result<void> ShmemSession::setChanInfo(uint32_t channel, const cbPKT_CHANINFO& i
         return Result<void>::error("Session not open");
     }
 
-    uint32_t max_chans = (m_impl->layout == ShmemLayout::NATIVE) ? NATIVE_MAXCHANS : CENTRAL_cbMAXCHANS;
-
-    if (channel >= max_chans) {
-        return Result<void>::error("Channel index out of range");
-    }
-
     if (m_impl->layout == ShmemLayout::NATIVE) {
+        if (channel >= NATIVE_MAXCHANS) {
+            return Result<void>::error("Channel index out of range");
+        }
         m_impl->nativeCfg()->chaninfo[channel] = info;
-    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
-        m_impl->legacyCfg()->chaninfo[channel] = info;
+        return Result<void>::ok();
     } else {
-        m_impl->centralCfg()->chaninfo[channel] = info;
+        return m_impl->adapter->setChanInfo(channel, info);
     }
-
-    return Result<void>::ok();
 }
 
 Result<void> ShmemSession::setSysInfo(const cbPKT_SYSINFO& info) {
@@ -1154,61 +1097,31 @@ Result<void> ShmemSession::setSysInfo(const cbPKT_SYSINFO& info) {
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
         m_impl->nativeCfg()->sysinfo = info;
-    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
-        m_impl->legacyCfg()->sysinfo = info;
+        return Result<void>::ok();
     } else {
-        m_impl->centralCfg()->sysinfo = info;
+        return m_impl->adapter->setSysInfo(info);
     }
-
-    return Result<void>::ok();
 }
 
-Result<void> ShmemSession::setGroupInfo(cbproto::InstrumentId id, uint32_t group, const cbPKT_GROUPINFO& info) {
+Result<void> ShmemSession::setGroupInfo(uint32_t group, const cbPKT_GROUPINFO& info) {
     if (!isOpen()) {
         return Result<void>::error("Session not open");
     }
-    if (!id.isValid()) {
-        return Result<void>::error("Invalid instrument ID");
-    }
-
-    uint8_t idx = id.toIndex();
 
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (idx != 0) {
-            return Result<void>::error("Native mode: single instrument only");
-        }
         if (group >= NATIVE_MAXGROUPS) {
             return Result<void>::error("Group index out of range");
         }
         m_impl->nativeCfg()->groupinfo[group] = info;
-    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
-        if (idx >= CENTRAL_cbMAXPROCS) return Result<void>::error("instrument index out of range");
-        if (group >= CENTRAL_cbMAXGROUPS) return Result<void>::error("Group index out of range");
-        m_impl->legacyCfg()->groupinfo[idx][group] = info;
+        return Result<void>::ok();
     } else {
-        if (group >= CENTRAL_cbMAXGROUPS) return Result<void>::error("Group index out of range");
-        m_impl->centralCfg()->groupinfo[idx][group] = info;
+        return m_impl->adapter->setGroupInfo(group, info);
     }
 
-    return Result<void>::ok();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Configuration Buffer Direct Access
-
-cbConfigBuffer* ShmemSession::getConfigBuffer() {
-    if (!isOpen() || m_impl->layout != ShmemLayout::CENTRAL) {
-        return nullptr;
-    }
-    return m_impl->centralCfg();
-}
-
-const cbConfigBuffer* ShmemSession::getConfigBuffer() const {
-    if (!isOpen() || m_impl->layout != ShmemLayout::CENTRAL) {
-        return nullptr;
-    }
-    return m_impl->centralCfg();
-}
 
 NativeConfigBuffer* ShmemSession::getNativeConfigBuffer() {
     if (!isOpen() || m_impl->layout != ShmemLayout::NATIVE) {
@@ -1224,22 +1137,12 @@ const NativeConfigBuffer* ShmemSession::getNativeConfigBuffer() const {
     return m_impl->nativeCfg();
 }
 
-CentralLegacyCFGBUFF* ShmemSession::getLegacyConfigBuffer() {
-    if (!isOpen() || m_impl->layout != ShmemLayout::CENTRAL_COMPAT) {
-        return nullptr;
+Result<void> ShmemSession::getLegacyConfigBuffer(NativeConfigBuffer& buf) {
+    if (!isOpen() || m_impl->layout != ShmemLayout::CENTRAL) {
+        return Result<void>::error("Not open or invalid layout");
     }
-    return m_impl->legacyCfg();
+    return m_impl->adapter->getConfigBuffer(buf);
 }
-
-const CentralLegacyCFGBUFF* ShmemSession::getLegacyConfigBuffer() const {
-    if (!isOpen() || m_impl->layout != ShmemLayout::CENTRAL_COMPAT) {
-        return nullptr;
-    }
-    return m_impl->legacyCfg();
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-// Packet Routing (THE KEY FIX!)
 
 Result<void> ShmemSession::storePacket(const cbPKT_GENERIC& pkt) {
     if (!isOpen()) {
@@ -1250,6 +1153,7 @@ Result<void> ShmemSession::storePacket(const cbPKT_GENERIC& pkt) {
     auto rec_result = m_impl->writeToReceiveBuffer(pkt);
     if (rec_result.isError()) {
         // Log error but don't fail - config updates may still work
+        // TODO: Log error without failing (?).  Needs more investigation.
     }
 
     // NOTE: Config parsing (PROCINFO, BANKINFO, etc.) is NOT done here.
@@ -1287,8 +1191,8 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
         return Result<void>::error("Transmit buffer not initialized");
     }
 
-    // In CENTRAL_COMPAT mode with an older protocol, translate to the legacy format
-    const bool needs_translation = (m_impl->layout == ShmemLayout::CENTRAL_COMPAT &&
+    // In CENTRAL mode with an older protocol, translate to the legacy format
+    const bool needs_translation = (m_impl->layout == ShmemLayout::CENTRAL &&
                                      m_impl->compat_protocol != CBPROTO_PROTOCOL_CURRENT);
 
     const uint8_t* write_data;
@@ -1316,8 +1220,7 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
             // Central's xmt consumer expects device-native format.
             auto gemini = isGeminiSystem();
             if (gemini.isOk() && !gemini.value() && dest_hdr.time != 0) {
-                uint32_t sysfreq = m_impl->legacyCfg()->sysinfo.sysfreq;
-                if (sysfreq == 0) sysfreq = 30000;
+                uint32_t sysfreq = m_impl->getSysFreq();
                 uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
                 dest_hdr.time = dest_hdr.time * (sysfreq / g) / (1000000000 / g);
             }
@@ -1339,23 +1242,21 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
             // Non-Gemini: convert nanosecond timestamp back to device clock ticks.
             auto gemini = isGeminiSystem();
             if (gemini.isOk() && !gemini.value() && dest_hdr.time != 0) {
-                uint32_t sysfreq = m_impl->legacyCfg()->sysinfo.sysfreq;
-                if (sysfreq == 0) sysfreq = 30000;
+                uint32_t sysfreq = m_impl->getSysFreq();
                 uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
                 dest_hdr.time = dest_hdr.time * (sysfreq / g) / (1000000000 / g);
             }
             write_size_bytes = cbPKT_HEADER_SIZE + dest_dlen * 4;
         }
         write_data = translated_buf;
-    } else if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT && m_impl->status_buffer_raw) {
+    } else if (m_impl->layout == ShmemLayout::CENTRAL && m_impl->status_buffer_raw) {
         // Protocol is CURRENT but device may be non-Gemini — still need ns→ticks conversion.
         auto gemini = isGeminiSystem();
         if (gemini.isOk() && !gemini.value() && pkt.cbpkt_header.time != 0) {
             std::memcpy(translated_buf, &pkt,
                         (cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen) * sizeof(uint32_t));
             auto& dest_hdr = *reinterpret_cast<cbPKT_HEADER*>(translated_buf);
-            uint32_t sysfreq = m_impl->legacyCfg()->sysinfo.sysfreq;
-            if (sysfreq == 0) sysfreq = 30000;
+            uint32_t sysfreq = m_impl->getSysFreq();
             uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
             dest_hdr.time = dest_hdr.time * (sysfreq / g) / (1000000000 / g);
             write_data = translated_buf;
@@ -1371,12 +1272,10 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
     // Round up to dword-aligned size for ring buffer
     uint32_t pkt_size_words = (write_size_bytes + 3) / 4;
 
-    auto* xmt = m_impl->xmtGlobal();
-    uint32_t* buf = m_impl->xmtGlobalBuffer();
-
-    uint32_t head = xmt->headindex;
-    uint32_t tail = xmt->tailindex;
-    uint32_t last_valid = xmt->last_valid_index;
+    uint32_t head = m_impl->adapter->getXmtHeadindexPtr();
+    uint32_t tail = m_impl->adapter->getXmtTailindexPtr();
+    uint32_t last_valid = m_impl->adapter->getXmtLastValidIndexPtr();
+    uint32_t* buf = m_impl->adapter->getXmtBufferPtr();
 
     // Linear buffer with wrap-to-zero (matches Central's cbSendPacket):
     // Packets are always written CONTIGUOUSLY. If the next packet doesn't fit
@@ -1409,7 +1308,7 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
     const uint32_t* pkt_words = reinterpret_cast<const uint32_t*>(write_data);
     uint32_t time_word = pkt_words[0];
     if (time_word == 0) {
-        PROCTIME t = m_impl->recLasttime();
+        PROCTIME t = m_impl->adapter->getRecLasttime();
         time_word = (t != 0) ? static_cast<uint32_t>(t) : 1;
     }
 
@@ -1417,7 +1316,7 @@ Result<void> ShmemSession::enqueuePacket(const cbPKT_GENERIC& pkt) {
     std::memcpy(&buf[head + 1], &pkt_words[1], (pkt_size_words - 1) * sizeof(uint32_t));
 
     // Advance head index
-    xmt->headindex = new_head;
+    m_impl->adapter->getXmtHeadindexPtr() = new_head;
 
     // Pass 2: atomically write the time field to mark packet as ready
 #ifdef _WIN32
@@ -1437,11 +1336,9 @@ Result<bool> ShmemSession::dequeuePacket(cbPKT_GENERIC& pkt) {
         return Result<bool>::error("Transmit buffer not initialized");
     }
 
-    auto* xmt = m_impl->xmtGlobal();
-    uint32_t* buf = m_impl->xmtGlobalBuffer();
-
-    uint32_t head = xmt->headindex;
-    uint32_t tail = xmt->tailindex;
+    uint32_t head = m_impl->adapter->getXmtHeadindexPtr();
+    uint32_t tail = m_impl->adapter->getXmtTailindexPtr();
+    uint32_t* buf = m_impl->adapter->getXmtBufferPtr();
 
     if (head == tail) {
         return Result<bool>::ok(false);  // Queue is empty
@@ -1468,14 +1365,20 @@ Result<bool> ShmemSession::dequeuePacket(cbPKT_GENERIC& pkt) {
 
     uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
 
+    // A corrupt dlen read from shared memory must not overflow the caller's
+    // cbPKT_GENERIC (the memcpy below would smash the stack).
+    if (pkt_size_words > (sizeof(cbPKT_GENERIC) / sizeof(uint32_t))) {
+        return Result<bool>::error("Corrupt packet size in transmit buffer");
+    }
+
     // Read remaining payload contiguously
     std::memcpy(&pkt_data[4], &buf[tail + 4], (pkt_size_words - 4) * sizeof(uint32_t));
 
     // Clear the time field to 0 so it's clean for next use
     buf[tail] = 0;
 
-    xmt->tailindex = tail + pkt_size_words;
-    xmt->transmitted++;
+    m_impl->adapter->getXmtTailindexPtr() = tail + pkt_size_words;
+    m_impl->adapter->getXmtTransmittedPtr()++;
 
     return Result<bool>::ok(true);
 }
@@ -1484,8 +1387,7 @@ bool ShmemSession::hasTransmitPackets() const {
     if (!m_impl || !m_impl->is_open || !m_impl->xmt_buffer_raw) {
         return false;
     }
-    auto* xmt = m_impl->xmtGlobal();
-    return xmt->headindex != xmt->tailindex;
+    return m_impl->adapter->getXmtHeadindexPtr() != m_impl->adapter->getXmtTailindexPtr();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1500,14 +1402,12 @@ Result<void> ShmemSession::enqueueLocalPacket(const cbPKT_GENERIC& pkt) {
         return Result<void>::error("Local transmit buffer not initialized");
     }
 
-    auto* xmt_local = m_impl->xmtLocal();
-    uint32_t* buf = m_impl->xmtLocalBuffer();
-
     uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
 
-    uint32_t head = xmt_local->headindex;
-    uint32_t tail = xmt_local->tailindex;
-    uint32_t last_valid = xmt_local->last_valid_index;
+    uint32_t head = m_impl->adapter->getLocalXmtHeadindexPtr();
+    uint32_t tail = m_impl->adapter->getLocalXmtTailindexPtr();
+    uint32_t last_valid = m_impl->adapter->getLocalXmtLastValidIndexPtr();
+    uint32_t* buf = m_impl->adapter->getLocalXmtBufferPtr();
 
     // Linear buffer with wrap-to-zero (matches Central's cbSendLoopbackPacket)
     uint32_t new_head = head + pkt_size_words;
@@ -1528,12 +1428,12 @@ Result<void> ShmemSession::enqueueLocalPacket(const cbPKT_GENERIC& pkt) {
     const uint32_t* pkt_data = reinterpret_cast<const uint32_t*>(&pkt);
     uint32_t time_word = pkt_data[0];
     if (time_word == 0) {
-        PROCTIME t = m_impl->recLasttime();
+        PROCTIME t = m_impl->adapter->getRecLasttime();
         time_word = (t != 0) ? static_cast<uint32_t>(t) : 1;
     }
 
     std::memcpy(&buf[head + 1], &pkt_data[1], (pkt_size_words - 1) * sizeof(uint32_t));
-    xmt_local->headindex = new_head;
+    m_impl->adapter->getLocalXmtHeadindexPtr() = new_head;
 
 #ifdef _WIN32
     InterlockedExchange(reinterpret_cast<volatile LONG*>(&buf[head]),
@@ -1552,11 +1452,9 @@ Result<bool> ShmemSession::dequeueLocalPacket(cbPKT_GENERIC& pkt) {
         return Result<bool>::error("Local transmit buffer not initialized");
     }
 
-    auto* xmt_local = m_impl->xmtLocal();
-    uint32_t* buf = m_impl->xmtLocalBuffer();
-
-    uint32_t head = xmt_local->headindex;
-    uint32_t tail = xmt_local->tailindex;
+    uint32_t head = m_impl->adapter->getLocalXmtHeadindexPtr();
+    uint32_t tail = m_impl->adapter->getLocalXmtTailindexPtr();
+    uint32_t* buf = m_impl->adapter->getLocalXmtBufferPtr();
 
     if (head == tail) {
         return Result<bool>::ok(false);  // Queue is empty
@@ -1583,14 +1481,20 @@ Result<bool> ShmemSession::dequeueLocalPacket(cbPKT_GENERIC& pkt) {
 
     uint32_t pkt_size_words = cbPKT_HEADER_32SIZE + pkt.cbpkt_header.dlen;
 
+    // A corrupt dlen read from shared memory must not overflow the caller's
+    // cbPKT_GENERIC (the memcpy below would smash the stack).
+    if (pkt_size_words > (sizeof(cbPKT_GENERIC) / sizeof(uint32_t))) {
+        return Result<bool>::error("Corrupt packet size in local transmit buffer");
+    }
+
     // Read remaining payload contiguously
     std::memcpy(&pkt_data[4], &buf[tail + 4], (pkt_size_words - 4) * sizeof(uint32_t));
 
     // Clear the time field to 0 so it's clean for next use
     buf[tail] = 0;
 
-    xmt_local->tailindex = tail + pkt_size_words;
-    xmt_local->transmitted++;
+    m_impl->adapter->getLocalXmtTailindexPtr() = tail + pkt_size_words;
+    m_impl->adapter->getLocalXmtTransmittedPtr()++;
 
     return Result<bool>::ok(true);
 }
@@ -1599,8 +1503,7 @@ bool ShmemSession::hasLocalTransmitPackets() const {
     if (!m_impl || !m_impl->is_open || !m_impl->xmt_local_buffer_raw) {
         return false;
     }
-    auto* xmt_local = m_impl->xmtLocal();
-    return xmt_local->headindex != xmt_local->tailindex;
+    return m_impl->adapter->getLocalXmtHeadindexPtr() != m_impl->adapter->getLocalXmtTailindexPtr();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1617,35 +1520,36 @@ Result<uint32_t> ShmemSession::getNumTotalChans() const {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         return Result<uint32_t>::ok(static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nNumTotalChans);
     } else {
-        // CENTRAL and CENTRAL_COMPAT share the same CentralPCStatus struct
-        return Result<uint32_t>::ok(static_cast<CentralPCStatus*>(m_impl->status_buffer_raw)->m_nNumTotalChans);
+        NativePCStatus status;
+        auto res = m_impl->adapter->getPcStatus(status);
+        if (res.isError()) {
+            return Result<uint32_t>::error(res.error());
+        }
+        return Result<uint32_t>::ok(status.m_nNumTotalChans);
     }
 }
 
-Result<NSPStatus> ShmemSession::getNspStatus(cbproto::InstrumentId id) const {
+Result<NativeNSPStatus> ShmemSession::getNspStatus() const {
     if (!m_impl || !m_impl->is_open) {
-        return Result<NSPStatus>::error("Session is not open");
+        return Result<NativeNSPStatus>::error("Session is not open");
     }
     if (!m_impl->status_buffer_raw) {
-        return Result<NSPStatus>::error("Status buffer not initialized");
+        return Result<NativeNSPStatus>::error("Status buffer not initialized");
     }
 
-    uint32_t index = id.toIndex();
-
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (index != 0) {
-            return Result<NSPStatus>::error("Native mode: single instrument only");
-        }
-        return Result<NSPStatus>::ok(static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nNspStatus);
+        return Result<NativeNSPStatus>::ok(static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nNspStatus);
     } else {
-        if (index >= CENTRAL_cbMAXPROCS) {
-            return Result<NSPStatus>::error("Invalid instrument ID");
+        NativePCStatus status;
+        auto res = m_impl->adapter->getPcStatus(status);
+        if (res.isError()) {
+            return Result<NativeNSPStatus>::error(res.error());
         }
-        return Result<NSPStatus>::ok(static_cast<CentralPCStatus*>(m_impl->status_buffer_raw)->m_nNspStatus[index]);
+        return Result<NativeNSPStatus>::ok(status.m_nNspStatus);
     }
 }
 
-Result<void> ShmemSession::setNspStatus(cbproto::InstrumentId id, NSPStatus status) {
+Result<void> ShmemSession::setNspStatus(NativeNSPStatus status) {
     if (!m_impl || !m_impl->is_open) {
         return Result<void>::error("Session is not open");
     }
@@ -1653,18 +1557,10 @@ Result<void> ShmemSession::setNspStatus(cbproto::InstrumentId id, NSPStatus stat
         return Result<void>::error("Status buffer not initialized");
     }
 
-    uint32_t index = id.toIndex();
-
     if (m_impl->layout == ShmemLayout::NATIVE) {
-        if (index != 0) {
-            return Result<void>::error("Native mode: single instrument only");
-        }
         static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nNspStatus = status;
     } else {
-        if (index >= CENTRAL_cbMAXPROCS) {
-            return Result<void>::error("Invalid instrument ID");
-        }
-        static_cast<CentralPCStatus*>(m_impl->status_buffer_raw)->m_nNspStatus[index] = status;
+        return m_impl->adapter->setNspStatus(status);
     }
 
     return Result<void>::ok();
@@ -1681,7 +1577,12 @@ Result<bool> ShmemSession::isGeminiSystem() const {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         return Result<bool>::ok(static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nGeminiSystem != 0);
     } else {
-        return Result<bool>::ok(static_cast<CentralPCStatus*>(m_impl->status_buffer_raw)->m_nGeminiSystem != 0);
+        NativePCStatus status;
+        auto res = m_impl->adapter->getPcStatus(status);
+        if (res.isError()) {
+            return Result<bool>::error(res.error());
+        }
+        return Result<bool>::ok(status.m_nGeminiSystem);
     }
 }
 
@@ -1696,7 +1597,7 @@ Result<void> ShmemSession::setGeminiSystem(bool is_gemini) {
     if (m_impl->layout == ShmemLayout::NATIVE) {
         static_cast<NativePCStatus*>(m_impl->status_buffer_raw)->m_nGeminiSystem = is_gemini ? 1 : 0;
     } else {
-        static_cast<CentralPCStatus*>(m_impl->status_buffer_raw)->m_nGeminiSystem = is_gemini ? 1 : 0;
+        return m_impl->adapter->setGeminiSystem(is_gemini);
     }
 
     return Result<void>::ok();
@@ -1705,7 +1606,7 @@ Result<void> ShmemSession::setGeminiSystem(bool is_gemini) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Spike Cache Buffer Access
 
-Result<void> ShmemSession::getSpikeCache(uint32_t channel, CentralSpikeCache& cache) const {
+Result<void> ShmemSession::getSpikeCache(uint32_t channel, NativeSpikeCache& cache) const {
     if (!m_impl || !m_impl->is_open) {
         return Result<void>::error("Session is not open");
     }
@@ -1717,21 +1618,23 @@ Result<void> ShmemSession::getSpikeCache(uint32_t channel, CentralSpikeCache& ca
         if (channel >= NATIVE_cbPKT_SPKCACHELINECNT) {
             return Result<void>::error("Invalid channel number");
         }
-        // Copy from NativeSpikeCache to CentralSpikeCache (same field layout)
+        // Copy from the buffer (same field layout)
         auto* spike = static_cast<NativeSpikeBuffer*>(m_impl->spike_buffer_raw);
         auto& src = spike->cache[channel];
         cache.chid = src.chid;
-        cache.pktcnt = src.pktcnt;
+        // Clamp pktcnt read from shared memory so the memcpy below cannot
+        // overflow the destination cache's spkpkt array.
+        cache.pktcnt = (src.pktcnt <= NATIVE_cbPKT_SPKCACHEPKTCNT)
+                           ? src.pktcnt : NATIVE_cbPKT_SPKCACHEPKTCNT;
         cache.pktsize = src.pktsize;
         cache.head = src.head;
         cache.valid = src.valid;
-        std::memcpy(cache.spkpkt, src.spkpkt, sizeof(cbPKT_SPK) * src.pktcnt);
+        std::memcpy(cache.spkpkt, src.spkpkt, sizeof(cbPKT_SPK) * cache.pktcnt);
     } else {
-        if (channel >= CENTRAL_cbPKT_SPKCACHELINECNT) {
-            return Result<void>::error("Invalid channel number");
+        auto res = m_impl->adapter->getSpikeCache(cache, channel);
+        if (res.isError()) {
+            return Result<void>::error(res.error());
         }
-        auto* spike = static_cast<CentralSpikeBuffer*>(m_impl->spike_buffer_raw);
-        cache = spike->cache[channel];
     }
 
     return Result<void>::ok();
@@ -1751,23 +1654,27 @@ Result<bool> ShmemSession::getRecentSpike(uint32_t channel, cbPKT_SPK& spike) co
         }
         auto* buf = static_cast<NativeSpikeBuffer*>(m_impl->spike_buffer_raw);
         const auto& cache = buf->cache[channel];
-        if (cache.valid == 0) {
+        // pktcnt comes from shared memory: 0 would underflow the index below
+        // and an oversized value would index past the spkpkt array.
+        if (cache.valid == 0 || cache.pktcnt == 0 ||
+            cache.pktcnt > NATIVE_cbPKT_SPKCACHEPKTCNT) {
             return Result<bool>::ok(false);
         }
         uint32_t recent_idx = (cache.head == 0) ? (cache.pktcnt - 1) : (cache.head - 1);
-        spike = cache.spkpkt[recent_idx];
+        spike = cache.spkpkt[recent_idx % cache.pktcnt];
         return Result<bool>::ok(true);
     } else {
-        if (channel >= CENTRAL_cbPKT_SPKCACHELINECNT) {
-            return Result<bool>::error("Invalid channel number");
+        auto cache = std::make_unique<NativeSpikeCache>();
+        auto res = m_impl->adapter->getSpikeCache(*cache, channel);
+        if (res.isError()) {
+            return Result<bool>::error(res.error());
         }
-        auto* buf = static_cast<CentralSpikeBuffer*>(m_impl->spike_buffer_raw);
-        const auto& cache = buf->cache[channel];
-        if (cache.valid == 0) {
+        if (cache->valid == 0 || cache->pktcnt == 0 ||
+            cache->pktcnt > NATIVE_cbPKT_SPKCACHEPKTCNT) {
             return Result<bool>::ok(false);
         }
-        uint32_t recent_idx = (cache.head == 0) ? (cache.pktcnt - 1) : (cache.head - 1);
-        spike = cache.spkpkt[recent_idx];
+        uint32_t recent_idx = (cache->head == 0) ? (cache->pktcnt - 1) : (cache->head - 1);
+        spike = cache->spkpkt[recent_idx % cache->pktcnt];
         return Result<bool>::ok(true);
     }
 }
@@ -1889,35 +1796,19 @@ PROCTIME ShmemSession::getLastTime() const {
     if (!m_impl || !m_impl->is_open || !m_impl->rec_buffer_raw) {
         return 0;
     }
-    PROCTIME t = m_impl->recLasttime();
-    // In CENTRAL_COMPAT mode, Central writes lasttime using the device's native
+    PROCTIME t = m_impl->adapter->getRecLasttime();
+    // In CENTRAL mode, Central writes lasttime using the device's native
     // timestamp unit.  Non-Gemini devices use clock ticks; convert to nanoseconds
     // for consistency with readReceiveBuffer() which translates packet timestamps.
-    if (t != 0 && m_impl->layout == ShmemLayout::CENTRAL_COMPAT) {
+    if (t != 0 && m_impl->layout == ShmemLayout::CENTRAL) {
         auto gemini = isGeminiSystem();
         if (gemini.isOk() && !gemini.value()) {
-            uint32_t sysfreq = m_impl->legacyCfg()->sysinfo.sysfreq;
-            if (sysfreq == 0) sysfreq = 30000;
+            uint32_t sysfreq = m_impl->getSysFreq();
             uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
             t = t * (1000000000 / g) / (sysfreq / g);
         }
     }
     return t;
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-// Instrument Filtering
-
-void ShmemSession::setInstrumentFilter(int32_t instrument_index) {
-    m_impl->instrument_filter = instrument_index;
-}
-
-int32_t ShmemSession::getInstrumentFilter() const {
-    return m_impl->instrument_filter;
-}
-
-cbproto_protocol_version_t ShmemSession::getCompatProtocolVersion() const {
-    return m_impl->compat_protocol;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1935,21 +1826,29 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
     }
 
     packets_read = 0;
-    uint32_t* buf = m_impl->recBuffer();
+    uint32_t* buf = m_impl->adapter->getRecBufferPtr();
     uint32_t buflen = m_impl->rec_buffer_len;
 
-    // Acquire-load: pairs with the producer's release-store of head_index in
-    // writeToReceiveBuffer.  Without this, on weak memory architectures
-    // (ARM/Apple Silicon) we can observe an advanced head_index but stale or
-    // partial packet bytes, leading to misaligned reads of the ring buffer.
-    uint32_t head_index = shm_load_acquire_u32(&m_impl->recHeadindex());
-    uint32_t head_wrap = shm_load_relaxed_u32(&m_impl->recHeadwrap());
+    // Fail-safe recovery: our tail no longer points at a packet boundary
+    // (the producer lapped us, or we observed a torn head snapshot across a
+    // wrap).  Jump tail to the current head and report the loss, rather than
+    // advancing by a garbage size and delivering misinterpreted bytes to user
+    // callbacks.
+    auto resyncToHead = [&](const char* msg) -> Result<void> {
+        m_impl->loadRecHeadSnapshot(m_impl->rec_tailindex, m_impl->rec_tailwrap);
+        return Result<void>::error(msg);
+    };
+
+    // Stable (head_index, head_wrap) snapshot; see loadRecHeadSnapshot for why
+    // a naive two-load read can observe a torn pair across a wrap.
+    uint32_t head_index, head_wrap;
+    m_impl->loadRecHeadSnapshot(head_index, head_wrap);
 
     if (m_impl->rec_tailwrap == head_wrap && m_impl->rec_tailindex == head_index) {
         return Result<void>::ok();
     }
 
-    const bool needs_translation = (m_impl->layout == ShmemLayout::CENTRAL_COMPAT &&
+    const bool needs_translation = (m_impl->layout == ShmemLayout::CENTRAL &&
                                      m_impl->compat_protocol != CBPROTO_PROTOCOL_CURRENT);
 
     // For non-Gemini systems, header timestamps are in clock ticks and need
@@ -1958,13 +1857,12 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
     // (Protocol 3.11 handles conversion inline with its hardcoded 30 kHz factor.)
     uint64_t ts_num = 1, ts_den = 1;
     bool needs_ts_conversion = false;
-    if (m_impl->layout == ShmemLayout::CENTRAL_COMPAT &&
+    if (m_impl->layout == ShmemLayout::CENTRAL &&
         m_impl->compat_protocol != CBPROTO_PROTOCOL_311 &&
         m_impl->status_buffer_raw) {
         auto gemini = isGeminiSystem();
         if (gemini.isOk() && !gemini.value()) {
-            uint32_t sysfreq = m_impl->legacyCfg()->sysinfo.sysfreq;
-            if (sysfreq == 0) sysfreq = 30000;
+            uint32_t sysfreq = m_impl->getSysFreq();
             uint64_t g = std::gcd(uint64_t(1000000000), uint64_t(sysfreq));
             ts_num = 1000000000 / g;
             ts_den = sysfreq / g;
@@ -1979,11 +1877,24 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             break;
         }
 
-        if ((m_impl->rec_tailwrap + 1 == head_wrap && m_impl->rec_tailindex < head_index) ||
-            (m_impl->rec_tailwrap + 1 < head_wrap)) {
-            m_impl->rec_tailindex = head_index;
-            m_impl->rec_tailwrap = head_wrap;
-            return Result<void>::error("Receive buffer overrun - data lost");
+        // Overrun detection (matches Central's cbhwlib check): the producer has
+        // lapped us if it is on a later wrap AND its head has advanced to within
+        // one reserved zone of our tail, or if it is more than a full lap ahead.
+        // In either case the bytes at our tail may already be overwritten.
+        if ((m_impl->rec_tailwrap != head_wrap &&
+             head_index + m_impl->rec_reserve_len >= m_impl->rec_tailindex) ||
+            (head_wrap > m_impl->rec_tailwrap + 1)) {
+            return resyncToHead("Receive buffer overrun - data lost");
+        }
+
+        // Same-lap sanity: a tail ahead of head on the same wrap cannot occur
+        // in a healthy stream (we only ever follow packet boundaries the
+        // producer published).  It means a torn snapshot was adopted across a
+        // wrap and our tail is parked in stale bytes — which parse as
+        // well-formed (previous-lap) packets, so the per-packet validation
+        // below would happily deliver them.  Resync instead.
+        if (m_impl->rec_tailwrap == head_wrap && m_impl->rec_tailindex > head_index) {
+            return resyncToHead("Receive buffer desync - data lost");
         }
 
         // Parse the packet header to determine packet size based on protocol version.
@@ -2004,37 +1915,26 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             raw_header_32size = cbPKT_HEADER_32SIZE;  // 4
             auto* hdr = reinterpret_cast<const cbPKT_HEADER*>(&buf[m_impl->rec_tailindex]);
             raw_dlen = hdr->dlen;
-
-            // Wrap-marker packet inserted by the writer to fill the unused
-            // gap before a wrap-around (chid=0, type=0, dlen != 0).  Skip
-            // silently — advance tail past the marker without reporting it
-            // to the caller so it never reaches user callbacks.
-            if (hdr->chid == 0 && hdr->type == 0 && hdr->dlen != 0) {
-                uint32_t marker_size = cbPKT_HEADER_32SIZE + hdr->dlen;
-                m_impl->rec_tailindex += marker_size;
-                if (m_impl->rec_tailindex >= buflen) {
-                    m_impl->rec_tailindex -= buflen;
-                    m_impl->rec_tailwrap++;
-                }
-                continue;
-            }
         }
 
         uint32_t pkt_size_dwords = raw_header_32size + raw_dlen;
 
         if (pkt_size_dwords == 0 || pkt_size_dwords > (sizeof(cbPKT_GENERIC) / sizeof(uint32_t))) {
-            m_impl->rec_tailindex++;
-            if (m_impl->rec_tailindex >= buflen) {
-                m_impl->rec_tailindex = 0;
-                m_impl->rec_tailwrap++;
-            }
-            continue;
+            // Implausible size => tail is off a packet boundary.  Fail safe
+            // rather than byte-scanning through garbage.
+            return resyncToHead("Receive buffer desync - data lost");
         }
 
         if (needs_translation) {
             // Copy raw bytes from ring buffer into a temp buffer for translation.
-            // Packets never straddle the buffer boundary (Central wraps before that),
-            // but we handle it defensively.
+            // Under a correct reserve-zone wrap a packet never straddles buflen:
+            // the tail is always <= buflen - reserve and pkt_size_dwords is capped
+            // at sizeof(cbPKT_GENERIC) (both enforced above), and reserve exceeds
+            // that cap, so end_index <= buflen always and the wrap branch below is
+            // unreachable.  It is retained only as a guard against an external
+            // Central writer whose wrap threshold diverges from ours (cf. the v7.0
+            // reserve desync): it degrades such a mismatch into bytes the validity
+            // checks below still catch, instead of a read past the end of the ring.
             uint32_t raw_bytes = pkt_size_dwords * sizeof(uint32_t);
             uint32_t end_index = m_impl->rec_tailindex + pkt_size_dwords;
 
@@ -2080,7 +1980,10 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             }
         } else {
             // No translation needed (4.2+, NATIVE, or CENTRAL layout).
-            // Copy directly from ring buffer to output.
+            // Copy directly from ring buffer to output.  As with the translation
+            // path above, the wrap branch is unreachable under a correct
+            // reserve-zone wrap and is retained only as a guard against an
+            // external-writer wrap-threshold mismatch.
             uint32_t end_index = m_impl->rec_tailindex + pkt_size_dwords;
 
             if (end_index <= buflen) {
@@ -2101,26 +2004,49 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
             }
         }
 
-        // Non-Gemini CENTRAL_COMPAT: convert header timestamp from clock ticks to nanoseconds.
+        // Non-Gemini CENTRAL: convert header timestamp from clock ticks to nanoseconds.
         // Applied after both translation and non-translation paths.
         if (needs_ts_conversion) {
             packets[packets_read].cbpkt_header.time =
                 packets[packets_read].cbpkt_header.time * ts_num / ts_den;
         }
 
-        // Advance tail past this packet (consumed from ring buffer regardless of filter)
+        // Fail-safe validation: a header that can't belong to a real packet
+        // means tail drifted off a packet boundary (producer lapped us, or a
+        // torn head snapshot across a wrap).  Real packets have the high byte of
+        // `type` clear, and chid is a channel (0 group sample, up to 0x0FFF) or
+        // the configuration channel (0x8000).  Resync to head and drop instead
+        // of advancing by a garbage size and scanning more garbage into the
+        // user callbacks.
+        {
+            const uint16_t vchid = packets[packets_read].cbpkt_header.chid;
+            const uint16_t vtype = packets[packets_read].cbpkt_header.type;
+            if ((vtype & 0xFF00) != 0 ||
+                (vchid > 0x0FFF && vchid != cbPKTCHAN_CONFIGURATION)) {
+                return resyncToHead("Receive buffer desync - data lost");
+            }
+        }
+
+        // Advance tail past this packet (consumed from ring buffer regardless
+        // of filter) and apply the identical reserved-tail-zone wrap the
+        // producer uses (see writeToReceiveBuffer): once the tail passes
+        // buflen - reserve, reset to 0 and bump the wrap counter.  This keeps
+        // our tail in lockstep with the producer's head and never lands in the
+        // stale bytes between the last packet and buflen.
         m_impl->rec_tailindex += pkt_size_dwords;
-        if (m_impl->rec_tailindex >= buflen) {
-            m_impl->rec_tailindex -= buflen;
+        if (m_impl->rec_tailindex > (buflen - m_impl->rec_reserve_len)) {
+            m_impl->rec_tailindex = 0;
             m_impl->rec_tailwrap++;
         }
 
-        // Apply instrument filter: skip packets not matching our instrument
-        if (m_impl->instrument_filter >= 0) {
-            uint8_t pkt_instrument = packets[packets_read].cbpkt_header.instrument;
-            if (pkt_instrument != static_cast<uint8_t>(m_impl->instrument_filter)) {
-                continue;  // Skip this packet, don't increment packets_read
-            }
+        // Filter packets so only those from the selected instrument are read.
+        // Only meaningful for the CENTRAL layout, where one shared receive
+        // buffer holds every instrument's packets and the instrument field is
+        // the demux key. NATIVE segments are per-device (single source), so
+        // filtering them would only drop valid data for a non-index-0 device.
+        if (m_impl->layout == ShmemLayout::CENTRAL &&
+            packets[packets_read].cbpkt_header.instrument != m_impl->inst.toIndex()) {
+            continue;  // Skip this packet, don't increment packets_read
         }
 
         packets_read++;
@@ -2129,33 +2055,16 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
     return Result<void>::ok();
 }
 
-Result<void> ShmemSession::getReceiveBufferStats(uint32_t& received, uint32_t& available) const {
+Result<uint32_t> ShmemSession::getReceivedPacketCount() const {
     if (!m_impl || !m_impl->is_open) {
-        return Result<void>::error("Session is not open");
+        return Result<uint32_t>::error("Session is not open");
     }
     if (!m_impl->rec_buffer_raw) {
-        return Result<void>::error("Receive buffer not initialized");
+        return Result<uint32_t>::error("Receive buffer not initialized");
     }
 
-    received = m_impl->recReceived();
-    uint32_t buflen = m_impl->rec_buffer_len;
-
-    uint32_t head_index = m_impl->recHeadindex();
-    uint32_t head_wrap = m_impl->recHeadwrap();
-
-    if (m_impl->rec_tailwrap == head_wrap) {
-        if (head_index >= m_impl->rec_tailindex) {
-            available = head_index - m_impl->rec_tailindex;
-        } else {
-            available = 0;
-        }
-    } else if (m_impl->rec_tailwrap + 1 == head_wrap) {
-        available = (buflen - m_impl->rec_tailindex) + head_index;
-    } else {
-        available = 0;
-    }
-
-    return Result<void>::ok();
+    // TODO: Do NOT rely on the Central adapter for NATIVE mode.
+    return Result<uint32_t>::ok(m_impl->adapter->getRecReceived());
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2171,7 +2080,7 @@ void ShmemSession::setClockSync(int64_t offset_ns, int64_t uncertainty_ns) {
         cfg->clock_uncertainty_ns = uncertainty_ns;
         cfg->clock_sync_valid = 1;
     }
-    // CENTRAL and CENTRAL_COMPAT layouts don't have clock sync fields
+    // The CENTRAL layout doesn't have clock sync fields
 }
 
 void ShmemSession::setClockRawOffset(int64_t raw_offset_ns) {

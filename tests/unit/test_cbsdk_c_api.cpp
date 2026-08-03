@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 #include "cbsdk/cbsdk.h"
 #include <cstring>
+#include <vector>
 
 /// Test fixture for C API tests
 class CbsdkCApiTest : public ::testing::Test {
@@ -339,7 +340,8 @@ TEST_F(CbsdkCApiTest, GetRunlevel_NullSession) {
 }
 
 TEST_F(CbsdkCApiTest, GetChannelLabel_NullSession) {
-    EXPECT_EQ(cbsdk_session_get_channel_label(nullptr, 1), nullptr);
+    std::vector<char> buf(cbsdk_session_get_channel_label_length());
+    EXPECT_LT(cbsdk_session_get_channel_label(nullptr, 1, buf.data(), buf.size()), 0);
 }
 
 TEST_F(CbsdkCApiTest, GetChannelSmpgroup_NullSession) {
@@ -351,7 +353,8 @@ TEST_F(CbsdkCApiTest, GetChannelChancaps_NullSession) {
 }
 
 TEST_F(CbsdkCApiTest, GetGroupLabel_NullSession) {
-    EXPECT_EQ(cbsdk_session_get_group_label(nullptr, 1), nullptr);
+    std::vector<char> buf(cbsdk_session_get_group_label_length());
+    EXPECT_LT(cbsdk_session_get_group_label(nullptr, 1, buf.data(), buf.size()), 0);
 }
 
 TEST_F(CbsdkCApiTest, GetConstants) {
@@ -359,6 +362,10 @@ TEST_F(CbsdkCApiTest, GetConstants) {
     EXPECT_GT(cbsdk_get_num_fe_chans(), 0);
     EXPECT_GT(cbsdk_get_num_analog_chans(), 0);
     EXPECT_GE(cbsdk_get_max_chans(), cbsdk_get_num_analog_chans());
+    // Label buffer sizes: at least one char + null terminator.
+    EXPECT_GT(cbsdk_session_get_channel_label_length(), 1u);
+    EXPECT_GT(cbsdk_session_get_group_label_length(), 1u);
+    EXPECT_GT(cbsdk_session_get_filter_label_length(), 1u);
 }
 
 TEST_F(CbsdkCApiTest, ConfigAccess_WithSession) {
@@ -367,14 +374,15 @@ TEST_F(CbsdkCApiTest, ConfigAccess_WithSession) {
     cbsdk_session_t session = nullptr;
     ASSERT_EQ(cbsdk_session_create(&session, &config), CBSDK_RESULT_SUCCESS);
 
-    // These may return NULL/0 without a device, but must not crash
-    cbsdk_session_get_channel_label(session, 1);
-    cbsdk_session_get_channel_label(session, 0);       // Invalid channel
-    cbsdk_session_get_channel_label(session, 99999);    // Out of range
+    // These may return a negative value without a device, but must not crash
+    std::vector<char> buf(cbsdk_session_get_channel_label_length());
+    cbsdk_session_get_channel_label(session, 1, buf.data(), buf.size());
+    cbsdk_session_get_channel_label(session, 0, buf.data(), buf.size());       // Invalid channel
+    cbsdk_session_get_channel_label(session, 99999, buf.data(), buf.size());    // Out of range
     cbsdk_session_get_channel_smpgroup(session, 1);
     cbsdk_session_get_channel_chancaps(session, 1);
-    cbsdk_session_get_group_label(session, 1);
-    cbsdk_session_get_group_label(session, 0);          // Invalid group
+    cbsdk_session_get_group_label(session, 1, buf.data(), buf.size());
+    cbsdk_session_get_group_label(session, 0, buf.data(), buf.size());          // Invalid group
     cbsdk_session_get_runlevel(session);
 
     cbsdk_session_destroy(session);

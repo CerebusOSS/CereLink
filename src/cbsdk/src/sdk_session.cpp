@@ -21,6 +21,7 @@
 #include "cbdev/device_factory.h"
 #include "cbdev/connection.h"
 #include "cbshm/shmem_session.h"
+#include <cbproto/gemini.h>
 #include <ccfutils/ccf_config.h>
 #include <CCFUtils.h>
 #include <thread>
@@ -29,7 +30,6 @@
 #include <cstring>
 #include <iostream>
 #include <algorithm>
-#include <array>
 #include <set>
 #include <vector>
 #include <unordered_map>
@@ -255,6 +255,11 @@ struct SdkSession::Impl {
     std::mutex handshake_mutex;
     std::condition_variable handshake_cv;
 
+    // Running count of configuration replies (CHANREP/PROCREP/GROUPREP).
+    // requestConfiguration() uses this to tell "the dump arrived but its
+    // terminating SYSREP did not" apart from "the device never answered".
+    std::atomic<uint64_t> config_replies{0};
+
     // User callbacks — per-type vectors for O(1) dispatch (Phase 2, Fix 8)
     // Registered rarely (user thread), dispatched at 30k/s (callback thread).
     struct PacketCB     { CallbackHandle handle; PacketCallback cb; };
@@ -302,14 +307,30 @@ struct SdkSession::Impl {
 
     void rebuildChannelTypeCache() {
         for (uint32_t ch = 0; ch < cbMAXCHANS; ++ch) {
-            const auto* ci = getChanInfoPtr(ch);
-            channel_type_cache[ch] = ci ? classifyChannelByCaps(*ci) : ChannelType::ANY;
+            auto ci = getChanInfo(ch + 1);
+            channel_type_cache[ch] = ci.isOk() ? classifyChannelByCaps(ci.value()) : ChannelType::ANY;
         }
         channel_cache_valid = true;
     }
 
-    /// Get chaninfo pointer for a 0-based channel index (works for both STANDALONE and CLIENT)
-    const cbPKT_CHANINFO* getChanInfoPtr(uint32_t idx) const;
+    // Helper: get chaninfo for a 1-based channel ID
+    Result<cbPKT_CHANINFO> getChanInfo(const uint32_t chan_id) const {
+        // Prefer shmem over device_config because CMP position overlays are
+        // written to shmem (device_config is owned by the receive thread and
+        // we avoid writing to it from other threads).
+        if (shmem_session && chan_id >= 1 && chan_id <= cbMAXCHANS) {
+            return shmem_session->getChanInfo(chan_id - 1);
+        }
+        // Fallback to device_config (no shmem available)
+        if (device_session) {
+            const auto* chaninfo = device_session->getChanInfo(chan_id);
+            if (!chaninfo) {
+                return Result<cbPKT_CHANINFO>::error("Failed to get channel information");
+            }
+            return Result<cbPKT_CHANINFO>::ok(*chaninfo);
+        }
+        return Result<cbPKT_CHANINFO>::error("Channel information not available");
+    }
 
     // Clock sync periodic probing
     std::chrono::steady_clock::time_point last_clock_probe_time{};
@@ -393,6 +414,7 @@ struct SdkSession::Impl {
         std::atomic<uint64_t> shmem_store_errors{0};
         std::atomic<uint64_t> receive_errors{0};
         std::atomic<uint64_t> send_errors{0};
+        std::atomic<uint64_t> shmem_overruns{0};
 
         void reset() {
             packets_received_from_device.store(0, std::memory_order_relaxed);
@@ -406,6 +428,7 @@ struct SdkSession::Impl {
             shmem_store_errors.store(0, std::memory_order_relaxed);
             receive_errors.store(0, std::memory_order_relaxed);
             send_errors.store(0, std::memory_order_relaxed);
+            shmem_overruns.store(0, std::memory_order_relaxed);
         }
 
         SdkStats snapshot() const {
@@ -421,6 +444,7 @@ struct SdkSession::Impl {
             s.shmem_store_errors = shmem_store_errors.load(std::memory_order_relaxed);
             s.receive_errors = receive_errors.load(std::memory_order_relaxed);
             s.send_errors = send_errors.load(std::memory_order_relaxed);
+            s.shmem_overruns = shmem_overruns.load(std::memory_order_relaxed);
             return s;
         }
     };
@@ -631,97 +655,6 @@ SdkSession::~SdkSession() {
     }
 }
 
-// Helper function to map DeviceType to shared memory instance number.
-// Central creates a SINGLE shared memory instance (0) for ALL instruments in a
-// Gemini system. The different instruments (Hub1-3, NSP) share the same buffers
-// and are distinguished by instrument INDEX within the buffers, not by separate
-// shared memory instances. Therefore all device types map to instance 0.
-static int getInstanceNumber(DeviceType /*type*/) {
-    return 0;
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-// Central-compatible shared memory naming
-// Names match Central's naming convention: base name + optional instance suffix
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Helper function to get Central-compatible shared memory names
-// Returns config buffer name (e.g., "cbCFGbuffer" or "cbCFGbuffer1")
-static std::string getCentralConfigBufferName(DeviceType type) {
-    int instance = getInstanceNumber(type);
-    if (instance == 0) {
-        return "cbCFGbuffer";
-    } else {
-        return "cbCFGbuffer" + std::to_string(instance);
-    }
-}
-
-// Helper function to get Central-compatible transmit buffer name
-// Returns transmit buffer name (e.g., "XmtGlobal" or "XmtGlobal1")
-static std::string getCentralTransmitBufferName(DeviceType type) {
-    int instance = getInstanceNumber(type);
-    if (instance == 0) {
-        return "XmtGlobal";
-    } else {
-        return "XmtGlobal" + std::to_string(instance);
-    }
-}
-
-// Helper function to get Central-compatible receive buffer name
-// Returns receive buffer name (e.g., "cbRECbuffer" or "cbRECbuffer1")
-static std::string getCentralReceiveBufferName(DeviceType type) {
-    int instance = getInstanceNumber(type);
-    if (instance == 0) {
-        return "cbRECbuffer";
-    } else {
-        return "cbRECbuffer" + std::to_string(instance);
-    }
-}
-
-// Helper function to get Central-compatible local transmit buffer name
-// Returns local transmit buffer name (e.g., "XmtLocal" or "XmtLocal1")
-static std::string getCentralLocalTransmitBufferName(DeviceType type) {
-    int instance = getInstanceNumber(type);
-    if (instance == 0) {
-        return "XmtLocal";
-    } else {
-        return "XmtLocal" + std::to_string(instance);
-    }
-}
-
-// Helper function to get Central-compatible status buffer name
-// Returns status buffer name (e.g., "cbSTATUSbuffer" or "cbSTATUSbuffer1")
-static std::string getCentralStatusBufferName(DeviceType type) {
-    int instance = getInstanceNumber(type);
-    if (instance == 0) {
-        return "cbSTATUSbuffer";
-    } else {
-        return "cbSTATUSbuffer" + std::to_string(instance);
-    }
-}
-
-// Helper function to get Central-compatible spike cache buffer name
-// Returns spike cache buffer name (e.g., "cbSPKbuffer" or "cbSPKbuffer1")
-static std::string getCentralSpikeBufferName(DeviceType type) {
-    int instance = getInstanceNumber(type);
-    if (instance == 0) {
-        return "cbSPKbuffer";
-    } else {
-        return "cbSPKbuffer" + std::to_string(instance);
-    }
-}
-
-// Helper function to get Central-compatible signal event name
-// Returns signal event name (e.g., "cbSIGNALevent" or "cbSIGNALevent1")
-static std::string getCentralSignalEventName(DeviceType type) {
-    int instance = getInstanceNumber(type);
-    if (instance == 0) {
-        return "cbSIGNALevent";
-    } else {
-        return "cbSIGNALevent" + std::to_string(instance);
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Native-mode shared memory naming
 // Names use per-device segments: "cbshm_{device}_{segment}"
@@ -756,7 +689,10 @@ static int32_t getCentralInstrumentIndex(DeviceType type) {
         case DeviceType::HUB3:       return 2;
         case DeviceType::NSP:        return 3;
         case DeviceType::LEGACY_NSP: return 0;  // Non-Gemini, single instrument
-        default:                     return -1;  // No filter
+        // No CENTRAL instrument mapping (e.g. NPLAY). -1 yields an invalid
+        // InstrumentId, so CENTRAL-mode create() fails and the caller falls
+        // back to NATIVE. This is NOT a "match all instruments" sentinel.
+        default:                     return -1;
     }
 }
 
@@ -770,43 +706,22 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     // 3. Fall back to native STANDALONE: create new native-mode segments
     bool is_standalone = false;
 
+    // Device token used to build NATIVE segment names. The SDK always targets
+    // Central's primary instance, so the CENTRAL instance suffix is empty.
+    std::string device_tag = getNativeDeviceName(config.device_type);
+
     // --- Attempt 1: Central-compatible CLIENT mode ---
     // Try to attach to Central's shared memory (Central is running)
-    std::string central_cfg = getCentralConfigBufferName(config.device_type);
-    std::string central_rec = getCentralReceiveBufferName(config.device_type);
-    std::string central_xmt = getCentralTransmitBufferName(config.device_type);
-    std::string central_xmt_local = getCentralLocalTransmitBufferName(config.device_type);
-    std::string central_status = getCentralStatusBufferName(config.device_type);
-    std::string central_spk = getCentralSpikeBufferName(config.device_type);
-    std::string central_signal = getCentralSignalEventName(config.device_type);
-
+    auto inst = cbproto::InstrumentId::fromIndex(getCentralInstrumentIndex(config.device_type));
     auto shmem_result = cbshm::ShmemSession::create(
-        central_cfg, central_rec, central_xmt, central_xmt_local,
-        central_status, central_spk, central_signal,
-        cbshm::Mode::CLIENT, cbshm::ShmemLayout::CENTRAL_COMPAT);
-
-    if (shmem_result.isOk()) {
-        // Set instrument filter for CENTRAL_COMPAT mode (Central's receive buffer
-        // contains packets from ALL instruments; we only want our device's packets)
-        int32_t inst_idx = getCentralInstrumentIndex(config.device_type);
-        shmem_result.value().setInstrumentFilter(inst_idx);
-    }
+        cbshm::Mode::CLIENT, cbshm::ShmemLayout::CENTRAL, /*instance=*/"", inst);
 
     if (shmem_result.isError()) {
         // --- Attempt 2: Native CLIENT mode ---
         // Try to attach to an existing CereLink STANDALONE's native segments
-        std::string native_cfg = getNativeSegmentName(config.device_type, "config");
-        std::string native_rec = getNativeSegmentName(config.device_type, "receive");
-        std::string native_xmt = getNativeSegmentName(config.device_type, "xmt_global");
-        std::string native_xmt_local = getNativeSegmentName(config.device_type, "xmt_local");
-        std::string native_status = getNativeSegmentName(config.device_type, "status");
-        std::string native_spk = getNativeSegmentName(config.device_type, "spike");
-        std::string native_signal = getNativeSegmentName(config.device_type, "signal");
-
         shmem_result = cbshm::ShmemSession::create(
-            native_cfg, native_rec, native_xmt, native_xmt_local,
-            native_status, native_spk, native_signal,
-            cbshm::Mode::CLIENT, cbshm::ShmemLayout::NATIVE);
+            cbshm::Mode::CLIENT, cbshm::ShmemLayout::NATIVE, device_tag,
+            cbproto::InstrumentId::fromIndex(0));
 
         // Liveness check: reject stale segments from a dead STANDALONE process.
         // The ShmemSession destructor (triggered by reassignment) unmaps the segments;
@@ -820,9 +735,8 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
             // --- Attempt 3: Native STANDALONE mode ---
             // No existing shared memory found, create new native-mode segments
             shmem_result = cbshm::ShmemSession::create(
-                native_cfg, native_rec, native_xmt, native_xmt_local,
-                native_status, native_spk, native_signal,
-                cbshm::Mode::STANDALONE, cbshm::ShmemLayout::NATIVE);
+                cbshm::Mode::STANDALONE, cbshm::ShmemLayout::NATIVE, device_tag,
+                cbproto::InstrumentId::fromIndex(0));
 
             if (shmem_result.isError()) {
                 return Result<SdkSession>::error("Failed to create shared memory: " + shmem_result.error());
@@ -964,6 +878,14 @@ Result<void> SdkSession::start() {
                     return;
                 }
 
+                // Track configuration replies so requestConfiguration() can
+                // recognise a config dump that arrived without its terminator.
+                if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP
+                    || pkt.cbpkt_header.type == cbPKTTYPE_PROCREP
+                    || pkt.cbpkt_header.type == cbPKTTYPE_GROUPREP) {
+                    impl->config_replies.fetch_add(1, std::memory_order_relaxed);
+                }
+
                 // Check for SYSREP packets (handshake responses)
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
                     const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
@@ -982,9 +904,8 @@ Result<void> SdkSession::start() {
                 // can read device configuration (chaninfo, procinfo, sysinfo, groupinfo).
                 if (pkt.cbpkt_header.type == cbPKTTYPE_PROCREP) {
                     const auto* procinfo = reinterpret_cast<const cbPKT_PROCINFO*>(&pkt);
-                    impl->shmem_session->setProcInfo(
-                        cbproto::InstrumentId::fromPacketField(pkt.cbpkt_header.instrument),
-                        *procinfo);
+                    impl->shmem_session->setProcInfo(*procinfo);
+                    impl->shmem_session->setGeminiSystem(cbproto::procInfoIsGemini(*procinfo));
                 }
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_SYSREP) {
                     const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
@@ -993,9 +914,7 @@ Result<void> SdkSession::start() {
                 if (pkt.cbpkt_header.type == cbPKTTYPE_GROUPREP) {
                     const auto* groupinfo = reinterpret_cast<const cbPKT_GROUPINFO*>(&pkt);
                     if (groupinfo->group >= 1 && groupinfo->group <= cbMAXGROUPS) {
-                        impl->shmem_session->setGroupInfo(
-                            cbproto::InstrumentId::fromPacketField(pkt.cbpkt_header.instrument),
-                            groupinfo->group - 1, *groupinfo);
+                        impl->shmem_session->setGroupInfo(groupinfo->group - 1, *groupinfo);
                     }
                 }
                 if ((pkt.cbpkt_header.type & 0xF0) == cbPKTTYPE_CHANREP) {
@@ -1304,6 +1223,14 @@ Result<void> SdkSession::start() {
                     auto read_result = impl->shmem_session->readReceiveBuffer(packets, MAX_BATCH, packets_read);
                     if (read_result.isError()) {
                         impl->stats.shmem_store_errors.fetch_add(1, std::memory_order_relaxed);
+                        // Separate "we lost data" from "the read could not run at
+                        // all".  ShmemSession marks the former (overrun / desync)
+                        // with "data lost"; the latter (not open, bad args) has no
+                        // effect on the stream.  packets_dropped is NOT reused --
+                        // that counts callback-queue overflow.
+                        if (read_result.error().find("data lost") != std::string::npos) {
+                            impl->stats.shmem_overruns.fetch_add(1, std::memory_order_relaxed);
+                        }
                         std::lock_guard<std::mutex> lock(impl->user_callback_mutex);
                         if (impl->error_callback) {
                             impl->error_callback("Error reading from shared memory: " + read_result.error());
@@ -1315,8 +1242,12 @@ Result<void> SdkSession::start() {
                     if (packets_read > 0) {
                         auto t4 = std::chrono::steady_clock::now();
                         impl->stats.packets_delivered_to_callback.fetch_add(packets_read, std::memory_order_relaxed);
+                        impl->stats.packets_received_from_device.fetch_add(packets_read, std::memory_order_relaxed);
+                        uint64_t batch_bytes = 0;
                         // CLIENT mode: scan packets for clock sync replies and CMP overlays
                         for (size_t i = 0; i < packets_read; i++) {
+                            batch_bytes += static_cast<uint64_t>(
+                                cbPKT_HEADER_32SIZE + packets[i].cbpkt_header.dlen) * 4;
                             if (packets[i].cbpkt_header.type == cbPKTTYPE_NPLAYREP) {
                                 // Complete pending clock sync probe
                                 constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
@@ -1348,6 +1279,8 @@ Result<void> SdkSession::start() {
                             // when it writes chaninfo to shmem. CLIENT doesn't need to
                             // re-apply them.
                         }
+                        impl->stats.bytes_received_from_device.fetch_add(
+                            batch_bytes, std::memory_order_relaxed);
 
                         // Periodic clock sync probing (~every 5 seconds)
                         if (t4 - impl->last_clock_probe_time > std::chrono::seconds(2)) {
@@ -1362,6 +1295,16 @@ Result<void> SdkSession::start() {
                             probe.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
                             probe.cbpkt_header.type = cbPKTTYPE_NPLAYSET;
                             probe.cbpkt_header.dlen = cbPKTDLEN_NPLAY;
+                            // Address the probe to this session's instrument so
+                            // the fabric routes it to the correct hub and the
+                            // echoed NPLAYREP carries the matching instrument
+                            // index — otherwise a non-index-0 session's reply is
+                            // dropped by readReceiveBuffer's instrument filter.
+                            // Use the session's bound instrument (0 for NATIVE)
+                            // so the probe and the filter compare the same value
+                            // by construction.
+                            probe.cbpkt_header.instrument =
+                                impl->shmem_session->getInstrument().toPacketField();
                             probe.mode = 0xFFFF;
                             probe.stime = static_cast<uint64_t>(
                                 std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -1507,6 +1450,16 @@ void SdkSession::setErrorCallback(ErrorCallback callback) {
 SdkStats SdkSession::getStats() const {
     SdkStats stats = m_impl->stats.snapshot();
     stats.queue_current_depth = m_impl->packet_queue.size();
+    // Live value, like queue_current_depth: the producer owns this counter in the
+    // ring, so a CLIENT can compare it against packets_received to size the loss
+    // an overrun cost it.  Exact only for a single-instrument ring -- a Central
+    // ring counts every instrument's packets, so treat it as an upper bound.
+    if (m_impl->shmem_session) {
+        auto produced = m_impl->shmem_session->getReceivedPacketCount();
+        if (produced.isOk()) {
+            stats.packets_produced = produced.value();
+        }
+    }
     return stats;
 }
 
@@ -1518,57 +1471,29 @@ const SdkConfig& SdkSession::getConfig() const {
     return m_impl->config;
 }
 
-const cbPKT_SYSINFO* SdkSession::getSysInfo() const {
+Result<cbPKT_SYSINFO> SdkSession::getSysInfo() const {
     if (m_impl->device_session)
-        return &m_impl->device_session->getSysInfo();
-    if (m_impl->shmem_session) {
-        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
-        if (native)
-            return &native->sysinfo;
-        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
-        if (legacy)
-            return &legacy->sysinfo;
-    }
-    return nullptr;
+        return Result<cbPKT_SYSINFO>::ok(m_impl->device_session->getSysInfo());
+    if (m_impl->shmem_session)
+        return m_impl->shmem_session->getSysInfo();
+    return Result<cbPKT_SYSINFO>::error("System information not available");
 }
 
-const cbPKT_CHANINFO* SdkSession::getChanInfo(const uint32_t chan_id) const {
-    // Prefer shmem over device_config because CMP position overlays are
-    // written to shmem (device_config is owned by the receive thread and
-    // we avoid writing to it from other threads).
-    if (m_impl->shmem_session && chan_id >= 1 && chan_id <= cbMAXCHANS) {
-        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
-        if (native)
-            return &native->chaninfo[chan_id - 1];
-        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
-        if (legacy)
-            return &legacy->chaninfo[chan_id - 1];
-    }
-    // Fallback to device_config (no shmem available)
-    if (m_impl->device_session)
-        return m_impl->device_session->getChanInfo(chan_id);
-    return nullptr;
+Result<cbPKT_CHANINFO> SdkSession::getChanInfo(const uint32_t chan_id) const {
+    return m_impl->getChanInfo(chan_id);
 }
 
-const cbPKT_GROUPINFO* SdkSession::getGroupInfo(uint32_t group_id) const {
+Result<cbPKT_GROUPINFO> SdkSession::getGroupInfo(uint32_t group_id) const {
     if (group_id == 0 || group_id > cbMAXGROUPS)
-        return nullptr;
+        return Result<cbPKT_GROUPINFO>::error("Invalid group ID");
     if (m_impl->device_session) {
         const auto& config = m_impl->device_session->getDeviceConfig();
-        return &config.groupinfo[group_id - 1];
+        return Result<cbPKT_GROUPINFO>::ok(config.groupinfo[group_id - 1]);
     }
     if (m_impl->shmem_session) {
-        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
-        if (native)
-            return &native->groupinfo[group_id - 1];
-        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
-        if (legacy) {
-            int32_t inst = getCentralInstrumentIndex(m_impl->config.device_type);
-            if (inst >= 0)
-                return &legacy->groupinfo[inst][group_id - 1];
-        }
+        return m_impl->shmem_session->getGroupInfo(group_id - 1);
     }
-    return nullptr;
+    return Result<cbPKT_GROUPINFO>::error("Group information not available");
 }
 
 uint32_t SdkSession::getGroupChannelList(uint32_t group_id, uint16_t* list, uint32_t max_count) const {
@@ -1582,19 +1507,22 @@ uint32_t SdkSession::getGroupChannelList(uint32_t group_id, uint16_t* list, uint
         // Prefer device_config (updated in updateConfigFromBuffer before the
         // sendAndWait / SYSREP sync barrier fires).  shmem chaninfo may lag
         // slightly because SDK callbacks run after the sync notification.
-        const cbPKT_CHANINFO* ci = nullptr;
-        if (m_impl->device_session)
-            ci = m_impl->device_session->getChanInfo(chan);
-        else
-            ci = getChanInfo(chan);
-
-        if (!ci) continue;
+        cbPKT_CHANINFO ci{};
+        if (m_impl->device_session) {
+            const auto* res = m_impl->device_session->getChanInfo(chan);
+            if (!res) continue;
+            ci = *res;
+        } else {
+            auto res = getChanInfo(chan);
+            if (res.isError()) continue;
+            ci = res.value();
+        }
 
         bool in_group;
         if (is_raw)
-            in_group = (ci->ainpopts & cbAINP_RAWSTREAM) != 0;
+            in_group = (ci.ainpopts & cbAINP_RAWSTREAM) != 0;
         else
-            in_group = (ci->smpgroup == group_id);
+            in_group = (ci.smpgroup == group_id);
 
         if (in_group)
             list[count++] = static_cast<uint16_t>(chan);
@@ -1602,25 +1530,17 @@ uint32_t SdkSession::getGroupChannelList(uint32_t group_id, uint16_t* list, uint
     return count;
 }
 
-const cbPKT_FILTINFO* SdkSession::getFilterInfo(const uint32_t filter_id) const {
+Result<cbPKT_FILTINFO> SdkSession::getFilterInfo(const uint32_t filter_id) const {
     if (filter_id >= cbMAXFILTS)
-        return nullptr;
+        return Result<cbPKT_FILTINFO>::error("Invalid filter ID");
     if (m_impl->device_session) {
         const auto& config = m_impl->device_session->getDeviceConfig();
-        return &config.filtinfo[filter_id];
+        return Result<cbPKT_FILTINFO>::ok(config.filtinfo[filter_id]);
     }
     if (m_impl->shmem_session) {
-        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
-        if (native)
-            return &native->filtinfo[filter_id];
-        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
-        if (legacy) {
-            int32_t inst = getCentralInstrumentIndex(m_impl->config.device_type);
-            if (inst >= 0)
-                return &legacy->filtinfo[inst][filter_id];
-        }
+        return m_impl->shmem_session->getFilterInfo(filter_id + 1);
     }
-    return nullptr;
+    return Result<cbPKT_FILTINFO>::error("Filter information not available");
 }
 
 uint32_t SdkSession::getRunLevel() const {
@@ -1629,7 +1549,8 @@ uint32_t SdkSession::getRunLevel() const {
     // Fall back to the SYSINFO mirrored into shmem by the STANDALONE owner.
     // In CLIENT mode the device only emits SYSREP on runlevel-set commands,
     // so this session's receive ring may never see one in steady state.
-    if (const auto* si = getSysInfo()) return si->runlevel;
+    auto si = getSysInfo();
+    if (si.isOk()) return si.value().runlevel;
     return 0;
 }
 
@@ -1644,12 +1565,8 @@ uint32_t SdkSession::getProtocolVersion() const {
         const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
         if (native)
             return CBPROTO_PROTOCOL_CURRENT;  // NATIVE layout always uses current protocol
-        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
-        if (legacy) {
-            int32_t inst = getCentralInstrumentIndex(m_impl->config.device_type);
-            if (inst >= 0)
-                return legacy->procinfo[inst].version;
-        }
+        else
+            return m_impl->shmem_session->getCompatProtocolVersion();
     }
     return 0;
 }
@@ -1662,35 +1579,35 @@ std::string SdkSession::getProcIdent() const {
     }
     if (m_impl->shmem_session) {
         const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
-        if (native)
+        if (native) {
             return std::string(native->procinfo.ident,
                 strnlen(native->procinfo.ident, sizeof(native->procinfo.ident)));
-        const auto* legacy = m_impl->shmem_session->getLegacyConfigBuffer();
-        if (legacy) {
-            int32_t inst = getCentralInstrumentIndex(m_impl->config.device_type);
-            if (inst >= 0)
-                return std::string(legacy->procinfo[inst].ident,
-                    strnlen(legacy->procinfo[inst].ident, sizeof(legacy->procinfo[inst].ident)));
+        } else {
+            auto procinfo = m_impl->shmem_session->getProcInfo();
+            if (procinfo.isError()) {
+                return {};
+            }
+            return std::string(procinfo.value().ident, strnlen(procinfo.value().ident, sizeof(procinfo.value().ident)));
         }
     }
     return {};
 }
 
 uint32_t SdkSession::getSpikeLength() const {
-    const auto* si = getSysInfo();
-    return si ? si->spikelen : 0;
+    auto si = getSysInfo();
+    return si.isOk() ? si.value().spikelen : 0;
 }
 
 uint32_t SdkSession::getSpikePretrigger() const {
-    const auto* si = getSysInfo();
-    return si ? si->spikepre : 0;
+    auto si = getSysInfo();
+    return si.isOk() ? si.value().spikepre : 0;
 }
 
 Result<void> SdkSession::setSpikeLength(uint32_t spikelen, uint32_t spikepre) {
-    const auto* si = getSysInfo();
-    if (!si)
-        return Result<void>::error("System info not available");
-    cbPKT_SYSINFO pkt = *si;
+    auto si = getSysInfo();
+    if (si.isError())
+        return Result<void>::error(si.error());
+    cbPKT_SYSINFO pkt = si.value();
     pkt.cbpkt_header.type = cbPKTTYPE_SYSSETSPKLEN;
     pkt.spikelen = spikelen;
     pkt.spikepre = spikepre;
@@ -1735,29 +1652,13 @@ static int64_t extractChanInfoField(const cbPKT_CHANINFO& ci, ChanInfoField fiel
     }
 }
 
-/// Helper: get chaninfo pointer for a 0-based channel index
-const cbPKT_CHANINFO* SdkSession::Impl::getChanInfoPtr(uint32_t idx) const {
-    // Prefer shmem: CMP position overlays are written there.
-    // device_config is owned by the receive thread and doesn't have positions.
-    if (shmem_session) {
-        const auto* native = shmem_session->getNativeConfigBuffer();
-        if (native) return &native->chaninfo[idx];
-        const auto* legacy = shmem_session->getLegacyConfigBuffer();
-        if (legacy) return &legacy->chaninfo[idx];
-    }
-    if (device_session) {
-        return device_session->getChanInfo(idx + 1);
-    }
-    return nullptr;
-}
-
 Result<int64_t> SdkSession::getChannelField(uint32_t chanId, ChanInfoField field) const {
     if (chanId == 0 || chanId > cbMAXCHANS)
         return Result<int64_t>::error("Invalid channel ID");
-    const auto* ci = m_impl->getChanInfoPtr(chanId - 1);
-    if (!ci)
+    auto ci = getChanInfo(chanId);
+    if (ci.isError())
         return Result<int64_t>::error("Channel info unavailable");
-    return Result<int64_t>::ok(extractChanInfoField(*ci, field));
+    return Result<int64_t>::ok(extractChanInfoField(ci.value(), field));
 }
 
 Result<std::vector<uint32_t>> SdkSession::getMatchingChannelIds(
@@ -1765,9 +1666,9 @@ Result<std::vector<uint32_t>> SdkSession::getMatchingChannelIds(
     std::vector<uint32_t> ids;
     size_t count = 0;
     for (uint32_t ch = 0; ch < cbMAXCHANS && count < nChans; ++ch) {
-        const auto* ci = m_impl->getChanInfoPtr(ch);
-        if (!ci) continue;
-        if (classifyChannelByCaps(*ci) != chanType) continue;
+        auto ci = getChanInfo(ch + 1);
+        if (ci.isError()) continue;
+        if (classifyChannelByCaps(ci.value()) != chanType) continue;
         ids.push_back(ch + 1);
         count++;
     }
@@ -1779,10 +1680,10 @@ Result<std::vector<int64_t>> SdkSession::getChannelField(
     std::vector<int64_t> values;
     size_t count = 0;
     for (uint32_t ch = 0; ch < cbMAXCHANS && count < nChans; ++ch) {
-        const auto* ci = m_impl->getChanInfoPtr(ch);
-        if (!ci) continue;
-        if (classifyChannelByCaps(*ci) != chanType) continue;
-        values.push_back(extractChanInfoField(*ci, field));
+        auto ci = getChanInfo(ch + 1);
+        if (ci.isError()) continue;
+        if (classifyChannelByCaps(ci.value()) != chanType) continue;
+        values.push_back(extractChanInfoField(ci.value(), field));
         count++;
     }
     return Result<std::vector<int64_t>>::ok(std::move(values));
@@ -1793,10 +1694,10 @@ Result<std::vector<std::string>> SdkSession::getChannelLabels(
     std::vector<std::string> labels;
     size_t count = 0;
     for (uint32_t ch = 0; ch < cbMAXCHANS && count < nChans; ++ch) {
-        const auto* ci = m_impl->getChanInfoPtr(ch);
-        if (!ci) continue;
-        if (classifyChannelByCaps(*ci) != chanType) continue;
-        labels.emplace_back(ci->label);
+        auto ci = getChanInfo(ch + 1);
+        if (ci.isError()) continue;
+        if (classifyChannelByCaps(ci.value()) != chanType) continue;
+        labels.emplace_back(ci.value().label);
         count++;
     }
     return Result<std::vector<std::string>>::ok(std::move(labels));
@@ -1807,13 +1708,13 @@ Result<std::vector<int32_t>> SdkSession::getChannelPositions(
     std::vector<int32_t> positions;
     size_t count = 0;
     for (uint32_t ch = 0; ch < cbMAXCHANS && count < nChans; ++ch) {
-        const auto* ci = m_impl->getChanInfoPtr(ch);
-        if (!ci) continue;
-        if (classifyChannelByCaps(*ci) != chanType) continue;
-        positions.push_back(ci->position[0]);
-        positions.push_back(ci->position[1]);
-        positions.push_back(ci->position[2]);
-        positions.push_back(ci->position[3]);
+        auto ci = getChanInfo(ch + 1);
+        if (ci.isError()) continue;
+        if (classifyChannelByCaps(ci.value()) != chanType) continue;
+        positions.push_back(ci.value().position[0]);
+        positions.push_back(ci.value().position[1]);
+        positions.push_back(ci.value().position[2]);
+        positions.push_back(ci.value().position[3]);
         count++;
     }
     return Result<std::vector<int32_t>>::ok(std::move(positions));
@@ -1850,8 +1751,8 @@ static std::vector<uint32_t> resolveTargetChans(
         result.reserve(std::min<uint32_t>(nChans, cbMAXCHANS));
     }
     for (uint32_t chan = 1; chan <= cbMAXCHANS && result.size() < nChans; ++chan) {
-        const cbPKT_CHANINFO* ci = session.getChanInfo(chan);
-        if (ci && classifyChannelByCaps(*ci) == chanType) {
+        auto ci = session.getChanInfo(chan);
+        if (ci.isOk() && classifyChannelByCaps(ci.value()) == chanType) {
             result.push_back(chan);
         }
     }
@@ -1873,9 +1774,9 @@ Result<void> SdkSession::setSampleGroup(
     // Always sends the full chaninfo (seeded from local cache), so a stale
     // CHANREP can't leave us stuck against a concurrent change.
     auto build_packet = [this](uint32_t chan, uint32_t grp) -> std::optional<cbPKT_CHANINFO> {
-        const cbPKT_CHANINFO* base = getChanInfo(chan);
-        if (!base || base->chan == 0) return std::nullopt;
-        cbPKT_CHANINFO chaninfo = *base;
+        auto base = getChanInfo(chan);
+        if (base.isError() || base.value().chan == 0) return std::nullopt;
+        cbPKT_CHANINFO& chaninfo = base.value();
         chaninfo.chan = chan;
         if (grp > 0 && grp < 6) {
             chaninfo.cbpkt_header.type = cbPKTTYPE_CHANSETSMP;
@@ -1910,8 +1811,8 @@ Result<void> SdkSession::setSampleGroup(
         std::set<uint32_t> target_set(targets.begin(), targets.end());
         for (uint32_t chan = 1; chan <= cbMAXCHANS; ++chan) {
             if (target_set.count(chan)) continue;
-            const cbPKT_CHANINFO* ci = getChanInfo(chan);
-            if (!ci || classifyChannelByCaps(*ci) != chanType) continue;
+            auto ci = getChanInfo(chan);
+            if (ci.isError() || classifyChannelByCaps(ci.value()) != chanType) continue;
             if (auto pkt = build_packet(chan, 0u); pkt) {
                 packets.push_back(reinterpret_cast<const cbPKT_GENERIC&>(*pkt));
             }
@@ -1956,9 +1857,9 @@ static Result<void> applyBulkSetter(
     std::vector<cbPKT_GENERIC> packets;
     packets.reserve(targets.size());
     for (uint32_t chan : targets) {
-        const cbPKT_CHANINFO* base = session.getChanInfo(chan);
-        if (!base || base->chan == 0) continue;
-        cbPKT_CHANINFO chaninfo = *base;
+        auto base = session.getChanInfo(chan);
+        if (base.isError() || base.value().chan == 0) continue;
+        cbPKT_CHANINFO& chaninfo = base.value();
         chaninfo.chan = chan;
         mutate(chaninfo);
         packets.push_back(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
@@ -2125,12 +2026,12 @@ Result<void> SdkSession::setAnalogOutputMonitor(uint32_t aout_chan_id, uint32_t 
     if (aout_chan_id < 1 || aout_chan_id > cbMAXCHANS)
         return Result<void>::error("Invalid analog output channel ID");
 
-    const cbPKT_CHANINFO* info = getChanInfo(aout_chan_id);
-    if (!info)
+    auto info = getChanInfo(aout_chan_id);
+    if (info.isError())
         return Result<void>::error("Channel info not available for channel " + std::to_string(aout_chan_id));
 
     // Copy current config and modify analog output fields
-    cbPKT_CHANINFO chaninfo = *info;
+    cbPKT_CHANINFO& chaninfo = info.value();
 
     // Set monitor channel
     chaninfo.monchan = static_cast<uint16_t>(monitor_chan_id);
@@ -2253,17 +2154,17 @@ Result<void> SdkSession::loadChannelMap(
         {
             std::lock_guard<std::mutex> lock(m_impl->cmp_mutex);
             for (uint32_t chan_id = 1; chan_id <= cbMAXCHANS; ++chan_id) {
-                const cbPKT_CHANINFO* info = getChanInfo(chan_id);
-                if (!info || info->chan == 0) continue;
-                auto it = m_impl->cmp_entries.find(cmpKey(info->bank, info->term));
+                auto info = getChanInfo(chan_id);
+                if (info.isError() || info.value().chan == 0) continue;
+                auto it = m_impl->cmp_entries.find(cmpKey(info.value().bank, info.value().term));
                 if (it == m_impl->cmp_entries.end()) continue;
                 labels_to_push.emplace_back(chan_id, it->second.label);
             }
         }
         for (const auto& [chan_id, label] : labels_to_push) {
-            const cbPKT_CHANINFO* info = getChanInfo(chan_id);
-            if (!info) continue;
-            cbPKT_CHANINFO ci = *info;
+            auto info = getChanInfo(chan_id);
+            if (info.isError()) continue;
+            cbPKT_CHANINFO& ci = info.value();
             ci.chan = chan_id;
             ci.cbpkt_header.type = cbPKTTYPE_CHANSETLABEL;
             std::strncpy(ci.label, label.c_str(), sizeof(ci.label) - 1);
@@ -2284,9 +2185,9 @@ Result<void> SdkSession::clearChannelMap() {
         std::lock_guard<std::mutex> lock(m_impl->cmp_mutex);
         if (!m_impl->cmp_entries.empty()) {
             for (uint32_t chan_id = 1; chan_id <= cbMAXCHANS; ++chan_id) {
-                const cbPKT_CHANINFO* info = getChanInfo(chan_id);
-                if (!info || info->chan == 0) continue;
-                if (m_impl->cmp_entries.count(cmpKey(info->bank, info->term))) {
+                auto info = getChanInfo(chan_id);
+                if (info.isError() || info.value().chan == 0) continue;
+                if (m_impl->cmp_entries.count(cmpKey(info.value().bank, info.value().term))) {
                     mapped_chans.push_back(chan_id);
                 }
             }
@@ -2313,9 +2214,9 @@ Result<void> SdkSession::clearChannelMap() {
     // local-only.
     if (m_impl->device_session || m_impl->shmem_session) {
         for (uint32_t chan_id : mapped_chans) {
-            const cbPKT_CHANINFO* info = getChanInfo(chan_id);
-            if (!info) continue;
-            cbPKT_CHANINFO ci = *info;
+            auto info = getChanInfo(chan_id);
+            if (info.isError()) continue;
+            cbPKT_CHANINFO& ci = info.value();
             ci.chan = chan_id;
             ci.cbpkt_header.type = cbPKTTYPE_CHANSETLABEL;
             char default_label[16];
@@ -2562,7 +2463,7 @@ std::optional<int64_t> SdkSession::getClockOffsetNs() const {
             return offset;
     }
 
-    // CLIENT fallback: use local ClockSync (CENTRAL_COMPAT — no shmem clock fields)
+    // CLIENT fallback: use local ClockSync (CENTRAL — no shmem clock fields)
     return m_impl->client_clock_sync.getOffsetNs();
 }
 
@@ -2577,7 +2478,7 @@ std::optional<int64_t> SdkSession::getClockUncertaintyNs() const {
             return uncert;
     }
 
-    // CLIENT fallback: use local ClockSync (CENTRAL_COMPAT)
+    // CLIENT fallback: use local ClockSync (CENTRAL)
     return m_impl->client_clock_sync.getUncertaintyNs();
 }
 
@@ -2595,7 +2496,7 @@ Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {
 
     // Stamp packet with a nanosecond timestamp (Central's xmt consumer skips packets with time=0).
     // Use getLastTime() (always nanoseconds) so that enqueuePacket's per-protocol translation
-    // can convert to the format each consumer expects (e.g. 30kHz ticks for 3.11 CENTRAL_COMPAT).
+    // can convert to the format each consumer expects (e.g. 30kHz ticks for 3.11 CENTRAL).
     cbPKT_GENERIC stamped = pkt;
     PROCTIME t = m_impl->shmem_session->getLastTime();
     stamped.cbpkt_header.time = (t != 0) ? t : 1;
@@ -2680,6 +2581,11 @@ Result<void> SdkSession::setSystemRunLevel(uint32_t runlevel, uint32_t resetque,
 }
 
 Result<void> SdkSession::requestConfiguration(uint32_t timeout_ms) {
+    // Baseline the config-reply count so we can tell whether the device
+    // answered this particular request (see the fallback below).
+    const uint64_t config_replies_before =
+        m_impl->config_replies.load(std::memory_order_acquire);
+
     // Reset handshake state before sending
     m_impl->received_sysrep.store(false, std::memory_order_relaxed);
 
@@ -2699,8 +2605,46 @@ Result<void> SdkSession::requestConfiguration(uint32_t timeout_ms) {
         return send_result;
 
     // Wait for final SYSREP from config flood
-    if (!waitForSysrep(timeout_ms))
+    if (waitForSysrep(timeout_ms))
+        return Result<void>::ok();
+
+    // The terminating SYSREP did not arrive.
+    //
+    // The device queues the SYSREP that ends the config dump, but firmware before
+    // 7.5.1 never flushes the queue afterwards, so if nothing else drives it the
+    // terminator is never transmitted (firmware commit ae8df07 added the explicit
+    // FlushCerPktQueue() for exactly this). Affected: 7.0.x and 7.5.0.
+    //
+    // Gate on protocol version, which detection has already established by now.
+    // It is coarser than the real firmware boundary but errs safe: 4.0 spans both
+    // 7.5.0 and 7.5.1+, and the fallback is unreachable on the latter. All 4.1+
+    // firmware flushes, so there a missing terminator is a real fault.
+    const bool terminator_guaranteed =
+        m_impl->device_session
+        && m_impl->device_session->getProtocolVersion() >= cbdev::ProtocolVersion::PROTOCOL_410;
+    if (terminator_guaranteed)
         return Result<void>::error("No SYSREP response received for requestConfiguration");
+
+    // Treat the dump as complete once config replies have arrived and then gone
+    // quiet. If none arrived at all, the device really did not answer.
+    if (m_impl->config_replies.load(std::memory_order_acquire) == config_replies_before)
+        return Result<void>::error("No SYSREP response received for requestConfiguration");
+
+    constexpr auto kQuietPeriod = std::chrono::milliseconds(200);
+    constexpr auto kPollInterval = std::chrono::milliseconds(25);
+    uint64_t last_count = m_impl->config_replies.load(std::memory_order_acquire);
+    auto quiet_since = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - quiet_since < kQuietPeriod) {
+        std::this_thread::sleep_for(kPollInterval);
+        // A late terminator is still the best signal available.
+        if (m_impl->received_sysrep.load(std::memory_order_acquire))
+            return Result<void>::ok();
+        const uint64_t count = m_impl->config_replies.load(std::memory_order_acquire);
+        if (count != last_count) {
+            last_count = count;
+            quiet_since = std::chrono::steady_clock::now();
+        }
+    }
 
     return Result<void>::ok();
 }
@@ -2721,14 +2665,42 @@ Result<void> SdkSession::performStartupHandshake(uint32_t timeout_ms) {
     m_impl->received_sysrepRunlev.store(false, std::memory_order_relaxed);
     m_impl->device_runlevel.store(0, std::memory_order_relaxed);
 
+    // These steps are UDP request/response exchanges, which have no delivery
+    // guarantee, so a single lost reply must not fail session creation. The
+    // query-style steps below are therefore retried.
+    //
+    // This matters most when the device is already streaming at full rate: a
+    // REQCONFIGALL makes the device emit its whole configuration (one CHANREP
+    // per channel plus proc/sys/group info), and that burst's terminating
+    // SYSREP has to survive alongside ~16 MB/s of continuous sample data.
+    // Occasionally it doesn't, and re-requesting is the only recovery -- a
+    // longer wait cannot conjure a datagram the kernel already dropped.
+    //
+    // Only the idempotent steps retry. HARDRESET/RESET below stay single-shot
+    // because re-issuing a state transition that already took effect (and whose
+    // reply was merely lost) would disturb a device that is mid-transition.
+    constexpr int kMaxQueryAttempts = 3;
+    constexpr auto kRetryPause = std::chrono::milliseconds(50);
+
     // Quick presence check - use shorter timeout to fail fast for non-existent devices
     const uint32_t presence_check_timeout = std::min(100u, timeout_ms);
 
     // Step 1: Quick presence check - send cbRUNLEVEL_RUNNING with short timeout to fail fast
-    Result<void> result = setSystemRunLevel(cbRUNLEVEL_RUNNING, 0, 0, 0, presence_check_timeout);
+    Result<void> result = Result<void>::error("presence check not attempted");
+    for (int attempt = 0; attempt < kMaxQueryAttempts; ++attempt) {
+        if (attempt > 0) {
+            std::this_thread::sleep_for(kRetryPause);
+        }
+        result = setSystemRunLevel(cbRUNLEVEL_RUNNING, 0, 0, 0, presence_check_timeout);
+        if (result.isOk()) {
+            break;
+        }
+    }
     if (result.isError()) {
         // No response - device not on network
-        return Result<void>::error("Device not reachable (no response to initial probe - check network connection and IP address)");
+        return Result<void>::error("Device not reachable (no response to initial probe after "
+            + std::to_string(kMaxQueryAttempts)
+            + " attempts - check network connection and IP address)");
     }
 
     // Step 2: Got response - check if device is already running
@@ -2746,10 +2718,21 @@ Result<void> SdkSession::performStartupHandshake(uint32_t timeout_ms) {
 
 request_config:
     // Step 4: Request all configuration (always performed)
-    // requestConfiguration() waits internally for final SYSREP
-    result = requestConfiguration(timeout_ms);
+    // requestConfiguration() waits internally for final SYSREP.
+    // Retried: a REQCONFIGALL is a pure query, so re-sending it is harmless --
+    // the device simply re-reports the same configuration.
+    for (int attempt = 0; attempt < kMaxQueryAttempts; ++attempt) {
+        if (attempt > 0) {
+            std::this_thread::sleep_for(kRetryPause);
+        }
+        result = requestConfiguration(timeout_ms);
+        if (result.isOk()) {
+            break;
+        }
+    }
     if (result.isError()) {
-        return Result<void>::error("Failed to send REQCONFIGALL: " + result.error());
+        return Result<void>::error("Failed to send REQCONFIGALL after "
+            + std::to_string(kMaxQueryAttempts) + " attempts: " + result.error());
     }
 
     // Step 5: Get current runlevel and transition to RUNNING if needed

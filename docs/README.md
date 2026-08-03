@@ -4,9 +4,4 @@ cbmex.pdf and .doc are here for historical reasons only. Contact the manufacture
 
 ## Source Code Architecture
 
-### cbSdkOpen
-
-Here is a high-level flowchart for what happens inside the SDK when you call cbSdkOpen.
-
-![cbSdkOpen flowchart](cbSdkOpen_flowchart.svg)
-
+See the [client sequence diagrams](client_mode_sequence_diagrams.md).

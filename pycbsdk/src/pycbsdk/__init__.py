@@ -17,14 +17,14 @@ Usage::
 """
 
 from .session import (
-    Session,
-    DeviceType,
-    ChannelType,
-    SampleRate,
     ChanInfoField,
-    ProtocolVersion,
-    Stats,
+    ChannelType,
     ContinuousReader,
+    DeviceType,
+    ProtocolVersion,
+    SampleRate,
+    Session,
+    Stats,
 )
 
 try:
@@ -33,13 +33,13 @@ except ImportError:
     __version__ = "0.0.0"
 
 __all__ = [
-    "Session",
-    "DeviceType",
-    "ChannelType",
-    "SampleRate",
     "ChanInfoField",
-    "ProtocolVersion",
-    "Stats",
+    "ChannelType",
     "ContinuousReader",
+    "DeviceType",
+    "ProtocolVersion",
+    "SampleRate",
+    "Session",
+    "Stats",
     "__version__",
 ]

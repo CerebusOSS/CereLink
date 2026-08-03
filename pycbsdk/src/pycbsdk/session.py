@@ -6,12 +6,15 @@ from __future__ import annotations
 
 import asyncio
 import enum
-import time as _time
+import logging
 import threading
+import time as _time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 from ._lib import ffi, load_library
+
+_logger = logging.getLogger(__name__)
 
 # Device runlevels (cbRUNLEVEL_*).  Mirrors values in cbproto types.h.
 RUNLEVEL_STARTUP = 10
@@ -184,7 +187,33 @@ def _check(result: int, msg: str = ""):
     if result != 0:
         _lib = _get_lib()
         err = ffi.string(_lib.cbsdk_get_error_message(result)).decode()
+        # The result code is only a category ("Internal error"); the detail says
+        # what actually failed. Append it when the SDK recorded one.
+        detail = ffi.string(_lib.cbsdk_get_last_error()).decode()
+        if detail and detail != err:
+            err = f"{err}: {detail}"
         raise RuntimeError(f"{msg}: {err}" if msg else err)
+
+
+_reported_callback_errors: set[str] = set()
+
+
+def _log_callback_error(site: str) -> None:
+    """Report an exception raised by a user callback.
+
+    Callbacks are invoked from C on the SDK's receive thread, so an exception
+    must never be allowed to propagate out of them.  Swallowing one silently
+    hides user bugs, so log it instead — but only the first per callback site:
+    a callback that raises on a 30 kHz group stream would otherwise flood the
+    log and stall the receive thread formatting tracebacks.
+    """
+    if site in _reported_callback_errors:
+        return
+    _reported_callback_errors.add(site)
+    _logger.exception(
+        "exception raised by %s callback; further occurrences are not reported",
+        site,
+    )
 
 
 @dataclass
@@ -203,6 +232,16 @@ class Stats:
     shmem_errors: int = 0
     receive_errors: int = 0
     send_errors: int = 0
+    shmem_overruns: int = 0
+    """Ring reads that lost data (CLIENT sessions)."""
+    packets_produced: int = 0
+    """Packets the producer has written to the ring (live, not a counter).
+
+    ``packets_produced - packets_received`` sizes the loss an overrun cost this
+    client.  A Central ring counts every instrument's packets, so that
+    difference is exact only for a single-instrument ring, otherwise an upper
+    bound.
+    """
 
 
 class Session:
@@ -402,8 +441,8 @@ class Session:
         def c_error_cb(error_message, user_data):
             try:
                 fn(ffi.string(error_message).decode())
-            except Exception:
-                pass  # Never let exceptions propagate into C
+            except Exception:  # noqa: BLE001 - must not propagate into C
+                _log_callback_error("on_error")
 
         _lib.cbsdk_session_set_error_callback(self._session, c_error_cb, ffi.NULL)
         self._callback_refs.append(c_error_cb)
@@ -419,8 +458,8 @@ class Session:
         def c_event_cb(pkt, user_data):
             try:
                 fn(pkt.cbpkt_header, pkt.data_u8)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 - must not propagate into C
+                _log_callback_error("on_event")
 
         handle = _lib.cbsdk_session_register_event_callback(
             self._session, c_channel_type, c_event_cb, ffi.NULL
@@ -437,8 +476,8 @@ class Session:
         def c_group_cb(pkt, user_data):
             try:
                 fn(pkt.cbpkt_header, pkt.data)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 - must not propagate into C
+                _log_callback_error("on_group")
 
         handle = _lib.cbsdk_session_register_group_callback(
             self._session, int(rate), c_group_cb, ffi.NULL
@@ -461,8 +500,8 @@ class Session:
                 n = n_ch if n_ch > 0 else pkt.cbpkt_header.dlen * 2
                 arr = group_data_as_array(pkt.data, n)
                 fn(pkt.cbpkt_header, arr)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 - must not propagate into C
+                _log_callback_error("on_group (array)")
 
         handle = _lib.cbsdk_session_register_group_callback(
             self._session, int(rate), c_group_cb, ffi.NULL
@@ -489,8 +528,8 @@ class Session:
                 tbuf = ffi.buffer(ts_ptr, n_samples * 8)
                 ts = np.frombuffer(tbuf, dtype=np.uint64).copy()
                 fn(arr, ts)
-            except Exception:
-                pass  # Never let exceptions propagate into C
+            except Exception:  # noqa: BLE001 - must not propagate into C
+                _log_callback_error("on_group_batch")
 
         handle = _lib.cbsdk_session_register_group_batch_callback(
             self._session, rate, c_batch_cb, ffi.NULL
@@ -507,8 +546,8 @@ class Session:
         def c_config_cb(pkt, user_data):
             try:
                 fn(pkt.cbpkt_header, pkt.data_u32)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 - must not propagate into C
+                _log_callback_error("config")
 
         handle = _lib.cbsdk_session_register_config_callback(
             self._session, packet_type, c_config_cb, ffi.NULL
@@ -531,8 +570,8 @@ class Session:
         def c_runlevel_cb(runlevel, user_data):
             try:
                 fn(int(runlevel))
-            except Exception:
-                pass  # Never let exceptions propagate into C
+            except Exception:  # noqa: BLE001 - must not propagate into C
+                _log_callback_error("runlevel")
 
         handle = _lib.cbsdk_session_register_runlevel_callback(
             self._session, c_runlevel_cb, ffi.NULL
@@ -552,8 +591,8 @@ class Session:
                 for i in range(count):
                     pkt = pkts[i]
                     fn(pkt.cbpkt_header, pkt.data_u8)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 - must not propagate into C
+                _log_callback_error("on_packet")
 
         handle = _lib.cbsdk_session_register_packet_callback(
             self._session, c_packet_cb, ffi.NULL
@@ -584,6 +623,8 @@ class Session:
             shmem_errors=c_stats.shmem_store_errors,
             receive_errors=c_stats.receive_errors,
             send_errors=c_stats.send_errors,
+            shmem_overruns=c_stats.shmem_overruns,
+            packets_produced=c_stats.packets_produced,
         )
 
     def reset_stats(self):
@@ -715,13 +756,17 @@ class Session:
         """Number of analog channels (front-end + analog input)."""
         return _get_lib().cbsdk_get_num_analog_chans()
 
-    def get_channel_label(self, chan_id: int) -> Optional[str]:
+    def get_channel_label(self, chan_id: int) -> str | None:
         """Get a channel's label (1-based channel ID)."""
         _lib = _get_lib()
-        ptr = _lib.cbsdk_session_get_channel_label(self._session, chan_id)
-        if ptr == ffi.NULL:
+        buf_len = _lib.cbsdk_session_get_channel_label_length()
+        buf = ffi.new(f"char[{buf_len}]")
+        written = _lib.cbsdk_session_get_channel_label(
+            self._session, chan_id, buf, buf_len
+        )
+        if written < 0:
             return None
-        return ffi.string(ptr).decode()
+        return ffi.string(buf).decode()
 
     def get_channel_smpgroup(self, chan_id: int) -> int:
         """Get a channel's sample group (0 = disabled, 1-6)."""
@@ -731,7 +776,7 @@ class Session:
         """Get a channel's capability flags."""
         return _get_lib().cbsdk_session_get_channel_chancaps(self._session, chan_id)
 
-    def get_channel_type(self, chan_id: int) -> Optional[ChannelType]:
+    def get_channel_type(self, chan_id: int) -> ChannelType | None:
         """Get a channel's type classification.
 
         Returns a :class:`ChannelType` member, or ``None`` if the channel is
@@ -781,7 +826,7 @@ class Session:
         """Get a channel's negative amplitude rejection threshold."""
         return _get_lib().cbsdk_session_get_channel_amplrejneg(self._session, chan_id)
 
-    def get_channel_scaling(self, chan_id: int) -> Optional[dict]:
+    def get_channel_scaling(self, chan_id: int) -> dict | None:
         """Get a channel's input scaling information.
 
         Args:
@@ -817,18 +862,31 @@ class Session:
 
         Returns:
             Field value as int (widened from the native type).
+
+        Raises:
+            ValueError: If *chan_id* is outside 1..max_chans.  The underlying C
+                call has no error channel and returns 0 for an invalid channel,
+                which is indistinguishable from a real zero value, so the range
+                is checked here instead.
         """
+        max_chans = self.max_chans()
+        if not 1 <= chan_id <= max_chans:
+            raise ValueError(f"chan_id {chan_id} out of range (1..{max_chans})")
         return _get_lib().cbsdk_session_get_channel_field(
             self._session, chan_id, int(field)
         )
 
-    def get_group_label(self, group_id: int) -> Optional[str]:
+    def get_group_label(self, group_id: int) -> str | None:
         """Get a sample group's label (group_id 1-6)."""
         _lib = _get_lib()
-        ptr = _lib.cbsdk_session_get_group_label(self._session, group_id)
-        if ptr == ffi.NULL:
+        buf_len = _lib.cbsdk_session_get_group_label_length()
+        buf = ffi.new(f"char[{buf_len}]")
+        written = _lib.cbsdk_session_get_group_label(
+            self._session, group_id, buf, buf_len
+        )
+        if written < 0:
             return None
-        return ffi.string(ptr).decode()
+        return ffi.string(buf).decode()
 
     def get_group_channels(self, group_id: int) -> list[int]:
         """Get the list of channel IDs in a sample group."""
@@ -1009,7 +1067,7 @@ class Session:
 
     def set_sample_group(
         self,
-        chans: "int | list[int] | None",
+        chans: int | list[int] | None,
         channel_type: ChannelType,
         rate: SampleRate,
         disable_others: bool = False,
@@ -1058,7 +1116,7 @@ class Session:
 
     def set_ac_input_coupling(
         self,
-        chans: "int | list[int] | None",
+        chans: int | list[int] | None,
         channel_type: ChannelType,
         enabled: bool,
     ) -> None:
@@ -1531,7 +1589,7 @@ class Session:
 
     def set_spike_sorting(
         self,
-        chans: "int | list[int] | None",
+        chans: int | list[int] | None,
         channel_type: ChannelType,
         sort_options: int,
     ) -> None:
@@ -1584,7 +1642,7 @@ class Session:
 
     def set_spike_extraction(
         self,
-        chans: "int | list[int] | None",
+        chans: int | list[int] | None,
         channel_type: ChannelType,
         enabled: bool,
     ) -> None:
@@ -1686,7 +1744,7 @@ class Session:
             self._mono_to_steady_offset_ns = self._calibrate_monotonic_offset()
 
     @property
-    def clock_offset_ns(self) -> Optional[int]:
+    def clock_offset_ns(self) -> int | None:
         """Clock offset in nanoseconds (device_ns - host_ns), or None if unavailable."""
         _lib = _get_lib()
         offset = ffi.new("int64_t *")
@@ -1696,7 +1754,7 @@ class Session:
         return offset[0]
 
     @property
-    def clock_uncertainty_ns(self) -> Optional[int]:
+    def clock_uncertainty_ns(self) -> int | None:
         """Clock uncertainty (half-RTT) in nanoseconds, or None if unavailable."""
         _lib = _get_lib()
         uncertainty = ffi.new("int64_t *")
@@ -1862,6 +1920,7 @@ class Session:
             numpy.ndarray of shape ``(n_channels, n_samples)``, dtype ``int16``.
         """
         import time
+
         import numpy as np
 
         rate = _coerce_enum(SampleRate, rate, _RATE_ALIASES)
@@ -1883,8 +1942,8 @@ class Session:
                     arr = np.frombuffer(src, dtype=np.int16, count=n_channels)
                     buf[:, count[0]] = arr
                     count[0] += 1
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 - must not propagate into C
+                _log_callback_error("read_continuous")
 
         handle = _lib.cbsdk_session_register_group_callback(
             self._session, int(rate), c_group_cb, ffi.NULL
@@ -1917,7 +1976,7 @@ class Session:
         """Number of available filters (cbMAXFILTS)."""
         return _get_lib().cbsdk_get_num_filters()
 
-    def get_filter_info(self, filter_id: int) -> Optional[dict]:
+    def get_filter_info(self, filter_id: int) -> dict | None:
         """Get a filter's description.
 
         Args:
@@ -1928,18 +1987,22 @@ class Session:
             ``lporder``. Frequencies are in milliHertz. Returns None if invalid.
         """
         _lib = _get_lib()
-        ptr = _lib.cbsdk_session_get_filter_label(self._session, filter_id)
-        if ptr == ffi.NULL:
+        buf_len = _lib.cbsdk_session_get_filter_label_length()
+        buf = ffi.new(f"char[{buf_len}]")
+        written = _lib.cbsdk_session_get_filter_label(
+            self._session, filter_id, buf, buf_len
+        )
+        if written < 0:
             return None
         return {
-            "label": ffi.string(ptr).decode(),
+            "label": ffi.string(buf).decode(),
             "hpfreq": _lib.cbsdk_session_get_filter_hpfreq(self._session, filter_id),
             "hporder": _lib.cbsdk_session_get_filter_hporder(self._session, filter_id),
             "lpfreq": _lib.cbsdk_session_get_filter_lpfreq(self._session, filter_id),
             "lporder": _lib.cbsdk_session_get_filter_lporder(self._session, filter_id),
         }
 
-    def get_channel_config(self, chan_id: int) -> Optional[dict]:
+    def get_channel_config(self, chan_id: int) -> dict | None:
         """Get full configuration for a single channel.
 
         Args:
@@ -2093,8 +2156,8 @@ class ContinuousReader:
                 self._buffer[:, pos] = arr
                 self._write_pos += 1
                 self._total_samples += 1
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 - must not propagate into C
+                _log_callback_error("ContinuousReader")
 
         self._cb_ref = c_group_cb
         handle = _lib.cbsdk_session_register_group_callback(

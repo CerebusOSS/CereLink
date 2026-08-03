@@ -1,6 +1,8 @@
 repos:
+  # CI lints with the latest ruff, so keep this rev current (pre-commit
+  # autoupdate) or local hooks will miss rules CI enforces.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.6
+    rev: v0.16.0
     hooks:
       - id: ruff
         args: [--fix]

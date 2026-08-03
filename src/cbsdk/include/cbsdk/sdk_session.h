@@ -165,6 +165,14 @@ struct SdkStats {
     uint64_t receive_errors = 0;                 ///< Socket receive errors
     uint64_t send_errors = 0;                    ///< Socket send errors
 
+    // CLIENT-mode receive statistics
+    uint64_t shmem_overruns = 0;                 ///< Ring reads that lost data (CLIENT)
+    uint64_t packets_produced = 0;               ///< Producer's ring packet count; live,
+                                                 ///< not a counter.  Spans every instrument
+                                                 ///< in a Central ring, so
+                                                 ///< packets_produced - packets_received is
+                                                 ///< exact only for a single instrument.
+
     void reset() {
         packets_received_from_device = 0;
         bytes_received_from_device = 0;
@@ -178,6 +186,8 @@ struct SdkStats {
         shmem_store_errors = 0;
         receive_errors = 0;
         send_errors = 0;
+        shmem_overruns = 0;
+        packets_produced = 0;
     }
 };
 
@@ -420,18 +430,18 @@ public:
     const SdkConfig& getConfig() const;
 
     /// Get system information
-    /// @return Pointer to system info packet, or nullptr if not available
-    const cbPKT_SYSINFO* getSysInfo() const;
+    /// @return Result containing a copy of the system info packet, or an error if not available
+    Result<cbPKT_SYSINFO> getSysInfo() const;
 
     /// Get channel information
     /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
-    /// @return Pointer to channel info, or nullptr if invalid/unavailable
-    const cbPKT_CHANINFO* getChanInfo(uint32_t chan_id) const;
+    /// @return Result containing a copy of the channel info, or an error if invalid/unavailable
+    Result<cbPKT_CHANINFO> getChanInfo(uint32_t chan_id) const;
 
     /// Get sample group information
     /// @param group_id Group ID (1-6)
-    /// @return Pointer to group info, or nullptr if invalid/unavailable
-    const cbPKT_GROUPINFO* getGroupInfo(uint32_t group_id) const;
+    /// @return Result containing a copy of the group info, or an error if invalid/unavailable
+    Result<cbPKT_GROUPINFO> getGroupInfo(uint32_t group_id) const;
 
     /// Compute the list of channel IDs belonging to a sample group by
     /// scanning individual chaninfo records.  More reliable than getGroupInfo()
@@ -445,8 +455,8 @@ public:
 
     /// Get filter information
     /// @param filter_id Filter ID (0 to cbMAXFILTS-1)
-    /// @return Pointer to filter info, or nullptr if invalid/unavailable
-    const cbPKT_FILTINFO* getFilterInfo(uint32_t filter_id) const;
+    /// @return Result containing a copy of the filter info, or an error if invalid/unavailable
+    Result<cbPKT_FILTINFO> getFilterInfo(uint32_t filter_id) const;
 
     /// Get current device run level
     /// @return Current run level (cbRUNLEVEL_*), or 0 if unknown

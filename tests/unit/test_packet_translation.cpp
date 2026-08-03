@@ -250,8 +250,10 @@ TEST(COMMENT_Translation, Current_to_Pre400_AlwaysUsesTimeStarted) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 TEST(CHANINFO_Translation, Pre410_to_Current_FieldExpansion) {
-    // Given: 3.11 CHANINFO with monsource as uint32_t
-    auto pkt_311 = make_311_CHANINFO(42, 0x12345678);
+    // Given: 3.11 CHANINFO in monitoring mode (doutopts without cbDOUT_FREQUENCY),
+    // where monsource holds a plain 1-based channel number (see the pre-4.1
+    // cbSetDoutOptions/cbSetAoutOptions).
+    auto pkt_311 = make_311_CHANINFO(42, 7);
 
     // Prepare destination
     cbPKT_CHANINFO dest = {};
@@ -262,10 +264,11 @@ TEST(CHANINFO_Translation, Pre410_to_Current_FieldExpansion) {
     size_t result_dlen = PacketTranslator::translate_CHANINFO_pre410_to_current(
         src_payload, &dest);
 
-    // Then: monsource narrowed to moninst, monchan=0, new fields zeroed
+    // Then: the monitored channel lands in monchan; moninst is the (only)
+    // pre-4.1 instrument, 0; new fields zeroed.
     EXPECT_EQ(dest.chan, 42u);
-    EXPECT_EQ(dest.moninst, 0x5678u);  // Lower 16 bits of monsource
-    EXPECT_EQ(dest.monchan, 0u);       // New field
+    EXPECT_EQ(dest.moninst, 0u);   // Pre-4.1 systems address a single instrument
+    EXPECT_EQ(dest.monchan, 7u);   // Monitored channel from monsource
     EXPECT_EQ(dest.reserved[0], 0u);   // New field
     EXPECT_EQ(dest.reserved[1], 0u);   // New field
     EXPECT_EQ(dest.triginst, 0u);      // New field
@@ -274,22 +277,54 @@ TEST(CHANINFO_Translation, Pre410_to_Current_FieldExpansion) {
     EXPECT_EQ(result_dlen, pkt_311[7] + 1u);
 }
 
+TEST(CHANINFO_Translation, Pre410_to_Current_FrequencyModeIsBytePreserving) {
+    // Given: 3.11 CHANINFO in frequency-output mode, where monsource packs
+    // sample counts byte-compatibly with the modern lowsamples/highsamples arm.
+    auto pkt_311 = make_311_CHANINFO(42, 0x12345678, cbDOUT_FREQUENCY);
+
+    cbPKT_CHANINFO dest = {};
+    dest.cbpkt_header.dlen = pkt_311[7];
+
+    const uint8_t* src_payload = &pkt_311[test_helpers::HEADER_SIZE_311];
+    PacketTranslator::translate_CHANINFO_pre410_to_current(src_payload, &dest);
+
+    // Then: byte-preserving split (moninst aliases lowsamples, monchan highsamples).
+    EXPECT_EQ(dest.moninst, 0x5678u);  // Lower 16 bits of monsource
+    EXPECT_EQ(dest.monchan, 0x1234u);  // Upper 16 bits of monsource
+}
+
 TEST(CHANINFO_Translation, Current_to_Pre410_FieldNarrowing) {
-    // Given: Current CHANINFO with moninst, monchan, triginst
-    auto pkt_current = make_current_CHANINFO(42, 0x1234, 0x5678);
+    // Given: Current CHANINFO in monitoring mode with moninst, monchan, triginst
+    auto pkt_current = make_current_CHANINFO(42, 0, 0x5678);
 
     // When: Translate to pre-410
     uint8_t dest_payload[sizeof(cbPKT_CHANINFO)] = {};
     size_t result_dlen = PacketTranslator::translate_CHANINFO_current_to_pre410(
         pkt_current, dest_payload);
 
-    // Then: chan preserved, moninst expanded to monsource, monchan/triginst dropped
+    // Then: chan preserved; monsource holds the monitored channel number
+    // (moninst has no pre-4.1 representation and is dropped); triginst dropped.
     uint32_t dest_chan = *reinterpret_cast<uint32_t*>(&dest_payload[0]);
     EXPECT_EQ(dest_chan, 42u);
 
-    // Find monsource field (at specific offset in structure)
-    // For simplicity, we'll verify the dlen change
+    constexpr size_t monsource_offset = offsetof(cbPKT_CHANINFO, moninst) - cbPKT_HEADER_SIZE;
+    uint32_t dest_monsource = *reinterpret_cast<uint32_t*>(&dest_payload[monsource_offset]);
+    EXPECT_EQ(dest_monsource, 0x5678u);  // monchan
+
     EXPECT_EQ(result_dlen, cbPKTDLEN_CHANINFO - 1u);
+}
+
+TEST(CHANINFO_Translation, Current_to_Pre410_FrequencyModeIsBytePreserving) {
+    // Given: Current CHANINFO in frequency-output mode (lowsamples/highsamples arm)
+    auto pkt_current = make_current_CHANINFO(42, 0x1234, 0x5678, cbDOUT_FREQUENCY);
+
+    uint8_t dest_payload[sizeof(cbPKT_CHANINFO)] = {};
+    PacketTranslator::translate_CHANINFO_current_to_pre410(pkt_current, dest_payload);
+
+    // Then: byte-preserving merge: (monchan << 16) | moninst.
+    constexpr size_t monsource_offset = offsetof(cbPKT_CHANINFO, moninst) - cbPKT_HEADER_SIZE;
+    uint32_t dest_monsource = *reinterpret_cast<uint32_t*>(&dest_payload[monsource_offset]);
+    EXPECT_EQ(dest_monsource, 0x56781234u);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

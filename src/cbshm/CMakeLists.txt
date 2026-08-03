@@ -9,6 +9,12 @@ project(cbshm
 # Library sources
 set(CBSHMEM_SOURCES
     src/shmem_session.cpp
+    src/central_version.cpp
+    src/central_adapters/v7_8.cpp
+    src/central_adapters/v7_7.cpp
+    src/central_adapters/v7_6.cpp
+    src/central_adapters/v7_5.cpp
+    src/central_adapters/v7_0.cpp
 )
 
 # Build as STATIC library
@@ -34,7 +40,7 @@ target_compile_features(cbshm PUBLIC cxx_std_17)
 if(WIN32)
     # Windows shared memory APIs (kernel32 is linked by default)
     target_compile_definitions(cbshm PRIVATE _WIN32_WINNT=0x0601)
-
+    target_link_libraries(cbshm PRIVATE Kernel32 Version)
 elseif(APPLE)
     # macOS shared memory APIs
     target_link_libraries(cbshm PRIVATE pthread)

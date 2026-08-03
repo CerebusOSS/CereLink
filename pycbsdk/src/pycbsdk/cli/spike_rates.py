@@ -15,12 +15,11 @@ from __future__ import annotations
 
 import argparse
 import sys
-import time
 import threading
+import time
 from collections import deque
 
-from pycbsdk import Session, DeviceType, ChannelType, ChanInfoField
-
+from pycbsdk import ChanInfoField, ChannelType, DeviceType, Session
 
 # cbAINPSPK flags
 _SPKOPTS_EXTRACT = 0x0000_0001
@@ -71,7 +70,7 @@ class SpikeRateMonitor:
             # not converged, or NPlay looping with stale offset).
             if abs(t - now) > self._window_sec * 2:
                 t = now
-        except Exception:
+        except RuntimeError:
             t = now
 
         with self._lock:
@@ -264,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
             except KeyboardInterrupt:
                 print("\nStopped.")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - CLI boundary: report failures, not tracebacks
         print(f"Error: {e}", file=sys.stderr)
         return 1
 

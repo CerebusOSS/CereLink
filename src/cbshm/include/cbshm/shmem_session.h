@@ -9,8 +9,6 @@
 /// buffers used by Central and cbsdk clients.
 ///
 /// Key Design Principles:
-/// - Uses Central-compatible buffer layout (cbMAXPROCS=4, not 1)
-/// - Mode-independent indexing (always uses packet.instrument)
 /// - Thread-safe for concurrent access
 /// - Platform-abstracted (Windows/macOS/Linux)
 ///
@@ -20,7 +18,7 @@
 #define CBSHM_SHMEM_SESSION_H
 
 // Include Central-compatible types which bring in protocol definitions
-#include <cbshm/central_types.h>
+#include <cbshm/central_current.h>
 #include <cbshm/native_types.h>
 #include <cbproto/connection.h>
 #include <cbutil/result.h>
@@ -47,8 +45,7 @@ enum class Mode {
 /// Controls buffer sizes, struct types, and bounds checking.
 ///
 enum class ShmemLayout {
-    CENTRAL,         ///< CereLink's own Central-compatible layout (cbConfigBuffer)
-    CENTRAL_COMPAT,  ///< Central's actual binary layout (CentralLegacyCFGBUFF)
+    CENTRAL,         ///< Central's actual binary layout (cbCFGBUFF)
     NATIVE           ///< Native single-instrument layout (NativeConfigBuffer)
 };
 
@@ -58,9 +55,6 @@ enum class ShmemLayout {
 /// Manages lifecycle of shared memory buffers that are compatible with Central's layout.
 /// Implements correct indexing for multi-instrument systems.
 ///
-/// CRITICAL: Even in STANDALONE mode, uses Central-compatible layout (cbMAXPROCS=4)
-/// so that subsequent CLIENT connections work correctly.
-///
 class ShmemSession {
 public:
     ///////////////////////////////////////////////////////////////////////////
@@ -68,21 +62,24 @@ public:
     /// @{
 
     /// @brief Create a new shared memory session
-    /// @param cfg_name Config buffer shared memory name (e.g., "cbCFGbuffer")
-    /// @param rec_name Receive buffer shared memory name (e.g., "cbRECbuffer")
-    /// @param xmt_name Transmit buffer shared memory name (e.g., "XmtGlobal")
-    /// @param xmt_local_name Local transmit buffer shared memory name (e.g., "XmtLocal")
-    /// @param status_name PC status buffer shared memory name (e.g., "cbSTATUSbuffer")
-    /// @param spk_name Spike cache buffer shared memory name (e.g., "cbSPKbuffer")
-    /// @param signal_event_name Signal event name (e.g., "cbSIGNALevent")
+    ///
+    /// The seven segment names are synthesized internally from @p layout and
+    /// @p name_qualifier, whose meaning depends on the layout:
+    /// - CENTRAL: Central's fixed, well-known names (e.g., "cbCFGbuffer"), with
+    ///   @p name_qualifier appended as the Central *instance* suffix ("" selects
+    ///   the primary instance, "1" selects cbCFGbuffer1, etc.).
+    /// - NATIVE: per-device names of the form "cbshm_<name_qualifier>_<segment>",
+    ///   where @p name_qualifier is the device token (e.g., "hub1").
+    ///
     /// @param mode Operating mode (STANDALONE or CLIENT)
-    /// @param layout Buffer layout (CENTRAL or NATIVE, default CENTRAL for backward compat)
+    /// @param layout Buffer layout (CENTRAL or NATIVE)
+    /// @param name_qualifier Layout-specific naming discriminator: the Central
+    ///                       instance suffix for CENTRAL, or the device token for
+    ///                       NATIVE
+    /// @param id Instrument ID (1-based)
     /// @return Result containing ShmemSession on success, error message on failure
-    static Result<ShmemSession> create(const std::string& cfg_name, const std::string& rec_name,
-                                        const std::string& xmt_name, const std::string& xmt_local_name,
-                                        const std::string& status_name, const std::string& spk_name,
-                                        const std::string& signal_event_name, Mode mode,
-                                        ShmemLayout layout = ShmemLayout::CENTRAL);
+    static Result<ShmemSession> create(Mode mode, ShmemLayout layout,
+                                        const std::string& name_qualifier, cbproto::InstrumentId id);
 
     /// @brief Destructor - closes shared memory and releases resources
     ~ShmemSession();
@@ -94,7 +91,7 @@ public:
     ShmemSession& operator=(const ShmemSession&) = delete;
 
     /// @}
-
+    
     ///////////////////////////////////////////////////////////////////////////
     /// @name Status
     /// @{
@@ -111,26 +108,39 @@ public:
     /// @return CENTRAL or NATIVE
     ShmemLayout getLayout() const;
 
+    /// @brief Get the instrument this session is bound to
+    ///
+    /// Fixed at creation. For the CENTRAL layout this is the instrument whose
+    /// packets readReceiveBuffer() returns; for NATIVE it is always index 0.
+    ///
+    /// @return the session's instrument ID
+    cbproto::InstrumentId getInstrument() const;
+
+    /// @brief Get the maximum number of instruments
+    ///
+    /// @return the maximum instrument count
+    uint32_t getMaxProcs() const;
+
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
-    /// @name Instrument Status (CRITICAL for multi-instrument)
+    /// @name Instrument Status
     /// @{
 
     /// @brief Get instrument active status
-    /// @param id Instrument ID (1-based)
+    ///
+    /// Always returns true if layout is CENTRAL.
+    ///
     /// @return true if instrument is active in shared memory
-    Result<bool> isInstrumentActive(cbproto::InstrumentId id) const;
+    Result<bool> isInstrumentActive() const;
 
     /// @brief Set instrument active status
-    /// @param id Instrument ID (1-based)
+    ///
+    /// Does nothing if layout is CENTRAL (instruments assumed to always be active).
+    ///
     /// @param active true to mark active, false to mark inactive
     /// @return Result indicating success or failure
-    Result<void> setInstrumentActive(cbproto::InstrumentId id, bool active);
-
-    /// @brief Get first active instrument ID
-    /// @return InstrumentId of first active instrument, or error if none active
-    Result<cbproto::InstrumentId> getFirstActiveInstrument() const;
+    Result<void> setInstrumentActive(bool active);
 
     /// @}
 
@@ -138,27 +148,34 @@ public:
     /// @name Configuration Read Operations
     /// @{
 
-    /// @brief Get processor information for specified instrument
-    /// @param id Instrument ID (1-based, e.g., cbNSP1)
+    /// @brief Get processor information
     /// @return cbPKT_PROCINFO structure on success
-    Result<cbPKT_PROCINFO> getProcInfo(cbproto::InstrumentId id) const;
+    Result<cbPKT_PROCINFO> getProcInfo() const;
 
     /// @brief Get bank information
-    /// @param id Instrument ID (1-based)
     /// @param bank Bank number (1-based, as used in cbPKT_BANKINFO)
     /// @return cbPKT_BANKINFO structure on success
-    Result<cbPKT_BANKINFO> getBankInfo(cbproto::InstrumentId id, uint32_t bank) const;
+    Result<cbPKT_BANKINFO> getBankInfo(uint32_t bank) const;
 
     /// @brief Get filter information
-    /// @param id Instrument ID (1-based)
     /// @param filter Filter number (1-based, as used in cbPKT_FILTINFO)
     /// @return cbPKT_FILTINFO structure on success
-    Result<cbPKT_FILTINFO> getFilterInfo(cbproto::InstrumentId id, uint32_t filter) const;
+    Result<cbPKT_FILTINFO> getFilterInfo(uint32_t filter) const;
 
     /// @brief Get channel information
     /// @param channel Channel number (0-based, global across all instruments)
     /// @return cbPKT_CHANINFO structure on success
     Result<cbPKT_CHANINFO> getChanInfo(uint32_t channel) const;
+    
+    /// @brief Get system information
+    /// @return cbPKT_SYSINFO structure on success
+    Result<cbPKT_SYSINFO> getSysInfo() const;
+    
+    /// @brief Get sample group information
+    /// @param group Group number (0-based, 0 to cbMAXGROUPS-1)
+    /// @param info cbPKT_GROUPINFO structure to write
+    /// @return Result indicating success or failure
+    Result<cbPKT_GROUPINFO> getGroupInfo(uint32_t group) const;
 
     /// @}
 
@@ -166,25 +183,22 @@ public:
     /// @name Configuration Write Operations
     /// @{
 
-    /// @brief Set processor information for specified instrument
-    /// @param id Instrument ID (1-based)
+    /// @brief Set processor information
     /// @param info cbPKT_PROCINFO structure to write
     /// @return Result indicating success or failure
-    Result<void> setProcInfo(cbproto::InstrumentId id, const cbPKT_PROCINFO& info);
+    Result<void> setProcInfo(const cbPKT_PROCINFO& info);
 
     /// @brief Set bank information
-    /// @param id Instrument ID (1-based)
-    /// @param bank Bank number (0-based)
+    /// @param bank Bank number (1-based, as used in cbPKT_BANKINFO)
     /// @param info cbPKT_BANKINFO structure to write
     /// @return Result indicating success or failure
-    Result<void> setBankInfo(cbproto::InstrumentId id, uint32_t bank, const cbPKT_BANKINFO& info);
+    Result<void> setBankInfo(uint32_t bank, const cbPKT_BANKINFO& info);
 
     /// @brief Set filter information
-    /// @param id Instrument ID (1-based)
-    /// @param filter Filter number (0-based)
+    /// @param filter Filter number (1-based, as used in cbPKT_FILTINFO)
     /// @param info cbPKT_FILTINFO structure to write
     /// @return Result indicating success or failure
-    Result<void> setFilterInfo(cbproto::InstrumentId id, uint32_t filter, const cbPKT_FILTINFO& info);
+    Result<void> setFilterInfo(uint32_t filter, const cbPKT_FILTINFO& info);
 
     /// @brief Set channel information
     /// @param channel Channel number (0-based)
@@ -198,30 +212,16 @@ public:
     Result<void> setSysInfo(const cbPKT_SYSINFO& info);
 
     /// @brief Set sample group information
-    /// @param id Instrument ID (1-based)
     /// @param group Group number (0-based, 0 to cbMAXGROUPS-1)
     /// @param info cbPKT_GROUPINFO structure to write
     /// @return Result indicating success or failure
-    Result<void> setGroupInfo(cbproto::InstrumentId id, uint32_t group, const cbPKT_GROUPINFO& info);
+    Result<void> setGroupInfo(uint32_t group, const cbPKT_GROUPINFO& info);
 
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
     /// @name Configuration Buffer Direct Access
     /// @{
-
-    /// @brief Get direct pointer to Central configuration buffer
-    ///
-    /// Provides direct access to the shared memory config buffer for zero-copy
-    /// operations. Used by SdkSession to connect DeviceSession's config buffer
-    /// to shared memory.
-    ///
-    /// @return Pointer to configuration buffer, or nullptr if not CENTRAL layout
-    cbConfigBuffer* getConfigBuffer();
-
-    /// @brief Get direct pointer to Central configuration buffer (const version)
-    /// @return Const pointer to configuration buffer, or nullptr if not CENTRAL layout
-    const cbConfigBuffer* getConfigBuffer() const;
 
     /// @brief Get direct pointer to native configuration buffer
     /// @return Pointer to native configuration buffer, or nullptr if not NATIVE layout
@@ -231,13 +231,10 @@ public:
     /// @return Const pointer to native configuration buffer, or nullptr if not NATIVE layout
     const NativeConfigBuffer* getNativeConfigBuffer() const;
 
-    /// @brief Get direct pointer to Central legacy configuration buffer
-    /// @return Pointer to legacy config buffer, or nullptr if not CENTRAL_COMPAT layout
-    CentralLegacyCFGBUFF* getLegacyConfigBuffer();
-
-    /// @brief Get direct pointer to Central legacy configuration buffer (const version)
-    /// @return Const pointer to legacy config buffer, or nullptr if not CENTRAL_COMPAT layout
-    const CentralLegacyCFGBUFF* getLegacyConfigBuffer() const;
+    /// @brief Get a translated copy of Central's configuration buffer
+    /// @param buf Output parameter to receive the configuration buffer (very large, allocate on the heap!)
+    /// @return Result::value containing the configuration buffer, or Result::error if not CENTRAL layout
+    Result<void> getLegacyConfigBuffer(NativeConfigBuffer& buf);
 
     /// @}
 
@@ -275,15 +272,14 @@ public:
     /// @}
 
     ///////////////////////////////////////////////////////////////////////////
-    /// @name Packet Routing (THE KEY FIX)
+    /// @name Packet Routing
     /// @{
 
-    /// @brief Store a packet in shared memory using correct indexing
+    /// @brief Store a packet in the shared memory receive buffer
     ///
-    /// CRITICAL FIX: This method ALWAYS uses packet.cbpkt_header.instrument
-    /// as the array index, regardless of mode. This ensures:
-    /// - Standalone mode: packets go to correct slot for later CLIENT access
-    /// - Client mode: packets go to same slot Central would use
+    /// Appends the packet to the receive ring buffer. Instrument selection is
+    /// applied on the read side (readReceiveBuffer), which filters against the
+    /// session's configured instrument.
     ///
     /// @param pkt Generic packet to store
     /// @return Result indicating success or failure
@@ -365,16 +361,14 @@ public:
     /// @return Total channel count
     Result<uint32_t> getNumTotalChans() const;
 
-    /// @brief Get NSP status for specified instrument
-    /// @param id Instrument ID (1-based)
+    /// @brief Get NSP status
     /// @return NSP status (INIT, NOIPADDR, NOREPLY, FOUND, INVALID)
-    Result<NSPStatus> getNspStatus(cbproto::InstrumentId id) const;
+    Result<NativeNSPStatus> getNspStatus() const;
 
-    /// @brief Set NSP status for specified instrument
-    /// @param id Instrument ID (1-based)
+    /// @brief Set NSP status
     /// @param status NSP status to set
     /// @return Result indicating success or failure
-    Result<void> setNspStatus(cbproto::InstrumentId id, NSPStatus status);
+    Result<void> setNspStatus(NativeNSPStatus status);
 
     /// @brief Check if system is configured as Gemini
     /// @return true if Gemini system, false otherwise
@@ -400,7 +394,7 @@ public:
     /// @param channel Channel number (0-based)
     /// @param cache Output parameter to receive spike cache
     /// @return Result indicating success or failure
-    Result<void> getSpikeCache(uint32_t channel, CentralSpikeCache& cache) const;
+    Result<void> getSpikeCache(uint32_t channel, NativeSpikeCache& cache) const;
 
     /// @brief Get most recent spike packet from cache
     ///
@@ -414,33 +408,14 @@ public:
 
     /// @}
 
-    ///////////////////////////////////////////////////////////////////////////
-    /// @name Instrument Filtering (CENTRAL_COMPAT mode)
-    /// @{
-
-    /// @brief Set instrument filter for receive buffer reads
+    /// @brief Get detected protocol version for CENTRAL mode
     ///
-    /// In CENTRAL_COMPAT mode, Central's receive buffer contains packets from ALL
-    /// instruments. This filter causes readReceiveBuffer() to only return packets
-    /// matching the specified instrument index.
-    ///
-    /// @param instrument_index 0-based instrument index to filter for, or -1 for no filter (default)
-    void setInstrumentFilter(int32_t instrument_index);
-
-    /// @brief Get current instrument filter
-    /// @return Current filter (-1 = no filter)
-    int32_t getInstrumentFilter() const;
-
-    /// @brief Get detected protocol version for CENTRAL_COMPAT mode
-    ///
-    /// In CENTRAL_COMPAT mode, Central may store packets in an older protocol format.
-    /// This returns the detected protocol version based on procinfo[0].version.
-    /// Returns CBPROTO_PROTOCOL_CURRENT for CENTRAL and NATIVE layouts.
+    /// In CENTRAL mode, Central may store packets in an older protocol format.
+    /// This returns the detected protocol version based on Central's executable
+    /// file. Returns CBPROTO_PROTOCOL_CURRENT for the NATIVE layout.
     ///
     /// @return Detected protocol version
     cbproto_protocol_version_t getCompatProtocolVersion() const;
-
-    /// @}
 
     ///////////////////////////////////////////////////////////////////////////
     /// @name Receive Buffer Access (Ring Buffer for Incoming Packets)
@@ -457,14 +432,10 @@ public:
     /// @return Result indicating success or failure
     Result<void> readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_packets, size_t& packets_read);
 
-    /// @brief Get current receive buffer statistics
+    /// @brief Get the number of packets read from the receive buffer
     ///
-    /// Returns information about the receive buffer state for monitoring.
-    ///
-    /// @param received Total packets received by writer
-    /// @param available Packets available to read (not yet consumed)
-    /// @return Result indicating success or failure
-    Result<void> getReceiveBufferStats(uint32_t& received, uint32_t& available) const;
+    /// @return Result<uint32_t> - total packets received by writer
+    Result<uint32_t> getReceivedPacketCount() const;
 
     /// @}
 
@@ -506,9 +477,9 @@ public:
     /// @brief Get last timestamp from receive buffer (always nanoseconds)
     ///
     /// Returns the most recent packet timestamp written to the receive buffer.
-    /// In CENTRAL_COMPAT mode with a non-Gemini device the raw value (clock
-    /// ticks) is converted to nanoseconds using sysfreq, so callers always
-    /// receive a uniform nanosecond timestamp.
+    /// In CENTRAL mode with a non-Gemini device the raw value (clock ticks)
+    /// is converted to nanoseconds using sysfreq, so callers always receive a
+    /// uniform nanosecond timestamp.
     ///
     /// @return Last timestamp in nanoseconds, or 0 if receive buffer not initialized
     PROCTIME getLastTime() const;
@@ -526,4 +497,4 @@ private:
 
 } // namespace cbshm
 
-#endif // CBSHMEM_SHMEM_SESSION_H
+#endif // CBSHM_SHMEM_SESSION_H

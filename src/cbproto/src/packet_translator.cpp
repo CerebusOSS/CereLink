@@ -121,10 +121,23 @@ size_t cbproto::PacketTranslator::translate_CHANINFO_pre410_to_current(const uin
     constexpr size_t payload_to_union = offsetof(cbPKT_CHANINFO, eopchar) + sizeof(dest->eopchar) - cbPKT_HEADER_SIZE;
     std::memcpy(&dest->chan, src_payload, payload_to_union);
     size_t src_offset = payload_to_union;
-    // Narrow 3.11's uint32_t monsource to 4.1's uint16_t moninst, set uint16_t monchan to 0.
-    dest->moninst = static_cast<uint16_t>(*reinterpret_cast<const uint32_t*>(&src_payload[src_offset]));
+    // Split uint32_t monsource (3.11) into uint16_t moninst/monchan (4.1).
+    // The packing is mode-dependent (see cbSetDoutOptions/cbSetAoutOptions in
+    // the pre-4.1 cbhwlib): frequency output packs sample counts,
+    // byte-compatible with the modern lowsamples/highsamples union arm; every
+    // other mode (monitoring, triggered) stores a plain 1-based channel
+    // number, which 4.1+ splits into (moninst = 0-based instrument,
+    // monchan = channel).  Pre-4.1 systems address a single instrument, so
+    // moninst is always 0.  dest->doutopts was populated by the memcpy above.
+    uint32_t monsource = *reinterpret_cast<const uint32_t*>(&src_payload[src_offset]);
+    if (dest->doutopts & cbDOUT_FREQUENCY) {
+        dest->moninst = static_cast<uint16_t>(monsource & 0xFFFF);
+        dest->monchan = static_cast<uint16_t>(monsource >> 16);
+    } else {
+        dest->moninst = 0;
+        dest->monchan = static_cast<uint16_t>(monsource & 0xFFFF);
+    }
     src_offset += 4;
-    dest->monchan = 0;  // New field; set to 0.
     // outvalue and trigtype are unchanged
     dest->outvalue = *reinterpret_cast<const int32_t*>(&src_payload[src_offset]);
     src_offset += 4;
@@ -147,8 +160,14 @@ size_t cbproto::PacketTranslator::translate_CHANINFO_current_to_pre410(const cbP
     constexpr size_t payload_to_union = offsetof(cbPKT_CHANINFO, eopchar) + sizeof(pkt.eopchar) - cbPKT_HEADER_SIZE;
     memcpy(dest_payload, &pkt.chan, payload_to_union);
     size_t dest_offset = payload_to_union;
-    // Expand 4.1's uint16_t moninst to 3.11's uint32_t monsource; ignore uint16_t monchan.
-    *reinterpret_cast<uint32_t*>(&dest_payload[dest_offset]) = static_cast<uint32_t>(pkt.moninst);
+    // Merge uint16_t moninst/monchan (4.1) into uint32_t monsource (3.11).
+    // Inverse of the mode-dependent split in translate_CHANINFO_pre410_to_current:
+    // frequency output is byte-preserving; other modes store the channel number
+    // (the modern instrument field has no pre-4.1 representation and is dropped).
+    *reinterpret_cast<uint32_t*>(&dest_payload[dest_offset]) =
+        (pkt.doutopts & cbDOUT_FREQUENCY)
+            ? ((static_cast<uint32_t>(pkt.monchan) << 16) | static_cast<uint32_t>(pkt.moninst))
+            : static_cast<uint32_t>(pkt.monchan);
     dest_offset += 4;
     // outvalue is unchanged
     *reinterpret_cast<int32_t*>(&dest_payload[dest_offset]) = pkt.outvalue;

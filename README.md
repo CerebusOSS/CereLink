@@ -24,7 +24,7 @@ Modular library stack:
 
 - **STANDALONE** — CereLink owns the device connection and shared memory
 - **CLIENT** — Attach to another CereLink instance's shared memory
-- **CENTRAL_COMPAT CLIENT** — Attach to Central's shared memory with on-the-fly protocol translation
+- **CENTRAL CLIENT** — Attach to Central's shared memory with on-the-fly protocol translation
 
 ## Build
 

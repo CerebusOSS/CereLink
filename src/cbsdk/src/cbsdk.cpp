@@ -16,11 +16,42 @@
 #include "cbsdk/sdk_session.h"
 #include <chrono>
 #include <csignal>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <mutex>
 #include <set>
+#include <string>
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Last-Error Detail
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// The C API collapses rich C++ error strings into a small result enum, which
+/// loses the only text that says *what* actually went wrong. Stash the full
+/// message here so callers can retrieve it via cbsdk_get_last_error().
+///
+/// Thread-local: each thread reads back the detail for the call it just made,
+/// with no locking and no cross-thread clobbering.
+static thread_local std::string g_last_error;
+
+/// Record `detail` as the last error and return `code` unchanged.
+static cbsdk_result_t fail_with(cbsdk_result_t code, const std::string& detail) {
+    g_last_error = detail;
+    return code;
+}
+
+/// Classify a C++ error string into a result code, preserving the full text.
+static cbsdk_result_t classify_error(const std::string& error) {
+    if (error.find("shared memory") != std::string::npos) {
+        return fail_with(CBSDK_RESULT_SHMEM_ERROR, error);
+    }
+    if (error.find("device") != std::string::npos) {
+        return fail_with(CBSDK_RESULT_DEVICE_ERROR, error);
+    }
+    return fail_with(CBSDK_RESULT_INTERNAL_ERROR, error);
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Session Tracking & Cleanup (forward declarations; bodies after cbsdk_session_impl)
@@ -212,6 +243,8 @@ static void to_c_stats(const cbsdk::SdkStats& cpp_stats, cbsdk_stats_t* c_stats)
     c_stats->shmem_store_errors = cpp_stats.shmem_store_errors;
     c_stats->receive_errors = cpp_stats.receive_errors;
     c_stats->send_errors = cpp_stats.send_errors;
+    c_stats->shmem_overruns = cpp_stats.shmem_overruns;
+    c_stats->packets_produced = cpp_stats.packets_produced;
 }
 
 /// Convert C chaninfo field enum to C++ ChanInfoField enum
@@ -274,6 +307,8 @@ cbsdk_result_t cbsdk_session_create(cbsdk_session_t* session, const cbsdk_config
         return CBSDK_RESULT_INVALID_PARAMETER;
     }
 
+    g_last_error.clear();
+
     try {
         // Create internal implementation
         auto impl = std::make_unique<cbsdk_session_impl>();
@@ -283,15 +318,7 @@ cbsdk_result_t cbsdk_session_create(cbsdk_session_t* session, const cbsdk_config
         auto result = cbsdk::SdkSession::create(cpp_config);
 
         if (result.isError()) {
-            // Classify error
-            const std::string& error = result.error();
-            if (error.find("shared memory") != std::string::npos) {
-                return CBSDK_RESULT_SHMEM_ERROR;
-            } else if (error.find("device") != std::string::npos) {
-                return CBSDK_RESULT_DEVICE_ERROR;
-            } else {
-                return CBSDK_RESULT_INTERNAL_ERROR;
-            }
+            return classify_error(result.error());
         }
 
         impl->cpp_session = std::make_unique<cbsdk::SdkSession>(std::move(result.value()));
@@ -300,8 +327,12 @@ cbsdk_result_t cbsdk_session_create(cbsdk_session_t* session, const cbsdk_config
         track_session(*session);
         return CBSDK_RESULT_SUCCESS;
 
+    } catch (const std::exception& e) {
+        return fail_with(CBSDK_RESULT_INTERNAL_ERROR,
+                         std::string("Exception during session create: ") + e.what());
     } catch (...) {
-        return CBSDK_RESULT_INTERNAL_ERROR;
+        return fail_with(CBSDK_RESULT_INTERNAL_ERROR,
+                         "Unknown exception during session create");
     }
 }
 
@@ -463,6 +494,10 @@ const char* cbsdk_get_error_message(cbsdk_result_t result) {
         default:
             return "Unknown error";
     }
+}
+
+const char* cbsdk_get_last_error(void) {
+    return g_last_error.c_str();
 }
 
 const char* cbsdk_get_version(void) {
@@ -694,15 +729,21 @@ uint32_t cbsdk_get_num_analog_chans(void) {
     return cbNUM_ANALOG_CHANS;
 }
 
-const char* cbsdk_session_get_channel_label(cbsdk_session_t session, uint32_t chan_id) {
-    if (!session || !session->cpp_session) {
-        return nullptr;
-    }
+uint32_t cbsdk_session_get_channel_label_length(void) {
+    return cbLEN_STR_LABEL + 1;  // + null terminator
+}
+
+int32_t cbsdk_session_get_channel_label(
+    cbsdk_session_t session, uint32_t chan_id, char* buf, uint32_t buf_size) {
+    if (!session || !session->cpp_session || !buf || buf_size == 0) return -1;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->label : nullptr;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        if (info.isError()) return -1;
+        auto written = std::snprintf(buf, buf_size, "%.*s", static_cast<int>(std::size(info.value().label)), info.value().label);
+        if (written < 0) return -1;
+        return written < buf_size ? written : buf_size - 1;  // clamp if truncated
     } catch (...) {
-        return nullptr;
+        return -1;
     }
 }
 
@@ -711,8 +752,8 @@ uint32_t cbsdk_session_get_channel_smpgroup(cbsdk_session_t session, uint32_t ch
         return 0;
     }
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->smpgroup : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().smpgroup : 0;
     } catch (...) {
         return 0;
     }
@@ -723,8 +764,8 @@ uint32_t cbsdk_session_get_channel_chancaps(cbsdk_session_t session, uint32_t ch
         return 0;
     }
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->chancaps : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().chancaps : 0;
     } catch (...) {
         return 0;
     }
@@ -735,10 +776,11 @@ cbproto_channel_type_t cbsdk_session_get_channel_type(cbsdk_session_t session, u
         return static_cast<cbproto_channel_type_t>(-1);
     }
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        if (!info) return static_cast<cbproto_channel_type_t>(-1);
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        if (info.isError()) return static_cast<cbproto_channel_type_t>(-1);
+        cbPKT_CHANINFO& ci = info.value();
 
-        const uint32_t caps = info->chancaps;
+        const uint32_t caps = ci.chancaps;
         if ((cbCHAN_EXISTS | cbCHAN_CONNECTED) != (caps & (cbCHAN_EXISTS | cbCHAN_CONNECTED)))
             return static_cast<cbproto_channel_type_t>(-1);
 
@@ -747,12 +789,12 @@ cbproto_channel_type_t cbsdk_session_get_channel_type(cbsdk_session_t session, u
         if (cbCHAN_AINP == (caps & (cbCHAN_AINP | cbCHAN_ISOLATED)))
             return CBPROTO_CHANNEL_TYPE_ANALOG_IN;
         if (cbCHAN_AOUT == (caps & cbCHAN_AOUT)) {
-            if (cbAOUT_AUDIO == (info->aoutcaps & cbAOUT_AUDIO))
+            if (cbAOUT_AUDIO == (ci.aoutcaps & cbAOUT_AUDIO))
                 return CBPROTO_CHANNEL_TYPE_AUDIO;
             return CBPROTO_CHANNEL_TYPE_ANALOG_OUT;
         }
         if (cbCHAN_DINP == (caps & cbCHAN_DINP)) {
-            if (info->dinpcaps & cbDINP_SERIALMASK)
+            if (ci.dinpcaps & cbDINP_SERIALMASK)
                 return CBPROTO_CHANNEL_TYPE_SERIAL;
             return CBPROTO_CHANNEL_TYPE_DIGITAL_IN;
         }
@@ -768,72 +810,72 @@ cbproto_channel_type_t cbsdk_session_get_channel_type(cbsdk_session_t session, u
 uint32_t cbsdk_session_get_channel_smpfilter(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->smpfilter : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().smpfilter : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_channel_spkfilter(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->spkfilter : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().spkfilter : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_channel_spkopts(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->spkopts : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().spkopts : 0;
     } catch (...) { return 0; }
 }
 
 int32_t cbsdk_session_get_channel_spkthrlevel(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->spkthrlevel : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().spkthrlevel : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_channel_ainpopts(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->ainpopts : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().ainpopts : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_channel_lncrate(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->lncrate : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().lncrate : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_channel_refelecchan(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->refelecchan : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().refelecchan : 0;
     } catch (...) { return 0; }
 }
 
 int16_t cbsdk_session_get_channel_amplrejpos(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->amplrejpos : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().amplrejpos : 0;
     } catch (...) { return 0; }
 }
 
 int16_t cbsdk_session_get_channel_amplrejneg(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        return info ? info->amplrejneg : 0;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().amplrejneg : 0;
     } catch (...) { return 0; }
 }
 
@@ -843,14 +885,15 @@ cbsdk_result_t cbsdk_session_get_channel_scaling(
         return CBSDK_RESULT_INVALID_PARAMETER;
     }
     try {
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        if (!info) return CBSDK_RESULT_INVALID_PARAMETER;
-        scaling->digmin  = info->scalin.digmin;
-        scaling->digmax  = info->scalin.digmax;
-        scaling->anamin  = info->scalin.anamin;
-        scaling->anamax  = info->scalin.anamax;
-        scaling->anagain = info->scalin.anagain;
-        std::memcpy(scaling->anaunit, info->scalin.anaunit, sizeof(scaling->anaunit));
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        if (info.isError()) return CBSDK_RESULT_INVALID_PARAMETER;
+        cbPKT_CHANINFO& ci = info.value();
+        scaling->digmin  = ci.scalin.digmin;
+        scaling->digmax  = ci.scalin.digmax;
+        scaling->anamin  = ci.scalin.anamin;
+        scaling->anamax  = ci.scalin.anamax;
+        scaling->anagain = ci.scalin.anagain;
+        std::memcpy(scaling->anaunit, ci.scalin.anaunit, sizeof(scaling->anaunit));
         return CBSDK_RESULT_SUCCESS;
     } catch (...) {
         std::memset(scaling, 0, sizeof(cbsdk_channel_scaling_t));
@@ -870,15 +913,21 @@ int64_t cbsdk_session_get_channel_field(
     } catch (...) { return 0; }
 }
 
-const char* cbsdk_session_get_group_label(cbsdk_session_t session, uint32_t group_id) {
-    if (!session || !session->cpp_session) {
-        return nullptr;
-    }
+uint32_t cbsdk_session_get_group_label_length(void) {
+    return cbLEN_STR_LABEL + 1;  // + null terminator
+}
+
+int32_t cbsdk_session_get_group_label(
+    cbsdk_session_t session, uint32_t group_id, char* buf, uint32_t buf_size) {
+    if (!session || !session->cpp_session || !buf || buf_size == 0) return -1;
     try {
-        const cbPKT_GROUPINFO* info = session->cpp_session->getGroupInfo(group_id);
-        return info ? info->label : nullptr;
+        auto info = session->cpp_session->getGroupInfo(group_id);
+        if (info.isError()) return -1;
+        auto written = std::snprintf(buf, buf_size, "%.*s", static_cast<int>(std::size(info.value().label)), info.value().label);
+        if (written < 0) return -1;
+        return written < buf_size ? written : buf_size - 1;  // clamp if truncated
     } catch (...) {
-        return nullptr;
+        return -1;
     }
 }
 
@@ -956,9 +1005,9 @@ static cbsdk_result_t modify_and_send_chaninfo(
             auto sync_result = session->cpp_session->sync(5000);
             if (sync_result.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
         }
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        if (!info) return CBSDK_RESULT_INVALID_PARAMETER;
-        cbPKT_CHANINFO ci = *info;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        if (info.isError()) return CBSDK_RESULT_INVALID_PARAMETER;
+        cbPKT_CHANINFO& ci = info.value();
         ci.chan = chan_id;
         ci.cbpkt_header.type = pkt_type;
         modify(ci);
@@ -994,9 +1043,9 @@ cbsdk_result_t cbsdk_session_set_channel_smpgroup(
             auto sync_result = session->cpp_session->sync(5000);
             if (sync_result.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
         }
-        const cbPKT_CHANINFO* info = session->cpp_session->getChanInfo(chan_id);
-        if (!info) return CBSDK_RESULT_INVALID_PARAMETER;
-        cbPKT_CHANINFO ci = *info;
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        if (info.isError()) return CBSDK_RESULT_INVALID_PARAMETER;
+        cbPKT_CHANINFO& ci = info.value();
         ci.chan = chan_id;
 
         if (rate == 0) {
@@ -1225,8 +1274,8 @@ cbsdk_result_t cbsdk_session_get_channels_positions(
 uint32_t cbsdk_session_get_sysfreq(cbsdk_session_t session) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_SYSINFO* info = session->cpp_session->getSysInfo();
-        return info ? info->sysfreq : 0;
+        auto info = session->cpp_session->getSysInfo();
+        return info.isOk() ? info.value().sysfreq : 0;
     } catch (...) { return 0; }
 }
 
@@ -1234,43 +1283,51 @@ uint32_t cbsdk_get_num_filters(void) {
     return cbMAXFILTS;
 }
 
-const char* cbsdk_session_get_filter_label(cbsdk_session_t session, uint32_t filter_id) {
-    if (!session || !session->cpp_session) return nullptr;
+uint32_t cbsdk_session_get_filter_label_length(void) {
+    return cbLEN_STR_FILT_LABEL + 1;  // + null terminator
+}
+
+int32_t cbsdk_session_get_filter_label(
+    cbsdk_session_t session, uint32_t filter_id, char* buf, uint32_t buf_size) {
+    if (!session || !session->cpp_session || !buf || buf_size == 0) return -1;
     try {
-        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
-        return info ? info->label : nullptr;
-    } catch (...) { return nullptr; }
+        auto info = session->cpp_session->getFilterInfo(filter_id);
+        if (info.isError()) return -1;
+        auto written = std::snprintf(buf, buf_size, "%.*s", static_cast<int>(std::size(info.value().label)), info.value().label);
+        if (written < 0) return -1;
+        return written < buf_size ? written : buf_size - 1;  // clamp if truncated
+    } catch (...) { return -1; }
 }
 
 uint32_t cbsdk_session_get_filter_hpfreq(cbsdk_session_t session, uint32_t filter_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
-        return info ? info->hpfreq : 0;
+        auto info = session->cpp_session->getFilterInfo(filter_id);
+        return info.isOk() ? info.value().hpfreq : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_filter_hporder(cbsdk_session_t session, uint32_t filter_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
-        return info ? info->hporder : 0;
+        auto info = session->cpp_session->getFilterInfo(filter_id);
+        return info.isOk() ? info.value().hporder : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_filter_lpfreq(cbsdk_session_t session, uint32_t filter_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
-        return info ? info->lpfreq : 0;
+        auto info = session->cpp_session->getFilterInfo(filter_id);
+        return info.isOk() ? info.value().lpfreq : 0;
     } catch (...) { return 0; }
 }
 
 uint32_t cbsdk_session_get_filter_lporder(cbsdk_session_t session, uint32_t filter_id) {
     if (!session || !session->cpp_session) return 0;
     try {
-        const cbPKT_FILTINFO* info = session->cpp_session->getFilterInfo(filter_id);
-        return info ? info->lporder : 0;
+        auto info = session->cpp_session->getFilterInfo(filter_id);
+        return info.isOk() ? info.value().lporder : 0;
     } catch (...) { return 0; }
 }
 

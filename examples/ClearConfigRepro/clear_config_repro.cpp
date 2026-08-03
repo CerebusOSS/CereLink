@@ -49,8 +49,9 @@ int main(int argc, char* argv[]) {
     auto session = std::move(result.value());
     std::cout << "  connected. protocol code=" << session.getProtocolVersion()
               << "  ident=\"" << session.getProcIdent() << "\"";
-    if (const auto* si = session.getSysInfo()) {
-        std::cout << "  sysfreq=" << si->sysfreq;
+    auto sysinfo = session.getSysInfo();
+    if (sysinfo.isOk()) {
+        std::cout << "  sysfreq=" << sysinfo.value().sysfreq;
     }
     std::cout << "\n";
 
@@ -59,7 +60,7 @@ int main(int argc, char* argv[]) {
     // Gather all analog-in channels (mirrors Orion's allChannels).
     std::vector<uint32_t> allChannels;
     for (uint32_t ch = 1; ch <= cbNUM_ANALOG_CHANS; ++ch) {
-        if (session.getChanInfo(ch) != nullptr) allChannels.push_back(ch);
+        if (session.getChanInfo(ch).isOk()) allChannels.push_back(ch);
     }
     std::cout << "  discovered " << allChannels.size() << " analog channels\n";
     if (allChannels.empty()) return 2;
@@ -86,9 +87,9 @@ int main(int argc, char* argv[]) {
         };
 
         for (uint32_t ch : allChannels) {          // clear LNC
-            const auto* base = session.getChanInfo(ch);
-            if (!base) return false;
-            cbPKT_CHANINFO ci = *base;
+            auto base = session.getChanInfo(ch);
+            if (base.isError()) return false;
+            auto& ci = base.value();
             ci.chan = ch;
             ci.cbpkt_header.type = cbPKTTYPE_CHANSETAINP;
             ci.ainpopts &= ~(cbAINP_LNC_MASK | cbAINP_RAWSTREAM);
@@ -99,9 +100,9 @@ int main(int argc, char* argv[]) {
             paced();
         }
         for (uint32_t ch : allChannels) {          // clear spike processing
-            const auto* base = session.getChanInfo(ch);
-            if (!base) return false;
-            cbPKT_CHANINFO ci = *base;
+            auto base = session.getChanInfo(ch);
+            if (base.isError()) return false;
+            auto& ci = base.value();
             ci.chan = ch;
             ci.cbpkt_header.type = cbPKTTYPE_CHANSETSPK;
             ci.spkopts &= ~SPIKE_PROCESSING_OPTION_MASK;

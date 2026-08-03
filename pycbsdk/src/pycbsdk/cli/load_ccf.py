@@ -93,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
             args.filename, device_type, timeout=args.timeout, sync=not args.no_sync
         )
         return 0
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - CLI boundary: report failures, not tracebacks
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
 

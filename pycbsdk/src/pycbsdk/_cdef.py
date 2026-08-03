@@ -111,6 +111,8 @@ typedef struct {
     uint64_t shmem_store_errors;
     uint64_t receive_errors;
     uint64_t send_errors;
+    uint64_t shmem_overruns;
+    uint64_t packets_produced;
 } cbsdk_stats_t;
 
 typedef struct {
@@ -200,10 +202,12 @@ cbsdk_result_t cbsdk_session_set_spike_length(cbsdk_session_t session,
 uint32_t cbsdk_get_max_chans(void);
 uint32_t cbsdk_get_num_fe_chans(void);
 uint32_t cbsdk_get_num_analog_chans(void);
-const char* cbsdk_session_get_channel_label(cbsdk_session_t session, uint32_t chan_id);
+uint32_t cbsdk_session_get_channel_label_length(void);
+int32_t cbsdk_session_get_channel_label(cbsdk_session_t session, uint32_t chan_id, char* buf, uint32_t buf_size);
 uint32_t cbsdk_session_get_channel_smpgroup(cbsdk_session_t session, uint32_t chan_id);
 uint32_t cbsdk_session_get_channel_chancaps(cbsdk_session_t session, uint32_t chan_id);
-const char* cbsdk_session_get_group_label(cbsdk_session_t session, uint32_t group_id);
+uint32_t cbsdk_session_get_group_label_length(void);
+int32_t cbsdk_session_get_group_label(cbsdk_session_t session, uint32_t group_id, char* buf, uint32_t buf_size);
 cbsdk_result_t cbsdk_session_get_group_list(cbsdk_session_t session,
     uint32_t group_id, uint16_t* list, uint32_t* count);
 
@@ -297,7 +301,8 @@ cbsdk_result_t cbsdk_session_get_channels_positions(
 // Bulk configuration access
 uint32_t cbsdk_session_get_sysfreq(cbsdk_session_t session);
 uint32_t cbsdk_get_num_filters(void);
-const char* cbsdk_session_get_filter_label(cbsdk_session_t session, uint32_t filter_id);
+uint32_t cbsdk_session_get_filter_label_length(void);
+int32_t cbsdk_session_get_filter_label(cbsdk_session_t session, uint32_t filter_id, char* buf, uint32_t buf_size);
 uint32_t cbsdk_session_get_filter_hpfreq(cbsdk_session_t session, uint32_t filter_id);
 uint32_t cbsdk_session_get_filter_hporder(cbsdk_session_t session, uint32_t filter_id);
 uint32_t cbsdk_session_get_filter_lpfreq(cbsdk_session_t session, uint32_t filter_id);
@@ -367,6 +372,7 @@ int64_t cbsdk_get_steady_clock_ns(void);
 
 // Error handling & version
 const char* cbsdk_get_error_message(cbsdk_result_t result);
+const char* cbsdk_get_last_error(void);
 const char* cbsdk_get_version(void);
 
 """

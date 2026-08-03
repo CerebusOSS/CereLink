@@ -177,9 +177,10 @@ TEST_F(CApiChannelInfoTest, GetChannelLabel) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
-    const char* label = cbsdk_session_get_channel_label(sg.session, 1);
-    EXPECT_NE(label, nullptr);
-    EXPECT_GT(strlen(label), 0u);
+    std::vector<char> label(cbsdk_session_get_channel_label_length());
+    int32_t len = cbsdk_session_get_channel_label(sg.session, 1, label.data(), label.size());
+    EXPECT_GT(len, 0);
+    EXPECT_EQ(strlen(label.data()), static_cast<size_t>(len));
 }
 
 TEST_F(CApiChannelInfoTest, GetChannelType) {
@@ -242,8 +243,17 @@ TEST_F(CApiChannelInfoTest, GetGroupLabel) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
-    const char* label = cbsdk_session_get_group_label(sg.session, CBPROTO_GROUP_RATE_30000Hz);
-    EXPECT_NE(label, nullptr);
+    std::vector<char> label(cbsdk_session_get_group_label_length());
+    int32_t len = cbsdk_session_get_group_label(sg.session, CBPROTO_GROUP_RATE_30000Hz,
+                                                label.data(), label.size());
+    // The label may be empty or unavailable (nPlayServer need not send GROUPREP),
+    // so -1 (failure) and 0 (empty) are both acceptable. But the return value must
+    // always be a valid contract value, and on success it must match the buffer.
+    EXPECT_GE(len, -1);
+    EXPECT_LT(len, static_cast<int32_t>(label.size()));
+    if (len >= 0) {
+        EXPECT_EQ(strlen(label.data()), static_cast<size_t>(len));
+    }
 }
 
 TEST_F(CApiChannelInfoTest, GetChannelField) {
@@ -332,9 +342,9 @@ TEST_F(CApiPerChannelTest, SetChannelLabel) {
               CBSDK_RESULT_SUCCESS);
     EXPECT_EQ(cbsdk_session_sync(sg.session, 5000), CBSDK_RESULT_SUCCESS);
 
-    const char* label = cbsdk_session_get_channel_label(sg.session, 1);
-    ASSERT_NE(label, nullptr);
-    EXPECT_STREQ(label, "TestCh");
+    std::vector<char> label(cbsdk_session_get_channel_label_length());
+    cbsdk_session_get_channel_label(sg.session, 1, label.data(), label.size());
+    EXPECT_STREQ(label.data(), "TestCh");
 }
 
 TEST_F(CApiPerChannelTest, SetChannelSmpfilter) {
@@ -374,14 +384,17 @@ TEST_F(CApiFilterTest, GetFilterLabel) {
     ASSERT_TRUE(sg.create());
 
     // Filter 0 — may or may not have a label, but should not crash
-    cbsdk_session_get_filter_label(sg.session, 0);
+    std::vector<char> label(cbsdk_session_get_filter_label_length());
+    cbsdk_session_get_filter_label(sg.session, 0, label.data(), label.size());
 }
 
 TEST_F(CApiFilterTest, GetFilterLabelInvalid) {
     SessionGuard sg;
     ASSERT_TRUE(sg.create());
 
-    EXPECT_EQ(cbsdk_session_get_filter_label(sg.session, 9999), nullptr);
+    // Invalid filter id reports failure via a negative return; buffer contents are undefined.
+    std::vector<char> label(cbsdk_session_get_filter_label_length());
+    EXPECT_LT(cbsdk_session_get_filter_label(sg.session, 9999, label.data(), label.size()), 0);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

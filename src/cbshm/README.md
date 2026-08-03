@@ -5,13 +5,13 @@ between STANDALONE and CLIENT sessions.
 
 ## Responsibilities
 
-- **Three layout modes:** `NATIVE` (CereLink-to-CereLink), `CENTRAL_COMPAT` (attach to
-  Central's shared memory), `CENTRAL` (Central-compatible layout created by CereLink)
+- **Two layout modes:** `NATIVE` (CereLink-to-CereLink), `CENTRAL` (attach to
+  Central's shared memory)
 - **Consistent packet indexing:** Always uses `packet.instrument` as the array index,
   regardless of mode
 - **Ring buffer I/O:** Write packets to the receive buffer (STANDALONE), read packets
   from it (CLIENT), with protocol-aware parsing and translation in compat mode
-- **Instrument filtering:** In `CENTRAL_COMPAT` mode, filters packets from Central's
+- **Instrument filtering:** In `CENTRAL` mode, filters packets from Central's
   shared receive buffer by instrument index
 - **Platform-specific implementations:** Windows (`CreateFileMapping`) and POSIX
   (`shm_open`) shared memory, plus platform-specific signaling
@@ -21,14 +21,13 @@ between STANDALONE and CLIENT sessions.
 | Type | Purpose |
 |------|---------|
 | `ShmemSession` | Main API — create/attach segments, read/write buffers, access config |
-| `ShmemLayout` | Enum: `CENTRAL`, `CENTRAL_COMPAT`, `NATIVE` |
+| `ShmemLayout` | Enum: `CENTRAL`, `NATIVE` |
 | `NativeConfigBuffer` | Single-instrument config (284 channels, scalar arrays) |
-| `CentralLegacyCFGBUFF` | Matches Central's exact binary layout for compat mode |
-| `cbConfigBuffer` | CereLink's own multi-instrument config layout |
+| `cbCFGBUFF` | Matches Central's exact binary layout for compat mode |
 
 ## Key Design Notes
 
-- **Central vs CereLink constants:** Central uses `cbMAXPROCS=4`, `cbNUM_FE_CHANS=768`.
+- **Central vs CereLink constants:** Central uses `cbMAXPROCS=4`, `cbNUM_FE_CHANS=768` (in v7.8.0).
   CereLink uses `cbMAXPROCS=1`, `cbNUM_FE_CHANS=256`. The compat types use Central's
   constants; native types use CereLink's.
 - **Not exposed to public API:** cbsdk orchestrates cbshm; users don't interact with it

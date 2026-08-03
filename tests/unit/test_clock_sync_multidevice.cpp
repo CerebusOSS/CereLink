@@ -152,19 +152,23 @@ void borrowFromFirstOpenHub(const std::vector<const ShmemSession*>& hubs_in_prio
     }
 }
 
+// NATIVE segments always use instrument 0 (devices are keyed by segment name,
+// not instrument id — matches sdk_session.cpp:711/726). The HUB1/HUB2/NSP
+// instrument mapping (getCentralInstrumentIndex) is a CENTRAL-layout concept and
+// doesn't apply here; the instrument id only gates open() validity and the
+// receive-buffer packet filter, neither of which these clock-exchange tests hit.
+
 // Helper to create a NATIVE STANDALONE shmem session with unique segment names.
 cbshm::Result<ShmemSession> makeNativeStandalone(const std::string& name) {
     return ShmemSession::create(
-        name + "_cfg", name + "_rec", name + "_xmt", name + "_xmt_local",
-        name + "_status", name + "_spk", name + "_signal",
-        Mode::STANDALONE, ShmemLayout::NATIVE);
+        Mode::STANDALONE, ShmemLayout::NATIVE,
+        name, cbproto::InstrumentId::fromIndex(0));
 }
 // Helper to attach a NATIVE CLIENT session to the same segment names.
 cbshm::Result<ShmemSession> makeNativeClient(const std::string& name) {
     return ShmemSession::create(
-        name + "_cfg", name + "_rec", name + "_xmt", name + "_xmt_local",
-        name + "_status", name + "_spk", name + "_signal",
-        Mode::CLIENT, ShmemLayout::NATIVE);
+        Mode::CLIENT, ShmemLayout::NATIVE,
+        name, cbproto::InstrumentId::fromIndex(0));
 }
 
 // Keep names short: macOS POSIX shared-memory names are limited to ~31 chars

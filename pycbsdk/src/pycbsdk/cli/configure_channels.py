@@ -19,7 +19,7 @@ import sys
 import time
 
 from pycbsdk import ChannelType, DeviceType, SampleRate, Session
-from pycbsdk.session import _coerce_enum, _RATE_ALIASES
+from pycbsdk.session import _RATE_ALIASES, _coerce_enum
 
 # cbAINPSPK_NOSORT — disable spike sorting
 _SPKOPTS_NOSORT = 0x0000_0000
@@ -165,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout=args.timeout,
         )
         return 0
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - CLI boundary: report failures, not tracebacks
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
 

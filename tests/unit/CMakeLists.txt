@@ -22,6 +22,7 @@ include(GoogleTest)
 add_executable(cbproto_tests
     test_instrument_id.cpp
     test_protocol_structures.cpp
+    test_gemini_detection.cpp
 )
 
 target_link_libraries(cbproto_tests
@@ -57,6 +58,25 @@ target_link_libraries(cbshm_tests
 gtest_discover_tests(cbshm_tests)
 
 message(STATUS "Unit tests configured for cbshm")
+
+# cbshm central adapter tests (per-version translation + copyArr helpers).
+# Fully off-Windows testable: adapters translate caller-owned buffers, no shared
+# memory or Central.exe required.
+add_executable(cbshm_adapter_tests
+    test_central_adapters.cpp
+    test_central_adapter_base.cpp
+)
+
+target_link_libraries(cbshm_adapter_tests
+    PRIVATE
+        cbshm
+        cbproto
+        GTest::gtest_main
+)
+
+gtest_discover_tests(cbshm_adapter_tests)
+
+message(STATUS "Unit tests configured for cbshm central adapters")
 
 # cbdev tests (non-device-dependent: packet translation, clock sync)
 add_executable(cbdev_tests
@@ -186,6 +206,25 @@ gtest_discover_tests(cbsdk_tests
 )
 
 message(STATUS "Unit tests configured for cbsdk (prefixed with 'device.' for CI filtering)")
+
+# cbsdk C-compilation test.
+add_executable(cbsdk_c_compile_test test_cbsdk_c_compile.c)
+
+set_target_properties(cbsdk_c_compile_test PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED ON
+    C_EXTENSIONS OFF
+)
+
+target_include_directories(cbsdk_c_compile_test
+    BEFORE PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/cbsdk/include
+        ${PROJECT_SOURCE_DIR}/src/cbproto/include
+)
+
+add_test(NAME cbsdk_c_api_header_compiles COMMAND cbsdk_c_compile_test)
+
+message(STATUS "Unit tests configured for cbsdk C-compilation test")
 
 # CMP parser tests (no device needed)
 add_executable(cmp_parser_tests
