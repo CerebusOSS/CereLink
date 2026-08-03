@@ -514,7 +514,8 @@ def phase_api_sweep(session: Session, n_chans: int) -> None:
     record(
         "sweep/group-membership-agrees",
         not mismatches,
-        "; ".join(mismatches[:3]) if mismatches
+        "; ".join(mismatches[:3])
+        if mismatches
         else "get_group_channels() agrees with get_channel_smpgroup()",
     )
 
