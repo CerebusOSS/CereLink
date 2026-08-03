@@ -22,6 +22,11 @@ The structure and sizes of types are defined in `src/cbshm/include/cbshm/central
 At runtime, `detectCentralVersion` (declared in `src/cbshm/include/cbshm/central_version.h`, defined in `src/cbshm/src/central_version.cpp`) inspects the application version of the running `Central.exe` and returns the matching `CentralVersion`.  `getProtocolVersion` converts a `CentralVersion` to its protocol version for the receive/transmit buffer logic.  `ShmemSession::Impl::open` uses the detected `CentralVersion` to select the appropriate `BootstrapAdapter` and `Adapter`.
 
 
+## Testing
+
+The automated suites cannot exercise a real Central: version detection requires a running `Central.exe`, and the adapter round-trip tests cannot detect a struct layout that is self-consistently wrong.  See [hardware_testing.md](hardware_testing.md) for the hardware matrix, the per-version receive-ring soak durations, and the `python -m pycbsdk.cli.soak` harness that runs the checks.
+
+
 ## Limitations
 
 This compatibility layer is limited to Central's configuration, status, and spike buffers.  The receive and transmit buffers are handled by brittle logic spread throughout cbdev, cbproto, and cbshm.  Replacing this brittle logic with another adapter class encapsulating all version-specific code would dramatically simplify the process of adding protocol versions.
