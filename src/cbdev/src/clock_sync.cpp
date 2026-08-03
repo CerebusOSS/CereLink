@@ -232,25 +232,38 @@ ClockSync::InternalEstimate ClockSync::computeInternalEstimate() const {
 
         const auto& best = m_probe_samples[indices[top - 1]];
 
-        // rtt/2 bounds the error only if the samples agree with each other.
-        // When they scatter, the disagreement is the real uncertainty: a
-        // device that transmits in blocks latches its reply timestamps to
-        // block boundaries, so every offset inherits that quantisation no
-        // matter how fast the round trip was. A Gemini NSP produced 187 ms of
-        // spread on 20 ms round trips -- reporting 10 ms there advertises
-        // millisecond confidence for an estimate wrong by a sixth of a second,
-        // and a caller checking the uncertainty has no way to tell.
+        // rtt/2 bounds the error only when transit delay is the sole error
+        // source. Offsets legitimately spread when round trips differ -- a
+        // slower probe yields a lower offset -- and picking the max already
+        // compensates for that, so charging the whole spread as uncertainty
+        // would double-count an effect that is handled.
         //
-        // Spread is measured over the glitch-filtered set actually in play
-        // (indices[0..top-1]); half of it is a symmetric proxy for what is
-        // really a one-sided error, since taking the max offset picks the
-        // least-delayed sample and the true offset lies at or above it.
+        // What rtt/2 cannot bound is spread the round trips do not explain. A
+        // device that transmits in blocks latches its reply timestamps to
+        // block boundaries, so every offset inherits that quantisation however
+        // fast the round trip was: a Gemini NSP produced 187 ms of spread on
+        // 20 ms round trips that varied by only ~10 ms. Reporting 10 ms there
+        // advertises millisecond confidence for an estimate wrong by a sixth
+        // of a second, and a caller checking the uncertainty cannot tell.
+        //
+        // So charge only the unexplained part. Differing round trips can
+        // account for at most (rtt_hi - rtt_lo) / 2 of spread; anything beyond
+        // that is a second error source. Halved for the same reason as above:
+        // the max-offset pick is the least-delayed sample, so the true offset
+        // lies at or above it and the error is one-sided.
         const int64_t spread_ns =
             best.offset_ns - m_probe_samples[indices[0]].offset_ns;
+        int64_t rtt_lo = INT64_MAX, rtt_hi = 0;
+        for (size_t k = 0; k < top; ++k) {
+            rtt_lo = std::min(rtt_lo, m_probe_samples[indices[k]].rtt_ns);
+            rtt_hi = std::max(rtt_hi, m_probe_samples[indices[k]].rtt_ns);
+        }
+        const int64_t explained_ns = (rtt_hi - rtt_lo) / 2;
+        const int64_t unexplained_ns = std::max<int64_t>(0, spread_ns - explained_ns);
 
         InternalEstimate e;
         e.offset_ns = best.offset_ns;
-        e.uncertainty_ns = std::max<int64_t>(best.rtt_ns / 2, spread_ns / 2);
+        e.uncertainty_ns = std::max<int64_t>(best.rtt_ns / 2, unexplained_ns / 2);
         return e;
     };
 
