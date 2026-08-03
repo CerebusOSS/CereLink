@@ -499,7 +499,7 @@ def phase_api_sweep(session: Session, n_chans: int) -> None:
             try:
                 if session.get_channel_smpgroup(ch) == g:
                     scanned.add(ch)
-            except Exception:  # noqa: BLE001 - absent channels are not a fault
+            except Exception:  # noqa: BLE001,S112 - absent channels are not a fault
                 continue
         # Only channels within this device's range are comparable; the group
         # list may legitimately mention ids beyond it on some layouts.
