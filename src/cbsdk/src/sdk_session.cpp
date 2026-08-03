@@ -2469,9 +2469,43 @@ Result<void> SdkSession::saveCCF(const std::string& filename) {
         ccf::extractDeviceConfig(m_impl->device_session->getDeviceConfig(), ccf_data);
     } else if (m_impl->shmem_session) {
         const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
-        if (!native)
-            return Result<void>::error("No configuration available in shared memory");
-        extractFromNativeConfig(*native, ccf_data);
+        if (native) {
+            extractFromNativeConfig(*native, ccf_data);
+        } else {
+            // CENTRAL: getNativeConfigBuffer() is NATIVE-only, so a CENTRAL
+            // CLIENT had no way to reach its configuration and every save
+            // failed. Translate Central's layout into the native form first.
+            // Heap-allocated: NativeConfigBuffer is far too large for the stack.
+            auto legacy = std::make_unique<cbshm::NativeConfigBuffer>();
+            auto r = m_impl->shmem_session->getLegacyConfigBuffer(*legacy);
+            if (r.isError())
+                return Result<void>::error("No configuration available in shared memory: " +
+                                           r.error());
+            extractFromNativeConfig(*legacy, ccf_data);
+
+            // The CCF describes the device this session speaks for, matching
+            // the rest of the API: this instrument's channels, in this
+            // instrument's numbering.
+            //
+            // extractFromNativeConfig copies the first cbMAXCHANS entries
+            // straight out of Central's globally-indexed space. On a
+            // multi-instrument Central that is the wrong set: with two hubs it
+            // yielded Hub1's 256 channels plus Hub2's first 28 sitting in the
+            // slots reserved for analog/Experiment I/O, and silently dropped
+            // everything past 284 of Central's 880. Loading such a file back
+            // would have written one device's settings onto another's.
+            //
+            // Everything else in the CCF (filters, sorting, LNC, waveforms,
+            // n-trodes, sysinfo) is system-wide and is kept as extracted.
+            std::memset(ccf_data.isChan, 0, sizeof(ccf_data.isChan));
+            const uint32_t n_local = std::min<uint32_t>(m_impl->local_max_chans, cbMAXCHANS);
+            for (uint32_t local = 1; local <= n_local; ++local) {
+                auto ci = m_impl->getChanInfo(local);
+                if (ci.isError()) continue;
+                ccf_data.isChan[local - 1] = ci.value();
+                ccf_data.isChan[local - 1].chan = local;
+            }
+        }
     } else {
         return Result<void>::error("No session available");
     }
