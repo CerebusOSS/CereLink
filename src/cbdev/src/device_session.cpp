@@ -66,7 +66,36 @@ namespace {
 #endif
     }
 
-
+    /// @brief Block until @p deadline, accurately below one millisecond
+    ///
+    /// std::this_thread::sleep_for is documented to sleep at least the
+    /// requested duration, but MinGW does not honour that below ~1 ms: it
+    /// returns immediately (measured, g++ 15.2.0: 40 x sleep_for(200us) took
+    /// 0 ms, 40 x sleep_for(500us) took 0 ms).  Configuration pacing asks for
+    /// 200 us, so it silently did nothing in those builds.  Sleeping a whole
+    /// millisecond instead is no answer either — Windows' default timer
+    /// granularity rounds that up to ~15.6 ms (40 x sleep_for(1ms) took
+    /// 616 ms), which would stretch a 256-channel configuration to seconds.
+    ///
+    /// So sleep only whole milliseconds, and yield for the sub-millisecond
+    /// remainder.  Yielding keeps the CPU available to the receiving process:
+    /// a pure busy-wait starves nPlayServer on a shared CI runner, preventing
+    /// it from draining the very buffer this pacing protects.
+    inline void waitUntil(const std::chrono::steady_clock::time_point deadline) {
+        for (;;) {
+            const auto remaining = deadline - std::chrono::steady_clock::now();
+            if (remaining <= std::chrono::steady_clock::duration::zero()) {
+                return;
+            }
+            if (remaining >= std::chrono::milliseconds(2)) {
+                // Leave a millisecond to absorb the timer's coarse granularity,
+                // then close the gap by yielding.
+                std::this_thread::sleep_for(remaining - std::chrono::milliseconds(1));
+            } else {
+                std::this_thread::yield();
+            }
+        }
+    }
 }
 
 namespace cbdev {
@@ -611,10 +640,10 @@ Result<void> DeviceSession::sendPacket(const cbPKT_GENERIC& pkt) {
     if ((pkt.cbpkt_header.chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
         constexpr auto kConfigSendMinInterval = std::chrono::microseconds(200);
         if (m_impl->last_config_send.time_since_epoch().count() != 0) {
-            const auto elapsed = std::chrono::steady_clock::now() - m_impl->last_config_send;
-            if (elapsed < kConfigSendMinInterval) {
-                std::this_thread::sleep_for(kConfigSendMinInterval - elapsed);
-            }
+            // waitUntil rather than sleep_for: the gap is sub-millisecond, and
+            // sleep_for does not sleep at all below ~1 ms on MinGW, which left
+            // this throttle inert in those builds.  See waitUntil().
+            waitUntil(m_impl->last_config_send + kConfigSendMinInterval);
         }
         m_impl->last_config_send = std::chrono::steady_clock::now();
     }
@@ -746,8 +775,10 @@ Result<void> DeviceSession::sendPackets(const std::vector<cbPKT_GENERIC>& pkts) 
         if ((i % BATCH) == (BATCH - 1)) {
             // Pace sends so the receiver can drain its kernel UDP buffer.
             // Sleep(1) yields for one scheduler quantum (~1 ms with the
-            // timer resolution raised above).  On other platforms,
-            // sleep_for is already accurate at sub-ms granularity.
+            // timer resolution raised above).  On POSIX, sleep_for is
+            // accurate at sub-ms granularity -- note this does NOT hold for
+            // MinGW, where it returns immediately below ~1 ms, which is why
+            // sendPacket's finer per-config gap uses waitUntil() instead.
 #ifdef _WIN32
             Sleep(1);
 #else

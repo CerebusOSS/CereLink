@@ -344,8 +344,14 @@ TEST_F(DeviceSessionTest, Error_SendPacketsEmpty) {
 // overrun a device's small UDP receive buffer (which drops packets, including a
 // following runlevel sync barrier). sendPacket() enforces a minimum gap between
 // consecutive configuration-channel sends; streaming/data packets are exempt.
-// std::this_thread::sleep_for only ever sleeps AT LEAST the requested time, so
-// the lower-bound timing assertion below cannot be flaky.
+//
+// The assertion is a lower bound on elapsed time, so it cannot fail from the
+// machine being slow. It CAN fail if the gap is not enforced at all, which is
+// what it is for: sendPacket originally waited with std::this_thread::sleep_for,
+// which MinGW does not honour below ~1 ms -- it returns immediately, leaving the
+// throttle inert in those builds while CI's toolchains passed. Do not "fix" a
+// failure here by relaxing the bound without first checking that the wait
+// primitive actually waits on the failing platform.
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 TEST_F(DeviceSessionTest, ConfigSends_ArePaced_DataSends_AreNot) {
