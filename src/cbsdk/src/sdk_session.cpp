@@ -2119,21 +2119,23 @@ Result<void> SdkSession::setChannelConfig(const cbPKT_CHANINFO& chaninfo) {
     if (m_impl->device_session)
         return m_impl->device_session->setChannelConfig(chaninfo);
 
-    // CLIENT: the caller addressed a local (per-device) channel, but Central
-    // routes on its global id, so translate before handing the packet over.
-    // Without this a HUB2 setter would land on HUB1's channel of the same
-    // number.
-    const uint32_t global = m_impl->toGlobalChan(chaninfo.chan);
-    if (!global) {
+    // CLIENT: validate against this device's window, but send the channel id
+    // unchanged.
+    //
+    // Only Central's shared-memory chaninfo[] is indexed globally. Central
+    // forwards transmit-buffer packets to the instrument network verbatim
+    // (InstNetwork drains the buffer straight into Instrument::Send, which is a
+    // plain UDP send with no per-instrument routing), so the device receives
+    // exactly what we wrote and applies it using its own numbering -- Hub2's
+    // channels are 1..256 to Hub2, whatever Central calls them. Routing is by
+    // cbpkt_header.instrument, which sendPacket() stamps.
+    //
+    // Translating the id here would send Hub2 a channel 257 it does not have.
+    if (!m_impl->toGlobalChan(chaninfo.chan)) {
         return Result<void>::error("Channel " + std::to_string(chaninfo.chan) +
                                    " is not present on this device");
     }
-    if (global == chaninfo.chan) {
-        return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
-    }
-    cbPKT_CHANINFO translated = chaninfo;
-    translated.chan = global;
-    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(translated));
+    return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
 }
 
 ///--------------------------------------------------------------------------------------------
@@ -2726,6 +2728,21 @@ Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {
     cbPKT_GENERIC stamped = pkt;
     PROCTIME t = m_impl->shmem_session->getLastTime();
     stamped.cbpkt_header.time = (t != 0) ? t : 1;
+
+    // Address the packet to this session's instrument so the fabric routes it
+    // to the right device and any reply carries the matching instrument index.
+    // Without this every outbound packet is addressed to instrument 0: a
+    // non-zero-index session's reply is then dropped by readReceiveBuffer's
+    // instrument filter and every wait times out. That is why sync() -- a
+    // runlevel SET plus a wait for SYSREPRUNLEV -- succeeded only for
+    // instrument 0, taking every auto_sync setter down with it on the others.
+    //
+    // Stamping here covers every CLIENT-mode send at once: runlevel,
+    // REQCONFIGALL, channel config, comments, digital output and file control.
+    // The clock probe already sets the same value explicitly, so it is
+    // unchanged; NATIVE is instrument 0 either way.
+    stamped.cbpkt_header.instrument =
+        m_impl->shmem_session->getInstrument().toPacketField();
 
     auto result = m_impl->shmem_session->enqueuePacket(stamped);
     if (result.isOk()) {
