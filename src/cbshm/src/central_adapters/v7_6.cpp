@@ -1025,6 +1025,14 @@ cbutil::Result<void> Adapter::getProcInfo(::cbPKT_PROCINFO& buf) const {
     return cbutil::Result<void>::ok();
 }
 
+cbutil::Result<void> Adapter::getProcInfoAt(::cbPKT_PROCINFO& buf, uint32_t instrument) const {
+    if (instrument >= std::size(cfg->procinfo)) {
+        return cbutil::Result<void>::error("Instrument index out of range");
+    }
+    fromLegacy(buf, cfg->procinfo[instrument]);
+    return cbutil::Result<void>::ok();
+}
+
 cbutil::Result<void> Adapter::getBankInfo(::cbPKT_BANKINFO& buf, uint32_t bank_num) const {
     uint32_t bank_idx = bank_num - 1;
     if (bank_idx >= std::size(cfg->bankinfo[0])) {

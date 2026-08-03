@@ -870,6 +870,25 @@ uint32_t ShmemSession::getMaxProcs() const {
     }
 }
 
+Result<cbPKT_PROCINFO> ShmemSession::getProcInfoAt(const uint32_t instrument) const {
+    if (!isOpen()) {
+        return Result<cbPKT_PROCINFO>::error("Session not open");
+    }
+    // NATIVE owns exactly one instrument, so only index 0 exists.
+    if (m_impl->layout == ShmemLayout::NATIVE) {
+        if (instrument != 0) {
+            return Result<cbPKT_PROCINFO>::error("Instrument index out of range");
+        }
+        return Result<cbPKT_PROCINFO>::ok(m_impl->nativeCfg()->procinfo);
+    }
+    auto info = Result<cbPKT_PROCINFO>::ok({});
+    auto res = m_impl->adapter->getProcInfoAt(info.value(), instrument);
+    if (res.isError()) {
+        return Result<cbPKT_PROCINFO>::error(res.error());
+    }
+    return info;
+}
+
 cbproto_protocol_version_t ShmemSession::getCompatProtocolVersion() const {
     return m_impl->compat_protocol;
 }

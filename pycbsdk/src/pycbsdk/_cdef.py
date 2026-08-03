@@ -195,11 +195,13 @@ uint32_t cbsdk_session_get_runlevel(cbsdk_session_t session);
 int cbsdk_session_is_standalone(cbsdk_session_t session);
 uint32_t cbsdk_session_get_protocol_version(cbsdk_session_t session);
 uint32_t cbsdk_session_get_proc_ident(cbsdk_session_t session, char* buf, uint32_t buf_size);
+cbsdk_result_t cbsdk_session_get_proc_chan_range(cbsdk_session_t session, uint32_t* out_chanbase, uint32_t* out_chancount);
 uint32_t cbsdk_session_get_spike_length(cbsdk_session_t session);
 uint32_t cbsdk_session_get_spike_pretrigger(cbsdk_session_t session);
 cbsdk_result_t cbsdk_session_set_spike_length(cbsdk_session_t session,
     uint32_t spike_length, uint32_t spike_pretrigger);
 uint32_t cbsdk_get_max_chans(void);
+cbsdk_result_t cbsdk_session_get_max_chans(cbsdk_session_t session, uint32_t* out_max_chans);
 uint32_t cbsdk_get_num_fe_chans(void);
 uint32_t cbsdk_get_num_analog_chans(void);
 uint32_t cbsdk_session_get_channel_label_length(void);

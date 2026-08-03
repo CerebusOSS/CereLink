@@ -741,9 +741,20 @@ class Session:
             "Failed to set spike length",
         )
 
-    @staticmethod
-    def max_chans() -> int:
-        """Total number of channels (cbMAXCHANS)."""
+    def max_chans(self) -> int:
+        """Number of channels this device actually has.
+
+        Channel ids are local to the device in both STANDALONE and CLIENT
+        modes, so valid ids are ``1..max_chans()``.  A Gemini hub reports 256 —
+        it is front-end only, the physical I/O lives on the NSP — while a
+        legacy analog NSP reports its full complement including that I/O.
+
+        Falls back to the compile-time ``cbMAXCHANS`` only if the session is
+        not open.
+        """
+        out = ffi.new("uint32_t *")
+        if _get_lib().cbsdk_session_get_max_chans(self._session, out) == 0:
+            return out[0]
         return _get_lib().cbsdk_get_max_chans()
 
     @staticmethod

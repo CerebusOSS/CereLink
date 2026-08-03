@@ -19,6 +19,7 @@
 
 // Include Central-compatible types which bring in protocol definitions
 #include <cbshm/central_current.h>
+#include <cbshm/central_adapters/base.h>
 #include <cbshm/native_types.h>
 #include <cbproto/connection.h>
 #include <cbutil/result.h>
@@ -120,6 +121,17 @@ public:
     ///
     /// @return the maximum instrument count
     uint32_t getMaxProcs() const;
+
+    /// @brief Get any instrument's processor information
+    ///
+    /// Unlike getProcInfo(), which returns this session's own instrument, this
+    /// reads an arbitrary index. Central packs instruments densely into one
+    /// channel space, so an instrument's base channel is the running sum of the
+    /// preceding instruments' chancount — which requires reading all of them.
+    ///
+    /// @param instrument 0-based instrument index
+    /// @return cbPKT_PROCINFO structure on success
+    Result<cbPKT_PROCINFO> getProcInfoAt(uint32_t instrument) const;
 
     /// @}
 

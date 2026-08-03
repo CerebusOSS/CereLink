@@ -160,6 +160,14 @@ public:
 
     /// Config read operations
     virtual cbutil::Result<void> getProcInfo(::cbPKT_PROCINFO& buf) const = 0;
+
+    /// @brief Read any instrument's procinfo, not just this adapter's own
+    ///
+    /// Central packs instruments densely into one channel space and renumbers
+    /// them when the connected set changes, so an instrument's base channel is
+    /// the running sum of the preceding instruments' chancount. Computing that
+    /// requires reading every procinfo, not only this one.
+    virtual cbutil::Result<void> getProcInfoAt(::cbPKT_PROCINFO& buf, uint32_t instrument) const = 0;
     virtual cbutil::Result<void> getBankInfo(::cbPKT_BANKINFO& buf, uint32_t bank_num) const = 0;
     virtual cbutil::Result<void> getFilterInfo(::cbPKT_FILTINFO& buf, uint32_t filter_num) const = 0;
     virtual cbutil::Result<void> getChanInfo(::cbPKT_CHANINFO& buf, uint32_t channel_idx) const = 0;
