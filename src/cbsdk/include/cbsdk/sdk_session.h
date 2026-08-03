@@ -462,6 +462,30 @@ public:
     /// @return Current run level (cbRUNLEVEL_*), or 0 if unknown
     uint32_t getRunLevel() const;
 
+    /// Get this instrument's processor information
+    ///
+    /// procinfo.chanbase and procinfo.chancount give the channel range this
+    /// instrument claims in the host's channel space. Central packs
+    /// instruments densely and renumbers them when the connected set changes,
+    /// so this is the authoritative mapping.
+    ///
+    /// @return Result containing the procinfo, or an error if unavailable
+    Result<cbPKT_PROCINFO> getProcInfo() const;
+
+    /// Get the number of channels this device actually has
+    ///
+    /// Channel ids in this API are always local to the device, so a session is
+    /// addressed 1..getMaxChans() whether it owns the device (STANDALONE) or
+    /// reads it through Central (CLIENT). A Gemini hub reports 256 — it is
+    /// front-end only, and the physical I/O lives on the NSP — while a legacy
+    /// analog NSP reports the full cbMAXCHANS complement.
+    ///
+    /// Prefer this over the free function cbsdk_get_max_chans(), which cannot
+    /// account for the attached device or Central version.
+    ///
+    /// @return Channel count for this device
+    uint32_t getMaxChans() const;
+
     /// Whether this session owns the device connection (STANDALONE mode).
     /// Returns false if attached to another process's shared memory (CLIENT mode).
     bool isStandalone() const;

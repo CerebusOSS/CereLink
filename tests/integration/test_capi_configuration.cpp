@@ -30,9 +30,13 @@ static std::string makeTempCcfPath() {
 #ifdef _WIN32
     char buf[MAX_PATH];
     GetTempPathA(MAX_PATH, buf);
-    std::string path = std::string(buf) + "cerelink_capi_XXXXXX.ccf";
+    // _mktemp_s requires the six X's to be the LAST six characters. With a
+    // ".ccf" suffix after them it fails with EINVAL and, per its contract,
+    // sets the first character to '\0' -- leaving an unusable path that made
+    // every save look like a CCF writer failure. Substitute first, extend after.
+    std::string path = std::string(buf) + "cerelink_capi_XXXXXX";
     _mktemp_s(&path[0], path.size() + 1);
-    return path;
+    return path + ".ccf";
 #else
     char tmpl[] = "/tmp/cerelink_capi_XXXXXX";
     int fd = mkstemp(tmpl);

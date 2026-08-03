@@ -161,6 +161,7 @@ public:
 
     /// Config read operations
     cbutil::Result<void> getProcInfo(::cbPKT_PROCINFO& buf) const override;
+    cbutil::Result<void> getProcInfoAt(::cbPKT_PROCINFO& buf, uint32_t instrument) const override;
     cbutil::Result<void> getBankInfo(::cbPKT_BANKINFO& buf, uint32_t bank_num) const override;
     cbutil::Result<void> getFilterInfo(::cbPKT_FILTINFO& buf, uint32_t filter_num) const override;
     cbutil::Result<void> getChanInfo(::cbPKT_CHANINFO& buf, uint32_t channel_idx) const override;

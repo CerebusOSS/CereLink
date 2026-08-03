@@ -684,6 +684,21 @@ uint32_t cbsdk_session_get_proc_ident(cbsdk_session_t session, char* buf, uint32
     } catch (...) { buf[0] = '\0'; return 0; }
 }
 
+cbsdk_result_t cbsdk_session_get_proc_chan_range(cbsdk_session_t session,
+                                                 uint32_t* out_chanbase,
+                                                 uint32_t* out_chancount) {
+    if (!session || !session->cpp_session || !out_chanbase || !out_chancount) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto info = session->cpp_session->getProcInfo();
+        if (info.isError()) return CBSDK_RESULT_INTERNAL_ERROR;
+        *out_chanbase = info.value().chanbase;
+        *out_chancount = info.value().chancount;
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) { return CBSDK_RESULT_INTERNAL_ERROR; }
+}
+
 uint32_t cbsdk_session_get_spike_length(cbsdk_session_t session) {
     if (!session || !session->cpp_session) return 0;
     try {
@@ -719,6 +734,18 @@ cbsdk_result_t cbsdk_session_set_spike_length(
 
 uint32_t cbsdk_get_max_chans(void) {
     return cbMAXCHANS;
+}
+
+cbsdk_result_t cbsdk_session_get_max_chans(cbsdk_session_t session, uint32_t* out_max_chans) {
+    if (!session || !session->cpp_session || !out_max_chans) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        *out_max_chans = session->cpp_session->getMaxChans();
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) {
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
 }
 
 uint32_t cbsdk_get_num_fe_chans(void) {

@@ -149,6 +149,7 @@ private:
     };
     std::deque<DataSample> m_data_samples;
     std::optional<int64_t> m_data_floor_ns;  // monotonic floor for data fallback
+    std::optional<int64_t> m_data_spread_ns; // spread of the samples behind it
 
     std::optional<int64_t> m_current_offset_ns;
     std::optional<int64_t> m_current_uncertainty_ns;

@@ -407,6 +407,20 @@ CBSDK_API uint32_t cbsdk_session_get_protocol_version(cbsdk_session_t session);
 /// @return Number of bytes written (excluding null terminator), or 0 if unavailable
 CBSDK_API uint32_t cbsdk_session_get_proc_ident(cbsdk_session_t session, char* buf, uint32_t buf_size);
 
+/// Get the channel range this instrument claims in the host's channel space
+///
+/// Central packs instruments densely and renumbers when the set of connected
+/// devices changes, so this is the authoritative mapping and cannot be derived
+/// from compile-time constants.
+///
+/// @param session Session handle
+/// @param out_chanbase Receives the lowest channel id claimed by this instrument
+/// @param out_chancount Receives the number of channel ids it claims
+/// @return CBSDK_RESULT_SUCCESS on success
+CBSDK_API cbsdk_result_t cbsdk_session_get_proc_chan_range(cbsdk_session_t session,
+                                                           uint32_t* out_chanbase,
+                                                           uint32_t* out_chancount);
+
 /// Get the global spike event length (samples per spike waveform)
 /// @param session Session handle (must not be NULL)
 /// @return Spike length in samples, or 0 if unavailable
@@ -435,8 +449,26 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_spike_length(
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Get the number of channels
+///
+/// @deprecated This is the cbproto wire constant for a single instrument. It
+/// cannot describe the attached device, and under a multi-instrument Central it
+/// is far too small to index the aggregated channel space. Use
+/// cbsdk_session_get_max_chans() instead.
+///
 /// @return cbMAXCHANS (compile-time constant)
 CBSDK_API uint32_t cbsdk_get_max_chans(void);
+
+/// Get the number of channels the session's device actually has
+///
+/// Channel ids are local to the device in both STANDALONE and CLIENT modes, so
+/// valid ids are 1..N. A Gemini hub reports 256 (front-end only); a legacy
+/// analog NSP reports its full complement including physical I/O.
+///
+/// @param session Session handle
+/// @param out_max_chans Receives the channel count
+/// @return CBSDK_RESULT_SUCCESS on success
+CBSDK_API cbsdk_result_t cbsdk_session_get_max_chans(cbsdk_session_t session,
+                                                    uint32_t* out_max_chans);
 
 /// Get the number of front-end channels
 /// @return cbNUM_FE_CHANS (compile-time constant)

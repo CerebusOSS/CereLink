@@ -30,6 +30,7 @@
 #include <cstring>
 #include <iostream>
 #include <algorithm>
+#include <map>
 #include <set>
 #include <vector>
 #include <unordered_map>
@@ -296,6 +297,139 @@ struct SdkSession::Impl {
     ErrorCallback error_callback;
     std::mutex user_callback_mutex;
 
+    ///////////////////////////////////////////////////////////////////////////
+    // Per-instrument channel window
+    //
+    // Central numbers channels globally across every instrument (Hub1 1-256,
+    // Hub2 257-512, ...), but the public API presents each device as an
+    // independent 1-based device so that CENTRAL CLIENT and STANDALONE look
+    // identical to a caller: HUB2's channel 1 is 1, not 257.  These segments
+    // map this session's local ids onto Central's global ids.
+    //
+    // Local numbering follows the cbproto *wire* layout (FE 1..256, then ANAIN,
+    // ANAOUT, AUDOUT, DIGIN, SERIAL, DIGOUT), which is exactly one instrument's
+    // complement.  On a single-instrument system the map is the identity, so
+    // nothing changes for legacy setups.
+    struct ChanSeg {
+        uint32_t local_start;   ///< 1-based, inclusive
+        uint32_t count;
+        uint32_t global_start;  ///< 1-based, inclusive
+    };
+    // Mutable so an unresolved window can still be resolved from const
+    // accessors -- see ensureWindowResolved().
+    mutable std::vector<ChanSeg> chan_segs;         ///< the mapped ranges
+    mutable bool window_resolved = false;           ///< false => identity map (unknown)
+    mutable uint32_t local_max_chans = cbMAXCHANS;  ///< channels this device has
+    uint32_t central_instrument = 0;                ///< instrument this session speaks for
+
+    /// @brief Resolve the window on first use if it could not be resolved yet
+    ///
+    /// procinfo can lag session setup by an unpredictable amount -- a Gemini
+    /// NSP resolved on three opens out of four with a one-second wait -- and an
+    /// unresolved window silently reports the whole wire space. Retrying at the
+    /// point of use removes the timing sensitivity entirely; once resolved this
+    /// is a single bool test.
+    void ensureWindowResolved() const {
+        if (!window_resolved) {
+            const_cast<Impl*>(this)->buildChannelWindow(central_instrument);
+        }
+    }
+
+    /// @brief Map a local (per-device) channel id onto Central's global id
+    /// @return the global id, or 0 if this device has no such channel
+    uint32_t toGlobalChan(const uint32_t local) const {
+        if (local < 1 || local > local_max_chans) return 0;
+        // An unresolved window is the identity; a resolved but empty one means
+        // the device is not present and nothing is addressable.
+        if (!window_resolved) return local;
+        for (const auto& s : chan_segs) {
+            if (local >= s.local_start && local < s.local_start + s.count)
+                return s.global_start + (local - s.local_start);
+        }
+        return 0;
+    }
+
+    /// @brief Inverse of toGlobalChan()
+    ///
+    /// Returns 0 when the global id belongs to a different instrument, which is
+    /// how packets for other devices are recognised and ignored.
+    uint32_t toLocalChan(const uint32_t global) const {
+        if (global < 1) return 0;
+        if (!window_resolved) return global <= local_max_chans ? global : 0;
+        for (const auto& s : chan_segs) {
+            if (global >= s.global_start && global < s.global_start + s.count)
+                return s.local_start + (global - s.global_start);
+        }
+        return 0;
+    }
+
+    /// @brief Build the local->global window for this instrument
+    ///
+    /// The mapping cannot be computed from compile-time constants.  Central
+    /// packs the connected instruments densely into one channel space and
+    /// renumbers them whenever that set changes: with two hubs the NSP's
+    /// analog inputs start at 513, with one hub at 257, with none at 1.  So the
+    /// window is discovered at runtime from procinfo, which Central maintains.
+    ///
+    /// Each instrument's channels are contiguous, so the window is a single
+    /// range: local 1..chancount maps to global base..base+chancount-1, where
+    /// base is 1 plus the running sum of the preceding instruments' chancount.
+    /// A device reporting chancount 0 is not present.
+    void buildChannelWindow(const uint32_t instrument) {
+        chan_segs.clear();
+        window_resolved = false;
+        local_max_chans = cbMAXCHANS;
+        if (!shmem_session) return;
+
+        const uint32_t max_procs = std::max<uint32_t>(shmem_session->getMaxProcs(), 1);
+        if (instrument >= max_procs) return;
+
+        uint32_t base = 1;
+        uint32_t count = 0;
+        uint32_t total = 0;
+        for (uint32_t i = 0; i < max_procs; ++i) {
+            auto pi = shmem_session->getProcInfoAt(i);
+            const uint32_t cc = pi.isOk() ? pi.value().chancount : 0;
+            total += cc;
+            if (i < instrument) base += cc;
+            else if (i == instrument) count = cc;
+        }
+
+        // Every instrument reporting zero means procinfo has not been populated
+        // yet rather than that nothing is connected.  Leave the window
+        // unresolved so the session degrades to the wire space instead of
+        // having no addressable channels at all.
+        if (total == 0) return;
+
+        // Resolved.  A zero count here means this instrument really is absent,
+        // so the window stays empty and every channel id is rejected — a
+        // session for a disconnected device must not read another one's data.
+        window_resolved = true;
+        if (count == 0) {
+            local_max_chans = 0;
+            return;
+        }
+        chan_segs.push_back({1, count, base});
+        local_max_chans = count;
+    }
+
+    /// @brief Resolve the channel window, retrying briefly if procinfo lags
+    ///
+    /// procinfo.chancount only becomes meaningful once the device has answered
+    /// REQCONFIGALL (STANDALONE) or the owner has published it (CLIENT), and
+    /// both can lag the point where a session is otherwise ready. Observed on a
+    /// Gemini NSP, which resolved on some session opens and not others.
+    /// An unresolved window silently reports the whole wire space, so it is
+    /// worth a bounded wait here rather than a wrong answer for the session's
+    /// lifetime.
+    void resolveChannelWindow(const int attempts = 20) {
+        for (int i = 0; i < attempts; ++i) {
+            buildChannelWindow(central_instrument);
+            if (window_resolved) return;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+    }
+
     // Channel type cache — pre-computed at config time, avoids per-packet getChanInfo() (Phase 3, Fix 10)
     std::array<ChannelType, cbMAXCHANS> channel_type_cache;
     bool channel_cache_valid = false;
@@ -306,20 +440,34 @@ struct SdkSession::Impl {
     std::mutex cmp_mutex;
 
     void rebuildChannelTypeCache() {
-        for (uint32_t ch = 0; ch < cbMAXCHANS; ++ch) {
+        channel_type_cache.fill(ChannelType::ANY);
+        for (uint32_t ch = 0; ch < local_max_chans; ++ch) {
             auto ci = getChanInfo(ch + 1);
             channel_type_cache[ch] = ci.isOk() ? classifyChannelByCaps(ci.value()) : ChannelType::ANY;
         }
         channel_cache_valid = true;
     }
 
-    // Helper: get chaninfo for a 1-based channel ID
+    // Helper: get chaninfo for a 1-based *local* channel ID
     Result<cbPKT_CHANINFO> getChanInfo(const uint32_t chan_id) const {
+        // Reject ids this device does not have before choosing a backing
+        // store, so the answer cannot depend on which one replies.  A hub has
+        // no I/O channels, but the wire layout still reserves slots at 257..,
+        // and the device happily returns the empty chaninfo sitting there.
+        ensureWindowResolved();
+        const uint32_t global = toGlobalChan(chan_id);
+        if (!global) {
+            return Result<cbPKT_CHANINFO>::error("Channel not present on this device");
+        }
         // Prefer shmem over device_config because CMP position overlays are
         // written to shmem (device_config is owned by the receive thread and
         // we avoid writing to it from other threads).
-        if (shmem_session && chan_id >= 1 && chan_id <= cbMAXCHANS) {
-            return shmem_session->getChanInfo(chan_id - 1);
+        //
+        // chaninfo[] is indexed in Central's global space, so the translated id
+        // is the right index there; device_session talks to the device
+        // directly, which numbers channels locally.
+        if (shmem_session) {
+            return shmem_session->getChanInfo(global - 1);
         }
         // Fallback to device_config (no shmem available)
         if (device_session) {
@@ -354,6 +502,94 @@ struct SdkSession::Impl {
     };
     PendingClockProbe pending_clock_probe;
     std::mutex clock_probe_mutex;
+
+    // CENTRAL-mode cross-instrument clock estimates.
+    //
+    // A STANDALONE owner borrows a peer's offset through the peer's own shared
+    // memory (see peer_hubs above) -- notably a Gemini NSP borrowing a hub,
+    // because the NSP transmits in ~8192-sample bursts and its probe replies
+    // are latched to those boundaries, quantising every offset by up to 273 ms.
+    // Under CENTRAL there is no peer CereLink process publishing anything, so
+    // that mechanism finds nothing and the NSP is stuck with its own unusable
+    // probes.
+    //
+    // Central's ring already carries every instrument's packets though, so the
+    // estimates can be built here instead: the packet observer sees the other
+    // instruments' probe replies before the demux filter discards them, and the
+    // same vote/borrow rules are applied to the result. The library resolves
+    // this itself -- callers should never have to assemble a clock estimate.
+    struct PeerInstrumentClock {
+        cbdev::ClockSync sync;
+        PendingClockProbe pending;
+    };
+    std::map<uint32_t, PeerInstrumentClock> peer_instrument_clocks;
+    std::mutex peer_instrument_mutex;
+
+    /// @brief Feed a probe reply belonging to another instrument
+    ///
+    /// Called from the packet observer, i.e. on the reading thread, for replies
+    /// the demux filter is about to discard.
+    void addPeerProbeReply(uint32_t instrument, uint64_t device_time_ns,
+                           std::chrono::steady_clock::time_point t4) {
+        std::lock_guard<std::mutex> lk(peer_instrument_mutex);
+        auto it = peer_instrument_clocks.find(instrument);
+        if (it == peer_instrument_clocks.end() || !it->second.pending.active) return;
+        it->second.sync.addProbeSample(it->second.pending.t1_local, device_time_ns, t4);
+        it->second.pending.active = false;
+    }
+
+    /// @brief Vote across instruments and commit the result to this session
+    ///
+    /// Mirrors the STANDALONE rules deliberately, so the two modes agree:
+    /// three or more independent estimates elect a median; below that an
+    /// instrument with no usable estimate of its own borrows the
+    /// lowest-uncertainty peer. ClockSync::setExternalOffset sanity-checks the
+    /// value before adopting it, which is what keeps this safe on hardware
+    /// whose instruments are not commonly disciplined -- a peer that disagrees
+    /// is rejected rather than believed.
+    void applyCrossInstrumentConsensus() {
+        std::vector<int64_t> votes;
+        std::optional<int64_t> best_peer_offset;
+        std::optional<int64_t> best_peer_uncert;
+        int64_t best_uncert_val = INT64_MAX;
+        {
+            std::lock_guard<std::mutex> lk(peer_instrument_mutex);
+            for (auto& [inst, pc] : peer_instrument_clocks) {
+                auto off = pc.sync.getOffsetNs();
+                if (!off) continue;
+                votes.push_back(*off);
+                const int64_t unc = pc.sync.getUncertaintyNs().value_or(INT64_MAX);
+                if (!best_peer_offset || unc < best_uncert_val) {
+                    best_peer_offset = off;
+                    best_peer_uncert = pc.sync.getUncertaintyNs();
+                    best_uncert_val = unc;
+                }
+            }
+        }
+        const auto own = client_clock_sync.getOffsetNs();
+        if (own) votes.push_back(*own);
+
+        if (votes.size() >= 3) {
+            std::sort(votes.begin(), votes.end());
+            client_clock_sync.setExternalOffset(votes[votes.size() / 2]);
+        } else if (best_peer_offset) {
+            client_clock_sync.setExternalOffset(best_peer_offset, best_peer_uncert);
+        } else {
+            client_clock_sync.setExternalOffset(std::nullopt);
+        }
+    }
+
+    /// Instruments present in Central, discovered from procinfo.chancount.
+    std::vector<uint32_t> presentInstruments() const {
+        std::vector<uint32_t> out;
+        if (!shmem_session) return out;
+        const uint32_t max_procs = std::max<uint32_t>(shmem_session->getMaxProcs(), 1);
+        for (uint32_t i = 0; i < max_procs; ++i) {
+            auto pi = shmem_session->getProcInfoAt(i);
+            if (pi.isOk() && pi.value().chancount > 0) out.push_back(i);
+        }
+        return out;
+    }
 
     // Per-stream monotonic-conversion state (see toLocalTimeBatch).  Each stream
     // keeps its own non-decreasing floor and the discontinuity epoch it last
@@ -466,7 +702,7 @@ struct SdkSession::Impl {
         std::lock_guard<std::mutex> lock(cmp_mutex);
         if (cmp_entries.empty()) return;
 
-        for (uint32_t chan_id = 1; chan_id <= cbMAXCHANS; ++chan_id) {
+        for (uint32_t chan_id = 1; chan_id <= local_max_chans; ++chan_id) {
             // Snapshot chaninfo to avoid racing with the receive thread
             cbPKT_CHANINFO ci{};
             bool valid = false;
@@ -499,6 +735,28 @@ struct SdkSession::Impl {
     /// Dispatch a batch of packets: first fire batch group callbacks, then per-packet callbacks.
     /// Called from both STANDALONE callback thread and CLIENT shmem receive thread.
     void dispatchBatch(cbPKT_GENERIC* packets, size_t count) {
+        // Central stamps packet chids in its global space (Hub2's channel 1
+        // arrives as 257), so rewrite them into this device's local space
+        // before any dispatch.  Doing it here covers the batch and per-packet
+        // paths at once and keeps callbacks identical to STANDALONE.
+        //
+        // An identity map — NATIVE, STANDALONE, or a single-instrument
+        // Central — skips the loop entirely, so the hot path is unaffected.
+        if (!chan_segs.empty()) {
+            for (size_t i = 0; i < count; i++) {
+                const uint16_t chid = packets[i].cbpkt_header.chid;
+                // chid 0 is a sample group and the high bit marks configuration
+                // packets; neither is a channel id.
+                if (chid == 0 || (chid & cbPKTCHAN_CONFIGURATION)) continue;
+                const uint32_t local = toLocalChan(chid);
+                // 0 means the channel belongs to another instrument, which the
+                // receive-buffer instrument filter should already have dropped.
+                // Leave it alone rather than rewriting it to 0, which would
+                // masquerade as a sample group.
+                if (local) packets[i].cbpkt_header.chid = static_cast<uint16_t>(local);
+            }
+        }
+
         // Phase 1: batch group callbacks (one invocation per group_id per batch)
         std::vector<GroupBatchCB> snap_batch;
         {
@@ -574,7 +832,7 @@ struct SdkSession::Impl {
         if (chid != 0 && !(chid & cbPKTCHAN_CONFIGURATION)) {
             // Look up cached channel type (Phase 3, Fix 10)
             ChannelType pkt_chan_type = ChannelType::ANY;
-            if (channel_cache_valid && chid >= 1 && chid <= cbMAXCHANS) {
+            if (channel_cache_valid && chid >= 1 && chid <= local_max_chans) {
                 pkt_chan_type = channel_type_cache[chid - 1];
             }
             for (const auto& cb : snap_event) {
@@ -748,6 +1006,26 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     session.m_impl->shmem_session = std::move(shmem_result.value());
     session.m_impl->standalone = is_standalone;
 
+    // Establish this session's local->global channel window.  NATIVE and
+    // STANDALONE own a single instrument, so index 0 is theirs.
+    //
+    // For CENTRAL the config is already sitting in shared memory, so this
+    // resolves immediately.  A STANDALONE session has not downloaded the
+    // device's config yet and will resolve to the identity map here; it is
+    // rebuilt after the handshake, once procinfo is populated.
+    {
+        // Only the CENTRAL layout aggregates instruments, so only there does
+        // the device type select a non-zero index.  NATIVE shared memory holds
+        // a single instrument whichever device produced it -- including for a
+        // NATIVE CLIENT, which is not standalone but is still single-instrument.
+        const int32_t inst_idx = getCentralInstrumentIndex(config.device_type);
+        const bool central_layout =
+            session.m_impl->shmem_session->getLayout() == cbshm::ShmemLayout::CENTRAL;
+        session.m_impl->central_instrument =
+            central_layout && inst_idx >= 0 ? static_cast<uint32_t>(inst_idx) : 0u;
+        session.m_impl->buildChannelWindow(session.m_impl->central_instrument);
+    }
+
     // Create device session only in STANDALONE mode
     if (is_standalone) {
         // Map SDK DeviceType to cbdev DeviceType
@@ -817,6 +1095,8 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
         if (start_result.isError()) {
             return Result<SdkSession>::error("Failed to start CLIENT session: " + start_result.error());
         }
+        // Resolve the channel window before the type cache, which it sizes.
+        session.m_impl->resolveChannelWindow();
         // Build channel type cache from existing shmem config
         session.m_impl->rebuildChannelTypeCache();
     }
@@ -1193,6 +1473,26 @@ Result<void> SdkSession::start() {
 
         m_impl->shmem_receive_thread_running.store(true);
         Impl* impl = m_impl.get();
+
+        // Catch the other instruments' probe replies before the demux filter
+        // discards them, so this session can build a cross-device estimate
+        // without a peer CereLink process to borrow one from. Only replies are
+        // taken; the filter still decides what the session actually receives,
+        // so no foreign data reaches callbacks.
+        if (m_impl->shmem_session->getLayout() == cbshm::ShmemLayout::CENTRAL) {
+            const uint32_t self_inst = m_impl->shmem_session->getInstrument().toIndex();
+            m_impl->shmem_session->setPacketObserver(
+                [impl, self_inst](const cbPKT_GENERIC& pkt) {
+                    if (pkt.cbpkt_header.type != cbPKTTYPE_NPLAYREP) return;
+                    const uint32_t inst = pkt.cbpkt_header.instrument;
+                    if (inst == self_inst) return;  // own reply: handled below
+                    constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
+                    impl->addPeerProbeReply(inst,
+                                            pkt.cbpkt_header.time + STALENESS_CORRECTION_NS,
+                                            std::chrono::steady_clock::now());
+                });
+        }
+
         m_impl->shmem_receive_thread = std::make_unique<std::thread>([impl]() {
             // CLIENT mode receive thread: reads from Central's cbRECbuffer, dispatches to callbacks
             constexpr size_t MAX_BATCH = 128;
@@ -1241,6 +1541,7 @@ Result<void> SdkSession::start() {
 
                     if (packets_read > 0) {
                         auto t4 = std::chrono::steady_clock::now();
+                        uint64_t last_data_time = 0;
                         impl->stats.packets_delivered_to_callback.fetch_add(packets_read, std::memory_order_relaxed);
                         impl->stats.packets_received_from_device.fetch_add(packets_read, std::memory_order_relaxed);
                         uint64_t batch_bytes = 0;
@@ -1248,6 +1549,12 @@ Result<void> SdkSession::start() {
                         for (size_t i = 0; i < packets_read; i++) {
                             batch_bytes += static_cast<uint64_t>(
                                 cbPKT_HEADER_32SIZE + packets[i].cbpkt_header.dlen) * 4;
+                            // Remember the newest data-packet timestamp for the
+                            // fallback estimator (fed once per batch below).
+                            if (!(packets[i].cbpkt_header.chid & cbPKTCHAN_CONFIGURATION) &&
+                                packets[i].cbpkt_header.time != 0) {
+                                last_data_time = packets[i].cbpkt_header.time;
+                            }
                             if (packets[i].cbpkt_header.type == cbPKTTYPE_NPLAYREP) {
                                 // Complete pending clock sync probe
                                 constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
@@ -1282,6 +1589,23 @@ Result<void> SdkSession::start() {
                         impl->stats.bytes_received_from_device.fetch_add(
                             batch_bytes, std::memory_order_relaxed);
 
+                        // Feed the fallback estimator once per batch, mirroring
+                        // DeviceSession. This is the only recourse for a device
+                        // whose probe replies are latched to transmit blocks
+                        // (a Gemini NSP quantises every offset by up to 273 ms)
+                        // when there is no peer instrument to borrow from --
+                        // an NSP alone under Central. No tick->ns conversion is
+                        // needed here: readReceiveBuffer already normalises
+                        // CLIENT timestamps for every device type.
+                        //
+                        // Selection order makes this self-limiting: reliable
+                        // probes still win, so a device with good probes is
+                        // unaffected and only one with unusable probes gains
+                        // the floor.
+                        if (last_data_time != 0) {
+                            impl->client_clock_sync.addDataPacketSample(last_data_time, t4);
+                        }
+
                         // Periodic clock sync probing (~every 5 seconds)
                         if (t4 - impl->last_clock_probe_time > std::chrono::seconds(2)) {
                             // Build and enqueue probe via shmem xmt buffer.
@@ -1315,6 +1639,31 @@ Result<void> SdkSession::start() {
                             impl->shmem_session->enqueuePacket(
                                 *reinterpret_cast<const cbPKT_GENERIC*>(&probe));
                             impl->last_clock_probe_time = t4;
+
+                            // CENTRAL: also probe the other instruments, so this
+                            // session can build its own cross-device estimate.
+                            // Their replies come back on the same ring and are
+                            // caught by the packet observer before the demux
+                            // filter drops them.
+                            if (impl->shmem_session->getLayout() == cbshm::ShmemLayout::CENTRAL) {
+                                const uint32_t self = impl->shmem_session->getInstrument().toIndex();
+                                for (uint32_t inst : impl->presentInstruments()) {
+                                    if (inst == self) continue;
+                                    {
+                                        std::lock_guard<std::mutex> lk(impl->peer_instrument_mutex);
+                                        auto& pc = impl->peer_instrument_clocks[inst];
+                                        pc.pending.t1_local = t4;
+                                        pc.pending.active = true;
+                                    }
+                                    cbPKT_NPLAY peer_probe = probe;
+                                    peer_probe.cbpkt_header.instrument =
+                                        cbproto::InstrumentId::fromIndex(
+                                            static_cast<int32_t>(inst)).toPacketField();
+                                    impl->shmem_session->enqueuePacket(
+                                        *reinterpret_cast<const cbPKT_GENERIC*>(&peer_probe));
+                                }
+                                impl->applyCrossInstrumentConsensus();
+                            }
                         }
 
                         // Dispatch batch (fires batch group callbacks, then per-packet callbacks)
@@ -1543,6 +1892,11 @@ Result<cbPKT_FILTINFO> SdkSession::getFilterInfo(const uint32_t filter_id) const
     return Result<cbPKT_FILTINFO>::error("Filter information not available");
 }
 
+uint32_t SdkSession::getMaxChans() const {
+    m_impl->ensureWindowResolved();
+    return m_impl->local_max_chans;
+}
+
 uint32_t SdkSession::getRunLevel() const {
     uint32_t rl = m_impl->device_runlevel.load(std::memory_order_acquire);
     if (rl != 0) return rl;
@@ -1591,6 +1945,20 @@ std::string SdkSession::getProcIdent() const {
         }
     }
     return {};
+}
+
+Result<cbPKT_PROCINFO> SdkSession::getProcInfo() const {
+    if (m_impl->device_session) {
+        return Result<cbPKT_PROCINFO>::ok(m_impl->device_session->getDeviceConfig().procinfo);
+    }
+    if (m_impl->shmem_session) {
+        const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
+        if (native) {
+            return Result<cbPKT_PROCINFO>::ok(native->procinfo);
+        }
+        return m_impl->shmem_session->getProcInfo();
+    }
+    return Result<cbPKT_PROCINFO>::error("Processor information not available");
 }
 
 uint32_t SdkSession::getSpikeLength() const {
@@ -1905,8 +2273,26 @@ Result<void> SdkSession::setACInputCoupling(
 }
 
 Result<void> SdkSession::setChannelConfig(const cbPKT_CHANINFO& chaninfo) {
+    // STANDALONE talks to the device directly, where ids are already local.
     if (m_impl->device_session)
         return m_impl->device_session->setChannelConfig(chaninfo);
+
+    // CLIENT: validate against this device's window, but send the channel id
+    // unchanged.
+    //
+    // Only Central's shared-memory chaninfo[] is indexed globally. Central
+    // forwards transmit-buffer packets to the instrument network verbatim
+    // (InstNetwork drains the buffer straight into Instrument::Send, which is a
+    // plain UDP send with no per-instrument routing), so the device receives
+    // exactly what we wrote and applies it using its own numbering -- Hub2's
+    // channels are 1..256 to Hub2, whatever Central calls them. Routing is by
+    // cbpkt_header.instrument, which sendPacket() stamps.
+    //
+    // Translating the id here would send Hub2 a channel 257 it does not have.
+    if (!m_impl->toGlobalChan(chaninfo.chan)) {
+        return Result<void>::error("Channel " + std::to_string(chaninfo.chan) +
+                                   " is not present on this device");
+    }
     return sendPacket(reinterpret_cast<const cbPKT_GENERIC&>(chaninfo));
 }
 
@@ -2153,7 +2539,7 @@ Result<void> SdkSession::loadChannelMap(
         std::vector<std::pair<uint32_t, std::string>> labels_to_push;
         {
             std::lock_guard<std::mutex> lock(m_impl->cmp_mutex);
-            for (uint32_t chan_id = 1; chan_id <= cbMAXCHANS; ++chan_id) {
+            for (uint32_t chan_id = 1; chan_id <= m_impl->local_max_chans; ++chan_id) {
                 auto info = getChanInfo(chan_id);
                 if (info.isError() || info.value().chan == 0) continue;
                 auto it = m_impl->cmp_entries.find(cmpKey(info.value().bank, info.value().term));
@@ -2184,7 +2570,7 @@ Result<void> SdkSession::clearChannelMap() {
     {
         std::lock_guard<std::mutex> lock(m_impl->cmp_mutex);
         if (!m_impl->cmp_entries.empty()) {
-            for (uint32_t chan_id = 1; chan_id <= cbMAXCHANS; ++chan_id) {
+            for (uint32_t chan_id = 1; chan_id <= m_impl->local_max_chans; ++chan_id) {
                 auto info = getChanInfo(chan_id);
                 if (info.isError() || info.value().chan == 0) continue;
                 if (m_impl->cmp_entries.count(cmpKey(info.value().bank, info.value().term))) {
@@ -2241,9 +2627,43 @@ Result<void> SdkSession::saveCCF(const std::string& filename) {
         ccf::extractDeviceConfig(m_impl->device_session->getDeviceConfig(), ccf_data);
     } else if (m_impl->shmem_session) {
         const auto* native = m_impl->shmem_session->getNativeConfigBuffer();
-        if (!native)
-            return Result<void>::error("No configuration available in shared memory");
-        extractFromNativeConfig(*native, ccf_data);
+        if (native) {
+            extractFromNativeConfig(*native, ccf_data);
+        } else {
+            // CENTRAL: getNativeConfigBuffer() is NATIVE-only, so a CENTRAL
+            // CLIENT had no way to reach its configuration and every save
+            // failed. Translate Central's layout into the native form first.
+            // Heap-allocated: NativeConfigBuffer is far too large for the stack.
+            auto legacy = std::make_unique<cbshm::NativeConfigBuffer>();
+            auto r = m_impl->shmem_session->getLegacyConfigBuffer(*legacy);
+            if (r.isError())
+                return Result<void>::error("No configuration available in shared memory: " +
+                                           r.error());
+            extractFromNativeConfig(*legacy, ccf_data);
+
+            // The CCF describes the device this session speaks for, matching
+            // the rest of the API: this instrument's channels, in this
+            // instrument's numbering.
+            //
+            // extractFromNativeConfig copies the first cbMAXCHANS entries
+            // straight out of Central's globally-indexed space. On a
+            // multi-instrument Central that is the wrong set: with two hubs it
+            // yielded Hub1's 256 channels plus Hub2's first 28 sitting in the
+            // slots reserved for analog/Experiment I/O, and silently dropped
+            // everything past 284 of Central's 880. Loading such a file back
+            // would have written one device's settings onto another's.
+            //
+            // Everything else in the CCF (filters, sorting, LNC, waveforms,
+            // n-trodes, sysinfo) is system-wide and is kept as extracted.
+            std::memset(ccf_data.isChan, 0, sizeof(ccf_data.isChan));
+            const uint32_t n_local = std::min<uint32_t>(m_impl->local_max_chans, cbMAXCHANS);
+            for (uint32_t local = 1; local <= n_local; ++local) {
+                auto ci = m_impl->getChanInfo(local);
+                if (ci.isError()) continue;
+                ccf_data.isChan[local - 1] = ci.value();
+                ccf_data.isChan[local - 1].chan = local;
+            }
+        }
     } else {
         return Result<void>::error("No session available");
     }
@@ -2501,6 +2921,21 @@ Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {
     PROCTIME t = m_impl->shmem_session->getLastTime();
     stamped.cbpkt_header.time = (t != 0) ? t : 1;
 
+    // Address the packet to this session's instrument so the fabric routes it
+    // to the right device and any reply carries the matching instrument index.
+    // Without this every outbound packet is addressed to instrument 0: a
+    // non-zero-index session's reply is then dropped by readReceiveBuffer's
+    // instrument filter and every wait times out. That is why sync() -- a
+    // runlevel SET plus a wait for SYSREPRUNLEV -- succeeded only for
+    // instrument 0, taking every auto_sync setter down with it on the others.
+    //
+    // Stamping here covers every CLIENT-mode send at once: runlevel,
+    // REQCONFIGALL, channel config, comments, digital output and file control.
+    // The clock probe already sets the same value explicitly, so it is
+    // unchanged; NATIVE is instrument 0 either way.
+    stamped.cbpkt_header.instrument =
+        m_impl->shmem_session->getInstrument().toPacketField();
+
     auto result = m_impl->shmem_session->enqueuePacket(stamped);
     if (result.isOk()) {
         return Result<void>::ok();
@@ -2749,7 +3184,11 @@ request_config:
     }
 
     // Success - device is now in RUNNING state
-    // Build channel type cache now that config is populated
+    // Resolve the channel window and build the type cache now that config is
+    // populated. procinfo.chancount is only meaningful once the device has
+    // answered REQCONFIGALL, so the window built during create() was still the
+    // identity fallback.
+    m_impl->resolveChannelWindow();
     m_impl->rebuildChannelTypeCache();
     return Result<void>::ok();
 }

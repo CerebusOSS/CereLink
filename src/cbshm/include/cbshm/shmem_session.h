@@ -19,9 +19,11 @@
 
 // Include Central-compatible types which bring in protocol definitions
 #include <cbshm/central_current.h>
+#include <cbshm/central_adapters/base.h>
 #include <cbshm/native_types.h>
 #include <cbproto/connection.h>
 #include <cbutil/result.h>
+#include <functional>
 #include <memory>
 #include <string>
 #include <cstdint>
@@ -120,6 +122,17 @@ public:
     ///
     /// @return the maximum instrument count
     uint32_t getMaxProcs() const;
+
+    /// @brief Get any instrument's processor information
+    ///
+    /// Unlike getProcInfo(), which returns this session's own instrument, this
+    /// reads an arbitrary index. Central packs instruments densely into one
+    /// channel space, so an instrument's base channel is the running sum of the
+    /// preceding instruments' chancount — which requires reading all of them.
+    ///
+    /// @param instrument 0-based instrument index
+    /// @return cbPKT_PROCINFO structure on success
+    Result<cbPKT_PROCINFO> getProcInfoAt(uint32_t instrument) const;
 
     /// @}
 
@@ -431,6 +444,25 @@ public:
     /// @param packets_read Output: actual number of packets read
     /// @return Result indicating success or failure
     Result<void> readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_packets, size_t& packets_read);
+
+    /// @brief Observe every packet walked, before the instrument filter
+    ///
+    /// readReceiveBuffer() returns only this session's instrument's packets.
+    /// For the CENTRAL layout that discards the other instruments' packets,
+    /// which are nonetheless in the same ring and already inspected in order to
+    /// make the filter decision. An observer sees each one as it is walked.
+    ///
+    /// This exists because a CENTRAL CLIENT has no peer CereLink process to
+    /// borrow clock estimates from, so it must derive cross-device estimates
+    /// from the ring itself. Deliberately generic: the shm layer stays ignorant
+    /// of packet meaning, and the caller decides what is worth observing.
+    ///
+    /// The filter is unaffected -- what readReceiveBuffer() returns is
+    /// unchanged. The observer runs on the reading thread and must be cheap; it
+    /// is called for every packet in the ring, not just this instrument's.
+    ///
+    /// @param observer Callback, or nullptr to clear
+    void setPacketObserver(std::function<void(const cbPKT_GENERIC&)> observer);
 
     /// @brief Get the number of packets read from the receive buffer
     ///
