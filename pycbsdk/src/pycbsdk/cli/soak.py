@@ -446,7 +446,16 @@ def phase_api_sweep(session: Session, n_chans: int) -> None:
         per_grp = [session.get_channel_smpgroup(c) for c in range(1, len(bulk_grp) + 1)]
         record("sweep/bulk-field", bulk_grp == per_grp, f"{len(bulk_grp)} smpgroups")
         ids = session.get_matching_channel_ids(ChannelType.FRONTEND)
-        record("sweep/matching-ids", len(ids) > 0, f"{len(ids)} FRONTEND ids")
+        # Compare against the bulk view rather than demanding a non-zero count:
+        # a Gemini NSP is I/O-only and correctly has no front-end channels, so
+        # "> 0" fails on healthy hardware.  Agreement between the two is the
+        # real assertion, and it still catches a lookup returning nothing when
+        # the device does have front-end channels.
+        record(
+            "sweep/matching-ids",
+            len(ids) == len(bulk_labels),
+            f"{len(ids)} FRONTEND ids (bulk reported {len(bulk_labels)})",
+        )
     except Exception as exc:  # noqa: BLE001 - diagnostic harness
         record("sweep/bulk", False, f"raised {exc!r}")
 
@@ -468,6 +477,46 @@ def phase_api_sweep(session: Session, n_chans: int) -> None:
         except Exception as exc:  # noqa: BLE001 - diagnostic harness
             gbad.append(f"{g}:{exc!r}")
     record("sweep/groups", not gbad, f"groups 1..6 bad={gbad[:5]}")
+
+    # Cross-check the two independent views of group membership: the per-group
+    # channel list against each channel's own smpgroup.  Unlike the field
+    # cross-check above, these reach the config by genuinely different routes,
+    # so agreement here is evidence and disagreement is a real defect.
+    #
+    # This exists because a HUB2 CENTRAL CLIENT session once passed every check
+    # in this phase while serving HUB1's configuration: three read paths agreed
+    # with each other and were all wrong.  These two did disagree, and nothing
+    # compared them.
+    mismatches = []
+    for g in range(1, 7):
+        try:
+            listed = set(session.get_group_channels(g))
+        except Exception as exc:  # noqa: BLE001 - diagnostic harness
+            mismatches.append(f"grp{g}:list raised {exc!r}")
+            continue
+        scanned = set()
+        for ch in range(1, n_chans + 1):
+            try:
+                if session.get_channel_smpgroup(ch) == g:
+                    scanned.add(ch)
+            except Exception:  # noqa: BLE001 - absent channels are not a fault
+                continue
+        # Only channels within this device's range are comparable; the group
+        # list may legitimately mention ids beyond it on some layouts.
+        listed_in_range = {c for c in listed if 1 <= c <= n_chans}
+        if listed_in_range != scanned:
+            only_listed = sorted(listed_in_range - scanned)[:4]
+            only_scanned = sorted(scanned - listed_in_range)[:4]
+            mismatches.append(
+                f"grp{g}: get_group_channels-only={only_listed} "
+                f"smpgroup-only={only_scanned}"
+            )
+    record(
+        "sweep/group-membership-agrees",
+        not mismatches,
+        "; ".join(mismatches[:3]) if mismatches
+        else "get_group_channels() agrees with get_channel_smpgroup()",
+    )
 
     try:
         cfg = session.get_config()
@@ -556,7 +605,11 @@ def phase_label_edges(session: Session) -> None:
         except Exception as exc:  # noqa: BLE001 - diagnostic harness
             ok = False
             record(f"label/{desc}", False, f"raised {exc!r}")
-    session.set_channel_label(ch, orig or f"chan{ch}", auto_sync=True)
+    try:
+        session.set_channel_label(ch, orig or f"chan{ch}", auto_sync=True)
+    except Exception as exc:  # noqa: BLE001 - diagnostic harness
+        ok = False
+        record("label/restore", False, f"raised {exc!r}")
     record("label/edges", ok, "16-byte field boundary + neighbour integrity")
 
 
@@ -691,7 +744,22 @@ def phase_overrun_recovery(session: Session, key: str) -> None:
     if rate < 1000:
         record("overrun", None, "no traffic; skipped")
         return
-    stall = min(1.5 * ring / rate, 120.0)
+    # The stall has to outlast one whole ring fill or the producer never laps
+    # the consumer and there is simply nothing to detect.  A fixed cap turns a
+    # slow device into a spurious failure: a Gemini NSP streaming 16 analog
+    # channels at 1.45 MB/s needs ~277 s to fill a 256 MiB ring, so a 120 s
+    # stall reported "no error" against perfectly healthy hardware.
+    need = 1.5 * ring / rate
+    cap = 400.0
+    if need > cap:
+        record(
+            "overrun",
+            None,
+            f"{rate / 1e6:.2f} MB/s would need {need:.0f}s to lap a "
+            f"{ring / 1048576:.0f} MiB ring, over the {cap:.0f}s cap -- skipped",
+        )
+        return
+    stall = need
 
     state = {"stall": True, "bad": 0, "post": 0}
     maxch = session.max_chans()
