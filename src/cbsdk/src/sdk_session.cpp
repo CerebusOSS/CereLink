@@ -1380,10 +1380,15 @@ Result<void> SdkSession::start() {
             while (impl->device_send_thread_running.load()) {
                 bool has_packets = false;
 
-                // Try to dequeue and send all available packets
-#ifdef _WIN32
-                bool timer_raised = false;
-#endif
+                // Try to dequeue and send all available packets.
+                //
+                // No pacing here: DeviceSession::sendPacket enforces the gap
+                // between configuration sends, and every packet below goes
+                // through it. This loop used to sleep 1 ms per 8 packets and
+                // raise the system timer resolution to make that sleep land,
+                // which is redundant now and was coarser than the choke point
+                // -- it burst 8 packets into the device's ~8-packet buffer
+                // before pausing, where the choke point spaces every one.
                 while (true) {
                     cbPKT_GENERIC pkt = {};
 
@@ -1394,31 +1399,15 @@ Result<void> SdkSession::start() {
                     }
 
                     has_packets = true;
-#ifdef _WIN32
-                    if (!timer_raised) { timeBeginPeriod(1); timer_raised = true; }
-#endif
 
-                    // Send packet to device
+                    // Send packet to device (paced by DeviceSession::sendPacket)
                     auto send_result = impl->device_session->sendPacket(pkt);
                     if (send_result.isError()) {
                         impl->stats.send_errors.fetch_add(1, std::memory_order_relaxed);
                     } else {
                         impl->stats.packets_sent_to_device.fetch_add(1, std::memory_order_relaxed);
                     }
-
-                    // Pace sends to avoid overflowing the device's kernel
-                    // UDP receive buffer (~8 KB on Windows = ~8 packets).
-                    if ((impl->stats.packets_sent_to_device.load(std::memory_order_relaxed) % 8) == 0) {
-#ifdef _WIN32
-                        Sleep(1);
-#else
-                        std::this_thread::sleep_for(std::chrono::microseconds(50));
-#endif
-                    }
                 }
-#ifdef _WIN32
-                if (timer_raised) timeEndPeriod(1);
-#endif
 
                 if (!has_packets) {
                     // No packets - wait briefly before checking again
