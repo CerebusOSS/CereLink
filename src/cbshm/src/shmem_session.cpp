@@ -144,6 +144,9 @@ struct ShmemSession::Impl {
     cbproto::InstrumentId inst;
     Mode mode;
     ShmemLayout layout;
+    /// Sees every packet walked, before the instrument filter. See
+    /// setPacketObserver(). Only touched from the reading thread.
+    std::function<void(const cbPKT_GENERIC&)> packet_observer;
     std::unique_ptr<CentralBootstrapAdapterBase> bootstrap_adapter;
     std::unique_ptr<CentralAdapterBase> adapter;
     std::string cfg_name;            // Config buffer name (e.g., "cbCFGbuffer")
@@ -868,6 +871,10 @@ uint32_t ShmemSession::getMaxProcs() const {
         }
         return m_impl->bootstrap_adapter->getMaxProcs();
     }
+}
+
+void ShmemSession::setPacketObserver(std::function<void(const cbPKT_GENERIC&)> observer) {
+    m_impl->packet_observer = std::move(observer);
 }
 
 Result<cbPKT_PROCINFO> ShmemSession::getProcInfoAt(const uint32_t instrument) const {
@@ -2056,6 +2063,14 @@ Result<void> ShmemSession::readReceiveBuffer(cbPKT_GENERIC* packets, size_t max_
         if (m_impl->rec_tailindex > (buflen - m_impl->rec_reserve_len)) {
             m_impl->rec_tailindex = 0;
             m_impl->rec_tailwrap++;
+        }
+
+        // Let an observer see the packet before the filter decides its fate.
+        // The filter below is unchanged; this only exposes what would
+        // otherwise be discarded, so a CENTRAL CLIENT can derive cross-device
+        // clock estimates from instruments it does not itself read.
+        if (m_impl->packet_observer) {
+            m_impl->packet_observer(packets[packets_read]);
         }
 
         // Filter packets so only those from the selected instrument are read.

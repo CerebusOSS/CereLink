@@ -30,6 +30,7 @@
 #include <cstring>
 #include <iostream>
 #include <algorithm>
+#include <map>
 #include <set>
 #include <vector>
 #include <unordered_map>
@@ -501,6 +502,94 @@ struct SdkSession::Impl {
     };
     PendingClockProbe pending_clock_probe;
     std::mutex clock_probe_mutex;
+
+    // CENTRAL-mode cross-instrument clock estimates.
+    //
+    // A STANDALONE owner borrows a peer's offset through the peer's own shared
+    // memory (see peer_hubs above) -- notably a Gemini NSP borrowing a hub,
+    // because the NSP transmits in ~8192-sample bursts and its probe replies
+    // are latched to those boundaries, quantising every offset by up to 273 ms.
+    // Under CENTRAL there is no peer CereLink process publishing anything, so
+    // that mechanism finds nothing and the NSP is stuck with its own unusable
+    // probes.
+    //
+    // Central's ring already carries every instrument's packets though, so the
+    // estimates can be built here instead: the packet observer sees the other
+    // instruments' probe replies before the demux filter discards them, and the
+    // same vote/borrow rules are applied to the result. The library resolves
+    // this itself -- callers should never have to assemble a clock estimate.
+    struct PeerInstrumentClock {
+        cbdev::ClockSync sync;
+        PendingClockProbe pending;
+    };
+    std::map<uint32_t, PeerInstrumentClock> peer_instrument_clocks;
+    std::mutex peer_instrument_mutex;
+
+    /// @brief Feed a probe reply belonging to another instrument
+    ///
+    /// Called from the packet observer, i.e. on the reading thread, for replies
+    /// the demux filter is about to discard.
+    void addPeerProbeReply(uint32_t instrument, uint64_t device_time_ns,
+                           std::chrono::steady_clock::time_point t4) {
+        std::lock_guard<std::mutex> lk(peer_instrument_mutex);
+        auto it = peer_instrument_clocks.find(instrument);
+        if (it == peer_instrument_clocks.end() || !it->second.pending.active) return;
+        it->second.sync.addProbeSample(it->second.pending.t1_local, device_time_ns, t4);
+        it->second.pending.active = false;
+    }
+
+    /// @brief Vote across instruments and commit the result to this session
+    ///
+    /// Mirrors the STANDALONE rules deliberately, so the two modes agree:
+    /// three or more independent estimates elect a median; below that an
+    /// instrument with no usable estimate of its own borrows the
+    /// lowest-uncertainty peer. ClockSync::setExternalOffset sanity-checks the
+    /// value before adopting it, which is what keeps this safe on hardware
+    /// whose instruments are not commonly disciplined -- a peer that disagrees
+    /// is rejected rather than believed.
+    void applyCrossInstrumentConsensus() {
+        std::vector<int64_t> votes;
+        std::optional<int64_t> best_peer_offset;
+        std::optional<int64_t> best_peer_uncert;
+        int64_t best_uncert_val = INT64_MAX;
+        {
+            std::lock_guard<std::mutex> lk(peer_instrument_mutex);
+            for (auto& [inst, pc] : peer_instrument_clocks) {
+                auto off = pc.sync.getOffsetNs();
+                if (!off) continue;
+                votes.push_back(*off);
+                const int64_t unc = pc.sync.getUncertaintyNs().value_or(INT64_MAX);
+                if (!best_peer_offset || unc < best_uncert_val) {
+                    best_peer_offset = off;
+                    best_peer_uncert = pc.sync.getUncertaintyNs();
+                    best_uncert_val = unc;
+                }
+            }
+        }
+        const auto own = client_clock_sync.getOffsetNs();
+        if (own) votes.push_back(*own);
+
+        if (votes.size() >= 3) {
+            std::sort(votes.begin(), votes.end());
+            client_clock_sync.setExternalOffset(votes[votes.size() / 2]);
+        } else if (best_peer_offset) {
+            client_clock_sync.setExternalOffset(best_peer_offset, best_peer_uncert);
+        } else {
+            client_clock_sync.setExternalOffset(std::nullopt);
+        }
+    }
+
+    /// Instruments present in Central, discovered from procinfo.chancount.
+    std::vector<uint32_t> presentInstruments() const {
+        std::vector<uint32_t> out;
+        if (!shmem_session) return out;
+        const uint32_t max_procs = std::max<uint32_t>(shmem_session->getMaxProcs(), 1);
+        for (uint32_t i = 0; i < max_procs; ++i) {
+            auto pi = shmem_session->getProcInfoAt(i);
+            if (pi.isOk() && pi.value().chancount > 0) out.push_back(i);
+        }
+        return out;
+    }
 
     // Per-stream monotonic-conversion state (see toLocalTimeBatch).  Each stream
     // keeps its own non-decreasing floor and the discontinuity epoch it last
@@ -1384,6 +1473,26 @@ Result<void> SdkSession::start() {
 
         m_impl->shmem_receive_thread_running.store(true);
         Impl* impl = m_impl.get();
+
+        // Catch the other instruments' probe replies before the demux filter
+        // discards them, so this session can build a cross-device estimate
+        // without a peer CereLink process to borrow one from. Only replies are
+        // taken; the filter still decides what the session actually receives,
+        // so no foreign data reaches callbacks.
+        if (m_impl->shmem_session->getLayout() == cbshm::ShmemLayout::CENTRAL) {
+            const uint32_t self_inst = m_impl->shmem_session->getInstrument().toIndex();
+            m_impl->shmem_session->setPacketObserver(
+                [impl, self_inst](const cbPKT_GENERIC& pkt) {
+                    if (pkt.cbpkt_header.type != cbPKTTYPE_NPLAYREP) return;
+                    const uint32_t inst = pkt.cbpkt_header.instrument;
+                    if (inst == self_inst) return;  // own reply: handled below
+                    constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
+                    impl->addPeerProbeReply(inst,
+                                            pkt.cbpkt_header.time + STALENESS_CORRECTION_NS,
+                                            std::chrono::steady_clock::now());
+                });
+        }
+
         m_impl->shmem_receive_thread = std::make_unique<std::thread>([impl]() {
             // CLIENT mode receive thread: reads from Central's cbRECbuffer, dispatches to callbacks
             constexpr size_t MAX_BATCH = 128;
@@ -1506,6 +1615,31 @@ Result<void> SdkSession::start() {
                             impl->shmem_session->enqueuePacket(
                                 *reinterpret_cast<const cbPKT_GENERIC*>(&probe));
                             impl->last_clock_probe_time = t4;
+
+                            // CENTRAL: also probe the other instruments, so this
+                            // session can build its own cross-device estimate.
+                            // Their replies come back on the same ring and are
+                            // caught by the packet observer before the demux
+                            // filter drops them.
+                            if (impl->shmem_session->getLayout() == cbshm::ShmemLayout::CENTRAL) {
+                                const uint32_t self = impl->shmem_session->getInstrument().toIndex();
+                                for (uint32_t inst : impl->presentInstruments()) {
+                                    if (inst == self) continue;
+                                    {
+                                        std::lock_guard<std::mutex> lk(impl->peer_instrument_mutex);
+                                        auto& pc = impl->peer_instrument_clocks[inst];
+                                        pc.pending.t1_local = t4;
+                                        pc.pending.active = true;
+                                    }
+                                    cbPKT_NPLAY peer_probe = probe;
+                                    peer_probe.cbpkt_header.instrument =
+                                        cbproto::InstrumentId::fromIndex(
+                                            static_cast<int32_t>(inst)).toPacketField();
+                                    impl->shmem_session->enqueuePacket(
+                                        *reinterpret_cast<const cbPKT_GENERIC*>(&peer_probe));
+                                }
+                                impl->applyCrossInstrumentConsensus();
+                            }
                         }
 
                         // Dispatch batch (fires batch group callbacks, then per-packet callbacks)
