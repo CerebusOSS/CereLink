@@ -95,6 +95,7 @@ void ClockSync::reset() {
     m_probe_samples.clear();
     m_data_samples.clear();
     m_data_floor_ns = std::nullopt;
+    m_data_spread_ns = std::nullopt;
     m_current_offset_ns = std::nullopt;
     m_current_uncertainty_ns = std::nullopt;
     resetDiscipline();
@@ -169,6 +170,7 @@ void ClockSync::addDataPacketSample(const uint64_t device_time_ns, const time_po
     if (m_current_offset_ns && std::abs(offset_ns - *m_current_offset_ns) > 1'000'000'000LL) {
         m_data_samples.clear();
         m_data_floor_ns = std::nullopt;
+        m_data_spread_ns = std::nullopt;
         m_current_offset_ns = std::nullopt;  // re-acquire immediately past a jump
         resetDiscipline();
     }
@@ -212,6 +214,9 @@ void ClockSync::addDataPacketSample(const uint64_t device_time_ns, const time_po
         }
 
         m_data_floor_ns = offsets[top - 1] + ONE_WAY_DELAY_ESTIMATE_NS;
+        // Spread of the glitch-filtered set, so the reported uncertainty can
+        // reflect how much the samples actually disagree instead of a constant.
+        m_data_spread_ns = offsets[top - 1] - offsets[0];
     }
 
     recomputeEstimate();
@@ -268,8 +273,13 @@ ClockSync::InternalEstimate ClockSync::computeInternalEstimate() const {
     //      glitch-filtered max-offset probe.  This is the HUB1 path.
     //   2. Otherwise, if data-packet samples are available, use the
     //      glitch-filtered max raw_offset from data packets.  This is
-    //      the NSP path — data-packet timestamps (from the ADC/PTP
-    //      clock) are more stable than probe header->time on the NSP.
+    //      the NSP path for a *device session* — data-packet timestamps
+    //      (from the ADC/PTP clock) are more stable than probe
+    //      header->time on the NSP, whose replies are latched to its
+    //      transmit blocks.  Only DeviceSession feeds addDataPacketSample,
+    //      so this branch is unreachable for the CLIENT-mode instance:
+    //      a NATIVE CLIENT inherits its owner's committed offset, and a
+    //      CENTRAL CLIENT derives one across instruments instead.
     //   3. If neither is available, use probes anyway (unreliable but
     //      better than nothing).
     // TEMPORARY diagnostic for #198 — set CERELINK_CLOCK_DEBUG=1 to enable.
@@ -304,7 +314,18 @@ ClockSync::InternalEstimate ClockSync::computeInternalEstimate() const {
     if (m_data_floor_ns.has_value()) {
         InternalEstimate e;
         e.offset_ns = *m_data_floor_ns;
-        e.uncertainty_ns = 700'000;  // ONE_WAY_DELAY_ESTIMATE_NS
+        // The floor takes the least-delayed sample seen, so its error is
+        // whatever delay that sample still carried -- unknowable directly, but
+        // the disagreement among samples is evidence for it. Reporting the flat
+        // ONE_WAY_DELAY_ESTIMATE_NS claimed 0.7 ms no matter how badly they
+        // scattered, the same way rtt/2 did on the probe path.
+        //
+        // Caveat: with only a handful of samples the spread understates the
+        // true uncertainty, since a narrow window is not evidence of a tight
+        // one. This floors at the old constant rather than pretending
+        // otherwise, but a sample-count term would be better still.
+        e.uncertainty_ns = std::max<int64_t>(700'000,  // ONE_WAY_DELAY_ESTIMATE_NS
+                                             m_data_spread_ns.value_or(0) / 2);
         dbg("data-floor", e);
         return e;
     }

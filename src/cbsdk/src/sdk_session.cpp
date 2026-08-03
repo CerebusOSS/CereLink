@@ -1541,6 +1541,7 @@ Result<void> SdkSession::start() {
 
                     if (packets_read > 0) {
                         auto t4 = std::chrono::steady_clock::now();
+                        uint64_t last_data_time = 0;
                         impl->stats.packets_delivered_to_callback.fetch_add(packets_read, std::memory_order_relaxed);
                         impl->stats.packets_received_from_device.fetch_add(packets_read, std::memory_order_relaxed);
                         uint64_t batch_bytes = 0;
@@ -1548,6 +1549,12 @@ Result<void> SdkSession::start() {
                         for (size_t i = 0; i < packets_read; i++) {
                             batch_bytes += static_cast<uint64_t>(
                                 cbPKT_HEADER_32SIZE + packets[i].cbpkt_header.dlen) * 4;
+                            // Remember the newest data-packet timestamp for the
+                            // fallback estimator (fed once per batch below).
+                            if (!(packets[i].cbpkt_header.chid & cbPKTCHAN_CONFIGURATION) &&
+                                packets[i].cbpkt_header.time != 0) {
+                                last_data_time = packets[i].cbpkt_header.time;
+                            }
                             if (packets[i].cbpkt_header.type == cbPKTTYPE_NPLAYREP) {
                                 // Complete pending clock sync probe
                                 constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
@@ -1581,6 +1588,23 @@ Result<void> SdkSession::start() {
                         }
                         impl->stats.bytes_received_from_device.fetch_add(
                             batch_bytes, std::memory_order_relaxed);
+
+                        // Feed the fallback estimator once per batch, mirroring
+                        // DeviceSession. This is the only recourse for a device
+                        // whose probe replies are latched to transmit blocks
+                        // (a Gemini NSP quantises every offset by up to 273 ms)
+                        // when there is no peer instrument to borrow from --
+                        // an NSP alone under Central. No tick->ns conversion is
+                        // needed here: readReceiveBuffer already normalises
+                        // CLIENT timestamps for every device type.
+                        //
+                        // Selection order makes this self-limiting: reliable
+                        // probes still win, so a device with good probes is
+                        // unaffected and only one with unusable probes gains
+                        // the floor.
+                        if (last_data_time != 0) {
+                            impl->client_clock_sync.addDataPacketSample(last_data_time, t4);
+                        }
 
                         // Periodic clock sync probing (~every 5 seconds)
                         if (t4 - impl->last_clock_probe_time > std::chrono::seconds(2)) {
