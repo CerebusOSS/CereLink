@@ -1641,6 +1641,77 @@ TEST_F(OwnerLivenessTest, ClientDetectsDeadOwner) {
     EXPECT_FALSE(client.value().isOwnerAlive());
 }
 
+TEST_F(OwnerLivenessTest, StandaloneWritesSegmentUid) {
+    auto result = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name,
+                                           cbproto::InstrumentId::fromOneBased(cbNSP1));
+    ASSERT_TRUE(result.isOk()) << result.error();
+
+    auto* cfg = result.value().getNativeConfigBuffer();
+    ASSERT_NE(cfg, nullptr);
+    EXPECT_NE(cfg->segment_uid, 0ull);
+}
+
+#ifndef _WIN32
+// POSIX-only: an owner "unlinking" its segment removes the name immediately
+// (shm_unlink), so a client's fresh open by name fails.  Windows has no unlink —
+// a named mapping persists as long as any handle is open, so an owner that
+// merely closes (without recreating) leaves the name and memory intact and the
+// client legitimately still sees a current segment.  That case is covered by
+// the crash-orphan (owner_pid) path or, mid-stream, by the client noticing the
+// data stall (see the pycbsdk liveness follow-up).
+TEST_F(OwnerLivenessTest, ClientDetectsUnlinkedSegment) {
+    // Owner creates the segment; client attaches (records uid N1).
+    auto standalone = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name,
+                                           cbproto::InstrumentId::fromOneBased(cbNSP1));
+    ASSERT_TRUE(standalone.isOk()) << standalone.error();
+
+    auto client = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name,
+                                           cbproto::InstrumentId::fromOneBased(cbNSP1));
+    ASSERT_TRUE(client.isOk()) << client.error();
+    EXPECT_TRUE(client.value().isOwnerAlive());  // segment is current
+
+    // Owner tears down the segment (unlinks the names); the client keeps its
+    // mapping.  With the name gone, the client's segment is stale.
+    {
+        ShmemSession owner = std::move(standalone.value());
+        // owner's destructor at end of scope runs close() -> shm_unlink.
+    }
+    EXPECT_FALSE(client.value().isOwnerAlive());
+}
+#endif  // !_WIN32
+
+TEST_F(OwnerLivenessTest, ClientDetectsSupersededSegment) {
+    // Owner creates the segment (uid N1); client attaches.
+    auto standalone1 = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name,
+                                           cbproto::InstrumentId::fromOneBased(cbNSP1));
+    ASSERT_TRUE(standalone1.isOk()) << standalone1.error();
+
+    auto client = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name,
+                                           cbproto::InstrumentId::fromOneBased(cbNSP1));
+    ASSERT_TRUE(client.isOk()) << client.error();
+    EXPECT_TRUE(client.value().isOwnerAlive());
+
+    // Owner tears the segment down, then a NEW owner recreates it under the SAME
+    // name (fresh uid N2).  This is the persistent-service case: owner_pid is
+    // identical, but the segment instance is different.
+    {
+        ShmemSession owner1 = std::move(standalone1.value());
+    }
+    auto standalone2 = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name,
+                                           cbproto::InstrumentId::fromOneBased(cbNSP1));
+    ASSERT_TRUE(standalone2.isOk()) << standalone2.error();
+
+    // A fresh client on the new segment sees it as current...
+    auto client2 = ShmemSession::create(Mode::CLIENT, ShmemLayout::NATIVE, test_name,
+                                           cbproto::InstrumentId::fromOneBased(cbNSP1));
+    ASSERT_TRUE(client2.isOk()) << client2.error();
+    EXPECT_TRUE(client2.value().isOwnerAlive());
+
+    // ...but the old client, still mapped to the superseded segment, is stale —
+    // even though a live owner now holds the name (owner_pid alone can't tell).
+    EXPECT_FALSE(client.value().isOwnerAlive());
+}
+
 TEST_F(OwnerLivenessTest, ClientTreatsZeroPidAsAlive) {
     // Create STANDALONE, then clear owner_pid to simulate pre-liveness segments
     auto standalone = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name, cbproto::InstrumentId::fromOneBased(cbNSP1));
