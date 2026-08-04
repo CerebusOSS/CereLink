@@ -316,10 +316,14 @@ struct SdkSession::Impl {
         uint32_t global_start;  ///< 1-based, inclusive
     };
     // Mutable so an unresolved window can still be resolved from const
-    // accessors -- see ensureWindowResolved().
+    // accessors -- see ensureWindowResolved().  That rebuild can come from any
+    // thread while the receive thread iterates chan_segs, so the three fields
+    // below move together under window_mutex.  local_max_chans is also atomic:
+    // the per-packet dispatch path reads it without taking the mutex.
+    mutable std::mutex window_mutex;                ///< guards the three fields below
     mutable std::vector<ChanSeg> chan_segs;         ///< the mapped ranges
     mutable bool window_resolved = false;           ///< false => identity map (unknown)
-    mutable uint32_t local_max_chans = cbMAXCHANS;  ///< channels this device has
+    mutable std::atomic<uint32_t> local_max_chans{cbMAXCHANS};  ///< channels this device has
     uint32_t central_instrument = 0;                ///< instrument this session speaks for
 
     /// @brief Resolve the window on first use if it could not be resolved yet
@@ -329,16 +333,23 @@ struct SdkSession::Impl {
     /// unresolved window silently reports the whole wire space. Retrying at the
     /// point of use removes the timing sensitivity entirely; once resolved this
     /// is a single bool test.
-    void ensureWindowResolved() const {
+    /// @pre window_mutex held
+    void ensureWindowResolvedLocked() const {
         if (!window_resolved) {
-            const_cast<Impl*>(this)->buildChannelWindow(central_instrument);
+            const_cast<Impl*>(this)->buildChannelWindowLocked(central_instrument);
         }
+    }
+
+    void ensureWindowResolved() const {
+        std::lock_guard<std::mutex> lk(window_mutex);
+        ensureWindowResolvedLocked();
     }
 
     /// @brief Map a local (per-device) channel id onto Central's global id
     /// @return the global id, or 0 if this device has no such channel
-    uint32_t toGlobalChan(const uint32_t local) const {
-        if (local < 1 || local > local_max_chans) return 0;
+    /// @pre window_mutex held
+    uint32_t toGlobalChanLocked(const uint32_t local) const {
+        if (local < 1 || local > local_max_chans.load(std::memory_order_relaxed)) return 0;
         // An unresolved window is the identity; a resolved but empty one means
         // the device is not present and nothing is addressable.
         if (!window_resolved) return local;
@@ -349,13 +360,22 @@ struct SdkSession::Impl {
         return 0;
     }
 
+    /// @brief Locking wrapper for the one-shot callers outside the receive path
+    uint32_t toGlobalChan(const uint32_t local) const {
+        std::lock_guard<std::mutex> lk(window_mutex);
+        ensureWindowResolvedLocked();
+        return toGlobalChanLocked(local);
+    }
+
     /// @brief Inverse of toGlobalChan()
     ///
     /// Returns 0 when the global id belongs to a different instrument, which is
     /// how packets for other devices are recognised and ignored.
-    uint32_t toLocalChan(const uint32_t global) const {
+    /// @pre window_mutex held
+    uint32_t toLocalChanLocked(const uint32_t global) const {
         if (global < 1) return 0;
-        if (!window_resolved) return global <= local_max_chans ? global : 0;
+        if (!window_resolved)
+            return global <= local_max_chans.load(std::memory_order_relaxed) ? global : 0;
         for (const auto& s : chan_segs) {
             if (global >= s.global_start && global < s.global_start + s.count)
                 return s.local_start + (global - s.global_start);
@@ -375,7 +395,8 @@ struct SdkSession::Impl {
     /// range: local 1..chancount maps to global base..base+chancount-1, where
     /// base is 1 plus the running sum of the preceding instruments' chancount.
     /// A device reporting chancount 0 is not present.
-    void buildChannelWindow(const uint32_t instrument) {
+    /// @pre window_mutex held
+    void buildChannelWindowLocked(const uint32_t instrument) {
         chan_segs.clear();
         window_resolved = false;
         local_max_chans = cbMAXCHANS;
@@ -409,8 +430,15 @@ struct SdkSession::Impl {
             local_max_chans = 0;
             return;
         }
-        chan_segs.push_back({1, count, base});
-        local_max_chans = count;
+        // chancount comes off the wire and can exceed the compile-time
+        // cbMAXCHANS that sizes every local-channel buffer, notably
+        // channel_type_cache; an unclamped count writes past them and over the
+        // Impl members that follow, several of which are std::mutex.  base is
+        // deliberately not clamped -- it indexes Central's global space, which
+        // must stay exact.
+        const uint32_t local_count = std::min<uint32_t>(count, cbMAXCHANS);
+        chan_segs.push_back({1, local_count, base});
+        local_max_chans = local_count;
     }
 
     /// @brief Resolve the channel window, retrying briefly if procinfo lags
@@ -424,8 +452,13 @@ struct SdkSession::Impl {
     /// lifetime.
     void resolveChannelWindow(const int attempts = 20) {
         for (int i = 0; i < attempts; ++i) {
-            buildChannelWindow(central_instrument);
-            if (window_resolved) return;
+            {
+                // Released around the sleep so a concurrent packet-translation
+                // batch is not blocked for the whole retry budget.
+                std::lock_guard<std::mutex> lk(window_mutex);
+                buildChannelWindowLocked(central_instrument);
+                if (window_resolved) return;
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
     }
@@ -441,7 +474,8 @@ struct SdkSession::Impl {
 
     void rebuildChannelTypeCache() {
         channel_type_cache.fill(ChannelType::ANY);
-        for (uint32_t ch = 0; ch < local_max_chans; ++ch) {
+        const uint32_t n = local_max_chans.load(std::memory_order_relaxed);
+        for (uint32_t ch = 0; ch < n; ++ch) {
             auto ci = getChanInfo(ch + 1);
             channel_type_cache[ch] = ci.isOk() ? classifyChannelByCaps(ci.value()) : ChannelType::ANY;
         }
@@ -454,7 +488,7 @@ struct SdkSession::Impl {
         // store, so the answer cannot depend on which one replies.  A hub has
         // no I/O channels, but the wire layout still reserves slots at 257..,
         // and the device happily returns the empty chaninfo sitting there.
-        ensureWindowResolved();
+        // toGlobalChan() resolves the window first if it still needs it.
         const uint32_t global = toGlobalChan(chan_id);
         if (!global) {
             return Result<cbPKT_CHANINFO>::error("Channel not present on this device");
@@ -742,18 +776,25 @@ struct SdkSession::Impl {
         //
         // An identity map — NATIVE, STANDALONE, or a single-instrument
         // Central — skips the loop entirely, so the hot path is unaffected.
-        if (!chan_segs.empty()) {
-            for (size_t i = 0; i < count; i++) {
-                const uint16_t chid = packets[i].cbpkt_header.chid;
-                // chid 0 is a sample group and the high bit marks configuration
-                // packets; neither is a channel id.
-                if (chid == 0 || (chid & cbPKTCHAN_CONFIGURATION)) continue;
-                const uint32_t local = toLocalChan(chid);
-                // 0 means the channel belongs to another instrument, which the
-                // receive-buffer instrument filter should already have dropped.
-                // Leave it alone rather than rewriting it to 0, which would
-                // masquerade as a sample group.
-                if (local) packets[i].cbpkt_header.chid = static_cast<uint16_t>(local);
+        //
+        // The lock is held once for the batch, not per packet: it only has to
+        // stop a concurrent ensureWindowResolved() refilling chan_segs under
+        // the iteration.
+        {
+            std::lock_guard<std::mutex> lk(window_mutex);
+            if (!chan_segs.empty()) {
+                for (size_t i = 0; i < count; i++) {
+                    const uint16_t chid = packets[i].cbpkt_header.chid;
+                    // chid 0 is a sample group and the high bit marks configuration
+                    // packets; neither is a channel id.
+                    if (chid == 0 || (chid & cbPKTCHAN_CONFIGURATION)) continue;
+                    const uint32_t local = toLocalChanLocked(chid);
+                    // 0 means the channel belongs to another instrument, which the
+                    // receive-buffer instrument filter should already have dropped.
+                    // Leave it alone rather than rewriting it to 0, which would
+                    // masquerade as a sample group.
+                    if (local) packets[i].cbpkt_header.chid = static_cast<uint16_t>(local);
+                }
             }
         }
 
@@ -981,6 +1022,14 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
             cbshm::Mode::CLIENT, cbshm::ShmemLayout::NATIVE, device_tag,
             cbproto::InstrumentId::fromIndex(0));
 
+        // Not the same as "nothing to attach to": the owner is probably alive,
+        // and the STANDALONE fallback below would unlink and recreate these
+        // very segments, taking the device away from it.
+        if (shmem_result.isError() && cbshm::isIncompatibleLayoutError(shmem_result.error())) {
+            return Result<SdkSession>::error("Failed to attach to shared memory: " +
+                                             shmem_result.error());
+        }
+
         // Liveness check: reject stale segments from a dead STANDALONE process.
         // The ShmemSession destructor (triggered by reassignment) unmaps the segments;
         // the subsequent STANDALONE creation path will shm_unlink + recreate them.
@@ -1023,7 +1072,8 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
             session.m_impl->shmem_session->getLayout() == cbshm::ShmemLayout::CENTRAL;
         session.m_impl->central_instrument =
             central_layout && inst_idx >= 0 ? static_cast<uint32_t>(inst_idx) : 0u;
-        session.m_impl->buildChannelWindow(session.m_impl->central_instrument);
+        std::lock_guard<std::mutex> lk(session.m_impl->window_mutex);
+        session.m_impl->buildChannelWindowLocked(session.m_impl->central_instrument);
     }
 
     // Create device session only in STANDALONE mode
@@ -1669,7 +1719,13 @@ Result<void> SdkSession::start() {
 }
 
 void SdkSession::stop() {
-    if (!m_impl || !m_impl->is_running.load()) {
+    // Gate on the Impl, never on is_running: start() sets that flag last, so it
+    // is false for the whole window in which the worker threads are already
+    // live.  Returning early there skips every join below and the destructor
+    // then frees the Impl under a running thread -- which aborts with "mutex
+    // lock failed: Invalid argument" once that thread locks a destroyed mutex.
+    // Each join is guarded by its own thread's flag, so this is idempotent.
+    if (!m_impl) {
         return;
     }
 

@@ -82,6 +82,41 @@ TEST_F(SdkSessionTest, Create_MoveConstruction) {
     EXPECT_TRUE(session2.isRunning());  // Session is started
 }
 
+/// procinfo.chancount comes off the wire and can exceed the compile-time
+/// cbMAXCHANS.  Taken verbatim it overran channel_type_cache — a
+/// std::array<ChannelType, cbMAXCHANS> in the session's Impl — and wrote over
+/// the members after it, several of which are std::mutex.  A smashed mutex
+/// makes pthread_mutex_lock return EINVAL, which libc++ raises as an uncaught
+/// "mutex lock failed: Invalid argument" on the next SDK thread to lock it.
+TEST_F(SdkSessionTest, ChannelWindow_ClampsOversizedChancount) {
+    // Own the native segments first so the session under test attaches to them
+    // as a CLIENT and reads the procinfo we plant here.
+    auto owner = cbshm::ShmemSession::create(
+        cbshm::Mode::STANDALONE, cbshm::ShmemLayout::NATIVE, "hub3",
+        cbproto::InstrumentId::fromIndex(0));
+    ASSERT_TRUE(owner.isOk()) << "Error: " << owner.error();
+
+    cbPKT_PROCINFO info;
+    std::memset(&info, 0, sizeof(info));
+    info.proc = 1;
+    info.chancount = cbMAXCHANS + 228;  // a device with more channels than we were built for
+    ASSERT_TRUE(owner.value().setProcInfo(info).isOk());
+    ASSERT_TRUE(owner.value().setInstrumentActive(true).isOk());
+
+    SdkConfig config;
+    config.device_type = DeviceType::HUB3;
+    config.autorun = false;
+
+    auto result = SdkSession::create(config);
+    ASSERT_TRUE(result.isOk()) << "Error: " << result.error();
+
+    auto& session = result.value();
+    EXPECT_FALSE(session.isStandalone()) << "expected to attach as CLIENT";
+    EXPECT_LE(session.getMaxChans(), static_cast<uint32_t>(cbMAXCHANS));
+
+    session.stop();
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Session Lifecycle Tests
 ///////////////////////////////////////////////////////////////////////////////////////////////////

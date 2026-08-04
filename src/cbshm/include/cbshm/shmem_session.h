@@ -51,6 +51,18 @@ enum class ShmemLayout {
     NATIVE           ///< Native single-instrument layout (NativeConfigBuffer)
 };
 
+/// @brief Prefix on the create() error for a segment written by an incompatible build
+///
+/// Callers must tell this apart from "no segment there", whose usual answer is
+/// to become STANDALONE -- which unlinks and recreates the segments, tearing
+/// them out from under an owner that is merely a different version.
+constexpr const char* INCOMPATIBLE_LAYOUT_ERROR = "Incompatible shared memory layout: ";
+
+/// @brief Whether a create() error reports an incompatible segment layout
+inline bool isIncompatibleLayoutError(const std::string& error) {
+    return error.rfind(INCOMPATIBLE_LAYOUT_ERROR, 0) == 0;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// @brief Shared memory session for Cerebus configuration and data buffers
 ///

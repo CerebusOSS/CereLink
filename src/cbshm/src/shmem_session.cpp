@@ -644,7 +644,7 @@ struct ShmemSession::Impl {
         if (mode == Mode::STANDALONE && layout == ShmemLayout::NATIVE) {
             auto* cfg = nativeCfg();
             std::memset(cfg, 0, cfg_buffer_size);
-            cfg->version = cbVERSION_MAJOR * 100 + cbVERSION_MINOR;
+            cfg->version = makeNativeConfigVersion(cbVERSION_MAJOR * 100 + cbVERSION_MINOR);
             cfg->instrument_status = static_cast<uint32_t>(InstrumentStatus::INACTIVE);
             // Ownership + per-creation identity.  owner_pid detects a crashed owner;
             // segment_uid detects a live owner that recreated this segment under the
@@ -717,6 +717,31 @@ struct ShmemSession::Impl {
         }
 
         is_open = true;
+
+        // Refuse a segment whose NativeConfigBuffer layout is not ours.  Nothing
+        // downstream can detect the mismatch -- every field still reads as
+        // *something* -- so it would surface as quietly wrong clock sync and
+        // liveness state rather than as a failed attach.
+        if (mode == Mode::CLIENT && layout == ShmemLayout::NATIVE && cfg_buffer_raw) {
+            const uint32_t their_version = nativeCfg()->version;
+            const uint32_t their_layout = nativeConfigLayoutVersion(their_version);
+            if (their_layout != NATIVE_CONFIG_LAYOUT_VERSION) {
+                const uint32_t their_proto = nativeConfigProtocolVersion(their_version);
+                std::string owner_desc =
+                    their_proto ? (" (protocol " + std::to_string(their_proto / 100) + "." +
+                                   std::to_string(their_proto % 100) + ")")
+                                : std::string();
+                close();
+                return Result<void>::error(
+                    std::string(INCOMPATIBLE_LAYOUT_ERROR) +
+                    "the owner wrote config layout " + std::to_string(their_layout) +
+                    owner_desc + ", but this build requires layout " +
+                    std::to_string(NATIVE_CONFIG_LAYOUT_VERSION) +
+                    ". Layout 0 means the owner predates CereLink 9.13."
+                    " Update every process sharing this device to the same"
+                    " CereLink version.");
+            }
+        }
 
         // Snapshot the segment identity we attached to (STANDALONE has just
         // written it in initBuffers(); CLIENT reads what the owner wrote).  Used
