@@ -235,6 +235,19 @@ def _parse_spec(spec: str) -> tuple[Path, int, int]:
     explicitly.
     """
     parts = spec.split(":")
+    # An absolute Windows path carries a colon in the FILE field, so a plain
+    # split reads "C:\data\map.cmp:129:2" as four fields and takes "C" for the
+    # filename.  Re-join the drive when the spec opens with one.  Requiring a
+    # separator after it keeps a single-letter relative path safe: "C:129" is
+    # still the POSIX file "C" at start_chan 129, since no Windows path can
+    # follow a drive with anything else and still be absolute.
+    if (
+        len(parts) > 1
+        and len(parts[0]) == 1
+        and parts[0].isalpha()
+        and parts[1][:1] in ("\\", "/")
+    ):
+        parts[:2] = [":".join(parts[:2])]
     if not parts or not parts[0]:
         raise argparse.ArgumentTypeError(f"empty spec: {spec!r}")
     path = Path(parts[0])
