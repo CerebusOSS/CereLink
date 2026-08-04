@@ -1022,6 +1022,14 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
             cbshm::Mode::CLIENT, cbshm::ShmemLayout::NATIVE, device_tag,
             cbproto::InstrumentId::fromIndex(0));
 
+        // Not the same as "nothing to attach to": the owner is probably alive,
+        // and the STANDALONE fallback below would unlink and recreate these
+        // very segments, taking the device away from it.
+        if (shmem_result.isError() && cbshm::isIncompatibleLayoutError(shmem_result.error())) {
+            return Result<SdkSession>::error("Failed to attach to shared memory: " +
+                                             shmem_result.error());
+        }
+
         // Liveness check: reject stale segments from a dead STANDALONE process.
         // The ShmemSession destructor (triggered by reassignment) unmaps the segments;
         // the subsequent STANDALONE creation path will shm_unlink + recreate them.

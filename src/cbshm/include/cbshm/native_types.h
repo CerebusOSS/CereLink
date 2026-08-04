@@ -64,8 +64,38 @@ constexpr uint32_t NATIVE_cbPKT_SPKCACHELINECNT = NATIVE_NUM_ANALOG_CHANS;      
 /// It uses scalar fields instead of arrays for per-instrument data, and uses
 /// cbMAXCHANS (284) instead of cbCONFIG_MAXCHANS (848) for channel arrays.
 ///
+/// @brief Layout revision of NativeConfigBuffer
+///
+/// Bump whenever a field is added, removed, or reordered.  Builds that disagree
+/// cannot share a segment: every field past the change is read at the wrong
+/// offset and the reader has no way to notice.  9.13 dropped
+/// optiontable/colortable and added segment_uid, shifting clock_offset_ns,
+/// owner_pid and segment_uid by 512 bytes — so a 9.13 CLIENT on a 9.12 segment
+/// takes its clock sync, liveness and supersession state from arbitrary bytes.
+constexpr uint32_t NATIVE_CONFIG_LAYOUT_VERSION = 2;
+
+/// @brief Pack the layout revision and the protocol version into cfg->version
+///
+/// High 8 bits are the layout revision, low 24 the cbproto version this field
+/// has always carried.  Builds before 9.13 wrote only the latter, so they read
+/// back as layout 0 -- which is how a pre-9.13 segment is recognised without a
+/// field that did not exist then.
+constexpr uint32_t makeNativeConfigVersion(const uint32_t protocol_version) {
+    return (NATIVE_CONFIG_LAYOUT_VERSION << 24) | (protocol_version & 0x00FFFFFFu);
+}
+
+/// @brief Recover the layout revision from cfg->version
+constexpr uint32_t nativeConfigLayoutVersion(const uint32_t version) {
+    return version >> 24;
+}
+
+/// @brief Recover the cbproto version from cfg->version
+constexpr uint32_t nativeConfigProtocolVersion(const uint32_t version) {
+    return version & 0x00FFFFFFu;
+}
+
 typedef struct {
-    uint32_t version;           ///< Buffer structure version
+    uint32_t version;           ///< Layout revision (high 8 bits) + cbproto version (low 24)
     uint32_t sysflags;          ///< System-wide flags
 
     // Single instrument status
