@@ -273,12 +273,51 @@ struct SdkSession::Impl {
     struct ConfigCB     { CallbackHandle handle; uint16_t packet_type; ConfigCallback cb; };
     struct RunlevelCB   { CallbackHandle handle; RunlevelCallback cb; };
 
-    std::vector<PacketCB>     packet_callbacks;
-    std::vector<EventCB>      event_callbacks;
-    std::vector<GroupCB>       group_callbacks;
-    std::vector<GroupBatchCB>  group_batch_callbacks;
-    std::vector<ConfigCB>     config_callbacks;
-    std::vector<RunlevelCB>   runlevel_callbacks;
+    /// Copy-on-write list of callbacks.
+    ///
+    /// Registration is rare and dispatch is hot (30k packets/s/device), so the
+    /// list is immutable once published: a mutation builds a fresh vector and
+    /// swaps the pointer, and dispatch takes a shared_ptr copy — one atomic
+    /// increment — instead of deep-copying a vector of std::function (each copy
+    /// of which can allocate).
+    template<typename CB>
+    struct CallbackList {
+        using List = std::vector<CB>;
+        using Ptr = std::shared_ptr<const List>;
+
+        /// Snapshot for dispatch.  Never null.
+        Ptr get() const { return list; }
+
+        /// Append under the caller's lock.
+        void add(CB cb) {
+            auto next = std::make_shared<List>(*list);
+            next->push_back(std::move(cb));
+            list = std::move(next);
+        }
+
+        /// Remove by handle under the caller's lock.  No-op (and no
+        /// reallocation) when the handle isn't ours.
+        void remove(CallbackHandle handle) {
+            const auto it = std::find_if(list->begin(), list->end(),
+                [handle](const CB& cb) { return cb.handle == handle; });
+            if (it == list->end()) return;
+            auto next = std::make_shared<List>(*list);
+            next->erase(std::remove_if(next->begin(), next->end(),
+                [handle](const CB& cb) { return cb.handle == handle; }),
+                next->end());
+            list = std::move(next);
+        }
+
+    private:
+        Ptr list = std::make_shared<const List>();
+    };
+
+    CallbackList<PacketCB>     packet_callbacks;
+    CallbackList<EventCB>      event_callbacks;
+    CallbackList<GroupCB>      group_callbacks;
+    CallbackList<GroupBatchCB> group_batch_callbacks;
+    CallbackList<ConfigCB>     config_callbacks;
+    CallbackList<RunlevelCB>   runlevel_callbacks;
 
     /// Atomically update device_runlevel; fire registered callbacks if the
     /// value changed.  Called from the receive thread (STANDALONE) or the
@@ -286,12 +325,12 @@ struct SdkSession::Impl {
     void updateRunlevel(uint32_t new_runlevel) {
         const uint32_t prev = device_runlevel.exchange(new_runlevel, std::memory_order_acq_rel);
         if (prev == new_runlevel) return;
-        std::vector<RunlevelCB> snap;
+        decltype(runlevel_callbacks)::Ptr snap;
         {
             std::lock_guard<std::mutex> lock(user_callback_mutex);
-            snap = runlevel_callbacks;
+            snap = runlevel_callbacks.get();
         }
-        for (const auto& cb : snap) {
+        for (const auto& cb : *snap) {
             if (cb.cb) cb.cb(new_runlevel);
         }
     }
@@ -813,19 +852,19 @@ struct SdkSession::Impl {
         }
 
         // Phase 1: batch group callbacks (one invocation per group_id per batch)
-        std::vector<GroupBatchCB> snap_batch;
+        decltype(group_batch_callbacks)::Ptr snap_batch;
         {
             std::lock_guard<std::mutex> lock(user_callback_mutex);
-            snap_batch = group_batch_callbacks;
+            snap_batch = group_batch_callbacks.get();
         }
 
-        if (!snap_batch.empty()) {
+        if (!snap_batch->empty()) {
             // Temp buffers — sized for max batch (128 packets × 272 channels)
             // ~70KB on stack, well within typical thread stack limits.
             int16_t sample_buf[128 * cbNUM_ANALOG_CHANS];
             uint64_t ts_buf[128];
 
-            for (const auto& bcb : snap_batch) {
+            for (const auto& bcb : *snap_batch) {
                 size_t n = 0;
                 size_t n_channels = 0;
 
@@ -959,30 +998,33 @@ struct SdkSession::Impl {
 
     /// Dispatch a single packet to all matching typed callbacks.
     /// Called on the callback thread (off the queue).
-    /// Snapshots each callback vector under lock, then dispatches without lock (Phase 2, Fix 6).
+    /// Takes a shared_ptr snapshot of each callback list under lock, then
+    /// dispatches without the lock so user callbacks can take arbitrary time.
     void dispatchPacket(const cbPKT_GENERIC& pkt) {
         const uint16_t chid = pkt.cbpkt_header.chid;
 
-        // Snapshot callback vectors under lock (fast: just copies a few pointers+sizes)
-        std::vector<PacketCB> snap_packet;
-        std::vector<EventCB>  snap_event;
-        std::vector<GroupCB>  snap_group;
-        std::vector<ConfigCB> snap_config;
+        // Snapshot the callback lists under lock.  These are copy-on-write, so
+        // each snapshot is a refcount bump rather than a vector-of-std::function
+        // copy — this runs on every packet (~30k/s per device).
+        decltype(packet_callbacks)::Ptr snap_packet;
+        decltype(event_callbacks)::Ptr  snap_event;
+        decltype(group_callbacks)::Ptr  snap_group;
+        decltype(config_callbacks)::Ptr snap_config;
         {
             std::lock_guard<std::mutex> lock(user_callback_mutex);
-            snap_packet = packet_callbacks;
-            // Only snapshot the vectors we'll actually need for this packet type
+            snap_packet = packet_callbacks.get();
+            // Only snapshot the list we'll actually need for this packet type
             if (chid != 0 && !(chid & cbPKTCHAN_CONFIGURATION)) {
-                snap_event = event_callbacks;
+                snap_event = event_callbacks.get();
             } else if (chid == 0) {
-                snap_group = group_callbacks;
+                snap_group = group_callbacks.get();
             } else if (chid & cbPKTCHAN_CONFIGURATION) {
-                snap_config = config_callbacks;
+                snap_config = config_callbacks.get();
             }
         }
 
         // Dispatch without holding the lock — user callbacks can take arbitrary time
-        for (const auto& cb : snap_packet) {
+        for (const auto& cb : *snap_packet) {
             if (cb.cb) cb.cb(pkt);
         }
 
@@ -992,19 +1034,19 @@ struct SdkSession::Impl {
             if (channel_cache_valid && chid >= 1 && chid <= local_max_chans) {
                 pkt_chan_type = channel_type_cache[chid - 1];
             }
-            for (const auto& cb : snap_event) {
+            for (const auto& cb : *snap_event) {
                 if (cb.channel_type == ChannelType::ANY || cb.channel_type == pkt_chan_type) {
                     if (cb.cb) cb.cb(pkt);
                 }
             }
         } else if (chid == 0) {
-            for (const auto& cb : snap_group) {
+            for (const auto& cb : *snap_group) {
                 if (pkt.cbpkt_header.type == cb.group_id) {
                     if (cb.cb) cb.cb(reinterpret_cast<const cbPKT_GROUP&>(pkt));
                 }
             }
         } else if (chid & cbPKTCHAN_CONFIGURATION) {
-            for (const auto& cb : snap_config) {
+            for (const auto& cb : *snap_config) {
                 if (pkt.cbpkt_header.type == cb.packet_type) {
                     if (cb.cb) cb.cb(pkt);
                 }
@@ -1818,14 +1860,14 @@ bool SdkSession::isRunning() const {
 CallbackHandle SdkSession::registerPacketCallback(PacketCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    m_impl->packet_callbacks.push_back({handle, std::move(callback)});
+    m_impl->packet_callbacks.add({handle, std::move(callback)});
     return handle;
 }
 
 CallbackHandle SdkSession::registerEventCallback(const ChannelType channel_type, EventCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    m_impl->event_callbacks.push_back({handle, channel_type, std::move(callback)});
+    m_impl->event_callbacks.add({handle, channel_type, std::move(callback)});
     return handle;
 }
 
@@ -1833,7 +1875,7 @@ CallbackHandle SdkSession::registerGroupCallback(const SampleRate rate, GroupCal
     const uint8_t group_id = static_cast<uint8_t>(rate);
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    m_impl->group_callbacks.push_back({handle, group_id, std::move(callback)});
+    m_impl->group_callbacks.add({handle, group_id, std::move(callback)});
     return handle;
 }
 
@@ -1841,37 +1883,32 @@ CallbackHandle SdkSession::registerGroupBatchCallback(const SampleRate rate, Gro
     const uint8_t group_id = static_cast<uint8_t>(rate);
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    m_impl->group_batch_callbacks.push_back({handle, group_id, std::move(callback)});
+    m_impl->group_batch_callbacks.add({handle, group_id, std::move(callback)});
     return handle;
 }
 
 CallbackHandle SdkSession::registerConfigCallback(const uint16_t packet_type, ConfigCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    m_impl->config_callbacks.push_back({handle, packet_type, std::move(callback)});
+    m_impl->config_callbacks.add({handle, packet_type, std::move(callback)});
     return handle;
 }
 
 CallbackHandle SdkSession::registerRunlevelChangeCallback(RunlevelCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    m_impl->runlevel_callbacks.push_back({handle, std::move(callback)});
+    m_impl->runlevel_callbacks.add({handle, std::move(callback)});
     return handle;
 }
 
 void SdkSession::unregisterCallback(CallbackHandle handle) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
-    auto erase_by_handle = [handle](auto& vec) {
-        vec.erase(std::remove_if(vec.begin(), vec.end(),
-            [handle](const auto& cb) { return cb.handle == handle; }),
-            vec.end());
-    };
-    erase_by_handle(m_impl->packet_callbacks);
-    erase_by_handle(m_impl->event_callbacks);
-    erase_by_handle(m_impl->group_callbacks);
-    erase_by_handle(m_impl->group_batch_callbacks);
-    erase_by_handle(m_impl->config_callbacks);
-    erase_by_handle(m_impl->runlevel_callbacks);
+    m_impl->packet_callbacks.remove(handle);
+    m_impl->event_callbacks.remove(handle);
+    m_impl->group_callbacks.remove(handle);
+    m_impl->group_batch_callbacks.remove(handle);
+    m_impl->config_callbacks.remove(handle);
+    m_impl->runlevel_callbacks.remove(handle);
 }
 
 void SdkSession::setErrorCallback(ErrorCallback callback) {
