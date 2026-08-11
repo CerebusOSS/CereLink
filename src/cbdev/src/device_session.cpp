@@ -295,11 +295,24 @@ struct DeviceSession::Impl {
     std::atomic<bool> has_callbacks{false};  // Fast-path skip when no callbacks registered
     CallbackHandle next_callback_handle = 1;  // 0 is reserved for "invalid"
 
-    // Protocol monitor — dropped packet detection
+    // Protocol monitor — dropped packet detection.
+    //
+    // The device reports, in each cbPKT_SYSPROTOCOLMONITOR, how many packets it
+    // sent since the previous one.  Comparing that to our own count per
+    // interval is NOT a loss measurement: a packet sent just before the monitor
+    // can be reassembled just after it, which shows up as a shortfall in one
+    // interval and an exactly matching surplus in the next.  Measured against
+    // Gemini hubs, that boundary straddling alone produced a steady stream of
+    // "dropped N packets" reports while the running totals agreed exactly.
+    //
+    // So track the running balance instead: accumulate sent and received across
+    // all intervals and report the cumulative difference.  Straddled packets
+    // cancel out on the next interval; genuine loss does not.
     uint32_t pkts_since_monitor = 0;       // Packets counted since last SYSPROTOCOLMONITOR
     bool first_monitor_seen = false;        // Skip comparison until first baseline is established
-    uint32_t dropped_accum = 0;             // Drops accumulated since last log
-    uint32_t sent_accum = 0;                // Sent accumulated since last log
+    uint64_t sent_total = 0;                // Device-reported packets sent, all intervals
+    uint64_t recv_total = 0;                // Packets we counted over the same intervals
+    uint64_t reported_lost = 0;             // Cumulative loss already reported
     std::chrono::steady_clock::time_point last_drop_log_time{};
 
     // Receive thread state
@@ -1608,16 +1621,23 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 // giving it an undefined timestamp delay.
                 const auto* mon = reinterpret_cast<const cbPKT_SYSPROTOCOLMONITOR*>(buff_bytes + offset);
                 if (m_impl->first_monitor_seen && mon->sentpkts > 0) {
-                    const uint32_t received = m_impl->pkts_since_monitor;
-                    if (received < mon->sentpkts) {
-                        m_impl->dropped_accum += mon->sentpkts - received;
-                        m_impl->sent_accum += mon->sentpkts;
+                    m_impl->sent_total += mon->sentpkts;
+                    m_impl->recv_total += m_impl->pkts_since_monitor;
+
+                    // Only a cumulative shortfall is real loss; a deficit that
+                    // the next interval makes up was just a boundary straddle.
+                    const int64_t balance = static_cast<int64_t>(m_impl->sent_total) -
+                                            static_cast<int64_t>(m_impl->recv_total);
+                    const uint64_t lost = balance > 0 ? static_cast<uint64_t>(balance) : 0;
+                    if (lost > m_impl->reported_lost) {
                         auto now = std::chrono::steady_clock::now();
                         if (now - m_impl->last_drop_log_time >= std::chrono::seconds(1)) {
-                            fprintf(stderr, "[cbdev] dropped %u of %u packets\n",
-                                    m_impl->dropped_accum, m_impl->sent_accum);
-                            m_impl->dropped_accum = 0;
-                            m_impl->sent_accum = 0;
+                            fprintf(stderr, "[cbdev] dropped %llu of %llu packets (%.4f%%)\n",
+                                    static_cast<unsigned long long>(lost),
+                                    static_cast<unsigned long long>(m_impl->sent_total),
+                                    100.0 * static_cast<double>(lost) /
+                                        static_cast<double>(m_impl->sent_total));
+                            m_impl->reported_lost = lost;
                             m_impl->last_drop_log_time = now;
                         }
                     }
