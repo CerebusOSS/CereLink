@@ -92,6 +92,7 @@ endif(CBSDK_BUILD_TEST)
 ##########################################################################################
 # Validation Tools
 add_subdirectory(tools/validate_clock_sync)
+add_subdirectory(tools/rx_bench)
 
 ##########################################################################################
 # Sample Applications for New Architecture
