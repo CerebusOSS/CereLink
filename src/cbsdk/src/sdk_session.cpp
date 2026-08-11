@@ -165,6 +165,9 @@ struct PeerClockReader {
 
 namespace cbsdk {
 
+/// Defined below; used by SdkSession::Impl to name peer devices' segments.
+static std::string getNativeSegmentName(DeviceType type, const std::string& segment);
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Channel type classification helper (capability-based)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -527,9 +530,20 @@ struct SdkSession::Impl {
     struct PeerHub {
         std::string segment;
         std::unique_ptr<PeerClockReader> reader;
+        // Peers that are not running have no segment to open, and shm_open on a
+        // missing name is a syscall that always fails.  Space the retries so an
+        // absent peer costs almost nothing.
+        std::chrono::steady_clock::time_point next_open_attempt{};
     };
     std::vector<PeerHub> peer_hubs;
     bool peer_hubs_init = false;
+
+    /// How often clock maintenance (probe, cross-device consensus, publication)
+    /// runs.  The estimate it produces cannot change faster than the probes
+    /// that feed it, so running it per datagram only burns receive-thread time.
+    static constexpr auto kClockMaintenanceInterval = std::chrono::milliseconds(100);
+    /// Retry interval for opening a peer's config segment (see PeerHub).
+    static constexpr auto kPeerReopenInterval = std::chrono::seconds(2);
     struct PendingClockProbe {
         std::chrono::steady_clock::time_point t1_local;
         bool active = false;
@@ -839,6 +853,108 @@ struct SdkSession::Impl {
         for (size_t i = 0; i < count; i++) {
             dispatchPacket(packets[i]);
         }
+    }
+
+    /// @brief Re-derive this device's clock offset from the cross-device
+    ///        consensus and publish the result to shared memory.
+    ///
+    /// Cross-device clock consensus.  Devices that share one PTP clock should
+    /// report the same device->host offset.  Each device publishes its own
+    /// (independent) estimate; here we combine this device's estimate with
+    /// every peer's and use the median, so a transiently-biased device is
+    /// outvoted instead of skewing time conversion.  All participants read the
+    /// same set of published estimates and therefore converge on the same
+    /// median.  Consensus needs >=3 participants to reject one outlier; with
+    /// fewer, an NSP still borrows a HUB's offset (its own probes are
+    /// unreliable) and other device types keep their own estimate.
+    ///
+    /// Only Gemini devices (NSP + HUBs) share one PTP clock.  Non-Gemini
+    /// devices (legacy NSP, nPlay, custom) have independent clocks and must not
+    /// be averaged together, so they skip consensus/borrow entirely.
+    ///
+    /// @note Runs on the device receive thread, on the cadence set by
+    ///       kClockMaintenanceInterval — never per datagram.  It performs
+    ///       syscalls (shm_open, kill) and shared-memory writes, all of which
+    ///       would otherwise stall the return to recvfrom().
+    void updateClockConsensus(std::chrono::steady_clock::time_point now) {
+        const DeviceType self_type = config.device_type;
+        const bool shares_ptp_clock =
+            self_type == DeviceType::NSP  ||
+            self_type == DeviceType::HUB1 || self_type == DeviceType::HUB2 ||
+            self_type == DeviceType::HUB3;
+        if (shares_ptp_clock) {
+            if (!peer_hubs_init) {
+                peer_hubs_init = true;
+                for (auto dt : {DeviceType::NSP, DeviceType::HUB1,
+                                DeviceType::HUB2, DeviceType::HUB3}) {
+                    if (dt == config.device_type)
+                        continue;  // skip self
+                    peer_hubs.push_back(
+                        {getNativeSegmentName(dt, "config"),
+                         std::make_unique<PeerClockReader>()});
+                }
+            }
+
+            // Collect peer votes; track the lowest-uncertainty peer for
+            // the <3-participant fallback.  At most four devices share a
+            // clock, so the votes never need the heap.
+            std::array<int64_t, 4> votes{};
+            size_t n_votes = 0;
+            std::optional<int64_t> best_peer_offset;
+            std::optional<int64_t> best_peer_uncert;
+            int64_t best_peer_uncert_val = INT64_MAX;
+            for (auto& ph : peer_hubs) {
+                if (!ph.reader->isOpen()) {
+                    // A peer that isn't running has no segment to open; back
+                    // off so the failing shm_open isn't retried every cycle.
+                    if (now < ph.next_open_attempt)
+                        continue;
+                    if (!ph.reader->tryOpen(ph.segment)) {
+                        ph.next_open_attempt = now + kPeerReopenInterval;
+                        continue;
+                    }
+                }
+                // Vote on the peer's own (pre-consensus) estimate so the
+                // median can track real common-mode drift.
+                auto offset = ph.reader->getRawOffsetNs();
+                if (!offset)
+                    continue;
+                if (n_votes < votes.size())
+                    votes[n_votes++] = *offset;
+                auto uncert = ph.reader->getClockUncertaintyNs();
+                const int64_t uncert_val = uncert ? *uncert : INT64_MAX;
+                if (!best_peer_offset || uncert_val < best_peer_uncert_val) {
+                    best_peer_offset = offset;
+                    best_peer_uncert = uncert;
+                    best_peer_uncert_val = uncert_val;
+                }
+            }
+            // This device's own independent vote.
+            if (auto own = device_session->getInternalOffsetNs()) {
+                if (n_votes < votes.size())
+                    votes[n_votes++] = *own;
+            }
+
+            if (n_votes >= 3) {
+                std::sort(votes.begin(), votes.begin() + n_votes);
+                const int64_t median = votes[n_votes / 2];
+                device_session->setExternalClockOffset(median);
+            } else if (config.device_type == DeviceType::NSP && best_peer_offset) {
+                // Too few for consensus: a Gemini NSP still borrows a HUB.
+                device_session->setExternalClockOffset(best_peer_offset, best_peer_uncert);
+            } else {
+                device_session->setExternalClockOffset(std::nullopt);
+            }
+        }
+
+        // Publish two offsets: the committed (post-consensus) value in
+        // clock_offset_ns for CLIENT-mode readers, and this device's own
+        // (pre-consensus) estimate in clock_raw_offset_ns for peers to vote on.
+        const auto uncertainty = device_session->getUncertaintyNs().value_or(0);
+        if (auto committed = device_session->getOffsetNs())
+            shmem_session->setClockSync(*committed, uncertainty);
+        if (auto internal = device_session->getInternalOffsetNs())
+            shmem_session->setClockRawOffset(*internal);
     }
 
     /// Dispatch a single packet to all matching typed callbacks.
@@ -1311,96 +1427,18 @@ Result<void> SdkSession::start() {
                     return;
                 }
 
-                // Periodic clock sync probing
-                auto now = std::chrono::steady_clock::now();
-                if (now - impl->last_clock_probe_time > std::chrono::milliseconds(100)) {
-                    impl->device_session->sendClockProbe();
+                // Clock maintenance runs on a fixed cadence, not once per
+                // datagram.  This callback is on the UDP receive thread, which
+                // has to get back to recvfrom() before the socket buffer fills;
+                // at 30 kHz, doing the work below per datagram cost ~90k
+                // shm_open and ~30k kill() syscalls per second per device.
+                // Nothing here can produce a new answer faster than the probe
+                // interval that feeds it.
+                const auto now = std::chrono::steady_clock::now();
+                if (now - impl->last_clock_probe_time > Impl::kClockMaintenanceInterval) {
                     impl->last_clock_probe_time = now;
-                }
-
-                // Cross-device clock consensus.  Devices that share one PTP
-                // clock should report the same device->host offset.  Each device
-                // publishes its own (independent) estimate; here we combine this
-                // device's estimate with every peer's and use the median, so a
-                // transiently-biased device is outvoted instead of skewing time
-                // conversion.  All participants read the same set of published
-                // estimates and therefore converge on the same median.
-                // Consensus needs >=3 participants to reject one outlier; with
-                // fewer, an NSP still borrows a HUB's offset (its own probes are
-                // unreliable) and other device types keep their own estimate.
-                //
-                // Only Gemini devices (NSP + HUBs) share one PTP clock.
-                // Non-Gemini devices (legacy NSP, nPlay, custom) have
-                // independent clocks and must not be averaged together, so they
-                // skip consensus/borrow entirely.
-                const DeviceType self_type = impl->config.device_type;
-                const bool shares_ptp_clock =
-                    self_type == DeviceType::NSP  ||
-                    self_type == DeviceType::HUB1 || self_type == DeviceType::HUB2 ||
-                    self_type == DeviceType::HUB3;
-                if (shares_ptp_clock) {
-                    if (!impl->peer_hubs_init) {
-                        impl->peer_hubs_init = true;
-                        for (auto dt : {DeviceType::NSP, DeviceType::HUB1,
-                                        DeviceType::HUB2, DeviceType::HUB3}) {
-                            if (dt == impl->config.device_type)
-                                continue;  // skip self
-                            impl->peer_hubs.push_back(
-                                {getNativeSegmentName(dt, "config"),
-                                 std::make_unique<PeerClockReader>()});
-                        }
-                    }
-
-                    // Collect peer votes; track the lowest-uncertainty peer for
-                    // the <3-participant fallback.
-                    std::vector<int64_t> votes;
-                    std::optional<int64_t> best_peer_offset;
-                    std::optional<int64_t> best_peer_uncert;
-                    int64_t best_peer_uncert_val = INT64_MAX;
-                    for (auto& ph : impl->peer_hubs) {
-                        if (!ph.reader->isOpen())
-                            ph.reader->tryOpen(ph.segment);
-                        // Vote on the peer's own (pre-consensus) estimate so the
-                        // median can track real common-mode drift.
-                        auto offset = ph.reader->getRawOffsetNs();
-                        if (!offset)
-                            continue;
-                        votes.push_back(*offset);
-                        auto uncert = ph.reader->getClockUncertaintyNs();
-                        const int64_t uncert_val = uncert ? *uncert : INT64_MAX;
-                        if (!best_peer_offset || uncert_val < best_peer_uncert_val) {
-                            best_peer_offset = offset;
-                            best_peer_uncert = uncert;
-                            best_peer_uncert_val = uncert_val;
-                        }
-                    }
-                    // This device's own independent vote.
-                    if (auto own = impl->device_session->getInternalOffsetNs())
-                        votes.push_back(*own);
-
-                    if (votes.size() >= 3) {
-                        std::sort(votes.begin(), votes.end());
-                        const int64_t median = votes[votes.size() / 2];
-                        impl->device_session->setExternalClockOffset(median);
-                    } else if (impl->config.device_type == DeviceType::NSP &&
-                               best_peer_offset) {
-                        // Too few for consensus: a Gemini NSP still borrows a HUB.
-                        impl->device_session->setExternalClockOffset(best_peer_offset, best_peer_uncert);
-                    } else {
-                        impl->device_session->setExternalClockOffset(std::nullopt);
-                    }
-                }
-
-                // Publish two offsets: the committed (post-consensus) value in
-                // clock_offset_ns for CLIENT-mode readers, and this device's own
-                // (pre-consensus) estimate in clock_raw_offset_ns for peers to
-                // vote on.
-                {
-                    auto uncertainty = impl->device_session->getUncertaintyNs().value_or(0);
-                    if (auto committed = impl->device_session->getOffsetNs())
-                        impl->shmem_session->setClockSync(*committed, uncertainty);
-                    if (auto internal = impl->device_session->getInternalOffsetNs())
-                        impl->shmem_session->setClockRawOffset(*internal);
+                    impl->device_session->sendClockProbe();
+                    impl->updateClockConsensus(now);
                 }
 
                 // Signal CLIENT processes that new data is available
