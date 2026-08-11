@@ -165,6 +165,9 @@ struct PeerClockReader {
 
 namespace cbsdk {
 
+/// Defined below; used by SdkSession::Impl to name peer devices' segments.
+static std::string getNativeSegmentName(DeviceType type, const std::string& segment);
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Channel type classification helper (capability-based)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -270,12 +273,51 @@ struct SdkSession::Impl {
     struct ConfigCB     { CallbackHandle handle; uint16_t packet_type; ConfigCallback cb; };
     struct RunlevelCB   { CallbackHandle handle; RunlevelCallback cb; };
 
-    std::vector<PacketCB>     packet_callbacks;
-    std::vector<EventCB>      event_callbacks;
-    std::vector<GroupCB>       group_callbacks;
-    std::vector<GroupBatchCB>  group_batch_callbacks;
-    std::vector<ConfigCB>     config_callbacks;
-    std::vector<RunlevelCB>   runlevel_callbacks;
+    /// Copy-on-write list of callbacks.
+    ///
+    /// Registration is rare and dispatch is hot (30k packets/s/device), so the
+    /// list is immutable once published: a mutation builds a fresh vector and
+    /// swaps the pointer, and dispatch takes a shared_ptr copy — one atomic
+    /// increment — instead of deep-copying a vector of std::function (each copy
+    /// of which can allocate).
+    template<typename CB>
+    struct CallbackList {
+        using List = std::vector<CB>;
+        using Ptr = std::shared_ptr<const List>;
+
+        /// Snapshot for dispatch.  Never null.
+        Ptr get() const { return list; }
+
+        /// Append under the caller's lock.
+        void add(CB cb) {
+            auto next = std::make_shared<List>(*list);
+            next->push_back(std::move(cb));
+            list = std::move(next);
+        }
+
+        /// Remove by handle under the caller's lock.  No-op (and no
+        /// reallocation) when the handle isn't ours.
+        void remove(CallbackHandle handle) {
+            const auto it = std::find_if(list->begin(), list->end(),
+                [handle](const CB& cb) { return cb.handle == handle; });
+            if (it == list->end()) return;
+            auto next = std::make_shared<List>(*list);
+            next->erase(std::remove_if(next->begin(), next->end(),
+                [handle](const CB& cb) { return cb.handle == handle; }),
+                next->end());
+            list = std::move(next);
+        }
+
+    private:
+        Ptr list = std::make_shared<const List>();
+    };
+
+    CallbackList<PacketCB>     packet_callbacks;
+    CallbackList<EventCB>      event_callbacks;
+    CallbackList<GroupCB>      group_callbacks;
+    CallbackList<GroupBatchCB> group_batch_callbacks;
+    CallbackList<ConfigCB>     config_callbacks;
+    CallbackList<RunlevelCB>   runlevel_callbacks;
 
     /// Atomically update device_runlevel; fire registered callbacks if the
     /// value changed.  Called from the receive thread (STANDALONE) or the
@@ -283,12 +325,12 @@ struct SdkSession::Impl {
     void updateRunlevel(uint32_t new_runlevel) {
         const uint32_t prev = device_runlevel.exchange(new_runlevel, std::memory_order_acq_rel);
         if (prev == new_runlevel) return;
-        std::vector<RunlevelCB> snap;
+        decltype(runlevel_callbacks)::Ptr snap;
         {
             std::lock_guard<std::mutex> lock(user_callback_mutex);
-            snap = runlevel_callbacks;
+            snap = runlevel_callbacks.get();
         }
-        for (const auto& cb : snap) {
+        for (const auto& cb : *snap) {
             if (cb.cb) cb.cb(new_runlevel);
         }
     }
@@ -527,9 +569,20 @@ struct SdkSession::Impl {
     struct PeerHub {
         std::string segment;
         std::unique_ptr<PeerClockReader> reader;
+        // Peers that are not running have no segment to open, and shm_open on a
+        // missing name is a syscall that always fails.  Space the retries so an
+        // absent peer costs almost nothing.
+        std::chrono::steady_clock::time_point next_open_attempt{};
     };
     std::vector<PeerHub> peer_hubs;
     bool peer_hubs_init = false;
+
+    /// How often clock maintenance (probe, cross-device consensus, publication)
+    /// runs.  The estimate it produces cannot change faster than the probes
+    /// that feed it, so running it per datagram only burns receive-thread time.
+    static constexpr auto kClockMaintenanceInterval = std::chrono::milliseconds(100);
+    /// Retry interval for opening a peer's config segment (see PeerHub).
+    static constexpr auto kPeerReopenInterval = std::chrono::seconds(2);
     struct PendingClockProbe {
         std::chrono::steady_clock::time_point t1_local;
         bool active = false;
@@ -799,19 +852,19 @@ struct SdkSession::Impl {
         }
 
         // Phase 1: batch group callbacks (one invocation per group_id per batch)
-        std::vector<GroupBatchCB> snap_batch;
+        decltype(group_batch_callbacks)::Ptr snap_batch;
         {
             std::lock_guard<std::mutex> lock(user_callback_mutex);
-            snap_batch = group_batch_callbacks;
+            snap_batch = group_batch_callbacks.get();
         }
 
-        if (!snap_batch.empty()) {
+        if (!snap_batch->empty()) {
             // Temp buffers — sized for max batch (128 packets × 272 channels)
             // ~70KB on stack, well within typical thread stack limits.
             int16_t sample_buf[128 * cbNUM_ANALOG_CHANS];
             uint64_t ts_buf[128];
 
-            for (const auto& bcb : snap_batch) {
+            for (const auto& bcb : *snap_batch) {
                 size_t n = 0;
                 size_t n_channels = 0;
 
@@ -841,32 +894,137 @@ struct SdkSession::Impl {
         }
     }
 
+    /// @brief Re-derive this device's clock offset from the cross-device
+    ///        consensus and publish the result to shared memory.
+    ///
+    /// Cross-device clock consensus.  Devices that share one PTP clock should
+    /// report the same device->host offset.  Each device publishes its own
+    /// (independent) estimate; here we combine this device's estimate with
+    /// every peer's and use the median, so a transiently-biased device is
+    /// outvoted instead of skewing time conversion.  All participants read the
+    /// same set of published estimates and therefore converge on the same
+    /// median.  Consensus needs >=3 participants to reject one outlier; with
+    /// fewer, an NSP still borrows a HUB's offset (its own probes are
+    /// unreliable) and other device types keep their own estimate.
+    ///
+    /// Only Gemini devices (NSP + HUBs) share one PTP clock.  Non-Gemini
+    /// devices (legacy NSP, nPlay, custom) have independent clocks and must not
+    /// be averaged together, so they skip consensus/borrow entirely.
+    ///
+    /// @note Runs on the device receive thread, on the cadence set by
+    ///       kClockMaintenanceInterval — never per datagram.  It performs
+    ///       syscalls (shm_open, kill) and shared-memory writes, all of which
+    ///       would otherwise stall the return to recvfrom().
+    void updateClockConsensus(std::chrono::steady_clock::time_point now) {
+        const DeviceType self_type = config.device_type;
+        const bool shares_ptp_clock =
+            self_type == DeviceType::NSP  ||
+            self_type == DeviceType::HUB1 || self_type == DeviceType::HUB2 ||
+            self_type == DeviceType::HUB3;
+        if (shares_ptp_clock) {
+            if (!peer_hubs_init) {
+                peer_hubs_init = true;
+                for (auto dt : {DeviceType::NSP, DeviceType::HUB1,
+                                DeviceType::HUB2, DeviceType::HUB3}) {
+                    if (dt == config.device_type)
+                        continue;  // skip self
+                    peer_hubs.push_back(
+                        {getNativeSegmentName(dt, "config"),
+                         std::make_unique<PeerClockReader>()});
+                }
+            }
+
+            // Collect peer votes; track the lowest-uncertainty peer for
+            // the <3-participant fallback.  At most four devices share a
+            // clock, so the votes never need the heap.
+            std::array<int64_t, 4> votes{};
+            size_t n_votes = 0;
+            std::optional<int64_t> best_peer_offset;
+            std::optional<int64_t> best_peer_uncert;
+            int64_t best_peer_uncert_val = INT64_MAX;
+            for (auto& ph : peer_hubs) {
+                if (!ph.reader->isOpen()) {
+                    // A peer that isn't running has no segment to open; back
+                    // off so the failing shm_open isn't retried every cycle.
+                    if (now < ph.next_open_attempt)
+                        continue;
+                    if (!ph.reader->tryOpen(ph.segment)) {
+                        ph.next_open_attempt = now + kPeerReopenInterval;
+                        continue;
+                    }
+                }
+                // Vote on the peer's own (pre-consensus) estimate so the
+                // median can track real common-mode drift.
+                auto offset = ph.reader->getRawOffsetNs();
+                if (!offset)
+                    continue;
+                if (n_votes < votes.size())
+                    votes[n_votes++] = *offset;
+                auto uncert = ph.reader->getClockUncertaintyNs();
+                const int64_t uncert_val = uncert ? *uncert : INT64_MAX;
+                if (!best_peer_offset || uncert_val < best_peer_uncert_val) {
+                    best_peer_offset = offset;
+                    best_peer_uncert = uncert;
+                    best_peer_uncert_val = uncert_val;
+                }
+            }
+            // This device's own independent vote.
+            if (auto own = device_session->getInternalOffsetNs()) {
+                if (n_votes < votes.size())
+                    votes[n_votes++] = *own;
+            }
+
+            if (n_votes >= 3) {
+                std::sort(votes.begin(), votes.begin() + n_votes);
+                const int64_t median = votes[n_votes / 2];
+                device_session->setExternalClockOffset(median);
+            } else if (config.device_type == DeviceType::NSP && best_peer_offset) {
+                // Too few for consensus: a Gemini NSP still borrows a HUB.
+                device_session->setExternalClockOffset(best_peer_offset, best_peer_uncert);
+            } else {
+                device_session->setExternalClockOffset(std::nullopt);
+            }
+        }
+
+        // Publish two offsets: the committed (post-consensus) value in
+        // clock_offset_ns for CLIENT-mode readers, and this device's own
+        // (pre-consensus) estimate in clock_raw_offset_ns for peers to vote on.
+        const auto uncertainty = device_session->getUncertaintyNs().value_or(0);
+        if (auto committed = device_session->getOffsetNs())
+            shmem_session->setClockSync(*committed, uncertainty);
+        if (auto internal = device_session->getInternalOffsetNs())
+            shmem_session->setClockRawOffset(*internal);
+    }
+
     /// Dispatch a single packet to all matching typed callbacks.
     /// Called on the callback thread (off the queue).
-    /// Snapshots each callback vector under lock, then dispatches without lock (Phase 2, Fix 6).
+    /// Takes a shared_ptr snapshot of each callback list under lock, then
+    /// dispatches without the lock so user callbacks can take arbitrary time.
     void dispatchPacket(const cbPKT_GENERIC& pkt) {
         const uint16_t chid = pkt.cbpkt_header.chid;
 
-        // Snapshot callback vectors under lock (fast: just copies a few pointers+sizes)
-        std::vector<PacketCB> snap_packet;
-        std::vector<EventCB>  snap_event;
-        std::vector<GroupCB>  snap_group;
-        std::vector<ConfigCB> snap_config;
+        // Snapshot the callback lists under lock.  These are copy-on-write, so
+        // each snapshot is a refcount bump rather than a vector-of-std::function
+        // copy — this runs on every packet (~30k/s per device).
+        decltype(packet_callbacks)::Ptr snap_packet;
+        decltype(event_callbacks)::Ptr  snap_event;
+        decltype(group_callbacks)::Ptr  snap_group;
+        decltype(config_callbacks)::Ptr snap_config;
         {
             std::lock_guard<std::mutex> lock(user_callback_mutex);
-            snap_packet = packet_callbacks;
-            // Only snapshot the vectors we'll actually need for this packet type
+            snap_packet = packet_callbacks.get();
+            // Only snapshot the list we'll actually need for this packet type
             if (chid != 0 && !(chid & cbPKTCHAN_CONFIGURATION)) {
-                snap_event = event_callbacks;
+                snap_event = event_callbacks.get();
             } else if (chid == 0) {
-                snap_group = group_callbacks;
+                snap_group = group_callbacks.get();
             } else if (chid & cbPKTCHAN_CONFIGURATION) {
-                snap_config = config_callbacks;
+                snap_config = config_callbacks.get();
             }
         }
 
         // Dispatch without holding the lock — user callbacks can take arbitrary time
-        for (const auto& cb : snap_packet) {
+        for (const auto& cb : *snap_packet) {
             if (cb.cb) cb.cb(pkt);
         }
 
@@ -876,19 +1034,19 @@ struct SdkSession::Impl {
             if (channel_cache_valid && chid >= 1 && chid <= local_max_chans) {
                 pkt_chan_type = channel_type_cache[chid - 1];
             }
-            for (const auto& cb : snap_event) {
+            for (const auto& cb : *snap_event) {
                 if (cb.channel_type == ChannelType::ANY || cb.channel_type == pkt_chan_type) {
                     if (cb.cb) cb.cb(pkt);
                 }
             }
         } else if (chid == 0) {
-            for (const auto& cb : snap_group) {
+            for (const auto& cb : *snap_group) {
                 if (pkt.cbpkt_header.type == cb.group_id) {
                     if (cb.cb) cb.cb(reinterpret_cast<const cbPKT_GROUP&>(pkt));
                 }
             }
         } else if (chid & cbPKTCHAN_CONFIGURATION) {
-            for (const auto& cb : snap_config) {
+            for (const auto& cb : *snap_config) {
                 if (pkt.cbpkt_header.type == cb.packet_type) {
                     if (cb.cb) cb.cb(pkt);
                 }
@@ -1311,96 +1469,18 @@ Result<void> SdkSession::start() {
                     return;
                 }
 
-                // Periodic clock sync probing
-                auto now = std::chrono::steady_clock::now();
-                if (now - impl->last_clock_probe_time > std::chrono::milliseconds(100)) {
-                    impl->device_session->sendClockProbe();
+                // Clock maintenance runs on a fixed cadence, not once per
+                // datagram.  This callback is on the UDP receive thread, which
+                // has to get back to recvfrom() before the socket buffer fills;
+                // at 30 kHz, doing the work below per datagram cost ~90k
+                // shm_open and ~30k kill() syscalls per second per device.
+                // Nothing here can produce a new answer faster than the probe
+                // interval that feeds it.
+                const auto now = std::chrono::steady_clock::now();
+                if (now - impl->last_clock_probe_time > Impl::kClockMaintenanceInterval) {
                     impl->last_clock_probe_time = now;
-                }
-
-                // Cross-device clock consensus.  Devices that share one PTP
-                // clock should report the same device->host offset.  Each device
-                // publishes its own (independent) estimate; here we combine this
-                // device's estimate with every peer's and use the median, so a
-                // transiently-biased device is outvoted instead of skewing time
-                // conversion.  All participants read the same set of published
-                // estimates and therefore converge on the same median.
-                // Consensus needs >=3 participants to reject one outlier; with
-                // fewer, an NSP still borrows a HUB's offset (its own probes are
-                // unreliable) and other device types keep their own estimate.
-                //
-                // Only Gemini devices (NSP + HUBs) share one PTP clock.
-                // Non-Gemini devices (legacy NSP, nPlay, custom) have
-                // independent clocks and must not be averaged together, so they
-                // skip consensus/borrow entirely.
-                const DeviceType self_type = impl->config.device_type;
-                const bool shares_ptp_clock =
-                    self_type == DeviceType::NSP  ||
-                    self_type == DeviceType::HUB1 || self_type == DeviceType::HUB2 ||
-                    self_type == DeviceType::HUB3;
-                if (shares_ptp_clock) {
-                    if (!impl->peer_hubs_init) {
-                        impl->peer_hubs_init = true;
-                        for (auto dt : {DeviceType::NSP, DeviceType::HUB1,
-                                        DeviceType::HUB2, DeviceType::HUB3}) {
-                            if (dt == impl->config.device_type)
-                                continue;  // skip self
-                            impl->peer_hubs.push_back(
-                                {getNativeSegmentName(dt, "config"),
-                                 std::make_unique<PeerClockReader>()});
-                        }
-                    }
-
-                    // Collect peer votes; track the lowest-uncertainty peer for
-                    // the <3-participant fallback.
-                    std::vector<int64_t> votes;
-                    std::optional<int64_t> best_peer_offset;
-                    std::optional<int64_t> best_peer_uncert;
-                    int64_t best_peer_uncert_val = INT64_MAX;
-                    for (auto& ph : impl->peer_hubs) {
-                        if (!ph.reader->isOpen())
-                            ph.reader->tryOpen(ph.segment);
-                        // Vote on the peer's own (pre-consensus) estimate so the
-                        // median can track real common-mode drift.
-                        auto offset = ph.reader->getRawOffsetNs();
-                        if (!offset)
-                            continue;
-                        votes.push_back(*offset);
-                        auto uncert = ph.reader->getClockUncertaintyNs();
-                        const int64_t uncert_val = uncert ? *uncert : INT64_MAX;
-                        if (!best_peer_offset || uncert_val < best_peer_uncert_val) {
-                            best_peer_offset = offset;
-                            best_peer_uncert = uncert;
-                            best_peer_uncert_val = uncert_val;
-                        }
-                    }
-                    // This device's own independent vote.
-                    if (auto own = impl->device_session->getInternalOffsetNs())
-                        votes.push_back(*own);
-
-                    if (votes.size() >= 3) {
-                        std::sort(votes.begin(), votes.end());
-                        const int64_t median = votes[votes.size() / 2];
-                        impl->device_session->setExternalClockOffset(median);
-                    } else if (impl->config.device_type == DeviceType::NSP &&
-                               best_peer_offset) {
-                        // Too few for consensus: a Gemini NSP still borrows a HUB.
-                        impl->device_session->setExternalClockOffset(best_peer_offset, best_peer_uncert);
-                    } else {
-                        impl->device_session->setExternalClockOffset(std::nullopt);
-                    }
-                }
-
-                // Publish two offsets: the committed (post-consensus) value in
-                // clock_offset_ns for CLIENT-mode readers, and this device's own
-                // (pre-consensus) estimate in clock_raw_offset_ns for peers to
-                // vote on.
-                {
-                    auto uncertainty = impl->device_session->getUncertaintyNs().value_or(0);
-                    if (auto committed = impl->device_session->getOffsetNs())
-                        impl->shmem_session->setClockSync(*committed, uncertainty);
-                    if (auto internal = impl->device_session->getInternalOffsetNs())
-                        impl->shmem_session->setClockRawOffset(*internal);
+                    impl->device_session->sendClockProbe();
+                    impl->updateClockConsensus(now);
                 }
 
                 // Signal CLIENT processes that new data is available
@@ -1780,14 +1860,14 @@ bool SdkSession::isRunning() const {
 CallbackHandle SdkSession::registerPacketCallback(PacketCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    m_impl->packet_callbacks.push_back({handle, std::move(callback)});
+    m_impl->packet_callbacks.add({handle, std::move(callback)});
     return handle;
 }
 
 CallbackHandle SdkSession::registerEventCallback(const ChannelType channel_type, EventCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    m_impl->event_callbacks.push_back({handle, channel_type, std::move(callback)});
+    m_impl->event_callbacks.add({handle, channel_type, std::move(callback)});
     return handle;
 }
 
@@ -1795,7 +1875,7 @@ CallbackHandle SdkSession::registerGroupCallback(const SampleRate rate, GroupCal
     const uint8_t group_id = static_cast<uint8_t>(rate);
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    m_impl->group_callbacks.push_back({handle, group_id, std::move(callback)});
+    m_impl->group_callbacks.add({handle, group_id, std::move(callback)});
     return handle;
 }
 
@@ -1803,37 +1883,32 @@ CallbackHandle SdkSession::registerGroupBatchCallback(const SampleRate rate, Gro
     const uint8_t group_id = static_cast<uint8_t>(rate);
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    m_impl->group_batch_callbacks.push_back({handle, group_id, std::move(callback)});
+    m_impl->group_batch_callbacks.add({handle, group_id, std::move(callback)});
     return handle;
 }
 
 CallbackHandle SdkSession::registerConfigCallback(const uint16_t packet_type, ConfigCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    m_impl->config_callbacks.push_back({handle, packet_type, std::move(callback)});
+    m_impl->config_callbacks.add({handle, packet_type, std::move(callback)});
     return handle;
 }
 
 CallbackHandle SdkSession::registerRunlevelChangeCallback(RunlevelCallback callback) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
     const auto handle = m_impl->next_callback_handle++;
-    m_impl->runlevel_callbacks.push_back({handle, std::move(callback)});
+    m_impl->runlevel_callbacks.add({handle, std::move(callback)});
     return handle;
 }
 
 void SdkSession::unregisterCallback(CallbackHandle handle) const {
     std::lock_guard<std::mutex> lock(m_impl->user_callback_mutex);
-    auto erase_by_handle = [handle](auto& vec) {
-        vec.erase(std::remove_if(vec.begin(), vec.end(),
-            [handle](const auto& cb) { return cb.handle == handle; }),
-            vec.end());
-    };
-    erase_by_handle(m_impl->packet_callbacks);
-    erase_by_handle(m_impl->event_callbacks);
-    erase_by_handle(m_impl->group_callbacks);
-    erase_by_handle(m_impl->group_batch_callbacks);
-    erase_by_handle(m_impl->config_callbacks);
-    erase_by_handle(m_impl->runlevel_callbacks);
+    m_impl->packet_callbacks.remove(handle);
+    m_impl->event_callbacks.remove(handle);
+    m_impl->group_callbacks.remove(handle);
+    m_impl->group_batch_callbacks.remove(handle);
+    m_impl->config_callbacks.remove(handle);
+    m_impl->runlevel_callbacks.remove(handle);
 }
 
 void SdkSession::setErrorCallback(ErrorCallback callback) {

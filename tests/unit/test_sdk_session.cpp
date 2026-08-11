@@ -176,20 +176,29 @@ TEST_F(SdkSessionTest, SetCallbacks) {
 
     auto& session = result.value();
 
-    bool packet_callback_invoked = false;
-    bool error_callback_invoked = false;
+    // create() has already started the session, and with a real device packets
+    // may already be flowing — so this can only assert the registration
+    // contract, not that the callbacks have yet to fire.  (An earlier version
+    // asserted the packet callback had NOT been invoked, which is a race
+    // against a live HUB1 streaming at 30 kHz.)
+    std::atomic<int> packets{0};
+    std::atomic<int> errors{0};
 
-    session.registerPacketCallback([&packet_callback_invoked](const cbPKT_GENERIC& pkt) {
-        packet_callback_invoked = true;
-    });
+    const auto packet_handle = session.registerPacketCallback(
+        [&packets](const cbPKT_GENERIC&) { packets.fetch_add(1); });
+    const auto event_handle = session.registerEventCallback(
+        ChannelType::ANY, [](const cbPKT_GENERIC&) {});
 
-    session.setErrorCallback([&error_callback_invoked](const std::string& error) {
-        error_callback_invoked = true;
-    });
+    session.setErrorCallback([&errors](const std::string&) { errors.fetch_add(1); });
 
-    // Callbacks set successfully
-    EXPECT_FALSE(packet_callback_invoked);
-    EXPECT_FALSE(error_callback_invoked);
+    // Registration yields distinct, usable handles...
+    EXPECT_NE(packet_handle, 0u);
+    EXPECT_NE(event_handle, 0u);
+    EXPECT_NE(packet_handle, event_handle);
+
+    // ...and unregistering them is accepted.
+    session.unregisterCallback(packet_handle);
+    session.unregisterCallback(event_handle);
 }
 
 TEST_F(SdkSessionTest, ReceivePackets_FromDevice) {
