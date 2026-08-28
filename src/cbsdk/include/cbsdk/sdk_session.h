@@ -227,6 +227,56 @@ enum class SampleRate : uint32_t {
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Channel Scaling
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Selects which of cbPKT_CHANINFO's two scaling records to read.
+///
+/// A channel carries both. They are frequently identical, but they answer
+/// different questions and only one of them describes the hardware.
+enum class ScalingSource {
+    /// ``physcalin`` — how the ADC digitizes the input. This is the one that
+    /// converts raw counts to a voltage, and the right default for anything
+    /// storing or plotting the acquired signal.
+    Physical,
+    /// ``scalin`` — a user-defined overlay, e.g. mapping an analog input to a
+    /// transducer's units (the field's own docs give "MPa" as an example).
+    /// Reads the same as Physical unless somebody configured it otherwise.
+    User,
+};
+
+/// A channel's linear map from raw counts to physical units:
+///
+///     physical = raw * scale + offset
+///
+/// derived from a cbSCALING record's digital and analog ranges. Callers get the
+/// factor and its unit together, so they never have to assume a unit or know
+/// how the device encodes the mapping.
+struct ChannelScaling {
+    double scale = 1.0;      ///< Physical units per raw count
+    double offset = 0.0;     ///< Physical units at a raw count of zero
+    std::string unit;        ///< Unit of ``scale``/``offset``, verbatim from
+                             ///< ``anaunit`` (e.g. "uV", "mV"). May be empty if
+                             ///< the device left it unset.
+};
+
+/// Derive the count-to-physical-units map from a raw cbSCALING record.
+///
+/// Pure function, exposed so callers holding a cbPKT_CHANINFO already (and
+/// tests) can convert without a session.
+///
+/// ``anagain`` is deliberately ignored: it is documented as the gain applied to
+/// reach the analog values that ``anamin``/``anamax`` already express, so the
+/// range endpoints alone define the map.
+///
+/// @param scaling A cbSCALING record (``physcalin`` or ``scalin``)
+/// @return The scaling, or an error if the record defines no usable map
+///         (zero digital or analog span — typically an unconfigured channel).
+///         An error is returned rather than a neutral 1.0 on purpose: silently
+///         scaling by 1.0 stores raw counts under a physical unit's name.
+Result<ChannelScaling> channelScalingFrom(const cbSCALING& scaling);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Channel Info Field (for bulk getters)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -437,6 +487,23 @@ public:
     /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
     /// @return Result containing a copy of the channel info, or an error if invalid/unavailable
     Result<cbPKT_CHANINFO> getChanInfo(uint32_t chan_id) const;
+
+    /// Get a channel's map from raw counts to physical units.
+    ///
+    /// Prefer this over reading cbSCALING out of getChanInfo(): it returns the
+    /// factor together with its unit, so callers do not have to know how the
+    /// device encodes the mapping or assume what unit it is in. The unit is not
+    /// uniform across a system — a Gemini hub's front end reports "uV" while a
+    /// Gemini NSP's analog inputs report "mV" — so the unit must be read, not
+    /// presumed.
+    ///
+    /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+    /// @param source Which scaling record to read (defaults to the hardware's)
+    /// @return The scaling, or an error if the channel is unavailable or its
+    ///         scaling record defines no usable map.
+    Result<ChannelScaling> getChanScaling(
+        uint32_t chan_id,
+        ScalingSource source = ScalingSource::Physical) const;
 
     /// Get sample group information
     /// @param group_id Group ID (1-6)

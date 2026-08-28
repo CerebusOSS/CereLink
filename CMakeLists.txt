@@ -32,6 +32,8 @@ cmake_dependent_option(CBSDK_BUILD_TEST "Build tests" ON
     "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
 cmake_dependent_option(CBSDK_BUILD_SAMPLE "Build sample applications" ON
     "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
+cmake_dependent_option(CBSDK_BUILD_TOOLS "Build validation tools" ON
+    "CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
 
 
 ##########################################################################################
@@ -91,8 +93,14 @@ endif(CBSDK_BUILD_TEST)
 
 ##########################################################################################
 # Validation Tools
-add_subdirectory(tools/validate_clock_sync)
-add_subdirectory(tools/rx_bench)
+# Gated like tests and samples: a project consuming CereLink wants the
+# libraries, not our benchmark executables. rx_bench in particular pulls in
+# ccfutils -> pugixml, which breaks a consumer building for an architecture
+# pugixml was not configured for (e.g. a macOS universal binary).
+if(CBSDK_BUILD_TOOLS)
+    add_subdirectory(tools/validate_clock_sync)
+    add_subdirectory(tools/rx_bench)
+endif(CBSDK_BUILD_TOOLS)
 
 ##########################################################################################
 # Sample Applications for New Architecture
