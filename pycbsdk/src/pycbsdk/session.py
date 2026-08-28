@@ -861,6 +861,50 @@ class Session:
             "anaunit": ffi.string(scaling.anaunit).decode(),
         }
 
+    def get_channel_conversion(
+        self, chan_id: int, source: str = "physical"
+    ) -> dict | None:
+        """Get a channel's map from raw counts to physical units.
+
+        Prefer this over :meth:`get_channel_scaling` when converting samples: it
+        returns the factor and its unit together, so callers do not have to
+        derive the mapping from the digital/analog ranges. The unit is not
+        uniform across a system -- a Gemini hub's front end reports ``uV`` while
+        a Gemini NSP's analog inputs report ``mV`` -- so it must be read, not
+        assumed.
+
+        ``physical = raw * scale + offset``
+
+        Args:
+            chan_id: 1-based channel ID.
+            source: ``"physical"`` for the ADC's own digitization (default), or
+                ``"user"`` for the user-defined overlay.
+
+        Returns:
+            Dict with keys ``scale``, ``offset``, ``unit``, or ``None`` if the
+            channel is invalid or its scaling record defines no usable map
+            (e.g. an unconfigured channel). ``None`` rather than a neutral 1.0
+            is deliberate: a silent identity scale stores raw counts under a
+            physical unit's name.
+        """
+        _lib = _get_lib()
+        source_value = (
+            _lib.CBSDK_SCALING_USER
+            if str(source).lower() == "user"
+            else _lib.CBSDK_SCALING_PHYSICAL
+        )
+        conversion = ffi.new("cbsdk_channel_conversion_t *")
+        result = _lib.cbsdk_session_get_channel_conversion(
+            self._session, chan_id, source_value, conversion
+        )
+        if result != 0:
+            return None
+        return {
+            "scale": conversion.scale,
+            "offset": conversion.offset,
+            "unit": ffi.string(conversion.unit).decode(),
+        }
+
     def get_channel_field(self, chan_id: int, field: ChanInfoField) -> int:
         """Get any numeric field from a single channel by field selector.
 

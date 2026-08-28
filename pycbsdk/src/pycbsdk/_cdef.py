@@ -124,6 +124,17 @@ typedef struct {
     char     anaunit[8];
 } cbsdk_channel_scaling_t;
 
+typedef enum {
+    CBSDK_SCALING_PHYSICAL = 0,
+    CBSDK_SCALING_USER = 1,
+} cbsdk_scaling_source_t;
+
+typedef struct {
+    double scale;
+    double offset;
+    char   unit[9];
+} cbsdk_channel_conversion_t;
+
 ///////////////////////////////////////////////////////////////////////////
 // Callback Types
 ///////////////////////////////////////////////////////////////////////////
@@ -238,6 +249,9 @@ int16_t  cbsdk_session_get_channel_amplrejpos(cbsdk_session_t session, uint32_t 
 int16_t  cbsdk_session_get_channel_amplrejneg(cbsdk_session_t session, uint32_t chan_id);
 cbsdk_result_t cbsdk_session_get_channel_scaling(
     cbsdk_session_t session, uint32_t chan_id, cbsdk_channel_scaling_t* scaling);
+cbsdk_result_t cbsdk_session_get_channel_conversion(
+    cbsdk_session_t session, uint32_t chan_id, cbsdk_scaling_source_t source,
+    cbsdk_channel_conversion_t* conversion);
 
 // Per-channel setters.
 // `auto_sync` is non-zero to run an internal sync() before the read-modify-write

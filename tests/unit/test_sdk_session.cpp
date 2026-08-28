@@ -14,6 +14,9 @@
 #include <chrono>
 #include <atomic>
 #include <cstring>  // for memset/memcpy
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
 // Include protocol types and session headers
 #include <cbproto/cbproto.h>            // Protocol types
@@ -469,4 +472,120 @@ TEST_F(SdkSessionTest, TransmitCallback_RoundTrip) {
     printf("  Retrieved payload[5]: 0x%08X\n", retrieved_payload[5]);
     printf("  Original payload[6]: 0x%08X (%u)\n", original_payload[6], original_payload[6]);
     printf("  Retrieved payload[6]: 0x%08X (%u)\n", retrieved_payload[6], retrieved_payload[6]);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Channel Scaling Tests
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+/// Build a cbSCALING record with the given ranges and unit.
+cbSCALING makeScaling(int16_t digmin, int16_t digmax,
+                      int32_t anamin, int32_t anamax,
+                      const char* unit) {
+    cbSCALING s{};
+    s.digmin = digmin;
+    s.digmax = digmax;
+    s.anamin = anamin;
+    s.anamax = anamax;
+    s.anagain = 1;
+    std::memset(s.anaunit, 0, sizeof(s.anaunit));
+    if (unit) {
+        std::memcpy(s.anaunit, unit, std::min(std::strlen(unit), sizeof(s.anaunit)));
+    }
+    return s;
+}
+
+}  // namespace
+
+// The two range pairs below are the values a Gemini Hub 2 and a Gemini NSP
+// actually report; they are the reason this API returns the unit alongside the
+// factor. Note neither digital span is 2^16, so the factor cannot be assumed
+// from the ADC width.
+TEST_F(SdkSessionTest, ChannelScaling_GeminiHubFrontEnd) {
+    const auto result = channelScalingFrom(makeScaling(-32764, 32764, -8191, 8191, "uV"));
+    ASSERT_TRUE(result.isOk()) << result.error();
+
+    // 16382 uV / 65528 counts == exactly 0.25 uV/count
+    EXPECT_DOUBLE_EQ(result.value().scale, 0.25);
+    EXPECT_DOUBLE_EQ(result.value().offset, 0.0);
+    EXPECT_EQ(result.value().unit, "uV");
+}
+
+TEST_F(SdkSessionTest, ChannelScaling_GeminiNspAnalogIn) {
+    const auto result = channelScalingFrom(makeScaling(-32767, 32767, -5000, 5000, "mV"));
+    ASSERT_TRUE(result.isOk()) << result.error();
+
+    // 10000 mV / 65534 counts -- note the span is 65534, not 2^16
+    EXPECT_DOUBLE_EQ(result.value().scale, 10000.0 / 65534.0);
+    EXPECT_DOUBLE_EQ(result.value().offset, 0.0);
+    EXPECT_EQ(result.value().unit, "mV");
+}
+
+TEST_F(SdkSessionTest, ChannelScaling_AsymmetricRangeYieldsOffset) {
+    // An asymmetric range is what the offset term exists for: 0..65535 counts
+    // mapping to 0..10000 mV puts the zero-count value at 0, but shifting the
+    // analog range moves it.
+    const auto result = channelScalingFrom(makeScaling(0, 1000, 500, 1500, "mV"));
+    ASSERT_TRUE(result.isOk()) << result.error();
+
+    EXPECT_DOUBLE_EQ(result.value().scale, 1.0);
+    EXPECT_DOUBLE_EQ(result.value().offset, 500.0);
+}
+
+TEST_F(SdkSessionTest, ChannelScaling_RoundTripsRangeEndpoints) {
+    const auto result = channelScalingFrom(makeScaling(-32767, 32767, -5000, 5000, "mV"));
+    ASSERT_TRUE(result.isOk()) << result.error();
+    const auto& s = result.value();
+
+    EXPECT_NEAR(-32767 * s.scale + s.offset, -5000.0, 1e-9);
+    EXPECT_NEAR(32767 * s.scale + s.offset, 5000.0, 1e-9);
+    EXPECT_NEAR(0 * s.scale + s.offset, 0.0, 1e-9);
+}
+
+TEST_F(SdkSessionTest, ChannelScaling_UnitNeedNotBeNulTerminated) {
+    // anaunit is a fixed 8-byte field; a unit that fills it has no terminator.
+    cbSCALING s = makeScaling(-32764, 32764, -8191, 8191, nullptr);
+    std::memcpy(s.anaunit, "ABCDEFGH", sizeof(s.anaunit));
+
+    const auto result = channelScalingFrom(s);
+    ASSERT_TRUE(result.isOk()) << result.error();
+    EXPECT_EQ(result.value().unit, "ABCDEFGH");
+    EXPECT_EQ(result.value().unit.size(), sizeof(s.anaunit));
+}
+
+TEST_F(SdkSessionTest, ChannelScaling_EmptyUnitIsAllowed) {
+    const auto result = channelScalingFrom(makeScaling(-32764, 32764, -8191, 8191, nullptr));
+    ASSERT_TRUE(result.isOk()) << result.error();
+    EXPECT_DOUBLE_EQ(result.value().scale, 0.25);
+    EXPECT_TRUE(result.value().unit.empty());
+}
+
+// An unconfigured channel must be an error rather than a neutral 1.0 -- a
+// silent identity scale is how raw counts end up stored under a physical unit.
+TEST_F(SdkSessionTest, ChannelScaling_ZeroDigitalSpanIsAnError) {
+    const auto result = channelScalingFrom(makeScaling(0, 0, -5000, 5000, "mV"));
+    EXPECT_TRUE(result.isError());
+}
+
+TEST_F(SdkSessionTest, ChannelScaling_ZeroAnalogSpanIsAnError) {
+    const auto result = channelScalingFrom(makeScaling(-32767, 32767, 0, 0, "mV"));
+    EXPECT_TRUE(result.isError());
+}
+
+TEST_F(SdkSessionTest, ChannelScaling_AllZeroRecordIsAnError) {
+    cbSCALING s{};
+    EXPECT_TRUE(channelScalingFrom(s).isError());
+}
+
+TEST_F(SdkSessionTest, ChannelScaling_FullInt32RangeDoesNotOverflow) {
+    // anamin/anamax are int32; their difference overflows int32 at the extremes,
+    // so the span must be computed wider.
+    const auto result = channelScalingFrom(makeScaling(
+        -32768, 32767,
+        std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max(), "V"));
+    ASSERT_TRUE(result.isOk()) << result.error();
+    EXPECT_GT(result.value().scale, 0.0);
+    EXPECT_TRUE(std::isfinite(result.value().scale));
 }

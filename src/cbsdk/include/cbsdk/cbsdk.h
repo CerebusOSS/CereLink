@@ -168,6 +168,29 @@ typedef struct {
     char     anaunit[8]; ///< Unit string (e.g., "uV", "mV", "MPa")
 } cbsdk_channel_scaling_t;
 
+/// Which of cbPKT_CHANINFO's two scaling records to read.
+typedef enum {
+    /// physcalin — how the ADC digitizes the input. Converts raw counts to a
+    /// voltage; the right choice for storing or plotting the acquired signal.
+    CBSDK_SCALING_PHYSICAL = 0,
+    /// scalin — a user-defined overlay, e.g. mapping an analog input to a
+    /// transducer's units. Reads the same as physical unless configured.
+    CBSDK_SCALING_USER = 1,
+} cbsdk_scaling_source_t;
+
+/// A channel's linear map from raw counts to physical units:
+///
+///     physical = raw * scale + offset
+///
+/// The unit is returned with the factor because it is not uniform across a
+/// system: a Gemini hub's front end reports "uV" while a Gemini NSP's analog
+/// inputs report "mV".
+typedef struct {
+    double scale;        ///< Physical units per raw count
+    double offset;       ///< Physical units at a raw count of zero
+    char   unit[9];      ///< NUL-terminated copy of anaunit (8 chars + NUL)
+} cbsdk_channel_conversion_t;
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Callback Types
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -570,6 +593,28 @@ CBSDK_API int16_t cbsdk_session_get_channel_amplrejneg(cbsdk_session_t session, 
 /// @return CBSDK_RESULT_SUCCESS on success, error code otherwise
 CBSDK_API cbsdk_result_t cbsdk_session_get_channel_scaling(
     cbsdk_session_t session, uint32_t chan_id, cbsdk_channel_scaling_t* scaling);
+
+/// Get a channel's map from raw counts to physical units.
+///
+/// Prefer this over cbsdk_session_get_channel_scaling() when you want to
+/// convert samples: it returns the factor and its unit together, so callers do
+/// not have to derive the mapping from the digital/analog ranges themselves.
+///
+/// Fails rather than returning a neutral 1.0 when the channel's scaling record
+/// defines no usable map (zero digital or analog span, typically an
+/// unconfigured channel) — a silent identity scale is how raw counts end up
+/// stored under a physical unit's name.
+///
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param source Which scaling record to read
+/// @param[out] conversion Pointer to struct to fill
+/// @return CBSDK_RESULT_SUCCESS on success, error code otherwise
+CBSDK_API cbsdk_result_t cbsdk_session_get_channel_conversion(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    cbsdk_scaling_source_t source,
+    cbsdk_channel_conversion_t* conversion);
 
 /// Get any numeric field from a single channel by field selector
 /// @param session Session handle (must not be NULL)

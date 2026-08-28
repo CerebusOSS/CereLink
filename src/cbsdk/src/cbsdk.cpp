@@ -18,6 +18,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <algorithm>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -924,6 +925,34 @@ cbsdk_result_t cbsdk_session_get_channel_scaling(
         return CBSDK_RESULT_SUCCESS;
     } catch (...) {
         std::memset(scaling, 0, sizeof(cbsdk_channel_scaling_t));
+        return CBSDK_RESULT_INTERNAL_ERROR;
+    }
+}
+
+cbsdk_result_t cbsdk_session_get_channel_conversion(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    cbsdk_scaling_source_t source,
+    cbsdk_channel_conversion_t* conversion) {
+    if (!session || !session->cpp_session || !conversion) {
+        return CBSDK_RESULT_INVALID_PARAMETER;
+    }
+    try {
+        auto result = session->cpp_session->getChanScaling(
+            chan_id,
+            source == CBSDK_SCALING_USER ? cbsdk::ScalingSource::User
+                                         : cbsdk::ScalingSource::Physical);
+        if (result.isError()) return CBSDK_RESULT_INVALID_PARAMETER;
+        std::memset(conversion, 0, sizeof(cbsdk_channel_conversion_t));
+        conversion->scale = result.value().scale;
+        conversion->offset = result.value().offset;
+        // unit is 9 bytes for an 8-char anaunit plus a guaranteed terminator.
+        const std::string& unit = result.value().unit;
+        std::memcpy(conversion->unit, unit.data(),
+                    std::min(unit.size(), sizeof(conversion->unit) - 1));
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) {
+        std::memset(conversion, 0, sizeof(cbsdk_channel_conversion_t));
         return CBSDK_RESULT_INTERNAL_ERROR;
     }
 }

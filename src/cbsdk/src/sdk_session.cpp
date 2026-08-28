@@ -1952,6 +1952,49 @@ Result<cbPKT_CHANINFO> SdkSession::getChanInfo(const uint32_t chan_id) const {
     return m_impl->getChanInfo(chan_id);
 }
 
+Result<ChannelScaling> channelScalingFrom(const cbSCALING& scaling) {
+    // Spans are computed in int64 before converting: digmin/digmax are int16 and
+    // anamin/anamax int32, so both differences can overflow their own type.
+    const int64_t dig_span =
+        static_cast<int64_t>(scaling.digmax) - static_cast<int64_t>(scaling.digmin);
+    if (dig_span == 0) {
+        return Result<ChannelScaling>::error(
+            "Channel scaling has a zero digital span (digmin == digmax)");
+    }
+    const int64_t ana_span =
+        static_cast<int64_t>(scaling.anamax) - static_cast<int64_t>(scaling.anamin);
+    if (ana_span == 0) {
+        return Result<ChannelScaling>::error(
+            "Channel scaling has a zero analog span (anamin == anamax)");
+    }
+
+    ChannelScaling out;
+    out.scale = static_cast<double>(ana_span) / static_cast<double>(dig_span);
+    // Equivalent to ``anamin - digmin * scale``, but the numerator is exact in
+    // integer arithmetic, so the symmetric ranges real devices report (e.g.
+    // +/-32767 counts to +/-5000 mV) give exactly 0.0 instead of a rounding
+    // residual. int64 is wide enough: |anamin| < 2^31 and |digmax| < 2^15.
+    const int64_t offset_numerator =
+        static_cast<int64_t>(scaling.anamin) * static_cast<int64_t>(scaling.digmax) -
+        static_cast<int64_t>(scaling.anamax) * static_cast<int64_t>(scaling.digmin);
+    out.offset = static_cast<double>(offset_numerator) / static_cast<double>(dig_span);
+    // anaunit is a fixed-width char buffer that need not be NUL-terminated.
+    out.unit.assign(scaling.anaunit,
+                    strnlen(scaling.anaunit, sizeof(scaling.anaunit)));
+    return Result<ChannelScaling>::ok(out);
+}
+
+Result<ChannelScaling> SdkSession::getChanScaling(
+    const uint32_t chan_id, const ScalingSource source) const {
+    auto info = m_impl->getChanInfo(chan_id);
+    if (info.isError()) {
+        return Result<ChannelScaling>::error(info.error());
+    }
+    const cbSCALING& scaling =
+        source == ScalingSource::User ? info.value().scalin : info.value().physcalin;
+    return channelScalingFrom(scaling);
+}
+
 Result<cbPKT_GROUPINFO> SdkSession::getGroupInfo(uint32_t group_id) const {
     if (group_id == 0 || group_id > cbMAXGROUPS)
         return Result<cbPKT_GROUPINFO>::error("Invalid group ID");
