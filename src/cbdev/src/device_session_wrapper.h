@@ -414,11 +414,15 @@ public:
         m_thread_state->receive_thread_running.store(true);
 
         m_thread_state->receive_thread = std::thread([this]() {
-            uint8_t buffer[cbCER_UDP_SIZE_MAX];
+            // Padded and filled only to cbCER_UDP_SIZE_MAX for the reason given
+            // in DeviceSession::startReceiveThread(). A callback that copies the
+            // whole cbPKT_GENERIC reads 1024 bytes from &buffer[offset], which runs
+            // off the end for a packet near the tail of a full-size datagram.
+            uint8_t buffer[cbCER_UDP_SIZE_MAX + sizeof(cbPKT_GENERIC)] = {};
 
             while (!m_thread_state->receive_thread_stop_requested.load()) {
                 // Call virtual receivePackets() - handles protocol translation
-                auto result = this->receivePackets(buffer, sizeof(buffer));
+                auto result = this->receivePackets(buffer, cbCER_UDP_SIZE_MAX);
 
                 if (result.isError()) {
                     continue;
