@@ -401,7 +401,19 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
 
     // Create UDP socket
 #ifdef _WIN32
-    session.m_impl->socket = WSASocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP, NULL, 0, 0);
+    // WSA_FLAG_OVERLAPPED prevents the receive and main threads from
+    // deadlocking each other by enabling the SO_RCVTIMEO and SO_SNDTIMEO
+    // options (previously broken) and allowing simultaneous requests on the
+    // shared socket.
+    //
+    // https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketa
+    //
+    // "If a socket is created using the WSASocket function, then the dwFlags
+    // parameter must have the WSA_FLAG_OVERLAPPED attribute set for the
+    // SO_RCVTIMEO or SO_SNDTIMEO socket options to function properly. Otherwise
+    // the timeout never takes effect on the socket."
+    //
+    session.m_impl->socket = WSASocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP, NULL, 0, WSA_FLAG_OVERLAPPED);
 #else
     session.m_impl->socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 #endif
