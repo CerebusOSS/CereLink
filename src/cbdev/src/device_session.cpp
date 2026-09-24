@@ -401,7 +401,10 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
 
     // Create UDP socket
 #ifdef _WIN32
-    session.m_impl->socket = WSASocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP, NULL, 0, 0);
+    // Without WSA_FLAG_OVERLAPPED, SO_RCVTIMEO never takes effect and the
+    // receive thread's blocking recvfrom() stalls sends from other threads.
+    // https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketa
+    session.m_impl->socket = WSASocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP, NULL, 0, WSA_FLAG_OVERLAPPED);
 #else
     session.m_impl->socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 #endif
