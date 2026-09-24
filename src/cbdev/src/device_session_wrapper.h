@@ -414,11 +414,14 @@ public:
         m_thread_state->receive_thread_running.store(true);
 
         m_thread_state->receive_thread = std::thread([this]() {
-            uint8_t buffer[cbCER_UDP_SIZE_MAX];
+            // Padded and filled only to cbCER_UDP_SIZE_MAX for the reason given
+            // in DeviceSession::startReceiveThread().
+            uint8_t buffer[cbCER_UDP_SIZE_MAX * 2] = {};
 
             while (!m_thread_state->receive_thread_stop_requested.load()) {
+                // Receive packets (only fill the actual datagram portion, not the padding)
                 // Call virtual receivePackets() - handles protocol translation
-                auto result = this->receivePackets(buffer, sizeof(buffer));
+                auto result = this->receivePackets(buffer, cbCER_UDP_SIZE_MAX);
 
                 if (result.isError()) {
                     continue;
