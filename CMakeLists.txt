@@ -11,7 +11,7 @@ include(CheckAtomicNeeded)
 
 # Get version from git tags. The fallback is used when no tag is available.
 # This is typically a minor bump ahead of the last release.
-get_version_from_git(FALLBACK "10.3.0")
+get_version_from_git(FALLBACK "10.4.0")
 
 project(CBSDK
     DESCRIPTION "Blackrock Neurotech CereBus Software Development Kit"
