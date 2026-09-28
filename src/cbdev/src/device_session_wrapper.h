@@ -124,12 +124,13 @@ public:
     ///   4. convertHeaderTimestampsToNs() — sample counts → nanoseconds for
     ///      non-Gemini devices
     Result<int> receivePackets(void* buffer, size_t buffer_size) final {
-        // Stack scratch keeps this reentrant, mirroring the receive thread's
-        // own stack buffer of the same size.
-        uint8_t scratch[cbCER_UDP_SIZE_MAX];
+        // Stack scratch keeps this reentrant. Like the receive thread's buffer,
+        // it is padded by a full datagram but filled only to cbCER_UDP_SIZE_MAX,
+        // because translateDatagram() reads source packets through struct casts.
+        uint8_t scratch[cbCER_UDP_SIZE_MAX * 2];
         const bool in_place = translatesInPlace();
         uint8_t* recv_buf = in_place ? static_cast<uint8_t*>(buffer) : scratch;
-        const size_t recv_cap = in_place ? buffer_size : sizeof(scratch);
+        const size_t recv_cap = in_place ? buffer_size : cbCER_UDP_SIZE_MAX;
 
         auto raw_result = m_device.receivePacketsRaw(recv_buf, recv_cap);
         if (raw_result.isError()) {
@@ -414,11 +415,14 @@ public:
         m_thread_state->receive_thread_running.store(true);
 
         m_thread_state->receive_thread = std::thread([this]() {
-            uint8_t buffer[cbCER_UDP_SIZE_MAX];
+            // Padded and filled only to cbCER_UDP_SIZE_MAX for the reason given
+            // in DeviceSession::startReceiveThread().
+            uint8_t buffer[cbCER_UDP_SIZE_MAX * 2] = {};
 
             while (!m_thread_state->receive_thread_stop_requested.load()) {
+                // Receive packets (only fill the actual datagram portion, not the padding)
                 // Call virtual receivePackets() - handles protocol translation
-                auto result = this->receivePackets(buffer, sizeof(buffer));
+                auto result = this->receivePackets(buffer, cbCER_UDP_SIZE_MAX);
 
                 if (result.isError()) {
                     continue;

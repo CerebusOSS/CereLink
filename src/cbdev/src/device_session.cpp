@@ -1866,12 +1866,13 @@ Result<void> DeviceSession::startReceiveThread() {
     m_impl->receive_thread_running.store(true);
 
     m_impl->receive_thread = std::thread([this]() {
-        // Receive buffer with padding. The extra sizeof(cbPKT_GENERIC) bytes ensure
-        // that reinterpret_cast<cbPKT_GENERIC*>(&buffer[offset]) always has a full
-        // struct's worth of readable memory, even for packets near the end of a
-        // datagram. Without this, callbacks that copy the full 1024-byte struct
-        // (e.g., SPSCQueue::push) would read past the buffer into unmapped memory.
-        uint8_t buffer[cbCER_UDP_SIZE_MAX + sizeof(cbPKT_GENERIC)] = {};
+        // Packets are packed tightly and may be shorter than their cbproto
+        // struct, but code that reads or writes this buffer (e.g.
+        // updateConfigFromBuffer, translateDatagram, SPSCQueue::push) may touch
+        // a full struct's worth of bytes at any packet offset. Padding by a
+        // full datagram keeps those accesses in bounds no matter which packet
+        // type is largest.
+        uint8_t buffer[cbCER_UDP_SIZE_MAX * 2] = {};
 
         while (!m_impl->receive_thread_stop_requested.load()) {
             // Receive packets (only fill the actual datagram portion, not the padding)
