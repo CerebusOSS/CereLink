@@ -1863,35 +1863,12 @@ Result<void> DeviceSession::startReceiveThread() {
     m_impl->receive_thread_running.store(true);
 
     m_impl->receive_thread = std::thread([this]() {
-        // Packets in the receive buffer are closely packed and may be smaller
-        // than their corresponding definition in cbproto.  Some consumers of the
-        // receive buffer (e.g. updateConfigFromBuffer, translateDatagram,
-        // SPSCQueue::push) assume that the maximum possible length of each
-        // packet is readable, so these consumers will attempt to read beyond
-        // the end of the buffer if the maximum length of a packet near the en
-        // of the buffer exceeds the remaining allocated space.
-        //
-        // The previous fix padded the receive buffer with an extra
-        // sizeof(cbPKT_GENERIC) bytes, but this is not enough padding because
-        // there are larger types than cbPKT_GENERIC that a packet may be
-        // copied or cast to.
-        // 
-        // A potential fix is to pad the receive buffer with an additional
-        // sizeof(cbPKT_FS_BASIS) bytes, since this is the largest
-        // possible individual packet as of 4.2 (cbPKT_UNIT_SELECTION is larger
-        // but it's ignored by CereLink).  This size of padding is sufficient
-        // right now, but it would need to be updated every time the protocol
-        // changes and a larger packet type is added.  The wire protocol does
-        // not explicitly define the size of the largest packet
-        // (cbPKT_MAX_SIZE < sizeof(cbPKT_FS_BASIS)), so cbproto cannot provide
-        // the ideal padding size.
-        //
-        // This fix doubles the size of the receive buffer so the existing
-        // consumers do not overrun the buffer in future protocol versions.
-        // cbCER_UDP_SIZE_MAX will always be larger than the largest possible
-        // individual packet, so a receive buffer that is double this size is
-        // guaranteed to encompass copies and casts performed by consumers on
-        // the buffer.
+        // Packets are packed tightly and may be shorter than their cbproto
+        // struct, but code that reads or writes this buffer (e.g.
+        // updateConfigFromBuffer, translateDatagram, SPSCQueue::push) may touch
+        // a full struct's worth of bytes at any packet offset. Padding by a
+        // full datagram keeps those accesses in bounds no matter which packet
+        // type is largest.
         uint8_t buffer[cbCER_UDP_SIZE_MAX * 2] = {};
 
         while (!m_impl->receive_thread_stop_requested.load()) {
