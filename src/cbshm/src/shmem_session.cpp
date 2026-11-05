@@ -19,6 +19,7 @@
 
 #ifndef _WIN32
     #include <sys/mman.h>
+    #include <sys/stat.h>
     #include <sys/time.h>
     #include <fcntl.h>
     #include <unistd.h>
@@ -42,6 +43,7 @@
 #include <cbshm/central_types/v7_0.h>
 #include <cbshm/central_version.h>
 #include <cbshm/native_types.h>
+#include <cbshm/native_peer.h>
 #include <cbproto/packet_translator.h>
 #include <atomic>
 #include <chrono>
@@ -2291,6 +2293,15 @@ bool ShmemSession::isOwnerAlive() const {
     if (pid == 0)
         return true;  // Pre-liveness segments or unknown — assume alive
 
+    return isProcessAlive(pid);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Peer config segment access (native_peer.h)
+
+bool isProcessAlive(const uint32_t pid) {
+    if (pid == 0)
+        return false;
 #ifdef _WIN32
     HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (h) {
@@ -2303,6 +2314,77 @@ bool ShmemSession::isOwnerAlive() const {
     // EPERM means the process exists but we lack permission to signal it.
     return kill(static_cast<pid_t>(pid), 0) == 0 || errno == EPERM;
 #endif
+}
+
+NativeConfigReader::~NativeConfigReader() {
+    close();
+}
+
+bool NativeConfigReader::open(const std::string& device_tag) {
+    close();
+    const std::string name = makeSegmentNames(ShmemLayout::NATIVE, device_tag).cfg;
+    constexpr size_t kSize = sizeof(NativeConfigBuffer);
+
+#ifdef _WIN32
+    HANDLE h = OpenFileMappingA(FILE_MAP_READ, FALSE, name.c_str());
+    if (!h)
+        return false;  // No owner has created it
+    // Fails if the object is smaller than the view, so a short segment is rejected here.
+    void* p = MapViewOfFile(h, FILE_MAP_READ, 0, 0, kSize);
+    if (!p) {
+        CloseHandle(h);
+        return false;
+    }
+    m_mapping = h;
+    m_view = p;
+#else
+    const std::string posix_name = "/" + name;
+    const int fd = shm_open(posix_name.c_str(), O_RDONLY, 0);
+    if (fd < 0)
+        return false;  // No owner has created it
+    struct stat st{};
+    if (fstat(fd, &st) < 0 || st.st_size < static_cast<off_t>(kSize)) {
+        ::close(fd);
+        return false;
+    }
+    void* p = mmap(nullptr, kSize, PROT_READ, MAP_SHARED, fd, 0);
+    ::close(fd);  // The mapping holds its own reference to the segment
+    if (p == MAP_FAILED)
+        return false;
+    m_size = kSize;
+    m_view = p;
+#endif
+
+    // A segment from a build with a different layout has every field past the
+    // change at the wrong offset -- including the clock fields and owner_pid
+    // that callers read -- so treat it as absent, as a CLIENT attach would.
+    if (nativeConfigLayoutVersion(config()->version) != NATIVE_CONFIG_LAYOUT_VERSION) {
+        close();
+        return false;
+    }
+    return true;
+}
+
+void NativeConfigReader::close() {
+#ifdef _WIN32
+    if (m_view)
+        UnmapViewOfFile(m_view);
+    if (m_mapping)
+        CloseHandle(static_cast<HANDLE>(m_mapping));
+    m_mapping = nullptr;
+#else
+    if (m_view)
+        munmap(const_cast<void*>(m_view), m_size);
+    m_size = 0;
+#endif
+    m_view = nullptr;
+}
+
+bool NativeConfigReader::isOwnerAlive() const {
+    if (!isOpen())
+        return false;
+    const uint32_t pid = config()->owner_pid;
+    return pid == 0 || isProcessAlive(pid);
 }
 
 } // namespace cbshm

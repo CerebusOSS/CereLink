@@ -453,3 +453,84 @@ TEST_F(DeviceSessionTest, LegacyConfigHelper_TranslatesOutbound_400) {
     EXPECT_EQ(readU16LE(&buf[8]), static_cast<uint16_t>(cbPKTCHAN_CONFIGURATION));
     EXPECT_EQ(static_cast<size_t>(n), kHeaderSize400 + cbPKTDLEN_SYSINFO * 4);
 }
+
+#ifdef _WIN32
+/// @brief Bind a fresh UDP socket to addr:port; true if the bind succeeded.
+static bool tryBindSecondSocket(const char* addr, uint16_t port, bool reuseaddr) {
+    // Own Winsock reference: the session may already have released its own.
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return false;
+    struct Cleanup { ~Cleanup() { WSACleanup(); } } cleanup;
+
+    SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s == INVALID_SOCKET) return false;
+    if (reuseaddr) {
+        BOOL on = TRUE;
+        setsockopt(s, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&on), sizeof(on));
+    }
+    sockaddr_in sa{};
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons(port);
+    sa.sin_addr.s_addr = inet_addr(addr);
+    const bool bound = bind(s, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0;
+    closesocket(s);
+    return bound;
+}
+
+/// A STANDALONE session must be the device's only controller.  With
+/// SO_REUSEADDR, Windows let Central bind the same port alongside an active
+/// session, and both then drove one device (#210).  Central binds the
+/// instrument-network address itself without SO_REUSEADDR for Gemini devices;
+/// neither that nor an SO_REUSEADDR bind of the same address may share it.
+TEST_F(DeviceSessionTest, Windows_PortIsExclusiveWhileSessionIsActive) {
+    constexpr uint16_t recv_port = 51061;
+    for (const char* client_addr : {"127.0.0.1", "0.0.0.0"}) {
+        SCOPED_TRACE(client_addr);
+        const bool wildcard = std::strcmp(client_addr, "0.0.0.0") == 0;
+        {
+            auto config = ConnectionParams::custom("127.0.0.1", client_addr, recv_port, 51062);
+            auto result = createDeviceSession(config, ProtocolVersion::PROTOCOL_CURRENT);
+            ASSERT_TRUE(result.isOk()) << result.error();
+
+            EXPECT_FALSE(tryBindSecondSocket("127.0.0.1", recv_port, /*reuseaddr=*/false));
+            EXPECT_FALSE(tryBindSecondSocket("127.0.0.1", recv_port, /*reuseaddr=*/true));
+            // A session on the wildcard address (the default -- the device
+            // socket binds 0.0.0.0) claims every address on the port.  One on
+            // a specific address cannot stop a *wildcard* bind: Windows always
+            // permits the less specific binding, exclusive or not.
+            if (wildcard) {
+                EXPECT_FALSE(tryBindSecondSocket("0.0.0.0", recv_port, /*reuseaddr=*/true));
+            }
+        }
+        // Released as soon as the session goes away.
+        EXPECT_TRUE(tryBindSecondSocket("127.0.0.1", recv_port, /*reuseaddr=*/false));
+    }
+}
+
+/// The reverse order: a port someone else already holds must make the session
+/// fail rather than quietly share it.
+TEST_F(DeviceSessionTest, Windows_CreateFailsWhenPortAlreadyBound) {
+    constexpr uint16_t recv_port = 51063;
+    // Initialise Winsock for the raw socket below (a session normally does it).
+    WSADATA wsa;
+    ASSERT_EQ(WSAStartup(MAKEWORD(2, 2), &wsa), 0);
+
+    SOCKET holder = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    ASSERT_NE(holder, INVALID_SOCKET);
+    sockaddr_in sa{};
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons(recv_port);
+    sa.sin_addr.s_addr = inet_addr("127.0.0.1");
+    ASSERT_EQ(bind(holder, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)), 0);
+
+    auto config = ConnectionParams::custom("127.0.0.1", "127.0.0.1", recv_port, 51064);
+    auto result = createDeviceSession(config, ProtocolVersion::PROTOCOL_CURRENT);
+    EXPECT_TRUE(result.isError());
+    if (result.isError()) {
+        EXPECT_NE(result.error().find("127.0.0.1:51063"), std::string::npos) << result.error();
+    }
+
+    closesocket(holder);
+    WSACleanup();
+}
+#endif

@@ -23,11 +23,15 @@ sequenceDiagram
     participant SHM as cbshm::ShmemSession
 
     App->>SDK: create(config{device_type=HUB1, ...})
-    Note over SDK: instrument index from GEMSTART==2 map<br/>(Hub1→0, Hub2→1, Hub3→2, NSP→3, legacy→0)
-    SDK->>SHM: create(CLIENT, CENTRAL, instance="", inst)
-    alt Central.exe running & its segments open
-        SHM-->>SDK: ok → CENTRAL-COMPAT CLIENT mode
-    else fails (no Central / non-Windows / wrong version)
+    Note over SDK: isCentralRunning()? then detectCentralVersion() →<br/>per-version slot (7.8: Hub1→0, Hub2→1, Hub3→2, NSP→3; legacy→0)
+    alt Central.exe running & has a slot for this device
+        SDK->>SHM: create(CLIENT, CENTRAL, instance="", inst)
+        alt segments open
+            SHM-->>SDK: ok → CENTRAL-COMPAT CLIENT mode
+        else fails
+            SHM-->>SDK: error → create() fails (no STANDALONE fallback:<br/>Central owns the device's socket)
+        end
+    else no Central / non-Windows / Central has no slot for this device
         SDK->>SHM: create(CLIENT, NATIVE, "hub1", inst 0)
         alt cbshm_hub1_* segments exist AND owner alive
             Note over SHM: isOwnerAlive(): kill(owner_pid, 0)<br/>rejects stale segments

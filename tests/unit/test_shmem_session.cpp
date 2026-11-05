@@ -11,6 +11,7 @@
 
 #include <gtest/gtest.h>
 #include <cbshm/shmem_session.h>
+#include <cbshm/native_peer.h>
 #include <cbproto/cbproto.h>       // For packet types and cbNSP1-4 constants
 #include <cbproto/instrument_id.h>
 #include <cbproto/connection.h>    // For cbproto_protocol_version_t
@@ -1735,6 +1736,127 @@ TEST_F(OwnerLivenessTest, ClientTreatsZeroPidAsAlive) {
 // so this liveness test should be reworked as a Windows-only integration test.
 //
 // TEST_F(OwnerLivenessTest, CentralCompatAlwaysReturnsTrue) { ... }
+
+TEST(ProcessLiveness, CurrentProcessIsAliveAndBogusPidsAreNot) {
+#ifdef _WIN32
+    EXPECT_TRUE(isProcessAlive(GetCurrentProcessId()));
+#else
+    EXPECT_TRUE(isProcessAlive(static_cast<uint32_t>(getpid())));
+#endif
+    EXPECT_FALSE(isProcessAlive(0));
+    EXPECT_FALSE(isProcessAlive(4000000000u));
+}
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Peer config reader (cross-device clock consensus)
+///
+/// The SDK reads peer devices' published clock offsets through
+/// NativeConfigReader.  It used to be a stub on Windows, so consensus silently
+/// never saw a peer there while the in-test replica of the voting logic kept
+/// passing (#212).  These drive the real reader against a real segment.
+/// @{
+
+class NativeConfigReaderTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        // p = peer.  Qualified by PID: ctest runs every test in its own
+        // process, so a bare per-process counter gives parallel tests the
+        // same segment name, and AbsentPeerDoesNotOpen then sees another
+        // test's segment.
+#ifdef _WIN32
+        const unsigned long pid = GetCurrentProcessId();
+#else
+        const unsigned long pid = static_cast<unsigned long>(getpid());
+#endif
+        test_name = "p" + std::to_string(pid) + "_" + std::to_string(test_counter++);
+    }
+
+    std::string test_name;
+    static int test_counter;
+};
+
+int NativeConfigReaderTest::test_counter = 0;
+
+TEST_F(NativeConfigReaderTest, SeesClockOffsetsPublishedByStandalone) {
+    auto owner = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name,
+                                      cbproto::InstrumentId::fromIndex(0));
+    ASSERT_TRUE(owner.isOk()) << owner.error();
+
+    NativeConfigReader reader;
+    ASSERT_TRUE(reader.open(test_name));
+    ASSERT_TRUE(reader.isOpen());
+    EXPECT_TRUE(reader.isOwnerAlive());
+
+    // Nothing published yet.
+    EXPECT_EQ(reader.config()->clock_raw_valid, 0u);
+    EXPECT_EQ(reader.config()->clock_sync_valid, 0u);
+
+    owner.value().setClockRawOffset(-123456789);
+    owner.value().setClockSync(987654321, 4200);
+
+    // The reader maps the same memory, so it sees the writes without reopening.
+    const NativeConfigBuffer* cfg = reader.config();
+    ASSERT_NE(cfg, nullptr);
+    EXPECT_NE(cfg->clock_raw_valid, 0u);
+    EXPECT_EQ(cfg->clock_raw_offset_ns, -123456789);
+    EXPECT_NE(cfg->clock_sync_valid, 0u);
+    EXPECT_EQ(cfg->clock_offset_ns, 987654321);
+    EXPECT_EQ(cfg->clock_uncertainty_ns, 4200);
+
+    // And later updates too.
+    owner.value().setClockRawOffset(42);
+    EXPECT_EQ(reader.config()->clock_raw_offset_ns, 42);
+
+    reader.close();
+    EXPECT_FALSE(reader.isOpen());
+    EXPECT_EQ(reader.config(), nullptr);
+}
+
+TEST_F(NativeConfigReaderTest, AbsentPeerDoesNotOpen) {
+    NativeConfigReader reader;
+    EXPECT_FALSE(reader.open(test_name));
+    EXPECT_FALSE(reader.isOpen());
+    EXPECT_FALSE(reader.isOwnerAlive());
+}
+
+TEST_F(NativeConfigReaderTest, ReportsDeadOwner) {
+    auto owner = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name,
+                                      cbproto::InstrumentId::fromIndex(0));
+    ASSERT_TRUE(owner.isOk()) << owner.error();
+
+    NativeConfigReader reader;
+    ASSERT_TRUE(reader.open(test_name));
+    EXPECT_TRUE(reader.isOwnerAlive());
+
+    // Simulate a crashed owner whose segment lingers.
+    owner.value().getNativeConfigBuffer()->owner_pid = 4000000000u;
+    EXPECT_FALSE(reader.isOwnerAlive());
+
+    // owner_pid 0 is a segment from before liveness tracking: assume alive.
+    owner.value().getNativeConfigBuffer()->owner_pid = 0;
+    EXPECT_TRUE(reader.isOwnerAlive());
+}
+
+TEST_F(NativeConfigReaderTest, RejectsIncompatibleLayout) {
+    auto owner = ShmemSession::create(Mode::STANDALONE, ShmemLayout::NATIVE, test_name,
+                                      cbproto::InstrumentId::fromIndex(0));
+    ASSERT_TRUE(owner.isOk()) << owner.error();
+
+    // A pre-9.13 owner wrote only the protocol version (layout revision 0);
+    // its clock fields sit at other offsets, so they must not be read.
+    auto* cfg = owner.value().getNativeConfigBuffer();
+    const uint32_t saved = cfg->version;
+    cfg->version = nativeConfigProtocolVersion(saved);
+
+    NativeConfigReader reader;
+    EXPECT_FALSE(reader.open(test_name));
+    EXPECT_FALSE(reader.isOpen());
+
+    cfg->version = saved;
+    EXPECT_TRUE(reader.open(test_name));
+}
 
 /// @}
 

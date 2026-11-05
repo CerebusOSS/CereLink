@@ -35,6 +35,7 @@
 #include <cbshm/central_adapters/v7_6.h>
 #include <cbshm/central_adapters/v7_7.h>
 #include <cbshm/central_adapters/v7_8.h>
+#include <cbshm/central_version.h>
 #include <cbshm/native_types.h>
 #include <cbproto/types.h>
 
@@ -375,5 +376,75 @@ TYPED_TEST(AdapterFixture, ChanInfoFrequencyModeSamplesRoundTrip) {
 // cur.reserved <-> leg.sortmethod. Verify by setting cbPKT_PROCINFO.reserved,
 // round-tripping, and (for proof of aliasing) inspecting the raw legacy
 // procinfo.sortmethod in the cfg buffer.
+
+/// @}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// @name Instrument slot mapping (DeviceType -> Central instrument index)
+///
+/// Central assigns slots at compile time, and the layout changed between
+/// releases.  CereLink once hardcoded 7.8's (NSP = 3), which overran 7.7's
+/// three slots and rejected every Gemini NSP attach on 7.7 (#210, #212).
+/// @{
+
+TEST(CentralInstrumentIndex, MatchesEachReleasesCentralDlgAssignment) {
+    // 7.8: HUB1, HUB2, HUB3, NSP
+    EXPECT_EQ(getCentralInstrumentIndex(CentralVersion::CURRENT, CBPROTO_DEVICE_TYPE_HUB1), 0);
+    EXPECT_EQ(getCentralInstrumentIndex(CentralVersion::CURRENT, CBPROTO_DEVICE_TYPE_HUB2), 1);
+    EXPECT_EQ(getCentralInstrumentIndex(CentralVersion::CURRENT, CBPROTO_DEVICE_TYPE_HUB3), 2);
+    EXPECT_EQ(getCentralInstrumentIndex(CentralVersion::CURRENT, CBPROTO_DEVICE_TYPE_NSP), 3);
+
+    // 7.6 / 7.7: HUB1, HUB2, NSP -- no HUB3
+    for (auto v : {CentralVersion::V7_6, CentralVersion::V7_7}) {
+        EXPECT_EQ(getCentralInstrumentIndex(v, CBPROTO_DEVICE_TYPE_HUB1), 0);
+        EXPECT_EQ(getCentralInstrumentIndex(v, CBPROTO_DEVICE_TYPE_HUB2), 1);
+        EXPECT_EQ(getCentralInstrumentIndex(v, CBPROTO_DEVICE_TYPE_HUB3), -1);
+        EXPECT_EQ(getCentralInstrumentIndex(v, CBPROTO_DEVICE_TYPE_NSP), 2);
+    }
+
+    // 7.5: NSP, HUB1
+    EXPECT_EQ(getCentralInstrumentIndex(CentralVersion::V7_5, CBPROTO_DEVICE_TYPE_NSP), 0);
+    EXPECT_EQ(getCentralInstrumentIndex(CentralVersion::V7_5, CBPROTO_DEVICE_TYPE_HUB1), 1);
+    EXPECT_EQ(getCentralInstrumentIndex(CentralVersion::V7_5, CBPROTO_DEVICE_TYPE_HUB2), -1);
+    EXPECT_EQ(getCentralInstrumentIndex(CentralVersion::V7_5, CBPROTO_DEVICE_TYPE_HUB3), -1);
+
+    // 7.0 predates Gemini.
+    EXPECT_EQ(getCentralInstrumentIndex(CentralVersion::V7_0, CBPROTO_DEVICE_TYPE_NSP), -1);
+    EXPECT_EQ(getCentralInstrumentIndex(CentralVersion::V7_0, CBPROTO_DEVICE_TYPE_HUB1), -1);
+
+    // Legacy NSP is slot 0 everywhere; nPlay and custom never have a slot.
+    for (auto v : {CentralVersion::V7_0, CentralVersion::V7_5, CentralVersion::V7_6,
+                   CentralVersion::V7_7, CentralVersion::CURRENT}) {
+        EXPECT_EQ(getCentralInstrumentIndex(v, CBPROTO_DEVICE_TYPE_LEGACY_NSP), 0);
+        EXPECT_EQ(getCentralInstrumentIndex(v, CBPROTO_DEVICE_TYPE_NPLAY), -1);
+        EXPECT_EQ(getCentralInstrumentIndex(v, CBPROTO_DEVICE_TYPE_CUSTOM), -1);
+    }
+}
+
+/// Every slot must fit the version's instrument arrays -- the bound
+/// ShmemSession::open enforces, and the exact check that failed in #210.
+TEST(CentralInstrumentIndex, EverySlotFitsTheVersionsMaxProcs) {
+    const struct {
+        CentralVersion version;
+        uint32_t max_procs;
+    } versions[] = {
+        {CentralVersion::V7_0, central_v7_0::BootstrapAdapter().getMaxProcs()},
+        {CentralVersion::V7_5, central_v7_5::BootstrapAdapter().getMaxProcs()},
+        {CentralVersion::V7_6, central_v7_6::BootstrapAdapter().getMaxProcs()},
+        {CentralVersion::V7_7, central_v7_7::BootstrapAdapter().getMaxProcs()},
+        {CentralVersion::CURRENT, central_v7_8::BootstrapAdapter().getMaxProcs()},
+    };
+    for (const auto& v : versions) {
+        for (auto dev : {CBPROTO_DEVICE_TYPE_LEGACY_NSP, CBPROTO_DEVICE_TYPE_NSP,
+                         CBPROTO_DEVICE_TYPE_HUB1, CBPROTO_DEVICE_TYPE_HUB2,
+                         CBPROTO_DEVICE_TYPE_HUB3}) {
+            const int32_t idx = getCentralInstrumentIndex(v.version, dev);
+            if (idx >= 0) {
+                EXPECT_LT(static_cast<uint32_t>(idx), v.max_procs)
+                    << "version " << static_cast<int>(v.version) << ", device " << dev;
+            }
+        }
+    }
+}
 
 /// @}

@@ -423,11 +423,29 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
         }
     }
 
-    // Set SO_REUSEADDR to allow multiple binds to same port
+#ifdef _WIN32
+    // A STANDALONE session is the device's only controller, so claim the port
+    // exclusively.  Windows' SO_REUSEADDR would do the opposite: it lets
+    // another process -- Central -- bind the same port alongside us, after
+    // which both drive one device (#210).  With SO_EXCLUSIVEADDRUSE that bind
+    // fails.  Note Central 7.6-7.8 does not handle the failure: its Gemini
+    // startup NULLs the instrument without marking the slot absent, and its
+    // timer then dereferences it, so Central crashes on launch (verified on
+    // 7.7.0; our session is unaffected).  Each device type has its own port and
+    // the protocol probe's socket is closed before this one binds, so nothing
+    // of ours depends on sharing the port.
+    if (setsockopt(session.m_impl->socket, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
+                  (char*)&opt_one, sizeof(opt_one)) != 0) {
+        return Result<DeviceSession>::error("Failed to set SO_EXCLUSIVEADDRUSE");
+    }
+#else
+    // Central is Windows-only, so the coexistence problem above does not arise
+    // here; POSIX behaviour is left as it was.
     if (setsockopt(session.m_impl->socket, SOL_SOCKET, SO_REUSEADDR,
                   (char*)&opt_one, sizeof(opt_one)) != 0) {
         return Result<DeviceSession>::error("Failed to set SO_REUSEADDR");
     }
+#endif
 
     // Set receive buffer size
     if (config.recv_buffer_size > 0) {
@@ -508,10 +526,22 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
 
     if (bind(session.m_impl->socket, reinterpret_cast<SOCKADDR *>(&session.m_impl->recv_addr),
             sizeof(session.m_impl->recv_addr)) != 0) {
+        char bound_ip[INET_ADDRSTRLEN] = {};
+        inet_ntop(AF_INET, &session.m_impl->recv_addr.sin_addr, bound_ip, sizeof(bound_ip));
+#ifdef _WIN32
+        // Winsock reports through WSAGetLastError, not errno.
+        const int bind_error = WSAGetLastError();
+        const std::string reason = " (winsock err " + std::to_string(bind_error) +
+            (bind_error == WSAEADDRINUSE || bind_error == WSAEACCES
+                 ? " - port already in use, e.g. by Central or another CereLink session)"
+                 : ")");
+#else
         const int bind_error = errno;  // Capture errno immediately
+        const std::string reason = " (errno: " + std::to_string(bind_error) + " - " +
+            std::strerror(bind_error) + ")";
+#endif
         return Result<DeviceSession>::error("Failed to bind socket to " +
-            config.client_address + ":" + std::to_string(config.recv_port) +
-            " (errno: " + std::to_string(bind_error) + " - " + std::strerror(bind_error) + ")");
+            std::string(bound_ip) + ":" + std::to_string(config.recv_port) + reason);
     }
 
     // Set up send address (device side)

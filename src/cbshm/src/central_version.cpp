@@ -22,6 +22,84 @@
 
 namespace cbshm {
 
+#ifdef _WIN32
+namespace {
+
+/// PID of a running Central.exe, 0 if there is none.
+cbutil::Result<DWORD> findCentralPid() {
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        return cbutil::Result<DWORD>::error("Failed to get a snapshot of the running processes from the Tool Help library");
+    }
+
+    PROCESSENTRY32 process_entry{};
+    process_entry.dwSize = sizeof(process_entry);
+    if (! Process32First(snapshot, &process_entry)) {
+        CloseHandle(snapshot);
+        return cbutil::Result<DWORD>::error("Failed to get the first process from the running processes snapshot");
+    }
+
+    // Enumerate the running processes and identify Central by it's process name.
+    // Windows process names are case insensitive, so the executable may be reported with any casing and must be compared in a case-insensitive way.
+    DWORD central_pid = 0;
+    do {
+        if (_stricmp(process_entry.szExeFile, "Central.exe") == 0) {
+            central_pid = process_entry.th32ProcessID;
+            break;
+        }
+    } while(Process32Next(snapshot, &process_entry));
+    CloseHandle(snapshot);
+    return cbutil::Result<DWORD>::ok(central_pid);
+}
+
+} // namespace
+#endif
+
+bool isCentralRunning() {
+#ifdef _WIN32
+    auto pid = findCentralPid();
+    return pid.isOk() && pid.value() != 0;
+#else
+    return false;
+#endif
+}
+
+int32_t getCentralInstrumentIndex(const CentralVersion version, const cbproto_device_type_t device) {
+    if (device == CBPROTO_DEVICE_TYPE_LEGACY_NSP)
+        return 0;
+
+    switch (version) {
+        case CentralVersion::V7_0:
+            // Predates Gemini: the single slot only ever holds a legacy NSP.
+            return -1;
+        case CentralVersion::V7_5:
+            switch (device) {
+                case CBPROTO_DEVICE_TYPE_NSP:  return 0;
+                case CBPROTO_DEVICE_TYPE_HUB1: return 1;
+                default:                       return -1;
+            }
+        case CentralVersion::V7_6:
+            /* fallthrough */
+        case CentralVersion::V7_7:
+            switch (device) {
+                case CBPROTO_DEVICE_TYPE_HUB1: return 0;
+                case CBPROTO_DEVICE_TYPE_HUB2: return 1;
+                case CBPROTO_DEVICE_TYPE_NSP:  return 2;
+                default:                       return -1;
+            }
+        case CentralVersion::CURRENT:
+            /* fallthrough */
+        default:
+            switch (device) {
+                case CBPROTO_DEVICE_TYPE_HUB1: return 0;
+                case CBPROTO_DEVICE_TYPE_HUB2: return 1;
+                case CBPROTO_DEVICE_TYPE_HUB3: return 2;
+                case CBPROTO_DEVICE_TYPE_NSP:  return 3;
+                default:                       return -1;
+            }
+    }
+}
+
 cbutil::Result<CentralVersion> detectCentralVersion() {
 #ifdef _WIN32
     // The 'version' field in Central's shared memory configuration buffer
@@ -39,29 +117,11 @@ cbutil::Result<CentralVersion> detectCentralVersion() {
     // fail to deduce the protocol version.
 
     // Get the path to Central's executable file from the running processes list.
-
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snapshot == INVALID_HANDLE_VALUE) {
-        return cbutil::Result<CentralVersion>::error("Failed to get a snapshot of the running processes from the Tool Help library");
+    auto pid_result = findCentralPid();
+    if (pid_result.isError()) {
+        return cbutil::Result<CentralVersion>::error(pid_result.error());
     }
-
-    PROCESSENTRY32 process_entry{};
-    process_entry.dwSize = sizeof(process_entry);
-    if (! Process32First(snapshot, &process_entry)) {
-        CloseHandle(snapshot);
-        return cbutil::Result<CentralVersion>::error("Failed to get the first process from the running processes snapshot");
-    }
-
-    // Enumerate the running processes and identify Central by it's process name.
-    // Windows process names are case insensitive, so the executable may be reported with any casing and must be compared in a case-insensitive way.
-    DWORD central_pid = 0;
-    do {
-        if (_stricmp(process_entry.szExeFile, "Central.exe") == 0) {
-            central_pid = process_entry.th32ProcessID;
-            break;
-        }
-    } while(Process32Next(snapshot, &process_entry));
-    CloseHandle(snapshot);
+    const DWORD central_pid = pid_result.value();
     if (central_pid == 0) {
         return cbutil::Result<CentralVersion>::error("Failed to find Central among the currently running processes. Is Central running?");
     }
