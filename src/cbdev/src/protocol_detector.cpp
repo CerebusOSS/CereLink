@@ -332,7 +332,17 @@ Result<ProtocolVersion> detectProtocol(const char* device_addr, uint16_t send_po
     // Set socket options for broadcast
     int opt_one = 1;
     setsockopt(sock, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<const char*>(&opt_one), sizeof(opt_one));
+#ifdef _WIN32
+    // Exclusive for the same reason as the device socket (see
+    // DeviceSession::create): probing must not succeed by sharing a port that
+    // Central or another session already holds.  (Central binds the specific
+    // instrument-network address without SO_REUSEADDR; a second bind of that
+    // address with SO_REUSEADDR fails with WSAEACCES even from the same user,
+    // which is the 10013 in #210.)
+    setsockopt(sock, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&opt_one), sizeof(opt_one));
+#else
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&opt_one), sizeof(opt_one));
+#endif
 
     // Bind to client address/port
     sockaddr_in client_sockaddr = {};

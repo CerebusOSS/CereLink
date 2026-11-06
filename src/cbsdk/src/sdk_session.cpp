@@ -21,6 +21,8 @@
 #include "cbdev/device_factory.h"
 #include "cbdev/connection.h"
 #include "cbshm/shmem_session.h"
+#include "cbshm/native_peer.h"
+#include "cbshm/central_version.h"
 #include <cbproto/gemini.h>
 #include <ccfutils/ccf_config.h>
 #include <CCFUtils.h>
@@ -36,129 +38,59 @@
 #include <unordered_map>
 #include <utility>
 #include "cbdev/clock_sync.h"
-#ifndef _WIN32
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <signal.h>
-#include <unistd.h>
-#endif
 
 namespace {
 
-/// High-resolution microsecond delay.
-/// On Windows, std::this_thread::sleep_for rounds up to ~15 ms which is far
-/// too coarse for the 50 µs inter-packet pacing the send thread needs.
-/// Use a QPC spin-wait instead (mirrors cbdev's hr_sleep_us).
-inline void hr_sleep_us([[maybe_unused]] uint64_t microseconds) {
+/// Parks the send thread between polls of an empty transmit queue.
+///
+/// This used to be a QPC busy-wait, and because the queue is empty nearly all
+/// the time, every STANDALONE session on Windows kept one core fully busy for
+/// its whole lifetime.  sleep_for is no substitute there: MinGW returns
+/// immediately below ~1 ms (a spin again), and Windows' default timer rounds
+/// 1 ms up to ~15.6 ms (a large send latency).  A high-resolution waitable
+/// timer (Windows 10 1803+) blocks the thread for roughly the requested
+/// sub-millisecond time.  Where it is unavailable we fall back to Sleep(1):
+/// coarser, but still idle.
+class IdlePoller {
+public:
+    IdlePoller() {
 #ifdef _WIN32
-    if (microseconds == 0) return;
-    LARGE_INTEGER freq, start;
-    QueryPerformanceFrequency(&freq);
-    QueryPerformanceCounter(&start);
-    const double ticks_per_us = static_cast<double>(freq.QuadPart) / 1'000'000.0;
-    const LONGLONG delta = static_cast<LONGLONG>(microseconds * ticks_per_us);
-    LARGE_INTEGER target;
-    target.QuadPart = start.QuadPart + delta;
-    for (;;) {
-        LARGE_INTEGER now;
-        QueryPerformanceCounter(&now);
-        if (now.QuadPart >= target.QuadPart) break;
-    }
-#else
-    std::this_thread::sleep_for(std::chrono::microseconds(static_cast<int64_t>(microseconds)));
+        m_timer = CreateWaitableTimerExW(nullptr, nullptr,
+                                         CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                                         TIMER_ALL_ACCESS);
 #endif
-}
-
-/// Lightweight read-only reader for a peer device's clock sync fields
-/// in shared memory.  Opens only the config segment via shm_open/mmap
-/// (not a full ShmemSession).  Used by the NSP to borrow a HUB's
-/// probe-based clock offset when its own probes are unreliable.
-struct PeerClockReader {
-#ifndef _WIN32
-    int fd = -1;
-    void* mapped = nullptr;
-    size_t mapped_size = 0;
-
-    bool isOpen() const { return mapped != nullptr && mapped != MAP_FAILED; }
-
-    bool tryOpen(const std::string& segment_name) {
-        close();
-        std::string posix_name = "/" + segment_name;
-        fd = shm_open(posix_name.c_str(), O_RDONLY, 0);
-        if (fd < 0)
-            return false;
-        struct stat st{};
-        if (fstat(fd, &st) < 0 || st.st_size < static_cast<off_t>(sizeof(cbshm::NativeConfigBuffer))) {
-            ::close(fd);
-            fd = -1;
-            return false;
-        }
-        mapped_size = static_cast<size_t>(st.st_size);
-        mapped = mmap(nullptr, mapped_size, PROT_READ, MAP_SHARED, fd, 0);
-        if (mapped == MAP_FAILED) {
-            mapped = nullptr;
-            ::close(fd);
-            fd = -1;
-            return false;
-        }
-        return true;
     }
 
-    std::optional<int64_t> getClockOffsetNs() const {
-        if (!isOpen()) return std::nullopt;
-        const auto* cfg = static_cast<const cbshm::NativeConfigBuffer*>(mapped);
-        if (!cfg->clock_sync_valid) return std::nullopt;
-        // Liveness check: is the owning process still alive?
-        if (cfg->owner_pid != 0 && kill(static_cast<pid_t>(cfg->owner_pid), 0) != 0)
-            return std::nullopt;
-        return cfg->clock_offset_ns;
-    }
-
-    /// Peer's own (pre-consensus) estimate — the value to use for cross-device
-    /// consensus voting (clock_offset_ns is the peer's post-consensus value).
-    std::optional<int64_t> getRawOffsetNs() const {
-        if (!isOpen()) return std::nullopt;
-        const auto* cfg = static_cast<const cbshm::NativeConfigBuffer*>(mapped);
-        if (!cfg->clock_raw_valid) return std::nullopt;
-        if (cfg->owner_pid != 0 && kill(static_cast<pid_t>(cfg->owner_pid), 0) != 0)
-            return std::nullopt;
-        return cfg->clock_raw_offset_ns;
-    }
-
-    std::optional<int64_t> getClockUncertaintyNs() const {
-        if (!isOpen()) return std::nullopt;
-        const auto* cfg = static_cast<const cbshm::NativeConfigBuffer*>(mapped);
-        if (!cfg->clock_sync_valid) return std::nullopt;
-        if (cfg->owner_pid != 0 && kill(static_cast<pid_t>(cfg->owner_pid), 0) != 0)
-            return std::nullopt;
-        return cfg->clock_uncertainty_ns;
-    }
-
-    void close() {
-        if (mapped && mapped != MAP_FAILED)
-            munmap(mapped, mapped_size);
-        mapped = nullptr;
-        mapped_size = 0;
-        if (fd >= 0)
-            ::close(fd);
-        fd = -1;
-    }
-
-    ~PeerClockReader() { close(); }
-#else
-    // Windows stub — not yet implemented
-    bool isOpen() const { return false; }
-    bool tryOpen(const std::string&) { return false; }
-    std::optional<int64_t> getClockOffsetNs() const { return std::nullopt; }
-    std::optional<int64_t> getRawOffsetNs() const { return std::nullopt; }
-    std::optional<int64_t> getClockUncertaintyNs() const { return std::nullopt; }
-    void close() {}
+    ~IdlePoller() {
+#ifdef _WIN32
+        if (m_timer)
+            CloseHandle(m_timer);
 #endif
+    }
 
-    PeerClockReader() = default;
-    PeerClockReader(const PeerClockReader&) = delete;
-    PeerClockReader& operator=(const PeerClockReader&) = delete;
+    IdlePoller(const IdlePoller&) = delete;
+    IdlePoller& operator=(const IdlePoller&) = delete;
+
+    void wait(const std::chrono::microseconds duration) {
+#ifdef _WIN32
+        if (m_timer) {
+            LARGE_INTEGER due;
+            due.QuadPart = -static_cast<LONGLONG>(duration.count()) * 10;  // relative, 100 ns units
+            if (SetWaitableTimer(m_timer, &due, 0, nullptr, nullptr, FALSE)) {
+                WaitForSingleObject(m_timer, INFINITE);
+                return;
+            }
+        }
+        Sleep(1);
+#else
+        std::this_thread::sleep_for(duration);
+#endif
+    }
+
+private:
+#ifdef _WIN32
+    HANDLE m_timer = nullptr;
+#endif
 };
 
 } // anonymous namespace
@@ -166,7 +98,7 @@ struct PeerClockReader {
 namespace cbsdk {
 
 /// Defined below; used by SdkSession::Impl to name peer devices' segments.
-static std::string getNativeSegmentName(DeviceType type, const std::string& segment);
+static const char* getNativeDeviceName(DeviceType type);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Channel type classification helper (capability-based)
@@ -567,9 +499,9 @@ struct SdkSession::Impl {
     // config segment.  All known HUB segments are kept open and refreshed each
     // cycle; the borrowed offset is sanity-checked inside ClockSync before use.
     struct PeerHub {
-        std::string segment;
-        std::unique_ptr<PeerClockReader> reader;
-        // Peers that are not running have no segment to open, and shm_open on a
+        std::string device_tag;  ///< NATIVE name qualifier, e.g. "hub1"
+        std::unique_ptr<cbshm::NativeConfigReader> reader;
+        // Peers that are not running have no segment to open, and opening a
         // missing name is a syscall that always fails.  Space the retries so an
         // absent peer costs almost nothing.
         std::chrono::steady_clock::time_point next_open_attempt{};
@@ -913,8 +845,8 @@ struct SdkSession::Impl {
     ///
     /// @note Runs on the device receive thread, on the cadence set by
     ///       kClockMaintenanceInterval — never per datagram.  It performs
-    ///       syscalls (shm_open, kill) and shared-memory writes, all of which
-    ///       would otherwise stall the return to recvfrom().
+    ///       syscalls (segment open, owner-liveness probe) and shared-memory
+    ///       writes, all of which would otherwise stall the return to recvfrom().
     void updateClockConsensus(std::chrono::steady_clock::time_point now) {
         const DeviceType self_type = config.device_type;
         const bool shares_ptp_clock =
@@ -929,8 +861,8 @@ struct SdkSession::Impl {
                     if (dt == config.device_type)
                         continue;  // skip self
                     peer_hubs.push_back(
-                        {getNativeSegmentName(dt, "config"),
-                         std::make_unique<PeerClockReader>()});
+                        {getNativeDeviceName(dt),
+                         std::make_unique<cbshm::NativeConfigReader>()});
                 }
             }
 
@@ -945,22 +877,34 @@ struct SdkSession::Impl {
             for (auto& ph : peer_hubs) {
                 if (!ph.reader->isOpen()) {
                     // A peer that isn't running has no segment to open; back
-                    // off so the failing shm_open isn't retried every cycle.
+                    // off so the failing open isn't retried every cycle.
                     if (now < ph.next_open_attempt)
                         continue;
-                    if (!ph.reader->tryOpen(ph.segment)) {
+                    if (!ph.reader->open(ph.device_tag)) {
                         ph.next_open_attempt = now + kPeerReopenInterval;
                         continue;
                     }
                 }
+                if (!ph.reader->isOwnerAlive()) {
+                    // The peer exited.  Drop the mapping rather than keep
+                    // reading it: on POSIX a restarted peer publishes into a
+                    // fresh segment this mapping can never see, and on Windows
+                    // our handle alone would keep the dead peer's object alive.
+                    ph.reader->close();
+                    ph.next_open_attempt = now + kPeerReopenInterval;
+                    continue;
+                }
+                const cbshm::NativeConfigBuffer* peer_cfg = ph.reader->config();
                 // Vote on the peer's own (pre-consensus) estimate so the
                 // median can track real common-mode drift.
-                auto offset = ph.reader->getRawOffsetNs();
-                if (!offset)
+                if (!peer_cfg->clock_raw_valid)
                     continue;
+                const std::optional<int64_t> offset = peer_cfg->clock_raw_offset_ns;
                 if (n_votes < votes.size())
                     votes[n_votes++] = *offset;
-                auto uncert = ph.reader->getClockUncertaintyNs();
+                const std::optional<int64_t> uncert = peer_cfg->clock_sync_valid
+                    ? std::optional<int64_t>(peer_cfg->clock_uncertainty_ns)
+                    : std::nullopt;
                 const int64_t uncert_val = uncert ? *uncert : INT64_MAX;
                 if (!best_peer_offset || uncert_val < best_peer_uncert_val) {
                     best_peer_offset = offset;
@@ -1129,28 +1073,24 @@ static const char* getNativeDeviceName(DeviceType type) {
     }
 }
 
-static std::string getNativeSegmentName(DeviceType type, const std::string& segment) {
-    return std::string("cbshm_") + getNativeDeviceName(type) + "_" + segment;
-}
-
-/// @brief Map DeviceType to Central's instrument index (GEMSTART==2 mapping)
+/// @brief Map DeviceType to Central's instrument index for the running Central
 ///
-/// Central hardcodes instrument assignments at compile time.
-/// With GEMSTART==2 (current build): Hub1=0, Hub2=1, Hub3=2, NSP=3
-/// With single-device (non-Gemini): instrument 0
-///
-static int32_t getCentralInstrumentIndex(DeviceType type) {
+/// The slot each device occupies depends on the Central version (see
+/// cbshm::getCentralInstrumentIndex).  -1 means that Central never connects
+/// to this device type (e.g. NPLAY, or HUB3 before 7.8), so it cannot be the
+/// device's owner and CENTRAL CLIENT mode does not apply.  It is NOT a "match
+/// all instruments" sentinel.
+static int32_t getCentralInstrumentIndex(const cbshm::CentralVersion version, const DeviceType type) {
+    cbproto_device_type_t device;
     switch (type) {
-        case DeviceType::HUB1:       return 0;
-        case DeviceType::HUB2:       return 1;
-        case DeviceType::HUB3:       return 2;
-        case DeviceType::NSP:        return 3;
-        case DeviceType::LEGACY_NSP: return 0;  // Non-Gemini, single instrument
-        // No CENTRAL instrument mapping (e.g. NPLAY). -1 yields an invalid
-        // InstrumentId, so CENTRAL-mode create() fails and the caller falls
-        // back to NATIVE. This is NOT a "match all instruments" sentinel.
+        case DeviceType::LEGACY_NSP: device = CBPROTO_DEVICE_TYPE_LEGACY_NSP; break;
+        case DeviceType::NSP:        device = CBPROTO_DEVICE_TYPE_NSP;        break;
+        case DeviceType::HUB1:       device = CBPROTO_DEVICE_TYPE_HUB1;       break;
+        case DeviceType::HUB2:       device = CBPROTO_DEVICE_TYPE_HUB2;       break;
+        case DeviceType::HUB3:       device = CBPROTO_DEVICE_TYPE_HUB3;       break;
         default:                     return -1;
     }
+    return cbshm::getCentralInstrumentIndex(version, device);
 }
 
 Result<SdkSession> SdkSession::create(const SdkConfig& config) {
@@ -1168,10 +1108,34 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     std::string device_tag = getNativeDeviceName(config.device_type);
 
     // --- Attempt 1: Central-compatible CLIENT mode ---
-    // Try to attach to Central's shared memory (Central is running)
-    auto inst = cbproto::InstrumentId::fromIndex(getCentralInstrumentIndex(config.device_type));
-    auto shmem_result = cbshm::ShmemSession::create(
-        cbshm::Mode::CLIENT, cbshm::ShmemLayout::CENTRAL, /*instance=*/"", inst);
+    // A running Central owns the socket of every device it has a slot for, so
+    // for those devices attaching through its shared memory is the only correct
+    // way in.  If that attach fails we must report it rather than fall through:
+    // STANDALONE would then compete with Central for the same device (#210).
+    // A device this Central never connects to (NPLAY, or HUB3 before 7.8) is
+    // not Central's, and goes through the NATIVE path as if Central were absent.
+    int32_t central_inst_idx = -1;
+    auto shmem_result = cbshm::Result<cbshm::ShmemSession>::error("Central is not running");
+    if (cbshm::isCentralRunning()) {
+        auto central_version = cbshm::detectCentralVersion();
+        if (central_version.isError()) {
+            return Result<SdkSession>::error(
+                "Central is running, but CereLink cannot attach to it: " + central_version.error() +
+                ". Not connecting to the device directly, which would compete with Central for it.");
+        }
+        central_inst_idx = getCentralInstrumentIndex(central_version.value(), config.device_type);
+        if (central_inst_idx >= 0) {
+            shmem_result = cbshm::ShmemSession::create(
+                cbshm::Mode::CLIENT, cbshm::ShmemLayout::CENTRAL, /*instance=*/"",
+                cbproto::InstrumentId::fromIndex(central_inst_idx));
+            if (shmem_result.isError()) {
+                return Result<SdkSession>::error(
+                    "Central is running, but attaching to its shared memory failed: " +
+                    shmem_result.error() +
+                    ". Not connecting to the device directly, which would compete with Central for it.");
+            }
+        }
+    }
 
     if (shmem_result.isError()) {
         // --- Attempt 2: Native CLIENT mode ---
@@ -1225,11 +1189,10 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
         // the device type select a non-zero index.  NATIVE shared memory holds
         // a single instrument whichever device produced it -- including for a
         // NATIVE CLIENT, which is not standalone but is still single-instrument.
-        const int32_t inst_idx = getCentralInstrumentIndex(config.device_type);
         const bool central_layout =
             session.m_impl->shmem_session->getLayout() == cbshm::ShmemLayout::CENTRAL;
         session.m_impl->central_instrument =
-            central_layout && inst_idx >= 0 ? static_cast<uint32_t>(inst_idx) : 0u;
+            central_layout && central_inst_idx >= 0 ? static_cast<uint32_t>(central_inst_idx) : 0u;
         std::lock_guard<std::mutex> lk(session.m_impl->window_mutex);
         session.m_impl->buildChannelWindowLocked(session.m_impl->central_instrument);
     }
@@ -1507,6 +1470,7 @@ Result<void> SdkSession::start() {
         // Start device send thread - dequeues from shmem and sends to device
         m_impl->device_send_thread_running.store(true);
         m_impl->device_send_thread = std::make_unique<std::thread>([impl]() {
+            IdlePoller idle;
             while (impl->device_send_thread_running.load()) {
                 bool has_packets = false;
 
@@ -1541,7 +1505,7 @@ Result<void> SdkSession::start() {
 
                 if (!has_packets) {
                     // No packets - wait briefly before checking again
-                    hr_sleep_us(100);
+                    idle.wait(std::chrono::microseconds(100));
                 }
             }
         });

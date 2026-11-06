@@ -226,24 +226,22 @@ CereLink only supports Central instance 0. Instances 1-3 are not supported.
 
 ### DeviceType to Instrument Index Mapping
 
-Central's config buffer has `[4]` arrays for up to 4 instruments. CereLink must map
+Central's config buffer has `[cbMAXPROCS]` arrays, one slot per instrument. CereLink must map
 `DeviceType` to the correct instrument index in Central's arrays.
 
-The mapping is hardcoded based on Central's compile-time `GEMSTART` setting. The current
-Central build uses `GEMSTART == 2`:
+Central assigns slots at compile time (`CentralDlg.cpp`, `GEMSTART == 2` in every release
+build), and the assignment changed as Hub support was added. CereLink picks the row for the
+detected Central version (`cbshm::getCentralInstrumentIndex`):
 
-| Instrument Index | Device | IP Address      | Port  |
-|------------------|--------|-----------------|-------|
-| 0                | Hub 1  | 192.168.137.200 | 51002 |
-| 1                | Hub 2  | 192.168.137.201 | 51003 |
-| 2                | Hub 3  | 192.168.137.202 | 51004 |
-| 3                | NSP    | 192.168.137.128 | 51001 |
+| Central | `cbMAXPROCS` | Hub 1 | Hub 2 | Hub 3 | NSP |
+|---------|--------------|-------|-------|-------|-----|
+| 7.0     | 1            | -     | -     | -     | -   |
+| 7.5     | 2            | 1     | -     | -     | 0   |
+| 7.6/7.7 | 3            | 0     | 1     | -     | 2   |
+| 7.8     | 4            | 0     | 1     | 2     | 3   |
 
-**Limitation**: This mapping assumes Central was compiled with `GEMSTART == 2`. An alternate
-build (`GEMSTART == 1`) uses a different ordering: NSP=0, Hub1=1, Hub2=2. CereLink does
-not currently detect or adapt to alternate GEMSTART configurations. If a future Central
-build changes GEMSTART, this mapping must be updated. A runtime discovery mechanism (e.g.,
-scanning `procinfo` slots for identifying data) could be added if needed.
+`-` means that Central never connects to the device, so it cannot own it; CereLink then
+uses the NATIVE path for that device even while Central is running.
 
 For legacy (non-Gemini) NSP systems, only instrument index 0 is used.
 
@@ -332,15 +330,17 @@ Instrument status in central mode:
 ```
 SdkSession::open(DeviceType::HUB1)
     |
-    +-- Can open Central's "cbSharedDataMutex" (instance 0)?
+    +-- Central.exe running AND its version has a slot for HUB1?
     |     |
     |     YES --> Central Mode (CENTRAL layout)
     |             - Map Central's 7 instance-0 segments
     |             - Use cbCFGBUFF for config buffer (Central's binary layout)
-    |             - Use GEMSTART==2 mapping: Hub1 = instrument index 0
+    |             - Instrument index from the version's slot table (Hub1 = 0 on 7.6+)
     |             - Set instrument filter for receive buffer
     |             - Target instrument is fixed for the session's lifetime (set at creation)
     |             - Detect protocol version, translate packets if non-current
+    |             - If the attach fails, create() FAILS: Central owns the device, so
+    |               falling through to Standalone would compete with it for the socket
     |
     +-- NO --> Can open "cbshm_hub1_signal"?
     |     |
@@ -474,9 +474,9 @@ an SPSC queue to buffer between fast UDP receive and slow callback processing.
 
 ## Known Limitations
 
-- GEMSTART mapping is hardcoded to `GEMSTART==2`. If a Central build uses a different
-  GEMSTART, the instrument index mapping must be updated. Runtime detection is not yet
-  implemented.
+- The instrument slot table is per Central release and assumes `GEMSTART==2`, which every
+  release so far was built with. A custom Central build with another `GEMSTART` needs a new
+  row in `cbshm::getCentralInstrumentIndex`.
 
 ## Code Locations
 
