@@ -18,6 +18,7 @@
 
 #include "cbsdk/sdk_session.h"
 #include "cmp_parser.h"
+#include "recording_gate.h"
 #include "cbdev/device_factory.h"
 #include "cbdev/connection.h"
 #include "cbshm/shmem_session.h"
@@ -150,6 +151,37 @@ static ChannelType classifyChannelByCaps(const cbPKT_CHANINFO& chaninfo) {
 struct SdkSession::Impl {
     // Configuration
     SdkConfig config;
+
+    /// Error if any of @p pkts changes a setting that is locked while the
+    /// device is recording (see recording_gate.h).  Checks the whole batch
+    /// before anything is sent.
+    Result<void> rejectWhileRecording(const cbPKT_GENERIC* pkts, size_t n) const {
+        const cbPKT_FILECFG* fileinfo = nullptr;
+        const cbPKT_CHANINFO* chaninfo = nullptr;
+        const cbPKT_SS_STATUS* status = nullptr;
+        if (device_session) {
+            const auto& c = device_session->getDeviceConfig();
+            fileinfo = &c.fileinfo;
+            chaninfo = c.chaninfo;
+            status = &c.spike_sorting.status;
+        } else if (const auto* nc = shmem_session ? shmem_session->getNativeConfigBuffer() : nullptr) {
+            fileinfo = &nc->fileinfo;
+            chaninfo = nc->chaninfo;
+            status = &nc->pktStatus;
+        } else {
+            // ponytail: CERELINK_CENTRAL_COMPAT sessions aren't gated (reading
+            // Central's config copies its whole buffer); the mode is deprecated.
+            return Result<void>::ok();
+        }
+        if (!isRecording(*fileinfo))
+            return Result<void>::ok();
+        for (size_t i = 0; i < n; ++i) {
+            if (const char* what = recordingBlockReason(pkts[i], chaninfo, cbMAXCHANS, *status))
+                return Result<void>::error(std::string("The device is recording; the ") + what +
+                                           " cannot be changed until recording stops");
+        }
+        return Result<void>::ok();
+    }
 
     // Connection mode
     bool standalone = false;
@@ -1364,6 +1396,17 @@ Result<void> SdkSession::start() {
                     const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(&pkt);
                     impl->shmem_session->setSysInfo(*sysinfo);
                 }
+                if (pkt.cbpkt_header.type == cbPKTTYPE_REPFILECFG) {
+                    // Same filter as cbdev's device_config.fileinfo, so CLIENTs
+                    // see the recording state the STANDALONE gates on.
+                    const auto* filecfg = reinterpret_cast<const cbPKT_FILECFG*>(&pkt);
+                    auto* native = impl->shmem_session->getNativeConfigBuffer();
+                    if (native && (filecfg->options == cbFILECFG_OPT_REC
+                                   || filecfg->options == cbFILECFG_OPT_STOP
+                                   || filecfg->options == cbFILECFG_OPT_TIMEOUT)) {
+                        native->fileinfo = *filecfg;
+                    }
+                }
                 if (pkt.cbpkt_header.type == cbPKTTYPE_GROUPREP) {
                     const auto* groupinfo = reinterpret_cast<const cbPKT_GROUPINFO*>(&pkt);
                     if (groupinfo->group >= 1 && groupinfo->group <= cbMAXGROUPS) {
@@ -2110,6 +2153,9 @@ Result<void> SdkSession::setSpikeLength(uint32_t spikelen, uint32_t spikepre) {
     pkt.spikepre = spikepre;
 
     if (m_impl->device_session) {
+        if (auto r = m_impl->rejectWhileRecording(
+                &reinterpret_cast<const cbPKT_GENERIC&>(pkt), 1); r.isError())
+            return r;
         const auto r = m_impl->device_session->sendPacket(
             reinterpret_cast<const cbPKT_GENERIC&>(pkt));
         if (r.isError())
@@ -2326,6 +2372,8 @@ Result<void> SdkSession::setSampleGroup(
 //   STANDALONE process.
 Result<void> SdkSession::sendBulkPackets(const std::vector<cbPKT_GENERIC>& packets) {
     if (packets.empty()) return Result<void>::ok();
+    if (auto r = m_impl->rejectWhileRecording(packets.data(), packets.size()); r.isError())
+        return r;
     if (m_impl->device_session) {
         return m_impl->device_session->sendPackets(packets);
     }
@@ -2403,8 +2451,12 @@ Result<void> SdkSession::setACInputCoupling(
 
 Result<void> SdkSession::setChannelConfig(const cbPKT_CHANINFO& chaninfo) {
     // STANDALONE talks to the device directly, where ids are already local.
-    if (m_impl->device_session)
+    if (m_impl->device_session) {
+        if (auto r = m_impl->rejectWhileRecording(
+                &reinterpret_cast<const cbPKT_GENERIC&>(chaninfo), 1); r.isError())
+            return r;
         return m_impl->device_session->setChannelConfig(chaninfo);
+    }
 
     // CLIENT: validate against this device's window, but send the channel id
     // unchanged.
@@ -2813,6 +2865,8 @@ Result<void> SdkSession::loadCCF(const std::string& filename) {
         return Result<void>::error("Failed to read CCF file");
 
     auto packets = ccf::buildConfigPackets(ccf_data);
+    if (auto r = m_impl->rejectWhileRecording(packets.data(), packets.size()); r.isError())
+        return r;
 
     if (m_impl->device_session) {
         // STANDALONE: send directly via DeviceSession (same path as
@@ -3042,6 +3096,8 @@ Result<void> SdkSession::sendPacket(const cbPKT_GENERIC& pkt) {
     if (!m_impl->shmem_session) {
         return Result<void>::error("sendPacket: shmem_session is null");
     }
+    if (auto r = m_impl->rejectWhileRecording(&pkt, 1); r.isError())
+        return r;
 
     // Stamp packet with a nanosecond timestamp (Central's xmt consumer skips packets with time=0).
     // Use getLastTime() (always nanoseconds) so that enqueuePacket's per-protocol translation

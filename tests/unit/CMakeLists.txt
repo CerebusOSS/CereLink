@@ -253,6 +253,25 @@ gtest_discover_tests(cmp_parser_tests)
 
 message(STATUS "Unit tests configured for CMP parser")
 
+# Recording gate (no device needed)
+add_executable(recording_gate_tests
+    test_recording_gate.cpp
+)
+
+target_link_libraries(recording_gate_tests
+    PRIVATE
+        cbproto
+        GTest::gtest_main
+)
+
+target_include_directories(recording_gate_tests
+    BEFORE PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/cbsdk/src
+        ${PROJECT_SOURCE_DIR}/src/cbproto/include
+)
+
+gtest_discover_tests(recording_gate_tests)
+
 # ccfutils tests (CCF <-> DeviceConfig conversion)
 add_executable(ccfutils_tests
     test_ccf_config.cpp

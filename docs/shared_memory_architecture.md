@@ -379,6 +379,17 @@ recording commands from a session still reach Central (the device echoes `SETFIL
 broadcast `REPFILECFG`). The session keeps native timing: sub-millisecond request round
 trips and ~0.1 ms clock uncertainty, versus ~20 ms and ~10 ms through Central.
 
+While the device reports a recording in progress (last `REPFILECFG` is `cbFILECFG_OPT_REC`,
+whoever started it), a session refuses to change what Central's own dialogs lock during
+recording: sample groups (`CHANSETSMP`, or a full `CHANSET` from `setChannelConfig` /
+`loadCCF` that changes `smpgroup`), the raw-stream bit, spike length, spike detection /
+noise boundaries, n-trode grouping, and restarting or switching on continuous spike
+sorting. The call returns an error and nothing is sent. Labels, thresholds, spike
+options, comments, digital out and recording control are unaffected. Central itself
+never filtered packets from other programs; this is the session's own rule
+(`src/cbsdk/src/recording_gate.h`). Sessions in the deprecated Central-compat mode are
+not gated.
+
 Caveats:
 - A session given a custom *specific* client address cannot share the port with Central;
   leave it unset so the wildcard is used.
