@@ -24,7 +24,6 @@
     #include <netinet/in.h>
     #include <arpa/inet.h>
     #include <unistd.h>
-    #include <sys/select.h>
     #include <fcntl.h>
     #include <errno.h>
     #include <ifaddrs.h>
@@ -67,22 +66,6 @@ namespace {
 #else
         ::close(sock);
 #endif
-    }
-
-    /// @brief Wait up to @p timeout for @p sock to become readable
-    /// @return true if a datagram is waiting
-    inline bool waitReadable(SOCKET sock, std::chrono::steady_clock::duration timeout) {
-        auto us = std::chrono::duration_cast<std::chrono::microseconds>(timeout).count();
-        if (us < 0)
-            us = 0;
-        fd_set readable;
-        FD_ZERO(&readable);
-        FD_SET(sock, &readable);
-        timeval tv{};
-        tv.tv_sec = static_cast<decltype(tv.tv_sec)>(us / 1000000);
-        tv.tv_usec = static_cast<decltype(tv.tv_usec)>(us % 1000000);
-        // The first argument is ignored on Windows.
-        return select(static_cast<int>(sock) + 1, &readable, nullptr, nullptr, &tv) > 0;
     }
 
     /// @brief Block until @p deadline, accurately below one millisecond
@@ -1963,22 +1946,11 @@ Result<void> DeviceSession::startReceiveThread() {
         // Puts sample datagrams that the host delivered out of order back in
         // order before dispatch (see sample_reorder.h).  Held copies get the
         // same padding as `buffer`.
-        SampleReorderBuffer reorder(
-            std::chrono::microseconds(m_impl->config.reorder_hold_us), cbCER_UDP_SIZE_MAX);
+        SampleReorderBuffer reorder(m_impl->config.reorder_window, cbCER_UDP_SIZE_MAX);
         uint64_t reported_reorders = 0;
         std::chrono::steady_clock::time_point last_reorder_log{};
 
         while (!m_impl->receive_thread_stop_requested.load()) {
-            // While a datagram is held, wait for more data only until its
-            // deadline rather than for the socket's full receive timeout.
-            if (const auto deadline = reorder.deadline()) {
-                const auto now = std::chrono::steady_clock::now();
-                if (now >= *deadline || !waitReadable(m_impl->socket, *deadline - now)) {
-                    reorder.releaseIfDue(std::chrono::steady_clock::now(), dispatch);
-                    continue;
-                }
-            }
-
             // Receive packets (only fill the actual datagram portion, not the padding)
             auto result = receivePackets(buffer, cbCER_UDP_SIZE_MAX);
 
@@ -1989,14 +1961,17 @@ Result<void> DeviceSession::startReceiveThread() {
 
             const int bytes_received = result.value();
             if (bytes_received == 0) {
-                reorder.releaseIfDue(std::chrono::steady_clock::now(), dispatch);
+                // A blocking socket returns nothing only after its receive
+                // timeout, i.e. the stream is idle: nothing more is coming for
+                // a held datagram.  (Non-blocking returns nothing constantly.)
+                if (!m_impl->config.non_blocking)
+                    reorder.releaseAll(dispatch);
                 // No data available - brief sleep to avoid busy-waiting
                 std::this_thread::sleep_for(std::chrono::microseconds(100));
                 continue;
             }
 
-            reorder.push(buffer, static_cast<size_t>(bytes_received),
-                         std::chrono::steady_clock::now(), dispatch);
+            reorder.push(buffer, static_cast<size_t>(bytes_received), dispatch);
 
             // Report restorations the way packet loss is reported (rate-limited).
             if (reorder.reorderedCount() != reported_reorders) {
@@ -2012,18 +1987,16 @@ Result<void> DeviceSession::startReceiveThread() {
 
         if (std::getenv("CERELINK_REORDER_STATS")) {
             const auto& st = reorder.stats();
-            using us = std::chrono::microseconds;
             fprintf(stderr,
                     "[cbdev] reorder stats (port %u): datagrams=%llu holds=%llu "
-                    "(head=%llu other=%llu timeout=%llu) held_total=%lld us held_max=%lld us\n",
+                    "(head=%llu count=%llu idle=%llu) head_wait_max=%u\n",
                     static_cast<unsigned>(m_impl->config.recv_port),
                     static_cast<unsigned long long>(st.datagrams),
                     static_cast<unsigned long long>(st.holds),
                     static_cast<unsigned long long>(st.released_by_head),
-                    static_cast<unsigned long long>(st.released_by_other),
-                    static_cast<unsigned long long>(st.released_by_timeout),
-                    static_cast<long long>(std::chrono::duration_cast<us>(st.held_total).count()),
-                    static_cast<long long>(std::chrono::duration_cast<us>(st.held_max).count()));
+                    static_cast<unsigned long long>(st.released_by_count),
+                    static_cast<unsigned long long>(st.released_by_idle),
+                    static_cast<unsigned>(st.head_wait_max));
         }
 
         m_impl->receive_thread_running.store(false);

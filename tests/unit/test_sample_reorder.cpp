@@ -6,13 +6,12 @@
 #include <gtest/gtest.h>
 #include "sample_reorder.h"
 
-#include <chrono>
 #include <cstring>
 #include <map>
+#include <utility>
 #include <vector>
 
 using cbdev::SampleReorderBuffer;
-using namespace std::chrono_literals;
 
 namespace {
 
@@ -50,10 +49,9 @@ Datagram samples(int first, int n, uint16_t group = 6) { return Datagram{}.sampl
 
 /// Feeds datagrams; records delivered packets as (chid, type, time) per stream.
 struct Harness {
-    SampleReorderBuffer buf{3ms};
+    SampleReorderBuffer buf{2};
     std::map<uint16_t, std::vector<PROCTIME>> group;  // sample group -> delivered times
     std::vector<std::pair<uint16_t, uint16_t>> order;  // (chid, type) in delivery order
-    SampleReorderBuffer::Clock::time_point now{};
 
     void record(const uint8_t* data, size_t len) {
         size_t off = 0;
@@ -67,12 +65,9 @@ struct Harness {
         }
     }
     auto emitter() { return [this](const uint8_t* d, size_t n) { record(d, n); }; }
-    void push(const Datagram& dg) { buf.push(dg.bytes.data(), dg.bytes.size(), now, emitter()); }
-    void tick(std::chrono::microseconds dt) {
-        now += dt;
-        buf.releaseIfDue(now, emitter());
-    }
-    bool held() const { return buf.deadline().has_value(); }
+    void push(const Datagram& dg) { buf.push(dg.bytes.data(), dg.bytes.size(), emitter()); }
+    void idle() { buf.releaseAll(emitter()); }
+    bool held() const { return buf.holding(); }
     /// Group @p g delivered exactly @p n consecutive samples, in order.
     bool contiguous(uint16_t g, size_t n, PROCTIME period = kPeriod) const {
         auto it = group.find(g);
@@ -141,27 +136,82 @@ TEST(SampleReorder, FullDatagramAfterRealGapIsNotHeld) {
     EXPECT_EQ(h.group[6][59] + 31 * kPeriod, h.group[6][60]);  // the gap stays a gap
 }
 
-TEST(SampleReorder, SmallDatagramAfterRealGapReleasedByNextSamples) {
+/// The head can be two datagrams behind its tail (tail, monitor, head).
+TEST(SampleReorder, HeadTwoDatagramsBehindIsRestored) {
+    Harness h;
+    h.push(samples(0, 30));
+    h.push(samples(30, 30));
+    h.push(samples(87, 3));                          // held
+    h.push(Datagram{}.monitor(kT0 + 61 * kPeriod));  // queued
+    h.push(samples(60, 27));                         // head, within the window
+    EXPECT_FALSE(h.held());
+    EXPECT_EQ(h.buf.reorderedCount(), 1u);
+    EXPECT_TRUE(h.contiguous(6, 90));
+}
+
+/// After real loss the tail waits out the window, then everything is
+/// delivered in arrival order.
+TEST(SampleReorder, SmallDatagramAfterRealGapReleasedAfterWindow) {
     Harness h;
     h.push(samples(0, 30));
     h.push(samples(30, 30));
     h.push(samples(87, 3));    // held, but its head was really lost
-    h.push(samples(90, 30));   // samples that are not the head: release, then this
+    h.push(samples(90, 30));   // queued (1 of 2)
+    EXPECT_TRUE(h.held());
+    EXPECT_EQ(h.group[6].size(), 60u);
+    h.push(samples(120, 30));  // window over: tail, the queued one, then this
     EXPECT_FALSE(h.held());
-    EXPECT_EQ(h.group[6].size(), 93u);
+    ASSERT_EQ(h.group[6].size(), 123u);
+    EXPECT_EQ(h.group[6][60], kT0 + 87 * kPeriod);
+    EXPECT_EQ(h.group[6].back(), kT0 + 149 * kPeriod);
     EXPECT_EQ(h.buf.reorderedCount(), 0u);
+    EXPECT_EQ(h.buf.stats().released_by_count, 1u);
 }
 
-TEST(SampleReorder, SmallDatagramAfterRealGapReleasedWhenHoldExpires) {
+TEST(SampleReorder, IdleSocketReleasesHeld) {
     Harness h;
     h.push(samples(0, 30));
     h.push(samples(30, 30));
     h.push(samples(87, 3));  // held
-    h.tick(2ms);
     EXPECT_EQ(h.group[6].size(), 60u);
-    h.tick(2ms);             // past the 3 ms hold
+    h.idle();
     EXPECT_EQ(h.group[6].size(), 63u);
     EXPECT_FALSE(h.held());
+}
+
+/// Samples [first, first + n) of the 30 kHz grid, with every group active:
+/// 6 and 5 at 30 kHz, 4 at 10 kHz, 3 at 2 kHz, 2 at 1 kHz, 1 at 500 Hz.
+Datagram allGroups(int first, int n) {
+    Datagram dg;
+    for (int i = first; i < first + n; ++i) {
+        const PROCTIME t = kT0 + PROCTIME(i) * kPeriod;
+        for (auto [group, every] : {std::pair{1, 60}, {2, 30}, {3, 15}, {4, 3}, {5, 1}, {6, 1}})
+            if (i % every == 0)
+                dg.packet(0, uint16_t(group), t);
+    }
+    return dg;
+}
+
+/// Channels can be spread over every sample group at once; each keeps its own
+/// timeline through a restored split.
+TEST(SampleReorder, AllSixGroupsAtOnce) {
+    Harness h;
+    for (int ms = 0; ms < 3; ++ms) {
+        h.push(allGroups(ms * 30, 30));
+        EXPECT_FALSE(h.held());  // no group's normal cadence looks like a gap
+    }
+    h.push(allGroups(117, 3));   // tail of ms 3: groups 4, 5, 6
+    EXPECT_TRUE(h.held());
+    h.push(allGroups(90, 27));   // the late head
+    EXPECT_FALSE(h.held());
+    h.push(allGroups(120, 30));
+    EXPECT_EQ(h.buf.reorderedCount(), 1u);
+    EXPECT_TRUE(h.contiguous(6, 150));
+    EXPECT_TRUE(h.contiguous(5, 150));
+    EXPECT_TRUE(h.contiguous(4, 50, 3 * kPeriod));
+    EXPECT_TRUE(h.contiguous(3, 10, 15 * kPeriod));
+    EXPECT_TRUE(h.contiguous(2, 5, 30 * kPeriod));
+    EXPECT_TRUE(h.contiguous(1, 3, 60 * kPeriod));
 }
 
 /// Group 6 alongside group 2 (1 kHz).  The tail datagram starts with a group-2
@@ -180,7 +230,7 @@ TEST(SampleReorder, DetectsGapInEitherOfTwoGroups) {
     EXPECT_TRUE(h.contiguous(2, 4, kPeriod1k));
 }
 
-/// Group 6 is published ahead of groups 1-4 for the same instant; cross-group
+/// Group 6 is published ahead of the lower-rate groups for the same instant; cross-group
 /// skew must not look like a gap or a reversal.
 TEST(SampleReorder, CrossGroupSkewIsIgnored) {
     Harness h;
@@ -224,8 +274,8 @@ TEST(SampleReorder, TimestampResetIsNotAGap) {
     EXPECT_EQ(h.group[6].size(), 63u);
 }
 
-TEST(SampleReorder, ZeroHoldDisablesReordering) {
-    SampleReorderBuffer buf{0us};
+TEST(SampleReorder, ZeroWindowDisablesReordering) {
+    SampleReorderBuffer buf{0};
     std::vector<PROCTIME> got;
     auto rec = [&](const uint8_t* d, size_t) {
         cbPKT_HEADER hdr;
@@ -233,19 +283,19 @@ TEST(SampleReorder, ZeroHoldDisablesReordering) {
         got.push_back(hdr.time);
     };
     for (auto& dg : {samples(0, 30), samples(30, 30), samples(87, 3), samples(60, 27)})
-        buf.push(dg.bytes.data(), dg.bytes.size(), {}, rec);
+        buf.push(dg.bytes.data(), dg.bytes.size(), rec);
     ASSERT_EQ(got.size(), 4u);
     EXPECT_GT(got[2], got[3]);  // left exactly as received
 }
 
 TEST(SampleReorder, HeldCopyLengthExcludesPadding) {
-    SampleReorderBuffer buf{3ms, 4096};
+    SampleReorderBuffer buf{2, 4096};
     std::vector<size_t> seen;
     auto rec = [&](const uint8_t*, size_t n) { seen.push_back(n); };
     for (auto& dg : {samples(0, 30), samples(30, 30)})
-        buf.push(dg.bytes.data(), dg.bytes.size(), {}, rec);
+        buf.push(dg.bytes.data(), dg.bytes.size(), rec);
     auto tail = samples(87, 3);
-    buf.push(tail.bytes.data(), tail.bytes.size(), {}, rec);
+    buf.push(tail.bytes.data(), tail.bytes.size(), rec);
     buf.releaseAll(rec);
     ASSERT_EQ(seen.size(), 3u);
     EXPECT_EQ(seen[2], tail.bytes.size());

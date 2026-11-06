@@ -389,9 +389,9 @@ Caveats:
   (~1 per minute) hands the second to sockets before the first, although the wire order is
   correct. Central sees this identically; it is not caused by sharing the port, and it was
   not cured by disabling interrupt moderation or Defender's datagram processing. CereLink
-  puts such datagrams back in order (`cbdev::SampleReorderBuffer`): a sample datagram that
-  starts after a gap is held up to `ConnectionParams::reorder_hold_us` (3 ms) for the late
-  one. In-order traffic is never held.
+  puts such datagrams back in order (`cbdev::SampleReorderBuffer`): a small sample datagram
+  that starts after a gap is held for at most `ConnectionParams::reorder_window` (2) more
+  datagrams, waiting for the late one. In-order traffic is never held.
 
 ## Key Data Flow Paths
 

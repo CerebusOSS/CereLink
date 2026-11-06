@@ -16,17 +16,19 @@
 /// Detection: a datagram is held when, for some sample group it carries, its
 /// first sample comes *after a gap* in that group AND it spans less than half
 /// a millisecond of that group -- i.e. it looks like the small tail of a split
-/// whose head has not arrived.  The head, when it arrives, is delivered first,
-/// then the held tail, then anything that queued up behind the tail.  Only the
-/// late head is ever moved; everything else keeps arrival order.  A gap left
-/// by genuine loss is usually followed by a full-millisecond datagram, which is
-/// not held, so loss costs no extra latency; a held datagram is released
-/// anyway when a sample datagram that is not the head arrives, or after the
-/// hold time.
+/// whose head has not arrived.  Each sample group is tracked separately: every
+/// channel picks its own group, so any of groups 1-6 can be active at once,
+/// each at its own rate.  Only groups fast enough to fit a sample in under half
+/// a millisecond (10 kHz and up) can mark a tail.  Non-sample packets (spikes,
+/// config, monitor) never affect detection.
 ///
-/// Each sample group is tracked separately (group 6 at 30 kHz alongside one of
-/// groups 1-4 at a lower rate, which the device publishes slightly later), and
-/// non-sample packets (spikes, config, monitor) never affect detection.
+/// Release: the split puts out head, monitor, tail.  With the tail delivered
+/// first, the head is at most two datagrams behind it (tail-head-monitor,
+/// tail-monitor-head, or monitor-tail-head).  So a held tail waits for at most
+/// that many datagrams: if the head arrives it is delivered first, then the
+/// tail, then whatever queued behind the tail; otherwise everything is released
+/// in arrival order (the head was really lost).  Only the late head ever moves.
+/// The caller also releases on an idle socket, when nothing more is coming.
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -35,64 +37,61 @@
 
 #include <cbproto/cbproto.h>
 #include <array>
-#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <deque>
-#include <optional>
 #include <vector>
 
 namespace cbdev {
 
 class SampleReorderBuffer {
 public:
-    using Clock = std::chrono::steady_clock;
-
     /// A held datagram is only the tail of a split if it spans less than this.
     static constexpr PROCTIME kMaxTailSpanNs = 500'000;
 
-    /// @param hold     Longest a datagram may be held waiting for an earlier one
-    ///                 (zero disables reordering entirely).
+    /// @param window   Datagrams a held tail waits for its late head (0 disables
+    ///                 reordering entirely).
     /// @param padding  Extra zeroed bytes kept after each held datagram.
     ///                 Callbacks may read a full packet struct at any packet
     ///                 offset, so held copies get the same padding as the
     ///                 receive buffer.
-    explicit SampleReorderBuffer(std::chrono::microseconds hold, size_t padding = 0)
-        : m_hold(hold), m_padding(padding) {}
+    explicit SampleReorderBuffer(uint32_t window = 2, size_t padding = 0)
+        : m_window(window), m_padding(padding) {}
 
     /// Feed one received datagram.  @p emit(const uint8_t* data, size_t len) is
     /// called for each datagram to deliver now, in delivery order.
     template <class Emit>
-    void push(const uint8_t* data, size_t len, Clock::time_point now, Emit&& emit) {
+    void push(const uint8_t* data, size_t len, Emit&& emit) {
         ++m_stats.datagrams;
         const Scan scan = scanDatagram(data, len);
 
         if (!m_held.empty()) {
+            ++m_waited;
             if (scan.count[m_held_group] > 0 && scan.first[m_held_group] < m_held_first_ts) {
                 // The late head of the split: deliver it, then everything held.
                 emit(data, len);
                 learn(data, len);
-                releaseHeld(emit, now, m_stats.released_by_head);
+                if (m_waited > m_stats.head_wait_max)
+                    m_stats.head_wait_max = m_waited;
+                releaseHeld(emit, m_stats.released_by_head);
                 ++m_reordered;
                 return;
             }
-            if (!scan.any && m_held.size() < kMaxQueued) {
-                // No samples (monitor, config, spikes): it cannot be the head,
-                // so queue it behind the held tail to keep arrival order.
-                hold(data, len);
+            if (m_waited < m_window) {
+                hold(data, len);  // queue behind the tail to keep arrival order
                 return;
             }
-            // Samples that are not the head: the gap was real.
-            releaseHeld(emit, now, m_stats.released_by_other);
+            // The head did not come: the gap was real.  This datagram is then
+            // handled like any other, after what was held.
+            releaseHeld(emit, m_stats.released_by_count);
         }
 
-        if (m_hold.count() > 0) {
+        if (m_window > 0) {
             for (uint16_t g = 1; g <= kMaxGroup; ++g) {
                 if (scan.count[g] > 0 && looksLikeSplitTail(g, scan)) {
                     m_held_group = g;
                     m_held_first_ts = scan.first[g];
-                    m_deadline = now + m_hold;
-                    m_held_since = now;
+                    m_waited = 0;
                     ++m_stats.holds;
                     hold(data, len);
                     return;
@@ -104,44 +103,32 @@ public:
         learn(data, len);
     }
 
-    /// Release held datagrams if the hold time has expired.
-    template <class Emit>
-    void releaseIfDue(Clock::time_point now, Emit&& emit) {
-        if (!m_held.empty() && now >= m_deadline)
-            releaseHeld(emit, now, m_stats.released_by_timeout);
-    }
-
-    /// Release held datagrams unconditionally (e.g. on shutdown).
+    /// Release held datagrams unconditionally (idle socket, shutdown).
     template <class Emit>
     void releaseAll(Emit&& emit) {
         if (!m_held.empty())
-            releaseHeld(emit, Clock::now(), m_stats.released_by_timeout);
+            releaseHeld(emit, m_stats.released_by_idle);
     }
 
-    /// When held datagrams must be released by, if any are held.
-    [[nodiscard]] std::optional<Clock::time_point> deadline() const {
-        return m_held.empty() ? std::nullopt : std::optional<Clock::time_point>(m_deadline);
-    }
+    /// True while a datagram is held.
+    [[nodiscard]] bool holding() const { return !m_held.empty(); }
 
     /// Number of times a late datagram was put back in order.
     [[nodiscard]] uint64_t reorderedCount() const { return m_reordered; }
 
     /// Counters describing what the buffer has done.
     struct Stats {
-        uint64_t datagrams = 0;           ///< datagrams pushed
-        uint64_t holds = 0;               ///< times a datagram was held
-        uint64_t released_by_head = 0;    ///< hold ended by the late head (a reorder fixed)
-        uint64_t released_by_other = 0;   ///< hold ended by other samples (the gap was real)
-        uint64_t released_by_timeout = 0; ///< hold ended by the hold time (or shutdown)
-        std::chrono::nanoseconds held_total{0};  ///< summed hold durations
-        std::chrono::nanoseconds held_max{0};    ///< longest hold
+        uint64_t datagrams = 0;          ///< datagrams pushed
+        uint64_t holds = 0;              ///< times a datagram was held
+        uint64_t released_by_head = 0;   ///< hold ended by the late head (a reorder fixed)
+        uint64_t released_by_count = 0;  ///< hold ended after the window (the gap was real)
+        uint64_t released_by_idle = 0;   ///< hold ended by an idle socket or shutdown
+        uint32_t head_wait_max = 0;      ///< most datagrams a late head arrived after its tail
     };
     [[nodiscard]] const Stats& stats() const { return m_stats; }
 
 private:
     static constexpr uint16_t kMaxGroup = 6;
-    static constexpr size_t kMaxQueued = 16;
-
     struct Scan {
         std::array<PROCTIME, kMaxGroup + 1> first{};
         std::array<PROCTIME, kMaxGroup + 1> last{};
@@ -216,12 +203,8 @@ private:
     }
 
     template <class Emit>
-    void releaseHeld(Emit&& emit, Clock::time_point now, uint64_t& reason) {
+    void releaseHeld(Emit&& emit, uint64_t& reason) {
         ++reason;
-        const auto held_for = std::chrono::duration_cast<std::chrono::nanoseconds>(now - m_held_since);
-        m_stats.held_total += held_for;
-        if (held_for > m_stats.held_max)
-            m_stats.held_max = held_for;
         std::deque<Held> out;
         out.swap(m_held);
         for (const Held& d : out) {
@@ -235,7 +218,7 @@ private:
         size_t len;
     };
 
-    std::chrono::microseconds m_hold;
+    uint32_t m_window;
     size_t m_padding;
 
     std::array<PROCTIME, kMaxGroup + 1> m_last_ts{};
@@ -244,9 +227,8 @@ private:
     std::deque<Held> m_held;   // the held tail, then anything queued behind it
     uint16_t m_held_group = 0;
     PROCTIME m_held_first_ts = 0;
-    Clock::time_point m_deadline{};
+    uint32_t m_waited = 0;     // datagrams pushed since the tail was held
     uint64_t m_reordered = 0;
-    Clock::time_point m_held_since{};
     Stats m_stats;
 };
 
