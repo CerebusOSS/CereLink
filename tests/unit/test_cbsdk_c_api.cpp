@@ -40,7 +40,6 @@ TEST_F(CbsdkCApiTest, Config_Default) {
 
     EXPECT_EQ(config.device_type, CBPROTO_DEVICE_TYPE_LEGACY_NSP);
     EXPECT_EQ(config.callback_queue_depth, 16384);
-    EXPECT_EQ(config.connection_mode, CBSDK_CONNECTION_MODE_NATIVE);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

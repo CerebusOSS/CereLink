@@ -15,6 +15,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <string>
@@ -77,6 +78,24 @@ TEST_F(SessionLifecycleTest, ConnectsToNPlay) {
 
 TEST_F(SessionLifecycleTest, IsStandalone) {
     auto result = createNPlaySession();
+    ASSERT_TRUE(result.isOk()) << result.error();
+    EXPECT_TRUE(result.value().isStandalone());
+}
+
+/// CERELINK_CENTRAL_COMPAT only matters while Central is running and has a
+/// slot for the device; NPLAY never has one, so the session still owns it.
+TEST_F(SessionLifecycleTest, CentralCompatEnvWithoutCentralSlotIsStandalone) {
+#ifdef _WIN32
+    _putenv_s("CERELINK_CENTRAL_COMPAT", "1");
+#else
+    setenv("CERELINK_CENTRAL_COMPAT", "1", 1);
+#endif
+    auto result = createNPlaySession();
+#ifdef _WIN32
+    _putenv_s("CERELINK_CENTRAL_COMPAT", "");
+#else
+    unsetenv("CERELINK_CENTRAL_COMPAT");
+#endif
     ASSERT_TRUE(result.isOk()) << result.error();
     EXPECT_TRUE(result.value().isStandalone());
 }

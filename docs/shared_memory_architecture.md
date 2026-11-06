@@ -327,11 +327,11 @@ Instrument status in central mode:
 
 ## Mode Selection
 
-`SdkConfig::connection_mode` selects the path. `NATIVE` is the default; `CENTRAL` is
-deprecated and opt-in.
+The `CERELINK_CENTRAL_COMPAT` environment variable selects the path. Unset is the default;
+`CERELINK_CENTRAL_COMPAT=1` is deprecated and opt-in.
 
 ```
-SdkSession::create(HUB1, connection_mode = NATIVE)       <-- default
+SdkSession::create(HUB1)                                 <-- default
     |
     +-- Can open "cbshm_hub1_signal" (another CereLink owns HUB1)?
     |     |
@@ -348,7 +348,7 @@ SdkSession::create(HUB1, connection_mode = NATIVE)       <-- default
                - Other CLIENTs can attach via Native Client Mode
                - Works alongside a running Central (see below)
 
-SdkSession::create(HUB1, connection_mode = CENTRAL)      <-- deprecated
+SdkSession::create(HUB1), CERELINK_CENTRAL_COMPAT=1      <-- deprecated
     |
     +-- Central.exe running AND its version has a slot for HUB1?
           |
@@ -359,7 +359,9 @@ SdkSession::create(HUB1, connection_mode = CENTRAL)      <-- deprecated
           |       - Set instrument filter for receive buffer
           |       - Detect protocol version, translate packets if non-current
           |
-          NO --> create() fails (never falls back to NATIVE)
+          |       - Attach failure is an error (no fallback to NATIVE)
+          |
+          NO --> Same as the default path above
 ```
 
 ### Running alongside Central (Windows)

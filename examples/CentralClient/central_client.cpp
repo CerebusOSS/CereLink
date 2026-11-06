@@ -6,7 +6,7 @@
 /// diagnostic info to verify struct layout compatibility.
 ///
 /// @deprecated The Central-compatible layout is deprecated along with
-/// cbsdk::ConnectionMode::CENTRAL and will be removed in the next major release.
+/// CERELINK_CENTRAL_COMPAT and will be removed in the next major release.
 ///
 /// Usage:
 ///   central_client [instance]

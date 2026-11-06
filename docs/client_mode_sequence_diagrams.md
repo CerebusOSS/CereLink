@@ -14,8 +14,10 @@ Reflects the code as of PR #190 (multi-version Central compatibility). Key sourc
 ## Mode selection (common entry point)
 
 Every client — C++ or pycbsdk (`Session()` → `cbsdk_session_create()` →
-`SdkSession::create()`) — picks its path from `connection_mode`. The default, `NATIVE`,
-never looks at Central; the deprecated `CENTRAL` mode only attaches to Central (#213).
+`SdkSession::create()`) — picks its path from the `CERELINK_CENTRAL_COMPAT` environment
+variable. The default (unset) never looks at Central. With the deprecated
+`CERELINK_CENTRAL_COMPAT=1`, a running Central that has a slot for the device is attached to
+(or the call fails); otherwise the default path is taken (#213).
 
 ```mermaid
 sequenceDiagram
@@ -23,8 +25,8 @@ sequenceDiagram
     participant SDK as SdkSession::create()
     participant SHM as cbshm::ShmemSession
 
-    App->>SDK: create(config{device_type=HUB1, connection_mode, ...})
-    alt connection_mode == NATIVE (default)
+    App->>SDK: create(config{device_type=HUB1, ...})
+    alt CERELINK_CENTRAL_COMPAT unset (default)
         SDK->>SHM: create(CLIENT, NATIVE, "hub1", inst 0)
         alt cbshm_hub1_* segments exist AND owner alive
             Note over SHM: isOwnerAlive(): segment_uid + owner_pid<br/>reject stale segments
@@ -33,13 +35,13 @@ sequenceDiagram
             SDK->>SHM: create(STANDALONE, NATIVE, "hub1", inst 0)
             SHM-->>SDK: creates 7 segments → NATIVE STANDALONE mode<br/>(shares the device port with Central if it is running)
         end
-    else connection_mode == CENTRAL (deprecated)
+    else CERELINK_CENTRAL_COMPAT=1 (deprecated)
         Note over SDK: isCentralRunning()? then detectCentralVersion() →<br/>per-version slot (7.8: Hub1→0, Hub2→1, Hub3→2, NSP→3; legacy→0)
         alt Central.exe running & has a slot for this device
             SDK->>SHM: create(CLIENT, CENTRAL, instance="", inst)
             SHM-->>SDK: ok → CENTRAL-COMPAT CLIENT mode (or error)
         else no Central / non-Windows / no slot
-            SDK-->>App: error (no fallback to NATIVE)
+            Note over SDK: same as the default branch above
         end
     end
 ```

@@ -61,10 +61,10 @@ with Session("HUB1") as session:
 session = Session(device_type="HUB1", callback_queue_depth=16384)
 ```
 
-The session talks to the device directly (`connection_mode="native"`, the default),
-whether or not Central is running on the same PC. `connection_mode="central"` attaches to
-Central's shared memory instead; it is deprecated, raises a `DeprecationWarning`, and will
-be removed in the next major release.
+The session talks to the device directly, whether or not Central is running on the same
+PC. Setting the environment variable `CERELINK_CENTRAL_COMPAT=1` attaches to Central's
+shared memory instead while Central is running (without Central it has no effect); it is deprecated, prints a notice on stderr, and will be removed in
+the next major release.
 
 **Callbacks** (decorator style):
 

@@ -48,7 +48,7 @@ enum class Mode {
 ///
 enum class ShmemLayout {
     /// Central's actual binary layout (cbCFGBUFF).
-    /// @deprecated Only used by cbsdk::ConnectionMode::CENTRAL; this layout,
+    /// @deprecated Only used by CERELINK_CENTRAL_COMPAT=1; this layout,
     /// the per-version Central adapters and central_types/ are slated for
     /// removal in the next major release.
     CENTRAL,
