@@ -82,6 +82,7 @@ message(STATUS "Unit tests configured for cbshm central adapters")
 add_executable(cbdev_tests
     test_packet_translation.cpp
     test_clock_sync.cpp
+    test_sample_reorder.cpp
     packet_test_helpers.cpp
 )
 

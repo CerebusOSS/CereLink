@@ -104,6 +104,11 @@ struct ConnectionParams {
     int recv_buffer_size = 8388608; ///< Receive buffer size (6MB default)
     int send_buffer_size = 0;       ///< Send buffer size (0 = OS default, typically 64KB-256KB)
 
+    /// Longest a sample datagram that arrives after a gap is held, waiting for
+    /// the earlier datagram the host delivered late (0 disables reordering).
+    /// Only datagrams that start after a gap are ever held.
+    uint32_t reorder_hold_us = 3000;
+
     // Connection options
     bool autorun = true;            ///< Auto-start device on connect (true = performStartupHandshake, false = requestConfiguration only)
 
