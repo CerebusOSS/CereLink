@@ -423,29 +423,24 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
         }
     }
 
-#ifdef _WIN32
-    // A STANDALONE session is the device's only controller, so claim the port
-    // exclusively.  Windows' SO_REUSEADDR would do the opposite: it lets
-    // another process -- Central -- bind the same port alongside us, after
-    // which both drive one device (#210).  With SO_EXCLUSIVEADDRUSE that bind
-    // fails.  Note Central 7.6-7.8 does not handle the failure: its Gemini
-    // startup NULLs the instrument without marking the slot absent, and its
-    // timer then dereferences it, so Central crashes on launch (verified on
-    // 7.7.0; our session is unaffected).  Each device type has its own port and
-    // the protocol probe's socket is closed before this one binds, so nothing
-    // of ours depends on sharing the port.
-    if (setsockopt(session.m_impl->socket, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
-                  (char*)&opt_one, sizeof(opt_one)) != 0) {
-        return Result<DeviceSession>::error("Failed to set SO_EXCLUSIVEADDRUSE");
-    }
-#else
-    // Central is Windows-only, so the coexistence problem above does not arise
-    // here; POSIX behaviour is left as it was.
+    // Share the port, so a session can run alongside Central on the same PC
+    // (#213).  On Windows, Central binds the instrument-network address (e.g.
+    // 192.168.137.199) without SO_REUSEADDR, while this socket binds the
+    // wildcard address (see the client-address note at bind() below); Windows
+    // permits that pair in either start order.  The devices broadcast
+    // everything -- samples, config replies, replies to either program's
+    // requests -- so both sockets receive the full stream.  Verified on
+    // Central 7.7 and 7.8 at 256 ch x 30 kHz per hub: no lost samples on either
+    // side, config changes from either side seen by the other within ~50 ms.
+    //
+    // (#212 tried SO_EXCLUSIVEADDRUSE instead, so Central could not take a
+    // device a session owned.  Central 7.6-7.8 then crashes on launch: its
+    // Gemini startup NULLs an instrument whose bind failed without marking the
+    // slot absent, and its timer dereferences it.)
     if (setsockopt(session.m_impl->socket, SOL_SOCKET, SO_REUSEADDR,
                   (char*)&opt_one, sizeof(opt_one)) != 0) {
         return Result<DeviceSession>::error("Failed to set SO_REUSEADDR");
     }
-#endif
 
     // Set receive buffer size
     if (config.recv_buffer_size > 0) {
@@ -509,7 +504,17 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
 #endif
     }
 
-    // Bind to client address and receive port
+    // Bind to client address and receive port.
+    //
+    // Note this reads the CALLER's client address, not the auto-detected one
+    // stored in m_impl->config above: when none was given, the socket binds
+    // the wildcard address.  On Windows that is what lets a session coexist
+    // with Central, which holds the specific instrument-network address -- a
+    // second bind of that same address fails (WSAEACCES, as in #210), but the
+    // wildcard bind does not.  A custom specific client address therefore
+    // cannot share the port with a running Central.  (On Linux the detected
+    // address would be the subnet broadcast address, which receives only
+    // broadcasts; the wildcard receives everything.)
     std::memset(&session.m_impl->recv_addr, 0, sizeof(session.m_impl->recv_addr));
     session.m_impl->recv_addr.sin_family = AF_INET;
     session.m_impl->recv_addr.sin_port = htons(config.recv_port);

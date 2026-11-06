@@ -2,8 +2,11 @@
 /// @file   central_client.cpp
 /// @brief  Diagnostic tool for testing CENTRAL_COMPAT CLIENT mode
 ///
-/// Attaches to Central's shared memory directly (bypassing SDK auto-detection)
-/// and prints diagnostic info to verify struct layout compatibility.
+/// Attaches to Central's shared memory directly (bypassing the SDK) and prints
+/// diagnostic info to verify struct layout compatibility.
+///
+/// @deprecated The Central-compatible layout is deprecated along with
+/// CERELINK_CENTRAL_COMPAT and will be removed in the next major release.
 ///
 /// Usage:
 ///   central_client [instance]

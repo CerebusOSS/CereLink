@@ -22,6 +22,7 @@ every automated check passed.
 from __future__ import annotations
 
 import argparse
+import os
 import pathlib
 import subprocess
 import sys
@@ -1136,6 +1137,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.native == bool(args.central):
         ap.error("pass exactly one of --central VERSION or --native")
     key = "native" if args.native else args.central
+    # --central soaks attach through Central (deprecated mode); --native soaks
+    # talk to the device directly.  Child processes inherit this.
+    if args.native:
+        os.environ.pop("CERELINK_CENTRAL_COMPAT", None)
+    else:
+        os.environ["CERELINK_CENTRAL_COMPAT"] = "1"
 
     producer = None
     if args.native:

@@ -28,6 +28,16 @@ Result<std::unique_ptr<IDeviceSession>> createDeviceSession(
     std::string client_addr = config.client_address;
     if (client_addr.empty()) {
         client_addr = detectClientAddress(config.type);
+#ifdef _WIN32
+        // Bind the probe the way the device socket will bind (the wildcard,
+        // when no address was given) rather than the detected instrument-
+        // network address.  Central holds that specific address, and a second
+        // bind of it fails with WSAEACCES -- the probe failure in #210 -- while
+        // a wildcard bind coexists with it.  Loopback (NPLAY) stays specific.
+        if (client_addr != "127.0.0.1") {
+            client_addr = "0.0.0.0";
+        }
+#endif
     }
 
     // Auto-detect protocol if unknown

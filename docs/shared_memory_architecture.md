@@ -325,27 +325,18 @@ Instrument status in central mode:
 - `getConfigBuffer()` returns **nullptr** (wrong struct type for compat mode)
 - `getLegacyConfigBuffer()` returns a copy of Central's configuration struct translated to a `NativeConfigBuffer`
 
-## Mode Auto-Detection
+## Mode Selection
+
+The `CERELINK_CENTRAL_COMPAT` environment variable selects the path. Unset is the default;
+`CERELINK_CENTRAL_COMPAT=1` is deprecated and opt-in.
 
 ```
-SdkSession::open(DeviceType::HUB1)
+SdkSession::create(HUB1)                                 <-- default
     |
-    +-- Central.exe running AND its version has a slot for HUB1?
-    |     |
-    |     YES --> Central Mode (CENTRAL layout)
-    |             - Map Central's 7 instance-0 segments
-    |             - Use cbCFGBUFF for config buffer (Central's binary layout)
-    |             - Instrument index from the version's slot table (Hub1 = 0 on 7.6+)
-    |             - Set instrument filter for receive buffer
-    |             - Target instrument is fixed for the session's lifetime (set at creation)
-    |             - Detect protocol version, translate packets if non-current
-    |             - If the attach fails, create() FAILS: Central owns the device, so
-    |               falling through to Standalone would compete with it for the socket
-    |
-    +-- NO --> Can open "cbshm_hub1_signal"?
+    +-- Can open "cbshm_hub1_signal" (another CereLink owns HUB1)?
     |     |
     |     YES --> Native Client Mode
-    |             - Map cbshm_hub1_* segments (read-only)
+    |             - Map cbshm_hub1_* segments
     |             - All packets are Hub1's (no filtering)
     |             - Packets in current format (no translation)
     |             - Config is single-instrument (no indexing)
@@ -355,7 +346,48 @@ SdkSession::open(DeviceType::HUB1)
                - Start cbdev (protocol auto-detect + translation)
                - Write current-format packets to native shmem
                - Other CLIENTs can attach via Native Client Mode
+               - Works alongside a running Central (see below)
+
+SdkSession::create(HUB1), CERELINK_CENTRAL_COMPAT=1      <-- deprecated
+    |
+    +-- Central.exe running AND its version has a slot for HUB1?
+          |
+          YES --> Central Mode (CENTRAL layout)
+          |       - Map Central's 7 instance-0 segments
+          |       - Use cbCFGBUFF for config buffer (Central's binary layout)
+          |       - Instrument index from the version's slot table (Hub1 = 0 on 7.6+)
+          |       - Set instrument filter for receive buffer
+          |       - Detect protocol version, translate packets if non-current
+          |
+          |       - Attach failure is an error (no fallback to NATIVE)
+          |
+          NO --> Same as the default path above
 ```
+
+### Running alongside Central (Windows)
+
+A Native Standalone session and Central can drive the same device at once (#213).
+Central binds each Gemini port on the instrument-network address (e.g.
+`192.168.137.199:51002`) without `SO_REUSEADDR`; the session binds the wildcard
+address with `SO_REUSEADDR`, which Windows allows in either start order. The devices
+broadcast everything, so both receive the full stream.
+
+Measured on Central 7.7 and 7.8, HUB1 + HUB2 at 256 ch x 30 kHz, in every start order
+(including Central starting, stopping, and recording while a session streams): no lost
+samples on either side; config changes from either side seen by the other within ~50 ms;
+recording commands from a session still reach Central (the device echoes `SETFILECFG` as a
+broadcast `REPFILECFG`). The session keeps native timing: sub-millisecond request round
+trips and ~0.1 ms clock uncertainty, versus ~20 ms and ~10 ms through Central.
+
+Caveats:
+- A session given a custom *specific* client address cannot share the port with Central;
+  leave it unset so the wildcard is used.
+- Central's Standby / Shutdown buttons reset or power down the devices for everyone.
+  Closing Central normally does not touch them.
+- About 0.6% of the time the device splits a millisecond of samples into two datagrams
+  3-4 us apart, and Windows occasionally delivers the second first. This happens below
+  both programs' sockets (Central sees it identically); nothing is lost, but sample
+  timestamps step backwards once.
 
 ## Key Data Flow Paths
 

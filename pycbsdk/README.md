@@ -61,6 +61,11 @@ with Session("HUB1") as session:
 session = Session(device_type="HUB1", callback_queue_depth=16384)
 ```
 
+The session talks to the device directly, whether or not Central is running on the same
+PC. Setting the environment variable `CERELINK_CENTRAL_COMPAT=1` attaches to Central's
+shared memory instead while Central is running (without Central it has no effect); it is deprecated, prints a notice on stderr, and will be removed in
+the next major release.
+
 **Callbacks** (decorator style):
 
 | Decorator | Description |
@@ -93,7 +98,8 @@ session = Session(device_type="HUB1", callback_queue_depth=16384)
 - `session.save_ccf("config.ccf")` — save current device config to XML file
 - `session.load_ccf("config.ccf")` — load config from file and apply to device
 
-**Recording Control** (requires Central):
+**Recording Control** (requires Central running; works from any session, since the
+device echoes the commands to Central):
 
 - `session.start_central_recording("filename", comment="session 1")` — start recording
 - `session.stop_central_recording()` — stop recording

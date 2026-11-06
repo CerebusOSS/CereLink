@@ -385,6 +385,15 @@ public:
     ~SdkSession();
 
     /// Create and initialize an SDK session
+    ///
+    /// The session attaches to another CereLink session's shared memory for the
+    /// same device if one exists (CLIENT), otherwise it connects to the device
+    /// itself (STANDALONE), alongside Central if it is running.
+    ///
+    /// @deprecated With the environment variable CERELINK_CENTRAL_COMPAT=1 set
+    /// and Central running with a slot for the device, the session instead
+    /// attaches to Central's shared memory, or fails if it cannot.  Slated for
+    /// removal in the next major release.
     /// @param config SDK configuration
     /// @return Result containing session on success, error message on failure
     static Result<SdkSession> create(const SdkConfig& config);
@@ -716,6 +725,10 @@ public:
     ///--------------------------------------------------------------------------------------------
 
     /// Open Central's File Storage dialog (required before startCentralRecording)
+    ///
+    /// Recording is done by Central, so it must be running, but these work in
+    /// any connection mode: the device echoes each file-config command as a
+    /// broadcast REPFILECFG, which Central's File Storage acts on.
     ///
     /// The old cbsdk/cbpy required a two-step sequence to start recording:
     /// 1. openCentralFileDialog() — sends cbFILECFG_OPT_OPEN

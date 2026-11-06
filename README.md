@@ -22,9 +22,20 @@ Modular library stack:
 
 ## Connection Modes
 
-- **STANDALONE** — CereLink owns the device connection and shared memory
-- **CLIENT** — Attach to another CereLink instance's shared memory
-- **CENTRAL CLIENT** — Attach to Central's shared memory with on-the-fly protocol translation
+A session talks to the device directly:
+
+- **STANDALONE** — the first session for a device owns its connection and shared memory
+- **CLIENT** — later sessions for the same device attach to that shared memory
+
+This works the same whether or not Central is running on the same PC. On Windows the
+session shares the device's UDP port with Central and both receive the full data stream,
+in either start order; config changes made from either side are seen by the other, and
+recording commands (`startCentralRecording`) still reach Central.
+
+- **CENTRAL CLIENT** (*deprecated*, environment variable `CERELINK_CENTRAL_COMPAT=1`) —
+  while Central is running and has a slot for the device, attach to Central's shared memory
+  instead, with on-the-fly protocol translation. Without Central the variable has no effect.
+  Opt-in only; slated for removal in the next major release.
 
 ## Build
 
