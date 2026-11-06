@@ -113,11 +113,31 @@ enum class DeviceType {
     NPLAY        ///< NPlay loopback (127.0.0.1, ports 51001/51002)
 };
 
+/// How a session reaches the device
+enum class ConnectionMode {
+    /// Talk to the device directly (the default).  The first session for a
+    /// device owns it (STANDALONE); further sessions for the same device
+    /// share the owner's native shared memory (CLIENT).  This works the same
+    /// whether or not Central is running: on Windows the session shares the
+    /// device's UDP port with Central and both receive the full data stream.
+    NATIVE,
+
+    /// @deprecated Attach to Central's shared memory instead of the device
+    /// (Windows only; Central must be running and have a slot for the device).
+    /// Kept for compatibility and slated for removal in the next major
+    /// release.  NATIVE gives the same data alongside Central, with ~100x
+    /// better clock synchronisation and sub-millisecond request round trips.
+    CENTRAL,
+};
+
 /// SDK configuration
 struct SdkConfig {
     // Device type (automatically maps to correct address/port and shared memory name)
     // Used only when creating new shared memory (STANDALONE mode)
     DeviceType device_type = DeviceType::LEGACY_NSP;
+
+    /// How to reach the device; see ConnectionMode.
+    ConnectionMode connection_mode = ConnectionMode::NATIVE;
 
     // Callback thread configuration
     size_t callback_queue_depth = 16384;      ///< Packets to buffer (as discussed)
@@ -385,6 +405,12 @@ public:
     ~SdkSession();
 
     /// Create and initialize an SDK session
+    ///
+    /// With ConnectionMode::NATIVE (default) the session attaches to another
+    /// CereLink session's shared memory for the same device if one exists
+    /// (CLIENT), otherwise it connects to the device itself (STANDALONE).
+    /// With the deprecated ConnectionMode::CENTRAL it attaches to Central's
+    /// shared memory or fails.
     /// @param config SDK configuration
     /// @return Result containing session on success, error message on failure
     static Result<SdkSession> create(const SdkConfig& config);
@@ -716,6 +742,10 @@ public:
     ///--------------------------------------------------------------------------------------------
 
     /// Open Central's File Storage dialog (required before startCentralRecording)
+    ///
+    /// Recording is done by Central, so it must be running, but these work in
+    /// any connection mode: the device echoes each file-config command as a
+    /// broadcast REPFILECFG, which Central's File Storage acts on.
     ///
     /// The old cbsdk/cbpy required a two-step sequence to start recording:
     /// 1. openCentralFileDialog() — sends cbFILECFG_OPT_OPEN

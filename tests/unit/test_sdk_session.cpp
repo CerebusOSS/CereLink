@@ -21,6 +21,7 @@
 // Include protocol types and session headers
 #include <cbproto/cbproto.h>            // Protocol types
 #include "cbshm/shmem_session.h"      // For transmit callback test
+#include "cbshm/central_version.h"    // isCentralRunning()
 #include "cbdev/device_session.h"       // For loopback test
 #include "cbdev/device_factory.h"       // For createDeviceSession
 #include "cbsdk/sdk_session.h"          // SDK orchestration
@@ -54,6 +55,22 @@ TEST_F(SdkSessionTest, Config_Default) {
     EXPECT_EQ(config.device_type, DeviceType::LEGACY_NSP);
     EXPECT_EQ(config.callback_queue_depth, 16384);
     EXPECT_TRUE(config.autorun);  // Default is to auto-run (full handshake)
+    // Talk to the device directly; Central compatibility is opt-in (#213).
+    EXPECT_EQ(config.connection_mode, ConnectionMode::NATIVE);
+}
+
+/// The deprecated CENTRAL mode never silently falls back to NATIVE.
+TEST_F(SdkSessionTest, Create_CentralModeWithoutCentralFails) {
+    if (cbshm::isCentralRunning())
+        GTEST_SKIP() << "Central is running on this machine";
+
+    SdkConfig config;
+    config.device_type = DeviceType::HUB1;
+    config.connection_mode = ConnectionMode::CENTRAL;
+
+    auto result = SdkSession::create(config);
+    ASSERT_TRUE(result.isError());
+    EXPECT_NE(result.error().find("Central"), std::string::npos) << result.error();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

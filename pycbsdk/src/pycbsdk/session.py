@@ -8,6 +8,7 @@ import asyncio
 import enum
 import logging
 import threading
+import warnings
 import time as _time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -53,6 +54,22 @@ class DeviceType(enum.IntEnum):
     HUB3 = 4
     NPLAY = 5
     CUSTOM = 6
+
+
+class ConnectionMode(enum.IntEnum):
+    """How a session reaches the device.
+
+    Values match ``cbsdk_connection_mode_t``.
+    """
+
+    NATIVE = 0
+    """Talk to the device directly (default).  The first session for a device
+    owns it; later sessions share its native shared memory.  Works alongside
+    Central: on Windows both share the device's port and receive all data."""
+
+    CENTRAL = 1
+    """Deprecated: attach to Central's shared memory (Windows, Central
+    running).  Slated for removal in the next major release."""
 
 
 class ChannelType(enum.IntEnum):
@@ -253,6 +270,10 @@ class Session:
     Args:
         device_type: Device type (e.g., ``DeviceType.HUB1``).
         callback_queue_depth: Number of packets to buffer (default: 16384).
+        connection_mode: ``ConnectionMode.NATIVE`` (default) talks to the
+            device directly, alongside Central if it is running.
+            ``ConnectionMode.CENTRAL`` (deprecated) attaches to Central's
+            shared memory instead.
 
     Example::
 
@@ -277,12 +298,23 @@ class Session:
         self,
         device_type: DeviceType = DeviceType.LEGACY_NSP,
         callback_queue_depth: int = 16384,
+        connection_mode: ConnectionMode | str = ConnectionMode.NATIVE,
     ):
         _lib = _get_lib()
+
+        connection_mode = _coerce_enum(ConnectionMode, connection_mode)
+        if connection_mode == ConnectionMode.CENTRAL:
+            warnings.warn(
+                "ConnectionMode.CENTRAL is deprecated and will be removed in the next "
+                "major release; ConnectionMode.NATIVE works alongside Central.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         config = _lib.cbsdk_config_default()
         config.device_type = int(_coerce_enum(DeviceType, device_type))
         config.callback_queue_depth = callback_queue_depth
+        config.connection_mode = int(connection_mode)
 
         session_p = ffi.new("cbsdk_session_t *")
         _check(

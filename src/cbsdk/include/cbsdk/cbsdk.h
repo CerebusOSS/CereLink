@@ -106,7 +106,21 @@ typedef enum {
 // Configuration Structures
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// How a session reaches the device (C version of cbsdk::ConnectionMode)
+typedef enum {
+    /// Talk to the device directly (default).  The first session for a device
+    /// owns it; later ones share its native shared memory.  Works alongside
+    /// Central: on Windows the device port is shared and both receive all data.
+    CBSDK_CONNECTION_MODE_NATIVE  = 0,
+    /// Deprecated: attach to Central's shared memory (Windows, Central running).
+    /// Slated for removal in the next major release.
+    CBSDK_CONNECTION_MODE_CENTRAL = 1,
+} cbsdk_connection_mode_t;
+
 /// SDK configuration (C version of SdkConfig)
+///
+/// Always start from cbsdk_config_default() so fields added in later versions
+/// get their defaults.
 typedef struct {
     // Device type (automatically maps to correct address/port and shared memory name)
     // Used only when creating new shared memory (STANDALONE mode)
@@ -127,6 +141,8 @@ typedef struct {
     const char* custom_client_address; ///< Override client IP (NULL = auto)
     uint16_t custom_device_port;       ///< Override device port (0 = auto)
     uint16_t custom_client_port;       ///< Override client port (0 = auto)
+
+    cbsdk_connection_mode_t connection_mode; ///< How to reach the device (default: NATIVE)
 } cbsdk_config_t;
 
 /// SDK statistics (C version of SdkStats)

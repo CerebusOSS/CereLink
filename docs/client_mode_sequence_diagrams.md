@@ -14,7 +14,8 @@ Reflects the code as of PR #190 (multi-version Central compatibility). Key sourc
 ## Mode selection (common entry point)
 
 Every client — C++ or pycbsdk (`Session()` → `cbsdk_session_create()` →
-`SdkSession::create()`) — goes through the same three-way probe:
+`SdkSession::create()`) — picks its path from `connection_mode`. The default, `NATIVE`,
+never looks at Central; the deprecated `CENTRAL` mode only attaches to Central (#213).
 
 ```mermaid
 sequenceDiagram
@@ -22,31 +23,30 @@ sequenceDiagram
     participant SDK as SdkSession::create()
     participant SHM as cbshm::ShmemSession
 
-    App->>SDK: create(config{device_type=HUB1, ...})
-    Note over SDK: isCentralRunning()? then detectCentralVersion() →<br/>per-version slot (7.8: Hub1→0, Hub2→1, Hub3→2, NSP→3; legacy→0)
-    alt Central.exe running & has a slot for this device
-        SDK->>SHM: create(CLIENT, CENTRAL, instance="", inst)
-        alt segments open
-            SHM-->>SDK: ok → CENTRAL-COMPAT CLIENT mode
-        else fails
-            SHM-->>SDK: error → create() fails (no STANDALONE fallback:<br/>Central owns the device's socket)
-        end
-    else no Central / non-Windows / Central has no slot for this device
+    App->>SDK: create(config{device_type=HUB1, connection_mode, ...})
+    alt connection_mode == NATIVE (default)
         SDK->>SHM: create(CLIENT, NATIVE, "hub1", inst 0)
         alt cbshm_hub1_* segments exist AND owner alive
-            Note over SHM: isOwnerAlive(): kill(owner_pid, 0)<br/>rejects stale segments
+            Note over SHM: isOwnerAlive(): segment_uid + owner_pid<br/>reject stale segments
             SHM-->>SDK: ok → NATIVE CLIENT mode
         else fails or stale
             SDK->>SHM: create(STANDALONE, NATIVE, "hub1", inst 0)
-            SHM-->>SDK: creates 7 segments → NATIVE STANDALONE mode
+            SHM-->>SDK: creates 7 segments → NATIVE STANDALONE mode<br/>(shares the device port with Central if it is running)
+        end
+    else connection_mode == CENTRAL (deprecated)
+        Note over SDK: isCentralRunning()? then detectCentralVersion() →<br/>per-version slot (7.8: Hub1→0, Hub2→1, Hub3→2, NSP→3; legacy→0)
+        alt Central.exe running & has a slot for this device
+            SDK->>SHM: create(CLIENT, CENTRAL, instance="", inst)
+            SHM-->>SDK: ok → CENTRAL-COMPAT CLIENT mode (or error)
+        else no Central / non-Windows / no slot
+            SDK-->>App: error (no fallback to NATIVE)
         end
     end
 ```
 
-Note that the first attempt does not merely test whether Central's shared memory exists:
-`ShmemSession::Impl::open()` calls `detectCentralVersion()` first, which requires finding
-a running `Central.exe` process (Windows-only). If Central crashed leaving segments
-behind, or on any POSIX platform, attempt 1 fails before any segment is touched.
+In CENTRAL mode `ShmemSession::Impl::open()` also calls `detectCentralVersion()` before
+touching any segment, which requires finding a running `Central.exe` process
+(Windows-only), so segments left behind by a crashed Central are never attached.
 
 ## Mode 1 — NATIVE STANDALONE (owns the device)
 

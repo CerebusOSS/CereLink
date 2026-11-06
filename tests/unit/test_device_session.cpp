@@ -455,82 +455,81 @@ TEST_F(DeviceSessionTest, LegacyConfigHelper_TranslatesOutbound_400) {
 }
 
 #ifdef _WIN32
-/// @brief Bind a fresh UDP socket to addr:port; true if the bind succeeded.
-static bool tryBindSecondSocket(const char* addr, uint16_t port, bool reuseaddr) {
-    // Own Winsock reference: the session may already have released its own.
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return false;
-    struct Cleanup { ~Cleanup() { WSACleanup(); } } cleanup;
-
-    SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (s == INVALID_SOCKET) return false;
-    if (reuseaddr) {
-        BOOL on = TRUE;
-        setsockopt(s, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&on), sizeof(on));
+/// A socket bound the way Central binds a Gemini port: the specific
+/// instrument-network address, without SO_REUSEADDR.  Loopback stands in for
+/// 192.168.137.199 so the test runs anywhere.
+class CentralStyleSocket {
+public:
+    explicit CentralStyleSocket(uint16_t port, const char* addr = "127.0.0.1") {
+        WSADATA wsa;
+        m_wsa = WSAStartup(MAKEWORD(2, 2), &wsa) == 0;
+        m_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (m_sock == INVALID_SOCKET) return;
+        sockaddr_in sa{};
+        sa.sin_family = AF_INET;
+        sa.sin_port = htons(port);
+        sa.sin_addr.s_addr = inet_addr(addr);
+        m_bound = bind(m_sock, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0;
     }
-    sockaddr_in sa{};
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(port);
-    sa.sin_addr.s_addr = inet_addr(addr);
-    const bool bound = bind(s, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0;
-    closesocket(s);
-    return bound;
-}
+    ~CentralStyleSocket() {
+        if (m_sock != INVALID_SOCKET) closesocket(m_sock);
+        if (m_wsa) WSACleanup();
+    }
+    [[nodiscard]] bool bound() const { return m_bound; }
 
-/// A STANDALONE session must be the device's only controller.  With
-/// SO_REUSEADDR, Windows let Central bind the same port alongside an active
-/// session, and both then drove one device (#210).  Central binds the
-/// instrument-network address itself without SO_REUSEADDR for Gemini devices;
-/// neither that nor an SO_REUSEADDR bind of the same address may share it.
-TEST_F(DeviceSessionTest, Windows_PortIsExclusiveWhileSessionIsActive) {
+    CentralStyleSocket(const CentralStyleSocket&) = delete;
+    CentralStyleSocket& operator=(const CentralStyleSocket&) = delete;
+
+private:
+    SOCKET m_sock = INVALID_SOCKET;
+    bool m_wsa = false;
+    bool m_bound = false;
+};
+
+/// Central started after a session must still get its port: the session binds
+/// the wildcard with SO_REUSEADDR, which a later specific bind may share
+/// (#213).  (With SO_EXCLUSIVEADDRUSE this bind failed, and Central crashed.)
+TEST_F(DeviceSessionTest, Windows_CentralCanBindAfterSession) {
     constexpr uint16_t recv_port = 51061;
-    for (const char* client_addr : {"127.0.0.1", "0.0.0.0"}) {
-        SCOPED_TRACE(client_addr);
-        const bool wildcard = std::strcmp(client_addr, "0.0.0.0") == 0;
-        {
-            auto config = ConnectionParams::custom("127.0.0.1", client_addr, recv_port, 51062);
-            auto result = createDeviceSession(config, ProtocolVersion::PROTOCOL_CURRENT);
-            ASSERT_TRUE(result.isOk()) << result.error();
+    auto config = ConnectionParams::custom("127.0.0.1", "0.0.0.0", recv_port, 51062);
+    auto result = createDeviceSession(config, ProtocolVersion::PROTOCOL_CURRENT);
+    ASSERT_TRUE(result.isOk()) << result.error();
 
-            EXPECT_FALSE(tryBindSecondSocket("127.0.0.1", recv_port, /*reuseaddr=*/false));
-            EXPECT_FALSE(tryBindSecondSocket("127.0.0.1", recv_port, /*reuseaddr=*/true));
-            // A session on the wildcard address (the default -- the device
-            // socket binds 0.0.0.0) claims every address on the port.  One on
-            // a specific address cannot stop a *wildcard* bind: Windows always
-            // permits the less specific binding, exclusive or not.
-            if (wildcard) {
-                EXPECT_FALSE(tryBindSecondSocket("0.0.0.0", recv_port, /*reuseaddr=*/true));
-            }
-        }
-        // Released as soon as the session goes away.
-        EXPECT_TRUE(tryBindSecondSocket("127.0.0.1", recv_port, /*reuseaddr=*/false));
-    }
+    CentralStyleSocket central(recv_port);
+    EXPECT_TRUE(central.bound());
 }
 
-/// The reverse order: a port someone else already holds must make the session
-/// fail rather than quietly share it.
-TEST_F(DeviceSessionTest, Windows_CreateFailsWhenPortAlreadyBound) {
+/// A session started after Central must still get its port (#210: it did not,
+/// when the socket bound the same specific address Central holds).
+TEST_F(DeviceSessionTest, Windows_SessionCanBindAfterCentral) {
     constexpr uint16_t recv_port = 51063;
-    // Initialise Winsock for the raw socket below (a session normally does it).
-    WSADATA wsa;
-    ASSERT_EQ(WSAStartup(MAKEWORD(2, 2), &wsa), 0);
+    CentralStyleSocket central(recv_port);
+    ASSERT_TRUE(central.bound());
 
-    SOCKET holder = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    ASSERT_NE(holder, INVALID_SOCKET);
-    sockaddr_in sa{};
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(recv_port);
-    sa.sin_addr.s_addr = inet_addr("127.0.0.1");
-    ASSERT_EQ(bind(holder, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)), 0);
-
-    auto config = ConnectionParams::custom("127.0.0.1", "127.0.0.1", recv_port, 51064);
+    auto config = ConnectionParams::custom("127.0.0.1", "0.0.0.0", recv_port, 51064);
     auto result = createDeviceSession(config, ProtocolVersion::PROTOCOL_CURRENT);
-    EXPECT_TRUE(result.isError());
-    if (result.isError()) {
-        EXPECT_NE(result.error().find("127.0.0.1:51063"), std::string::npos) << result.error();
-    }
+    EXPECT_TRUE(result.isOk()) << result.error();
+}
 
-    closesocket(holder);
-    WSACleanup();
+/// Protocol detection must also bind alongside Central.  With no client
+/// address given, the probe binds the wildcard like the device socket; #210's
+/// probe bound the detected instrument-network address -- the one Central
+/// holds -- and failed with WSAEACCES.  Needs a 192.168.137.x adapter to hold
+/// that address the way Central does.  Nothing answers, so detection times
+/// out; what matters is that it got as far as waiting rather than failing to
+/// bind.
+TEST_F(DeviceSessionTest, Windows_ProtocolProbeCanBindAfterCentral) {
+    const std::string detected = detectClientAddress(DeviceType::CUSTOM);
+    if (detected.empty() || detected == "0.0.0.0")
+        GTEST_SKIP() << "no 192.168.137.x adapter to hold the way Central does";
+
+    constexpr uint16_t recv_port = 51065;
+    CentralStyleSocket central(recv_port, detected.c_str());
+    ASSERT_TRUE(central.bound()) << detected;
+
+    auto config = ConnectionParams::custom("127.0.0.1", "", recv_port, 51066);
+    auto result = createDeviceSession(config, ProtocolVersion::UNKNOWN);
+    ASSERT_TRUE(result.isError());
+    EXPECT_EQ(result.error().find("bind"), std::string::npos) << result.error();
 }
 #endif

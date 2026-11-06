@@ -1097,48 +1097,43 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
     SdkSession session;
     session.m_impl->config = config;
 
-    // Three-way shared memory detection:
-    // 1. Try Central compat CLIENT: attach to existing Central-named segments
-    // 2. Try native CLIENT: attach to existing native-named segments
-    // 3. Fall back to native STANDALONE: create new native-mode segments
+    // Shared memory selection:
+    //   NATIVE (default): attach to another CereLink session's native segments
+    //     for this device (CLIENT), else create them and own the device
+    //     (STANDALONE).  Central, if running, is irrelevant: the device socket
+    //     shares the port with it (see cbdev DeviceSession::create).
+    //   CENTRAL (deprecated): attach to Central's shared memory, or fail.
     bool is_standalone = false;
 
-    // Device token used to build NATIVE segment names. The SDK always targets
-    // Central's primary instance, so the CENTRAL instance suffix is empty.
+    // Device token used to build NATIVE segment names.
     std::string device_tag = getNativeDeviceName(config.device_type);
 
-    // --- Attempt 1: Central-compatible CLIENT mode ---
-    // A running Central owns the socket of every device it has a slot for, so
-    // for those devices attaching through its shared memory is the only correct
-    // way in.  If that attach fails we must report it rather than fall through:
-    // STANDALONE would then compete with Central for the same device (#210).
-    // A device this Central never connects to (NPLAY, or HUB3 before 7.8) is
-    // not Central's, and goes through the NATIVE path as if Central were absent.
     int32_t central_inst_idx = -1;
-    auto shmem_result = cbshm::Result<cbshm::ShmemSession>::error("Central is not running");
-    if (cbshm::isCentralRunning()) {
-        auto central_version = cbshm::detectCentralVersion();
-        if (central_version.isError()) {
-            return Result<SdkSession>::error(
-                "Central is running, but CereLink cannot attach to it: " + central_version.error() +
-                ". Not connecting to the device directly, which would compete with Central for it.");
-        }
-        central_inst_idx = getCentralInstrumentIndex(central_version.value(), config.device_type);
-        if (central_inst_idx >= 0) {
-            shmem_result = cbshm::ShmemSession::create(
-                cbshm::Mode::CLIENT, cbshm::ShmemLayout::CENTRAL, /*instance=*/"",
-                cbproto::InstrumentId::fromIndex(central_inst_idx));
-            if (shmem_result.isError()) {
-                return Result<SdkSession>::error(
-                    "Central is running, but attaching to its shared memory failed: " +
-                    shmem_result.error() +
-                    ". Not connecting to the device directly, which would compete with Central for it.");
-            }
-        }
-    }
+    auto shmem_result = cbshm::Result<cbshm::ShmemSession>::error("not attempted");
 
-    if (shmem_result.isError()) {
-        // --- Attempt 2: Native CLIENT mode ---
+    if (config.connection_mode == ConnectionMode::CENTRAL) {
+        static std::once_flag warned;
+        std::call_once(warned, [] {
+            std::cerr << "[cbsdk] ConnectionMode::CENTRAL is deprecated and will be removed in the "
+                         "next major release; ConnectionMode::NATIVE works alongside Central.\n";
+        });
+        if (!cbshm::isCentralRunning())
+            return Result<SdkSession>::error("ConnectionMode::CENTRAL requires Central to be running");
+        auto central_version = cbshm::detectCentralVersion();
+        if (central_version.isError())
+            return Result<SdkSession>::error("Cannot attach to Central: " + central_version.error());
+        central_inst_idx = getCentralInstrumentIndex(central_version.value(), config.device_type);
+        if (central_inst_idx < 0)
+            return Result<SdkSession>::error(
+                "This version of Central has no instrument slot for the requested device type");
+        shmem_result = cbshm::ShmemSession::create(
+            cbshm::Mode::CLIENT, cbshm::ShmemLayout::CENTRAL, /*instance=*/"",
+            cbproto::InstrumentId::fromIndex(central_inst_idx));
+        if (shmem_result.isError())
+            return Result<SdkSession>::error("Failed to attach to Central's shared memory: " +
+                                             shmem_result.error());
+    } else {
+        // --- NATIVE CLIENT ---
         // Try to attach to an existing CereLink STANDALONE's native segments
         shmem_result = cbshm::ShmemSession::create(
             cbshm::Mode::CLIENT, cbshm::ShmemLayout::NATIVE, device_tag,
@@ -1161,7 +1156,7 @@ Result<SdkSession> SdkSession::create(const SdkConfig& config) {
         }
 
         if (shmem_result.isError()) {
-            // --- Attempt 3: Native STANDALONE mode ---
+            // --- NATIVE STANDALONE ---
             // No existing shared memory found, create new native-mode segments
             shmem_result = cbshm::ShmemSession::create(
                 cbshm::Mode::STANDALONE, cbshm::ShmemLayout::NATIVE, device_tag,

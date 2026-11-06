@@ -28,7 +28,11 @@ import sys
 import threading
 import time
 
-from pycbsdk import DeviceType, ProtocolVersion, SampleRate, Session
+from pycbsdk import ConnectionMode, DeviceType, ProtocolVersion, SampleRate, Session
+
+# Set by main(): --central soaks attach through Central (deprecated mode),
+# --native soaks talk to the device directly.
+_CONNECTION_MODE = ConnectionMode.NATIVE
 
 # cbRECBUFFLEN in DWORDS per Central application version; bytes = dwords * 4.
 # These come from Central's own constants, so they do NOT shrink with a
@@ -105,7 +109,7 @@ def open_session(device: str, attempts: int = 3, delay: float = 4.0) -> Session:
         if attempt:
             time.sleep(delay)
         try:
-            return Session(DeviceType[device])
+            return Session(DeviceType[device], connection_mode=_CONNECTION_MODE)
         except Exception as exc:  # noqa: BLE001 - diagnostic harness
             last_exc = exc
             print(
@@ -1136,6 +1140,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.native == bool(args.central):
         ap.error("pass exactly one of --central VERSION or --native")
     key = "native" if args.native else args.central
+    global _CONNECTION_MODE
+    _CONNECTION_MODE = ConnectionMode.NATIVE if args.native else ConnectionMode.CENTRAL
 
     producer = None
     if args.native:

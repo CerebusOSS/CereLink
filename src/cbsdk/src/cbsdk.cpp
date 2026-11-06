@@ -227,6 +227,10 @@ static cbsdk::SdkConfig to_cpp_config(const cbsdk_config_t* c_config) {
         cpp_config.custom_client_port = c_config->custom_client_port;
     }
 
+    cpp_config.connection_mode = c_config->connection_mode == CBSDK_CONNECTION_MODE_CENTRAL
+        ? cbsdk::ConnectionMode::CENTRAL
+        : cbsdk::ConnectionMode::NATIVE;
+
     return cpp_config;
 }
 
@@ -300,6 +304,7 @@ cbsdk_config_t cbsdk_config_default(void) {
     config.custom_client_address = nullptr;
     config.custom_device_port = 0;
     config.custom_client_port = 0;
+    config.connection_mode = CBSDK_CONNECTION_MODE_NATIVE;
     return config;
 }
 

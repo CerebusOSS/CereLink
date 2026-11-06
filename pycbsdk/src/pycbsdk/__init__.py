@@ -18,6 +18,7 @@ Usage::
 
 from .session import (
     ChanInfoField,
+    ConnectionMode,
     ChannelType,
     ContinuousReader,
     DeviceType,
@@ -34,6 +35,7 @@ except ImportError:
 
 __all__ = [
     "ChanInfoField",
+    "ConnectionMode",
     "ChannelType",
     "ContinuousReader",
     "DeviceType",

@@ -47,7 +47,11 @@ enum class Mode {
 /// Controls buffer sizes, struct types, and bounds checking.
 ///
 enum class ShmemLayout {
-    CENTRAL,         ///< Central's actual binary layout (cbCFGBUFF)
+    /// Central's actual binary layout (cbCFGBUFF).
+    /// @deprecated Only used by cbsdk::ConnectionMode::CENTRAL; this layout,
+    /// the per-version Central adapters and central_types/ are slated for
+    /// removal in the next major release.
+    CENTRAL,
     NATIVE           ///< Native single-instrument layout (NativeConfigBuffer)
 };
 
