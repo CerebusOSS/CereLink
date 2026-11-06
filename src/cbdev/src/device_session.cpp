@@ -38,12 +38,14 @@
 #endif
 
 #include "device_session_impl.h"
+#include "sample_reorder.h"
 #include "cbdev/clock_sync.h"
 #include <cbproto/cbproto.h>
 #include <cbproto/config.h>
 #include <cbproto/gemini.h>
 #include <cbproto/packet_translator.h>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <condition_variable>
@@ -1909,30 +1911,15 @@ Result<void> DeviceSession::startReceiveThread() {
         // type is largest.
         uint8_t buffer[cbCER_UDP_SIZE_MAX * 2] = {};
 
-        while (!m_impl->receive_thread_stop_requested.load()) {
-            // Receive packets (only fill the actual datagram portion, not the padding)
-            auto result = receivePackets(buffer, cbCER_UDP_SIZE_MAX);
-
-            if (result.isError()) {
-                // TODO: Could invoke an error callback here
-                continue;
-            }
-
-            const int bytes_received = result.value();
-            if (bytes_received == 0) {
-                // No data available - brief sleep to avoid busy-waiting
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
-                continue;
-            }
-
-            // Parse packets and invoke callbacks
+        // Parse one datagram's packets and invoke callbacks.
+        auto dispatch = [this](const uint8_t* data, size_t len) {
             size_t offset = 0;
-            while (offset + cbPKT_HEADER_SIZE <= static_cast<size_t>(bytes_received)) {
-                const auto* pkt = reinterpret_cast<const cbPKT_GENERIC*>(&buffer[offset]);
+            while (offset + cbPKT_HEADER_SIZE <= len) {
+                const auto* pkt = reinterpret_cast<const cbPKT_GENERIC*>(data + offset);
                 const size_t packet_size = cbPKT_HEADER_SIZE + (pkt->cbpkt_header.dlen * 4);
 
                 // Verify complete packet
-                if (offset + packet_size > static_cast<size_t>(bytes_received)) {
+                if (offset + packet_size > len) {
                     break;  // Incomplete packet
                 }
 
@@ -1954,6 +1941,62 @@ Result<void> DeviceSession::startReceiveThread() {
                     reg.callback();
                 }
             }
+        };
+
+        // Puts sample datagrams that the host delivered out of order back in
+        // order before dispatch (see sample_reorder.h).  Held copies get the
+        // same padding as `buffer`.
+        SampleReorderBuffer reorder(m_impl->config.reorder_window, cbCER_UDP_SIZE_MAX);
+        uint64_t reported_reorders = 0;
+        std::chrono::steady_clock::time_point last_reorder_log{};
+
+        while (!m_impl->receive_thread_stop_requested.load()) {
+            // Receive packets (only fill the actual datagram portion, not the padding)
+            auto result = receivePackets(buffer, cbCER_UDP_SIZE_MAX);
+
+            if (result.isError()) {
+                // TODO: Could invoke an error callback here
+                continue;
+            }
+
+            const int bytes_received = result.value();
+            if (bytes_received == 0) {
+                // A blocking socket returns nothing only after its receive
+                // timeout, i.e. the stream is idle: nothing more is coming for
+                // a held datagram.  (Non-blocking returns nothing constantly.)
+                if (!m_impl->config.non_blocking)
+                    reorder.releaseAll(dispatch);
+                // No data available - brief sleep to avoid busy-waiting
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
+                continue;
+            }
+
+            reorder.push(buffer, static_cast<size_t>(bytes_received), dispatch);
+
+            // Report restorations the way packet loss is reported (rate-limited).
+            if (reorder.reorderedCount() != reported_reorders) {
+                const auto now = std::chrono::steady_clock::now();
+                if (now - last_reorder_log >= std::chrono::seconds(1)) {
+                    reported_reorders = reorder.reorderedCount();
+                    last_reorder_log = now;
+                    fprintf(stderr, "[cbdev] put %llu out-of-order sample datagrams back in order\n",
+                            static_cast<unsigned long long>(reported_reorders));
+                }
+            }
+        }
+
+        if (std::getenv("CERELINK_REORDER_STATS")) {
+            const auto& st = reorder.stats();
+            fprintf(stderr,
+                    "[cbdev] reorder stats (port %u): datagrams=%llu holds=%llu "
+                    "(head=%llu count=%llu idle=%llu) head_wait_max=%u\n",
+                    static_cast<unsigned>(m_impl->config.recv_port),
+                    static_cast<unsigned long long>(st.datagrams),
+                    static_cast<unsigned long long>(st.holds),
+                    static_cast<unsigned long long>(st.released_by_head),
+                    static_cast<unsigned long long>(st.released_by_count),
+                    static_cast<unsigned long long>(st.released_by_idle),
+                    static_cast<unsigned>(st.head_wait_max));
         }
 
         m_impl->receive_thread_running.store(false);

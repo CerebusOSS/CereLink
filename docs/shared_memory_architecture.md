@@ -384,10 +384,14 @@ Caveats:
   leave it unset so the wildcard is used.
 - Central's Standby / Shutdown buttons reset or power down the devices for everyone.
   Closing Central normally does not touch them.
-- About 0.6% of the time the device splits a millisecond of samples into two datagrams
-  3-4 us apart, and Windows occasionally delivers the second first. This happens below
-  both programs' sockets (Central sees it identically); nothing is lost, but sample
-  timestamps step backwards once.
+- About once a second the device's protocol-monitor packet splits a millisecond of samples
+  into two datagrams (e.g. 27 + 3) a few microseconds apart, and Windows occasionally
+  (~1 per minute) hands the second to sockets before the first, although the wire order is
+  correct. Central sees this identically; it is not caused by sharing the port, and it was
+  not cured by disabling interrupt moderation or Defender's datagram processing. CereLink
+  puts such datagrams back in order (`cbdev::SampleReorderBuffer`): a small sample datagram
+  that starts after a gap is held for at most `ConnectionParams::reorder_window` (2) more
+  datagrams, waiting for the late one. In-order traffic is never held.
 
 ## Key Data Flow Paths
 
