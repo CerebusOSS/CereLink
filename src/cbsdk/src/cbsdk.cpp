@@ -96,8 +96,11 @@ struct cbsdk_session_impl {
 /// segments become orphaned and cause the next session to attach as CLIENT
 /// (finding stale shmem) instead of creating a new STANDALONE session.
 ///
-/// Strategy: install a one-shot signal handler that destroys all tracked sessions
+/// Strategy: install a one-shot signal handler that tears down all tracked sessions
 /// (triggering shm_unlink via the normal destructor chain), then re-raises.
+/// The handler only releases each session's resources; the handle itself stays
+/// allocated because the host still owns it and will pass it to
+/// cbsdk_session_stop/destroy if it survives the signal.
 
 static std::mutex g_sessions_mutex;
 static std::set<cbsdk_session_t> g_sessions;
@@ -113,7 +116,7 @@ static BOOL WINAPI console_ctrl_handler(DWORD event) {
             sessions_copy.swap(g_sessions);
         }
         for (auto* s : sessions_copy) {
-            delete s;
+            s->cpp_session.reset();
         }
         return FALSE;  // Let the default handler run (process exit)
     }
@@ -133,7 +136,7 @@ static void cleanup_sessions_and_reraise(int sig) {
         sessions_copy.swap(g_sessions);
     }
     for (auto* s : sessions_copy) {
-        delete s;
+        s->cpp_session.reset();
     }
 
     // Restore the previous handler and re-raise so the process exits normally
@@ -156,8 +159,15 @@ static void install_signal_handlers() {
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
 
-    sigaction(SIGINT, &sa, &g_prev_sigint);
-    sigaction(SIGTERM, &sa, &g_prev_sigterm);
+    // Only take over signals left at SIG_DFL. If the host handles (or ignores) a
+    // signal it may survive it, and it then shuts its sessions down itself.
+    auto install_if_default = [&sa](int sig, struct sigaction* prev) {
+        if (sigaction(sig, nullptr, prev) != 0) return;
+        if ((prev->sa_flags & SA_SIGINFO) || prev->sa_handler != SIG_DFL) return;
+        sigaction(sig, &sa, nullptr);
+    };
+    install_if_default(SIGINT, &g_prev_sigint);
+    install_if_default(SIGTERM, &g_prev_sigterm);
 #endif
 }
 

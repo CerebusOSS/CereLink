@@ -13,6 +13,10 @@
 #include "cbsdk/cbsdk.h"
 #include <cstring>
 #include <vector>
+#ifndef _WIN32
+#include <csignal>
+#include <cstdlib>
+#endif
 
 /// Test fixture for C API tests
 class CbsdkCApiTest : public ::testing::Test {
@@ -114,6 +118,38 @@ TEST_F(CbsdkCApiTest, StartTwice_Error) {
     cbsdk_session_stop(session);
     cbsdk_session_destroy(session);
 }
+
+#ifndef _WIN32
+static volatile sig_atomic_t g_host_sigint_count = 0;
+static void host_sigint_handler(int) { g_host_sigint_count = g_host_sigint_count + 1; }
+
+/// Regression for #220: a host that handles SIGINT itself (as CPython does) survives
+/// the signal and then stops/destroys its session. cbsdk must not have freed it.
+TEST_F(CbsdkCApiTest, HostSigintHandler_SessionSurvivesSignal) {
+    // Fresh process: cbsdk installs its handlers once, on the first session create.
+    GTEST_FLAG_SET(death_test_style, "threadsafe");
+    EXPECT_EXIT({
+        struct sigaction sa{};
+        sa.sa_handler = host_sigint_handler;
+        sigemptyset(&sa.sa_mask);
+        sigaction(SIGINT, &sa, nullptr);
+
+        cbsdk_config_t config = cbsdk_config_default();
+        config.device_type = CBPROTO_DEVICE_TYPE_HUB1;
+        cbsdk_session_t session = nullptr;
+        if (cbsdk_session_create(&session, &config) != CBSDK_RESULT_SUCCESS) std::exit(2);
+        if (cbsdk_session_start(session) != CBSDK_RESULT_SUCCESS) std::exit(3);
+
+        raise(SIGINT);
+        if (g_host_sigint_count != 1) std::exit(4);
+        if (!cbsdk_session_is_running(session)) std::exit(5);
+
+        cbsdk_session_stop(session);
+        cbsdk_session_destroy(session);
+        std::exit(0);
+    }, ::testing::ExitedWithCode(0), "");
+}
+#endif
 
 TEST_F(CbsdkCApiTest, IsRunning_NullSession) {
     EXPECT_FALSE(cbsdk_session_is_running(nullptr));
