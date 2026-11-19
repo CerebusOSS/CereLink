@@ -82,6 +82,16 @@ public:
                                          static_cast<int>(buflen), 0, nullptr, nullptr));
     }
 
+    /// Send one datagram to 127.0.0.1:port (i.e. to a session's recv port).
+    bool sendTo(uint16_t port, const void* buf, size_t len) {
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port);
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+        return sendto(m_sock, reinterpret_cast<const char*>(buf), static_cast<int>(len), 0,
+                      reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == static_cast<int>(len);
+    }
+
     FakeDeviceSocket(const FakeDeviceSocket&) = delete;
     FakeDeviceSocket& operator=(const FakeDeviceSocket&) = delete;
 
@@ -384,6 +394,64 @@ TEST_F(DeviceSessionTest, ConfigSends_ArePaced_DataSends_AreNot) {
     EXPECT_GE(cfg_ms, 4) << "configuration sends were not throttled";
     EXPECT_LT(data_ms, 4) << "data sends should not be throttled";
     EXPECT_GT(cfg_ms, data_ms) << "config sends should be slower than data sends";
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Clock probes are held off until the device is RUNNING and while a
+// REQCONFIGALL burst is in flight: round trips are unreliable before RUNNING,
+// and a probe reply queued behind the burst measures that backlog.
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+TEST_F(DeviceSessionTest, ClockProbe_GatedOnRunningAndConfigBurst) {
+    const uint16_t recv_port = 51047;
+    const uint16_t send_port = 51048;
+    auto config = ConnectionParams::custom("127.0.0.1", "0.0.0.0", recv_port, send_port);
+    auto result = createDeviceSession(config, ProtocolVersion::PROTOCOL_CURRENT);
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    FakeDeviceSocket device(send_port);
+    ASSERT_TRUE(device.ok()) << "Failed to bind fake device socket";
+
+    // Deliver one SYSREP (the config-flood terminator) with the given runlevel.
+    auto deliverSysrep = [&](uint32_t runlevel) {
+        cbPKT_SYSINFO rep{};
+        rep.cbpkt_header.time = 1;
+        rep.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        rep.cbpkt_header.type = cbPKTTYPE_SYSREP;
+        rep.cbpkt_header.dlen = cbPKTDLEN_SYSINFO;
+        rep.runlevel = runlevel;
+        ASSERT_TRUE(device.sendTo(recv_port, &rep, sizeof(rep)));
+        uint8_t buf[cbPKT_MAX_SIZE * 4];
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+        int n = 0;
+        while (n <= 0 && std::chrono::steady_clock::now() < deadline) {
+            auto r = session->receivePackets(buf, sizeof(buf));
+            ASSERT_TRUE(r.isOk()) << r.error();
+            n = r.value();
+        }
+        ASSERT_GT(n, 0) << "SYSREP not received";
+    };
+    uint8_t wire[cbPKT_MAX_SIZE];
+
+    // Fresh session: runlevel unknown (0), so no probe goes out.
+    EXPECT_TRUE(session->sendClockProbe().isError());
+
+    deliverSysrep(cbRUNLEVEL_STANDBY);
+    EXPECT_TRUE(session->sendClockProbe().isError()) << "probed a non-RUNNING device";
+
+    deliverSysrep(cbRUNLEVEL_RUNNING);
+    ASSERT_TRUE(session->sendClockProbe().isOk());
+    ASSERT_GT(device.recvOne(wire, sizeof(wire)), 0);
+    EXPECT_EQ(reinterpret_cast<const cbPKT_HEADER*>(wire)->type, cbPKTTYPE_NPLAYSET);
+
+    // REQCONFIGALL opens a burst; probes wait for its terminating SYSREP.
+    ASSERT_TRUE(session->requestConfiguration().isOk());
+    ASSERT_GT(device.recvOne(wire, sizeof(wire)), 0);
+    EXPECT_TRUE(session->sendClockProbe().isError()) << "probed during config burst";
+
+    deliverSysrep(cbRUNLEVEL_RUNNING);
+    EXPECT_TRUE(session->sendClockProbe().isOk());
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

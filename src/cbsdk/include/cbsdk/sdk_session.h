@@ -910,6 +910,8 @@ public:
     void resetMonotonic(int64_t stream_id);
 
     /// Send a clock synchronization probe to the device.
+    /// STANDALONE: refused while the device is not RUNNING or a REQCONFIGALL
+    /// burst is in progress (see cbdev::IDeviceSession::sendClockProbe).
     /// @return Result indicating success or error
     Result<void> sendClockProbe();
 

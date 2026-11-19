@@ -271,6 +271,19 @@ struct DeviceSession::Impl {
     PendingClockProbe pending_clock_probe;
     std::mutex clock_probe_mutex;
 
+    // Start of the REQCONFIGALL burst in flight (epoch when none); guarded by
+    // clock_probe_mutex. The device answers with >1000 packets in a few ms, and
+    // a probe reply queued behind them measures that backlog, not the path.
+    std::chrono::steady_clock::time_point config_burst_since{};
+    // Fallback for a lost terminating SYSREP, so probing can't stall forever.
+    static constexpr auto kConfigBurstMaxAge = std::chrono::seconds(1);
+
+    void beginConfigBurst() {
+        std::lock_guard<std::mutex> lock(clock_probe_mutex);
+        config_burst_since = std::chrono::steady_clock::now();
+        pending_clock_probe.active = false;  // its reply would land behind the burst
+    }
+
     // General response waiting mechanism
     struct PendingResponse {
         std::function<bool(const cbPKT_HEADER*)> matcher;
@@ -684,6 +697,12 @@ void DeviceSession::setSendProtocol(ProtocolVersion version) {
 Result<void> DeviceSession::sendPacket(const cbPKT_GENERIC& pkt) {
     if (!m_impl || !m_impl->connected) {
         return Result<void>::error("Device not connected");
+    }
+
+    // Every REQCONFIGALL passes here, including those relayed from shmem.
+    if (pkt.cbpkt_header.type == cbPKTTYPE_REQCONFIGALL &&
+        (pkt.cbpkt_header.chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
+        m_impl->beginConfigBurst();
     }
 
     // Pace bursts of configuration packets so they drain at a rate the device
@@ -1124,9 +1143,17 @@ Result<void> DeviceSession::sendClockProbe() {
     if (!m_impl || !m_impl->connected)
         return Result<void>::error("Device not connected");
 
+    // Probe round trips are unreliable before the device reaches RUNNING.
+    if (m_impl->device_config.sysinfo.runlevel != cbRUNLEVEL_RUNNING)
+        return Result<void>::error("Clock probe skipped: device not RUNNING");
+
     auto now = std::chrono::steady_clock::now();
     {
         std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
+        // Checked under the lock so a burst starting concurrently either is
+        // seen here or cancels this probe in beginConfigBurst().
+        if (now - m_impl->config_burst_since < Impl::kConfigBurstMaxAge)
+            return Result<void>::error("Clock probe skipped: configuration burst in progress");
         m_impl->pending_clock_probe.t1_local = now;
         m_impl->pending_clock_probe.active = true;
     }
@@ -1602,11 +1629,18 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 }
             }
             else if (header->type == cbPKTTYPE_REPCONFIGALL) {
-                // Config flood starting - no action needed
+                // Config flood starting. Also catches floods another host requested.
+                m_impl->beginConfigBurst();
             }
             else if ((header->type & 0xF0) == cbPKTTYPE_SYSREP) {
                 const auto* sysinfo = reinterpret_cast<const cbPKT_SYSINFO*>(buff_bytes + offset);
                 m_impl->device_config.sysinfo = *sysinfo;
+
+                // Plain SYSREP terminates the config flood (as in requestConfigurationSync).
+                if (header->type == cbPKTTYPE_SYSREP) {
+                    std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
+                    m_impl->config_burst_since = {};
+                }
 
                 // If SYSREP arrives after PROCREP established non-Gemini identity,
                 // update conversion factors now that sysfreq is available.
