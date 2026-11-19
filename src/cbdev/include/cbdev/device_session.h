@@ -344,8 +344,10 @@ public:
     [[nodiscard]] virtual std::optional<uint64_t>
         toDeviceTime(std::chrono::steady_clock::time_point local_time) const = 0;
 
-    /// Send a clock synchronization probe (no-op SYSSETRUNLEV(RUNNING)).
-    /// Captures T1 (host send time) and completes measurement when SYSREPRUNLEV is received.
+    /// Send a clock synchronization probe (nPlay echo, mode 0xFFFF).
+    /// Captures T1 (host send time) and completes measurement when NPLAYREP is received.
+    /// Refused (error, nothing sent) while the device is not RUNNING or a
+    /// REQCONFIGALL burst is in progress, since either skews the round trip.
     /// @return Success or error
     virtual Result<void> sendClockProbe() = 0;
 
