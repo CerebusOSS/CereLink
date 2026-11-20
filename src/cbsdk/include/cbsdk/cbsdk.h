@@ -119,7 +119,7 @@ typedef struct {
 
     // Advanced options
     int recv_buffer_size;             ///< UDP receive buffer size (default: 6MB)
-    bool non_blocking;                ///< Non-blocking sockets
+    bool non_blocking;                ///< Non-blocking sockets (default: false on Windows, true elsewhere)
 
     // Optional custom device configuration (overrides device_type mapping)
     // Use NULL/0 for automatic detection based on device_type

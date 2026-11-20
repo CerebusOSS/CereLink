@@ -44,6 +44,11 @@ TEST_F(CbsdkCApiTest, Config_Default) {
 
     EXPECT_EQ(config.device_type, CBPROTO_DEVICE_TYPE_LEGACY_NSP);
     EXPECT_EQ(config.callback_queue_depth, 16384);
+#ifdef _WIN32
+    EXPECT_FALSE(config.non_blocking);
+#else
+    EXPECT_TRUE(config.non_blocking);
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
