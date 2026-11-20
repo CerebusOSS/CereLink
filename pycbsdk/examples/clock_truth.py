@@ -5,12 +5,10 @@ On a host whose clock is PTP-synchronized to the device(s), the true offset
 ref_clock is the PTP-disciplined PHC (or CLOCK_TAI / CLOCK_REALTIME if phc2sys
 slaves the system clock).  This prints estimate - truth over time.
 
-A/B the kernel-timestamp experiment by running it once per mode:
+    python clock_truth.py HUB1 --ref /dev/ptp0
 
-    CBDEV_KERNEL_TS=0    python clock_truth.py HUB1 --ref /dev/ptp0
-    CBDEV_KERNEL_TS=rx   python clock_truth.py HUB1 --ref /dev/ptp0
-    CBDEV_KERNEL_TS=rxpost python clock_truth.py HUB1 --ref /dev/ptp0
-    CBDEV_KERNEL_TS=rxtx python clock_truth.py HUB1 --ref /dev/ptp0  # Linux only
+Without PTP (any OS), --ref none reports the host/device drift rate and the
+estimate's scatter around a linear fit instead.
 """
 
 from __future__ import annotations
@@ -56,7 +54,6 @@ def main() -> None:
 
     clk = None if args.ref == "none" else open_ref(args.ref)
     raw: list[tuple[int, int]] = []  # (monotonic_ns, offset_ns) for --ref none
-    mode = os.environ.get("CBDEV_KERNEL_TS", "0") or "0"
     errs_us: list[float] = []
     with Session(device_type=DeviceType[args.device]) as session:
         deadline = time.monotonic() + 15
@@ -65,7 +62,7 @@ def main() -> None:
                 raise TimeoutError("no clock offset within 15 s")
             time.sleep(0.25)
 
-        print(f"mode={mode}  ref={args.ref}  t0_wall={time.time():.3f}")
+        print(f"ref={args.ref}  t0_wall={time.time():.3f}")
         print(f"{'t (s)':>7s}  {'err (us)':>10s}  {'uncert (us)':>11s}")
         t0 = time.monotonic()
         try:
@@ -93,13 +90,13 @@ def main() -> None:
         ys = [(o - late[0][1]) / 1e3 for _, o in late]
         fit = statistics.linear_regression(xs, ys)
         res = sorted(abs(y - (fit.slope * x + fit.intercept)) for x, y in zip(xs, ys))
-        print(f"\nmode={mode}  n={len(late)}  drift={fit.slope:+.2f} ppm  "
+        print(f"\nn={len(late)}  drift={fit.slope:+.2f} ppm  "
               f"residual sd={statistics.pstdev([y - (fit.slope * x + fit.intercept) for x, y in zip(xs, ys)]):.1f} us  "
               f"p95|res|={res[int(0.95 * (len(res) - 1))]:.1f} us  max|res|={res[-1]:.1f} us")
     if len(errs_us) >= 2:
         a = sorted(abs(e) for e in errs_us)
         print(
-            f"\nmode={mode}  n={len(errs_us)}  mean={statistics.mean(errs_us):+.1f} us  "
+            f"\nn={len(errs_us)}  mean={statistics.mean(errs_us):+.1f} us  "
             f"sd={statistics.stdev(errs_us):.1f} us  median|err|={statistics.median(a):.1f} us  "
             f"p95|err|={a[int(0.95 * (len(a) - 1))]:.1f} us  max|err|={a[-1]:.1f} us"
         )
