@@ -305,7 +305,16 @@ cbsdk_config_t cbsdk_config_default(void) {
     config.enable_realtime_priority = false;
     config.drop_on_overflow = true;
     config.recv_buffer_size = 6000000;
+#ifdef __linux__
+    // Polling wakes sooner than a blocking read on Linux (e.g. ~0.1 vs ~0.3 ms
+    // on a Raspberry Pi 5).
     config.non_blocking = true;
+#else
+    // The receive loop sleeps 100 us after each empty non-blocking read.
+    // Windows rounds that up to a whole timer tick (~15.6 ms); macOS overshoots
+    // it too.  A blocking read wakes on arrival.
+    config.non_blocking = false;
+#endif
     config.custom_device_address = nullptr;
     config.custom_client_address = nullptr;
     config.custom_device_port = 0;
