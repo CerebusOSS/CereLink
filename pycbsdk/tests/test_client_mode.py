@@ -263,13 +263,18 @@ class TestClientClockSync:
 
     def test_clock_offset_matches_standalone(self, nplay_session, client_session):
         """CLIENT and STANDALONE should report the same clock offset."""
-        standalone_offset = nplay_session.clock_offset_ns
-        client_offset = client_session.clock_offset_ns
-        assert standalone_offset is not None
-        assert client_offset is not None
-        # Offsets may differ slightly due to read timing, but should be
-        # within 10ms of each other (probes update every 2s)
-        delta_ms = abs(standalone_offset - client_offset) / 1e6
+        # Each nPlay file loop steps the offset by the loop length (~11 s), and
+        # the STANDALONE republishes it to shmem only every 100 ms, so a read
+        # pair can straddle a step (~1% of the time).  Retry past that window.
+        for _ in range(3):
+            standalone_offset = nplay_session.clock_offset_ns
+            client_offset = client_session.clock_offset_ns
+            assert standalone_offset is not None
+            assert client_offset is not None
+            delta_ms = abs(standalone_offset - client_offset) / 1e6
+            if delta_ms < 10:
+                break
+            time.sleep(0.2)
         assert delta_ms < 10, (
             f"Offset mismatch: standalone={standalone_offset}ns, "
             f"client={client_offset}ns, delta={delta_ms:.1f}ms"
