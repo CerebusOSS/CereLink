@@ -46,6 +46,15 @@ public:
         std::chrono::seconds drift_fit_window = std::chrono::seconds{15};
         size_t max_pick_samples = 40;
 
+        // A step in the rate difference (e.g. NTP slewing the host clock)
+        // makes the slope fit lag for up to drift_fit_window, and the pick
+        // overshoots.  The estimate is capped at the largest raw offset of the
+        // newest recent_cap_probes probes plus recent_cap_ns.  On HUB2 this cut
+        // the worst error after a 10 s, -200 ppm slew from ~700 us to ~100 us
+        // with no loss of steady-state accuracy.  Zero disables the cap.
+        int64_t recent_cap_ns = 40'000;
+        size_t recent_cap_probes = 10;
+
         // Minimum number of probes before probesAreReliable() can report true.
         // A single (or a wild pair of) probe is not enough evidence to commit
         // an offset from the probe path.

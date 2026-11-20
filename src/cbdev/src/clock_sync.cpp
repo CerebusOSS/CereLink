@@ -274,6 +274,14 @@ ClockSync::InternalEstimate ClockSync::computeInternalEstimate() const {
         InternalEstimate e;
         e.offset_ns = best.offset_ns;
         e.uncertainty_ns = std::max<int64_t>(best.rtt_ns / 2, unexplained_ns / 2);
+        if (m_config.recent_cap_ns > 0 && m_config.recent_cap_probes > 0) {
+            const size_t k0 = m_probe_samples.size() -
+                              std::min(m_probe_samples.size(), m_config.recent_cap_probes);
+            int64_t recent_max = INT64_MIN;
+            for (size_t k = k0; k < m_probe_samples.size(); ++k)
+                recent_max = std::max(recent_max, m_probe_samples[k].offset_ns);
+            e.offset_ns = std::min(*e.offset_ns, recent_max + m_config.recent_cap_ns);
+        }
         return e;
     };
 
