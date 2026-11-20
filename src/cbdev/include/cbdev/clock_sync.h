@@ -10,9 +10,9 @@
 ///
 /// Each probe gives T1 (host send), T3 (device timestamp), T4 (host recv).
 /// Offset = T3 - T1 - α * (T4 - T1), where α is the forward delay fraction
-/// (default 0.5 = symmetric NTP midpoint). The probe with minimum RTT is
-/// selected as the best estimate, since minimum RTT implies the least
-/// queuing/jitter.
+/// (default 0.5 = symmetric NTP midpoint). Probes are detrended for the
+/// host/device clock-rate difference, then the one with the largest offset
+/// (least queuing) among the most recent is selected as the best estimate.
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -34,8 +34,26 @@ public:
 
     struct Config {
         double forward_delay_fraction = 0.5; // α: assumed D1/(D1+D2)
-        size_t max_probe_samples = 80;
+        size_t max_probe_samples = 200;
         std::chrono::seconds max_probe_age = std::chrono::seconds{15};
+
+        // Drift compensation.  The host and device clocks tick at slightly
+        // different rates (crystal error; NTP slewing of steady_clock), so
+        // older probes carry a stale offset.  A robust (Theil-Sen) slope over
+        // the last drift_fit_window detrends probes to the newest one's time,
+        // and the max-offset pick then considers only the newest
+        // max_pick_samples.  A zero window disables the fit.
+        std::chrono::seconds drift_fit_window = std::chrono::seconds{15};
+        size_t max_pick_samples = 40;
+
+        // A step in the rate difference (e.g. NTP slewing the host clock)
+        // makes the slope fit lag for up to drift_fit_window, and the pick
+        // overshoots.  The estimate is capped at the largest raw offset of the
+        // newest recent_cap_probes probes plus recent_cap_ns.  On HUB2 this cut
+        // the worst error after a 10 s, -200 ppm slew from ~700 us to ~100 us
+        // with no loss of steady-state accuracy.  Zero disables the cap.
+        int64_t recent_cap_ns = 40'000;
+        size_t recent_cap_probes = 10;
 
         // Minimum number of probes before probesAreReliable() can report true.
         // A single (or a wild pair of) probe is not enough evidence to commit
@@ -173,6 +191,7 @@ private:
     void commitDisciplined(int64_t target_offset_ns, int64_t uncertainty_ns);  // lock held
     void resetDiscipline();                // zero the commit-discipline counters
     InternalEstimate computeInternalEstimate() const;  // called with lock held
+    double driftSlope() const;             // d(offset)/dt, lock held
     bool externalPlausible(int64_t external_ns,
                            const InternalEstimate& internal) const;  // lock held
     void pruneExpired(time_point now);     // called with lock held

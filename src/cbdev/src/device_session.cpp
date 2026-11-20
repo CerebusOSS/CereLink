@@ -29,7 +29,12 @@
     #include <ifaddrs.h>
     #ifdef __APPLE__
         #include <net/if.h>
+        #include <mach/mach_time.h>
     #endif
+    #ifdef __linux__
+        #include <time.h>
+    #endif
+    #define CBDEV_KERNEL_RX_TIMESTAMPS 1
     typedef int SOCKET;
     typedef struct sockaddr SOCKADDR;
     typedef struct sockaddr_in SOCKADDR_IN;
@@ -59,6 +64,48 @@
 #include <vector>
 
 namespace {
+#ifdef CBDEV_KERNEL_RX_TIMESTAMPS
+    /// Receive time of a datagram from the kernel's timestamp of its arrival,
+    /// or nullopt if the message carries none.  The kernel stamps it before
+    /// the receive thread wakes, so this excludes the scheduling delay that a
+    /// user-space read adds (~0.1 ms on a Raspberry Pi 5).
+    std::optional<std::chrono::steady_clock::time_point> kernelRecvTime(msghdr& msg) {
+        for (cmsghdr* c = CMSG_FIRSTHDR(&msg); c; c = CMSG_NXTHDR(&msg, c)) {
+            if (c->cmsg_level != SOL_SOCKET)
+                continue;
+            // Convert by age: the stamp's clock differs from steady_clock's.
+            int64_t age_ns;
+#ifdef __linux__
+            if (c->cmsg_type != SCM_TIMESTAMPNS)
+                continue;
+            timespec stamp{};  // CLOCK_REALTIME
+            std::memcpy(&stamp, CMSG_DATA(c), sizeof(stamp));
+            timespec now{};
+            clock_gettime(CLOCK_REALTIME, &now);
+            age_ns = (static_cast<int64_t>(now.tv_sec) - stamp.tv_sec) * 1'000'000'000LL +
+                     (static_cast<int64_t>(now.tv_nsec) - stamp.tv_nsec);
+#else
+            if (c->cmsg_type != SCM_TIMESTAMP_MONOTONIC)
+                continue;
+            uint64_t stamp = 0;  // mach_absolute_time()
+            std::memcpy(&stamp, CMSG_DATA(c), sizeof(stamp));
+            static const mach_timebase_info_data_t timebase = [] {
+                mach_timebase_info_data_t tb{};
+                mach_timebase_info(&tb);
+                return tb;
+            }();
+            age_ns = (static_cast<int64_t>(mach_absolute_time()) - static_cast<int64_t>(stamp)) *
+                     timebase.numer / timebase.denom;
+#endif
+            // A CLOCK_REALTIME step between the stamp and now corrupts the age.
+            if (age_ns < 0 || age_ns > 1'000'000'000)
+                return std::nullopt;
+            return std::chrono::steady_clock::now() - std::chrono::nanoseconds(age_ns);
+        }
+        return std::nullopt;
+    }
+#endif
+
     // Platform-specific socket close function
     inline void closeSocket(SOCKET sock) {
 #ifdef _WIN32
@@ -460,6 +507,15 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
         return Result<DeviceSession>::error("Failed to set SO_REUSEADDR");
     }
 
+#ifdef CBDEV_KERNEL_RX_TIMESTAMPS
+    // Best effort: without kernel timestamps, receive times come from user space.
+#ifdef __linux__
+    setsockopt(session.m_impl->socket, SOL_SOCKET, SO_TIMESTAMPNS, &opt_one, sizeof(opt_one));
+#else
+    setsockopt(session.m_impl->socket, SOL_SOCKET, SO_TIMESTAMP_MONOTONIC, &opt_one, sizeof(opt_one));
+#endif
+#endif
+
     // Set receive buffer size
     if (config.recv_buffer_size > 0) {
         int buffer_size = config.recv_buffer_size;
@@ -608,9 +664,22 @@ Result<int> DeviceSession::receivePacketsRaw(void* buffer, const size_t buffer_s
     // Use recvfrom to capture the sender address so we can discard datagrams
     // from other devices sharing the same port (e.g. NPLAY and HUB1 both use 51002).
     SOCKADDR_IN sender_addr{};
+#ifdef CBDEV_KERNEL_RX_TIMESTAMPS
+    iovec iov{buffer, buffer_size};
+    alignas(cmsghdr) char ctrl[64];  // room for one timestamp
+    msghdr msg{};
+    msg.msg_name = &sender_addr;
+    msg.msg_namelen = sizeof(sender_addr);
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = ctrl;
+    msg.msg_controllen = sizeof(ctrl);
+    const int bytes_recv = static_cast<int>(recvmsg(m_impl->socket, &msg, 0));
+#else
     socklen_t addr_len = sizeof(sender_addr);
     const int bytes_recv = recvfrom(m_impl->socket, (char*)buffer, buffer_size, 0,
                               reinterpret_cast<SOCKADDR*>(&sender_addr), &addr_len);
+#endif
 
     if (bytes_recv == SOCKET_ERROR_VALUE) {
         #ifdef _WIN32
@@ -635,7 +704,12 @@ Result<int> DeviceSession::receivePacketsRaw(void* buffer, const size_t buffer_s
 
     // Capture host timestamp as early as possible after accepting a datagram.
     if (bytes_recv > 0) {
+#ifdef CBDEV_KERNEL_RX_TIMESTAMPS
+        const auto kernel_time = kernelRecvTime(msg);
+        m_impl->last_recv_timestamp = kernel_time ? *kernel_time : std::chrono::steady_clock::now();
+#else
         m_impl->last_recv_timestamp = std::chrono::steady_clock::now();
+#endif
     }
 
     return Result<int>::ok(bytes_recv);

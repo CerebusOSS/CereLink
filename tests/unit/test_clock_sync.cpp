@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 #include "cbdev/clock_sync.h"
 #include "cbdev/device_session.h"  // deviceTimestampToNs
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -194,6 +195,104 @@ TEST(ClockSyncTest, BestProbeIsMaxOffset) {
     // Probe B should be selected (highest offset = 9950)
     EXPECT_EQ(*sync.getOffsetNs(), 9950);
     EXPECT_EQ(*sync.getUncertaintyNs(), 50);  // RTT/2 = 100/2 = 50
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Drift compensation
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+// Probes every 100 ms for 60 s against a device whose offset drifts at
+// `rate` (dimensionless, e.g. -20e-6).  Symmetric 100 us transit plus up to
+// 200 us of return-path queuing (deterministic LCG), so per-probe offsets lie
+// in [truth - 100 us, truth].  Returns committed - true offset at the end.
+int64_t driftRunError(ClockSync::Config cfg, double rate, int n_probes = 600,
+                      int64_t first_t3_error_ns = 0) {
+    ClockSync sync(cfg);
+    constexpr int64_t THETA0 = 1'000'000'000;
+    uint32_t lcg = 12345;
+    int64_t t1 = 0;
+    for (int k = 0; k < n_probes; ++k, t1 += 100'000'000) {
+        lcg = lcg * 1664525u + 1013904223u;
+        const int64_t queue = static_cast<int64_t>(lcg >> 8) % 200'000;
+        const int64_t t_dev = t1 + 100'000;  // host time when the device stamps
+        const auto theta = [&](int64_t t) { return THETA0 + static_cast<int64_t>(rate * t); };
+        const int64_t t3_err = k == 0 ? first_t3_error_ns : 0;
+        sync.addProbeSample(tp_from_ns(t1), static_cast<uint64_t>(t_dev + theta(t_dev) + t3_err),
+                            tp_from_ns(t_dev + 100'000 + queue));
+        if (k == n_probes - 1)
+            return *sync.getOffsetNs() - theta(t_dev);
+    }
+    return 0;
+}
+} // anonymous namespace
+
+TEST(ClockSyncDriftTest, DriftingOffsetTrackedWithinFewMicroseconds) {
+    for (const double rate : {-20e-6, -5e-6, 0.0, 5e-6, 20e-6}) {
+        const int64_t err = driftRunError(ClockSync::Config{}, rate);
+        EXPECT_LT(std::llabs(err), 10'000) << "rate " << rate * 1e6 << " ppm: error " << err << " ns";
+    }
+}
+
+TEST(ClockSyncDriftTest, ColdStartTracksDriftAfterThreeSeconds) {
+    for (const double rate : {-50e-6, 0.0, 50e-6}) {
+        const int64_t err = driftRunError(ClockSync::Config{}, rate, 30);
+        EXPECT_LT(std::llabs(err), 30'000) << "rate " << rate * 1e6 << " ppm: error " << err << " ns";
+    }
+}
+
+TEST(ClockSyncDriftTest, ColdStartOutlierProbeDoesNotSkewSlope) {
+    // Real cold starts: the first reply reads ~3.5 ms low.
+    for (const double rate : {-50e-6, 0.0, 50e-6}) {
+        const int64_t err = driftRunError(ClockSync::Config{}, rate, 30, -3'500'000);
+        EXPECT_LT(std::llabs(err), 30'000) << "rate " << rate * 1e6 << " ppm: error " << err << " ns";
+    }
+}
+
+namespace {
+// As driftRunError, with no drift except a 10 s, -200 ppm step in the rate
+// difference from t = 30 s (an NTP slew of the host clock).  Returns the
+// largest |committed - true offset| from the step onwards.
+int64_t slewMaxError(ClockSync::Config cfg) {
+    ClockSync sync(cfg);
+    constexpr int64_t THETA0 = 1'000'000'000, STEP_START = 30'000'000'000, STEP_END = 40'000'000'000;
+    constexpr double RATE = -200e-6;
+    const auto theta = [&](int64_t t) {
+        const int64_t in_step = std::clamp<int64_t>(t, STEP_START, STEP_END) - STEP_START;
+        return THETA0 + static_cast<int64_t>(RATE * static_cast<double>(in_step));
+    };
+    uint32_t lcg = 12345;
+    int64_t worst = 0;
+    for (int64_t t1 = 0; t1 < 70'000'000'000; t1 += 100'000'000) {
+        lcg = lcg * 1664525u + 1013904223u;
+        const int64_t queue = static_cast<int64_t>(lcg >> 8) % 200'000;
+        const int64_t t_dev = t1 + 100'000;
+        sync.addProbeSample(tp_from_ns(t1), static_cast<uint64_t>(t_dev + theta(t_dev)),
+                            tp_from_ns(t_dev + 100'000 + queue));
+        if (t1 >= STEP_START)
+            worst = std::max<int64_t>(worst, std::llabs(*sync.getOffsetNs() - theta(t_dev)));
+    }
+    return worst;
+}
+} // anonymous namespace
+
+TEST(ClockSyncDriftTest, RateStepErrorIsCapped) {
+    ClockSync::Config uncapped;
+    uncapped.recent_cap_ns = 0;
+    const int64_t capped_err = slewMaxError(ClockSync::Config{});
+    const int64_t uncapped_err = slewMaxError(uncapped);
+    // ~220 us vs ~700 us here; ~100 us vs ~700 us on HUB2.
+    EXPECT_LT(capped_err, uncapped_err / 2)
+        << "capped " << capped_err << " ns, uncapped " << uncapped_err << " ns";
+}
+
+TEST(ClockSyncDriftTest, WithoutCompensationOldestProbeWins) {
+    // Guards that the test above exercises the compensation: with the fit
+    // disabled, a falling offset makes the oldest probe in the pick window win.
+    ClockSync::Config cfg;
+    cfg.drift_fit_window = std::chrono::seconds{0};
+    cfg.recent_cap_ns = 0;  // the cap would also hide it
+    EXPECT_GT(driftRunError(cfg, -20e-6), 50'000);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
