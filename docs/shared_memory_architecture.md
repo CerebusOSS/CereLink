@@ -369,8 +369,9 @@ SdkSession::create(HUB1), CERELINK_CENTRAL_COMPAT=1      <-- deprecated
 A Native Standalone session and Central can drive the same device at once (#213).
 Central binds each Gemini port on the instrument-network address (e.g.
 `192.168.137.199:51002`) without `SO_REUSEADDR`; the session binds the wildcard
-address with `SO_REUSEADDR`, which Windows allows in either start order. The devices
-broadcast everything, so both receive the full stream.
+address with `SO_REUSEADDR`, which Windows allows in either start order as long as both
+programs run in the same logon session (see the caveats). The devices broadcast everything,
+so both receive the full stream.
 
 Measured on Central 7.7 and 7.8, HUB1 + HUB2 at 256 ch x 30 kHz, in every start order
 (including Central starting, stopping, and recording while a session streams): no lost
@@ -380,6 +381,11 @@ broadcast `REPFILECFG`). The session keeps native timing: sub-millisecond reques
 trips and ~0.1 ms clock uncertainty, versus ~20 ms and ~10 ms through Central.
 
 Caveats:
+- Run the session in the same logon session as Central, e.g. from a terminal or IDE on the
+  desktop. If the session is started over SSH, as a Windows service, or as another user,
+  and Central starts afterwards, Windows refuses Central's bind of the shared port. Central
+  doesn't handle the failed bind and crashes on launch (0xc0000005). Starting Central first
+  works regardless.
 - A session given a custom *specific* client address cannot share the port with Central;
   leave it unset so the wildcard is used.
 - Central's Standby / Shutdown buttons reset or power down the devices for everyone.

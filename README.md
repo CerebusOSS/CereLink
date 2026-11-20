@@ -29,7 +29,10 @@ A session talks to the device directly:
 
 This works the same whether or not Central is running on the same PC. On Windows the
 session shares the device's UDP port with Central and both receive the full data stream,
-in either start order; config changes made from either side are seen by the other, and
+in either start order when both run in the same logon session (a session started over SSH,
+as a service, or as another user crashes a Central launched after it; see
+[Running alongside Central](docs/shared_memory_architecture.md#running-alongside-central-windows));
+config changes made from either side are seen by the other, and
 recording commands (`startCentralRecording`) still reach Central.
 
 - **CENTRAL CLIENT** (*deprecated*, environment variable `CERELINK_CENTRAL_COMPAT=1`) —

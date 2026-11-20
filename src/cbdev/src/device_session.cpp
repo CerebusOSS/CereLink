@@ -442,7 +442,10 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
     // (#213).  On Windows, Central binds the instrument-network address (e.g.
     // 192.168.137.199) without SO_REUSEADDR, while this socket binds the
     // wildcard address (see the client-address note at bind() below); Windows
-    // permits that pair in either start order.  The devices broadcast
+    // permits that pair in either start order, provided both processes run in
+    // the same logon session.  A session started over SSH, as a service, or as
+    // another user makes Central's later bind fail, and Central then crashes
+    // (see below); Central first still works.  The devices broadcast
     // everything -- samples, config replies, replies to either program's
     // requests -- so both sockets receive the full stream.  Verified on
     // Central 7.7 and 7.8 at 256 ch x 30 kHz per hub: no lost samples on either
