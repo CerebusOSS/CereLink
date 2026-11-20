@@ -166,7 +166,8 @@ void ClockSync::addDataPacketSample(const uint64_t device_time_ns, const time_po
     ds.when = recv_local;
     m_data_samples.push_back(ds);
 
-    while (m_data_samples.size() > m_config.max_probe_samples * 4) {
+    constexpr size_t MAX_DATA_SAMPLES = 320;
+    while (m_data_samples.size() > MAX_DATA_SAMPLES) {
         m_data_samples.pop_front();
     }
 
@@ -212,25 +213,35 @@ ClockSync::InternalEstimate ClockSync::computeInternalEstimate() const {
     // Glitch-filtered max-offset probe pick (least-queued probe).  Returns
     // {offset, uncertainty=rtt/2} for the selected probe.
     const auto bestProbe = [this]() -> InternalEstimate {
-        std::vector<size_t> indices(m_probe_samples.size());
+        // Detrend the newest max_pick_samples probes to the newest probe's
+        // time, so a drifting offset doesn't make the oldest probe win.
+        const double slope = driftSlope();
+        const int64_t t_last = to_ns(m_probe_samples.back().when);
+        const size_t n = std::min(m_probe_samples.size(), m_config.max_pick_samples);
+        std::vector<ProbeSample> picks(m_probe_samples.end() - static_cast<std::ptrdiff_t>(n),
+                                       m_probe_samples.end());
+        for (auto& p : picks)
+            p.offset_ns += static_cast<int64_t>(std::llround(
+                slope * static_cast<double>(t_last - to_ns(p.when))));
+
+        std::vector<size_t> indices(picks.size());
         std::iota(indices.begin(), indices.end(), 0);
         std::sort(indices.begin(), indices.end(),
-                  [this](size_t a, size_t b) {
-                      return m_probe_samples[a].offset_ns
-                           < m_probe_samples[b].offset_ns;
+                  [&picks](size_t a, size_t b) {
+                      return picks[a].offset_ns < picks[b].offset_ns;
                   });
 
         constexpr int64_t GAP_THRESHOLD_NS = 10'000'000;  // 10 ms
         size_t top = indices.size();
         while (top > 1) {
-            if (m_probe_samples[indices[top - 1]].offset_ns -
-                m_probe_samples[indices[top - 2]].offset_ns > GAP_THRESHOLD_NS)
+            if (picks[indices[top - 1]].offset_ns -
+                picks[indices[top - 2]].offset_ns > GAP_THRESHOLD_NS)
                 --top;
             else
                 break;
         }
 
-        const auto& best = m_probe_samples[indices[top - 1]];
+        const auto& best = picks[indices[top - 1]];
 
         // rtt/2 bounds the error only when transit delay is the sole error
         // source. Offsets legitimately spread when round trips differ -- a
@@ -251,12 +262,11 @@ ClockSync::InternalEstimate ClockSync::computeInternalEstimate() const {
         // that is a second error source. Halved for the same reason as above:
         // the max-offset pick is the least-delayed sample, so the true offset
         // lies at or above it and the error is one-sided.
-        const int64_t spread_ns =
-            best.offset_ns - m_probe_samples[indices[0]].offset_ns;
+        const int64_t spread_ns = best.offset_ns - picks[indices[0]].offset_ns;
         int64_t rtt_lo = INT64_MAX, rtt_hi = 0;
         for (size_t k = 0; k < top; ++k) {
-            rtt_lo = std::min(rtt_lo, m_probe_samples[indices[k]].rtt_ns);
-            rtt_hi = std::max(rtt_hi, m_probe_samples[indices[k]].rtt_ns);
+            rtt_lo = std::min(rtt_lo, picks[indices[k]].rtt_ns);
+            rtt_hi = std::max(rtt_hi, picks[indices[k]].rtt_ns);
         }
         const int64_t explained_ns = (rtt_hi - rtt_lo) / 2;
         const int64_t unexplained_ns = std::max<int64_t>(0, spread_ns - explained_ns);
@@ -438,6 +448,45 @@ void ClockSync::commitDisciplined(int64_t target_offset_ns, int64_t uncertainty_
         }
         // else: hold the current offset, ignore this sample.
     }
+}
+
+double ClockSync::driftSlope() const {
+    // Theil-Sen d(offset)/dt over drift_fit_window: the median of pairwise
+    // slopes.  Robust to outlier probes (the first reply after connecting is
+    // typically ~3.5 ms late), which drag a least-squares fit by hundreds of
+    // ppm while its history is short.
+    if (m_probe_samples.empty())
+        return 0.0;
+    const auto& last = m_probe_samples.back();
+    const auto cutoff = last.when - m_config.drift_fit_window;
+    std::vector<const ProbeSample*> pts;
+    for (const auto& p : m_probe_samples)
+        if (p.when >= cutoff) pts.push_back(&p);
+
+    // Fit from 1 s of history: at cold start a noisy slope beats none, since
+    // without it the pick lags by rate x window (measured on HUB2 cold starts).
+    constexpr size_t MIN_FIT_SAMPLES = 10;
+    constexpr int64_t MIN_FIT_SPAN_NS = 1'000'000'000;
+    constexpr int64_t MIN_PAIR_DT_NS = 500'000'000;  // closer pairs are all noise
+    constexpr double MAX_ABS_SLOPE = 500e-6;         // beyond any real clock: distrust
+    if (pts.size() < MIN_FIT_SAMPLES ||
+        to_ns(last.when) - to_ns(pts.front()->when) < MIN_FIT_SPAN_NS)
+        return 0.0;
+
+    std::vector<double> slopes;
+    for (size_t i = 0; i < pts.size(); ++i) {
+        for (size_t j = i + 1; j < pts.size(); ++j) {
+            const int64_t dt = to_ns(pts[j]->when) - to_ns(pts[i]->when);
+            if (dt >= MIN_PAIR_DT_NS)
+                slopes.push_back(static_cast<double>(pts[j]->offset_ns - pts[i]->offset_ns) /
+                                 static_cast<double>(dt));
+        }
+    }
+    if (slopes.empty())
+        return 0.0;
+    const auto mid = slopes.begin() + static_cast<std::ptrdiff_t>(slopes.size() / 2);
+    std::nth_element(slopes.begin(), mid, slopes.end());
+    return std::abs(*mid) <= MAX_ABS_SLOPE ? *mid : 0.0;
 }
 
 bool ClockSync::probeSpreadOk() const {

@@ -197,6 +197,66 @@ TEST(ClockSyncTest, BestProbeIsMaxOffset) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Drift compensation
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+// Probes every 100 ms for 60 s against a device whose offset drifts at
+// `rate` (dimensionless, e.g. -20e-6).  Symmetric 100 us transit plus up to
+// 200 us of return-path queuing (deterministic LCG), so per-probe offsets lie
+// in [truth - 100 us, truth].  Returns committed - true offset at the end.
+int64_t driftRunError(ClockSync::Config cfg, double rate, int n_probes = 600,
+                      int64_t first_t3_error_ns = 0) {
+    ClockSync sync(cfg);
+    constexpr int64_t THETA0 = 1'000'000'000;
+    uint32_t lcg = 12345;
+    int64_t t1 = 0;
+    for (int k = 0; k < n_probes; ++k, t1 += 100'000'000) {
+        lcg = lcg * 1664525u + 1013904223u;
+        const int64_t queue = static_cast<int64_t>(lcg >> 8) % 200'000;
+        const int64_t t_dev = t1 + 100'000;  // host time when the device stamps
+        const auto theta = [&](int64_t t) { return THETA0 + static_cast<int64_t>(rate * t); };
+        const int64_t t3_err = k == 0 ? first_t3_error_ns : 0;
+        sync.addProbeSample(tp_from_ns(t1), static_cast<uint64_t>(t_dev + theta(t_dev) + t3_err),
+                            tp_from_ns(t_dev + 100'000 + queue));
+        if (k == n_probes - 1)
+            return *sync.getOffsetNs() - theta(t_dev);
+    }
+    return 0;
+}
+} // anonymous namespace
+
+TEST(ClockSyncDriftTest, DriftingOffsetTrackedWithinFewMicroseconds) {
+    for (const double rate : {-20e-6, -5e-6, 0.0, 5e-6, 20e-6}) {
+        const int64_t err = driftRunError(ClockSync::Config{}, rate);
+        EXPECT_LT(std::llabs(err), 10'000) << "rate " << rate * 1e6 << " ppm: error " << err << " ns";
+    }
+}
+
+TEST(ClockSyncDriftTest, ColdStartTracksDriftAfterThreeSeconds) {
+    for (const double rate : {-50e-6, 0.0, 50e-6}) {
+        const int64_t err = driftRunError(ClockSync::Config{}, rate, 30);
+        EXPECT_LT(std::llabs(err), 30'000) << "rate " << rate * 1e6 << " ppm: error " << err << " ns";
+    }
+}
+
+TEST(ClockSyncDriftTest, ColdStartOutlierProbeDoesNotSkewSlope) {
+    // Real cold starts: the first reply reads ~3.5 ms low.
+    for (const double rate : {-50e-6, 0.0, 50e-6}) {
+        const int64_t err = driftRunError(ClockSync::Config{}, rate, 30, -3'500'000);
+        EXPECT_LT(std::llabs(err), 30'000) << "rate " << rate * 1e6 << " ppm: error " << err << " ns";
+    }
+}
+
+TEST(ClockSyncDriftTest, WithoutCompensationOldestProbeWins) {
+    // Guards that the test above exercises the compensation: with the fit
+    // disabled, a falling offset makes the oldest probe in the pick window win.
+    ClockSync::Config cfg;
+    cfg.drift_fit_window = std::chrono::seconds{0};
+    EXPECT_GT(driftRunError(cfg, -20e-6), 50'000);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Multi-device clock-sync bug coverage
 //
 // These tests pin down the device(PTP)->host time mapping invariants that the
