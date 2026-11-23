@@ -1847,10 +1847,10 @@ class Session:
         )
 
     @property
-    def firmware_version(self) -> int | None:
+    def proc_version(self) -> int | None:
         """Device firmware version (procinfo.version), or None if unavailable."""
         out = ffi.new("uint32_t *")
-        if _get_lib().cbsdk_session_get_firmware_version(self._session, out) != 0:
+        if _get_lib().cbsdk_session_get_proc_version(self._session, out) != 0:
             return None
         return out[0]
 

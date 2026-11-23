@@ -2885,41 +2885,42 @@ Result<void> SdkSession::sync(uint32_t timeout_ms) {
 /// Clock Synchronization
 ///--------------------------------------------------------------------------------------------
 
-uint32_t SdkSession::getFirmwareVersion() const {
+uint32_t SdkSession::getProcVersion() const {
     auto pi = getProcInfo();
     return pi.isOk() ? pi.value().version : 0;
 }
 
 namespace {
 // Measured (CereLink issue #229) as device stamp minus true sampling instant.
-// Per device type, oldest to newest: the last entry is the fallback for unlisted firmware.
-// TODO: fill in procinfo.version of the measured firmware (Gemini 7.8).  NOTE: procinfo.version is
-// the protocol library version packed major<<16|minor, not the 7.8 release number.
-constexpr uint32_t kMeasuredFirmware = 0;
-struct LatencyEntry { DeviceType type; uint32_t firmware; int64_t latency_ns; };
+// Keyed by procinfo.version, the protocol library version (major<<16|minor), which is the only
+// version the device reports.  It does not identify the firmware release: Gemini 7.8 reports 4.2,
+// and other releases with the same protocol match the same entries.
+// Per device type, oldest to newest: the last entry is the fallback for an unlisted version.
+constexpr uint32_t kProtocol_4_2 = 0x00040002;  // measured on Gemini firmware 7.8
+struct LatencyEntry { DeviceType type; uint32_t version; int64_t latency_ns; };
 constexpr LatencyEntry kLatencyTable[] = {
-    {DeviceType::LEGACY_NSP, kMeasuredFirmware, 31'000},
-    {DeviceType::NSP,        kMeasuredFirmware, 31'000},
-    {DeviceType::HUB1,       kMeasuredFirmware, 42'600},
-    {DeviceType::HUB2,       kMeasuredFirmware, 44'000},  // measured 43.7-44.8 us
-    {DeviceType::HUB3,       kMeasuredFirmware, 44'000},  // untested; assumed as HUB2
+    {DeviceType::LEGACY_NSP, kProtocol_4_2, 31'000},
+    {DeviceType::NSP,        kProtocol_4_2, 31'000},
+    {DeviceType::HUB1,       kProtocol_4_2, 42'600},
+    {DeviceType::HUB2,       kProtocol_4_2, 44'000},  // measured 43.7-44.8 us
+    {DeviceType::HUB3,       kProtocol_4_2, 44'000},  // untested; assumed as HUB2
 };
 }  // namespace
 
 int64_t SdkSession::getDeviceLatencyNs() const {
     if (m_impl->config.device_latency_ns >= 0)
         return m_impl->config.device_latency_ns;
-    const uint32_t fw = getFirmwareVersion();
+    const uint32_t fw = getProcVersion();
     const LatencyEntry* last = nullptr;
     for (const auto& e : kLatencyTable) {
         if (e.type != m_impl->config.device_type) continue;
-        if (e.firmware == fw) return e.latency_ns;
+        if (e.version == fw) return e.latency_ns;
         last = &e;
     }
     if (!last) return 0;
     static std::once_flag warned;
     std::call_once(warned, [fw] {
-        std::cerr << "[cbsdk] device latency is unverified for firmware " << fw
+        std::cerr << "[cbsdk] device latency is unverified for protocol version " << fw
                   << "; using the most recent measured value\n";
     });
     return last->latency_ns;

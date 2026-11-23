@@ -555,7 +555,7 @@ public:
     Result<cbPKT_PROCINFO> getProcInfo() const;
 
     /// Firmware version (procinfo.version), or 0 if unavailable.
-    uint32_t getFirmwareVersion() const;
+    uint32_t getProcVersion() const;
 
     /// Get the number of channels this device actually has
     ///

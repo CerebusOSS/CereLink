@@ -1787,7 +1787,7 @@ cbsdk_result_t cbsdk_session_get_host_clock_bias_ns(cbsdk_session_t session, int
     } catch (...) { return CBSDK_RESULT_INTERNAL_ERROR; }
 }
 
-cbsdk_result_t cbsdk_session_get_firmware_version(cbsdk_session_t session, uint32_t* version) {
+cbsdk_result_t cbsdk_session_get_proc_version(cbsdk_session_t session, uint32_t* version) {
     if (!session || !session->cpp_session || !version) return CBSDK_RESULT_INVALID_PARAMETER;
     try {
         auto info = session->cpp_session->getProcInfo();

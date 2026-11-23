@@ -1228,7 +1228,7 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_host_clock_bias_ns(cbsdk_session_t se
 CBSDK_API cbsdk_result_t cbsdk_session_get_host_clock_bias_ns(cbsdk_session_t session, int64_t* bias_ns);
 
 /// Get the device firmware version (procinfo.version); CBSDK_RESULT_NOT_RUNNING if unavailable
-CBSDK_API cbsdk_result_t cbsdk_session_get_firmware_version(cbsdk_session_t session, uint32_t* version);
+CBSDK_API cbsdk_result_t cbsdk_session_get_proc_version(cbsdk_session_t session, uint32_t* version);
 
 /// Send a clock synchronization probe to the device
 /// @param session Session handle (must not be NULL)

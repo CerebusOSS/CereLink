@@ -102,6 +102,7 @@ TEST_F(SdkSessionTest, ChannelWindow_ClampsOversizedChancount) {
     cbPKT_PROCINFO info;
     std::memset(&info, 0, sizeof(info));
     info.proc = 1;
+    info.version = 0x00040002;  // protocol 4.2, as Gemini 7.8 reports
     info.chancount = cbMAXCHANS + 228;  // a device with more channels than we were built for
     ASSERT_TRUE(owner.value().setProcInfo(info).isOk());
     ASSERT_TRUE(owner.value().setInstrumentActive(true).isOk());
@@ -139,6 +140,7 @@ void convertWithLatency(DeviceType type, const char* tag, int64_t latency_cfg, i
     cbPKT_PROCINFO info;
     std::memset(&info, 0, sizeof(info));
     info.proc = 1;
+    info.version = 0x00040002;  // protocol 4.2, as Gemini 7.8 reports
     ASSERT_TRUE(owner.value().setProcInfo(info).isOk());
     ASSERT_TRUE(owner.value().setInstrumentActive(true).isOk());
     owner.value().setClockSync(kClockOffsetNs, 1000);
@@ -681,6 +683,7 @@ TEST_F(SdkSessionTest, HostClockBias_SharedAcrossSessions) {
     cbPKT_PROCINFO info;
     std::memset(&info, 0, sizeof(info));
     info.proc = 1;
+    info.version = 0x00040002;  // protocol 4.2, as Gemini 7.8 reports
     ASSERT_TRUE(owner.value().setProcInfo(info).isOk());
     ASSERT_TRUE(owner.value().setInstrumentActive(true).isOk());
     owner.value().setClockSync(kClockOffsetNs, 1000);

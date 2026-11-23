@@ -131,10 +131,12 @@ PTP), so do not reconstruct them as `t0 + n / 30000`.
 `cbsdk_session_to_local_time`) subtract two corrections, so the result approximates the sampling
 instant:
 
-- **Device latency**, per firmware, baked in.  A table of `{device type, firmware version,
-  latency}` (`procinfo.version`, readable as `session.firmware_version`): NSP 31 us; HUB1 42.6 us;
-  HUB2/HUB3 44 us (measured: HUB2 43.7-44.8; HUB3 untested); other device types 0.  A firmware not
-  in the table uses the device type's most recent entry and logs once that it is unverified.
+- **Device latency**, built in.  A table of `{device type, protocol version, latency}` keyed by
+  `procinfo.version` (readable as `session.proc_version`; Gemini firmware 7.8 reports 0x00040002 =
+  protocol 4.2): NSP 31 us; HUB1 42.6 us; HUB2/HUB3 44 us (measured: HUB2 43.7-44.8; HUB3 untested);
+  other device types 0.  The device reports no firmware release number, so releases sharing a
+  protocol version share the entries; a version not in the table uses the device type's most recent
+  entry and logs once that it is unverified.
   Override with `Session(..., device_latency_ns=N)` (C++ `SdkConfig::device_latency_ns`, C
   `cbsdk_config_t.device_latency_ns`; -1 = default); `0` disables it.
 - **Host clock bias**, per host, calibrated by you against a physical signal.  The clock-probe
