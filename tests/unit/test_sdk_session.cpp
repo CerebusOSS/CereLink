@@ -102,6 +102,7 @@ TEST_F(SdkSessionTest, ChannelWindow_ClampsOversizedChancount) {
     cbPKT_PROCINFO info;
     std::memset(&info, 0, sizeof(info));
     info.proc = 1;
+    info.version = 0x00040002;  // protocol 4.2, as Gemini 7.8 reports
     info.chancount = cbMAXCHANS + 228;  // a device with more channels than we were built for
     ASSERT_TRUE(owner.value().setProcInfo(info).isOk());
     ASSERT_TRUE(owner.value().setInstrumentActive(true).isOk());
@@ -118,6 +119,86 @@ TEST_F(SdkSessionTest, ChannelWindow_ClampsOversizedChancount) {
     EXPECT_LE(session.getMaxChans(), static_cast<uint32_t>(cbMAXCHANS));
 
     session.stop();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Device timestamp latency (device -> host conversion)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+constexpr int64_t kClockOffsetNs = 5'000'000'000;  // planted device_ns - steady_ns
+constexpr uint64_t kDeviceNs = 10'000'000'000;
+
+/// Own HUB3's native shmem with a known clock offset, attach a CLIENT session with
+/// the given config, and return toLocalTime(kDeviceNs) in steady_clock ns.
+void convertWithLatency(DeviceType type, const char* tag, int64_t latency_cfg, int64_t& latency_out,
+                        int64_t& local_ns, int64_t& batch_ns) {
+    auto owner = cbshm::ShmemSession::create(
+        cbshm::Mode::STANDALONE, cbshm::ShmemLayout::NATIVE, tag,
+        cbproto::InstrumentId::fromIndex(0));
+    ASSERT_TRUE(owner.isOk()) << owner.error();
+    cbPKT_PROCINFO info;
+    std::memset(&info, 0, sizeof(info));
+    info.proc = 1;
+    info.version = 0x00040002;  // protocol 4.2, as Gemini 7.8 reports
+    ASSERT_TRUE(owner.value().setProcInfo(info).isOk());
+    ASSERT_TRUE(owner.value().setInstrumentActive(true).isOk());
+    owner.value().setClockSync(kClockOffsetNs, 1000);
+
+    SdkConfig config;
+    config.device_type = type;
+    config.autorun = false;
+    config.device_latency_ns = latency_cfg;
+    auto result = SdkSession::create(config);
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+    ASSERT_FALSE(session.isStandalone());
+
+    latency_out = session.getDeviceLatencyNs();
+    auto t = session.toLocalTime(kDeviceNs);
+    ASSERT_TRUE(t.has_value());
+    local_ns = t->time_since_epoch().count();
+    ASSERT_TRUE(session.toLocalTimeBatch(-1, &kDeviceNs, &batch_ns, 1));
+    EXPECT_EQ(session.toDeviceTime(*t), kDeviceNs);  // round trip is exact
+    session.stop();
+}
+}  // namespace
+
+TEST_F(SdkSessionTest, DeviceLatency_DefaultsByType) {
+    SdkConfig config;
+    EXPECT_EQ(config.device_latency_ns, -1);  // "use default"
+    int64_t lat, local, batch;
+    convertWithLatency(DeviceType::HUB3, "hub3", -1, lat, local, batch);
+    EXPECT_EQ(lat, 44'000);
+    EXPECT_EQ(local, static_cast<int64_t>(kDeviceNs) - kClockOffsetNs - 44'000);
+    EXPECT_EQ(batch, local);
+}
+
+TEST_F(SdkSessionTest, DeviceLatency_NspAndUnknownDefaults) {
+    int64_t lat, local, batch;
+    convertWithLatency(DeviceType::NSP, "nsp", -1, lat, local, batch);
+    EXPECT_EQ(lat, 31'000);
+    EXPECT_EQ(local, static_cast<int64_t>(kDeviceNs) - kClockOffsetNs - 31'000);
+    convertWithLatency(DeviceType::LEGACY_NSP, "legacy_nsp", -1, lat, local, batch);
+    EXPECT_EQ(lat, 31'000);
+    convertWithLatency(DeviceType::HUB2, "hub2", -1, lat, local, batch);
+    EXPECT_EQ(lat, 44'000);
+    convertWithLatency(DeviceType::NPLAY, "nplay", -1, lat, local, batch);
+    EXPECT_EQ(lat, 0);
+    EXPECT_EQ(local, static_cast<int64_t>(kDeviceNs) - kClockOffsetNs);
+}
+
+TEST_F(SdkSessionTest, DeviceLatency_OverrideAndDisable) {
+    int64_t lat, local, batch;
+    convertWithLatency(DeviceType::HUB3, "hub3", 12'345, lat, local, batch);
+    EXPECT_EQ(lat, 12'345);
+    EXPECT_EQ(local, static_cast<int64_t>(kDeviceNs) - kClockOffsetNs - 12'345);
+    EXPECT_EQ(batch, local);
+
+    convertWithLatency(DeviceType::HUB3, "hub3", 0, lat, local, batch);
+    EXPECT_EQ(lat, 0);
+    EXPECT_EQ(local, static_cast<int64_t>(kDeviceNs) - kClockOffsetNs);  // raw offset only
+    EXPECT_EQ(batch, local);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -588,4 +669,46 @@ TEST_F(SdkSessionTest, ChannelScaling_FullInt32RangeDoesNotOverflow) {
     ASSERT_TRUE(result.isOk()) << result.error();
     EXPECT_GT(result.value().scale, 0.0);
     EXPECT_TRUE(std::isfinite(result.value().scale));
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Host clock bias (shared memory, settable from any process)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+TEST_F(SdkSessionTest, HostClockBias_SharedAcrossSessions) {
+    auto owner = cbshm::ShmemSession::create(
+        cbshm::Mode::STANDALONE, cbshm::ShmemLayout::NATIVE, "nplay",
+        cbproto::InstrumentId::fromIndex(0));
+    ASSERT_TRUE(owner.isOk()) << owner.error();
+    cbPKT_PROCINFO info;
+    std::memset(&info, 0, sizeof(info));
+    info.proc = 1;
+    info.version = 0x00040002;  // protocol 4.2, as Gemini 7.8 reports
+    ASSERT_TRUE(owner.value().setProcInfo(info).isOk());
+    ASSERT_TRUE(owner.value().setInstrumentActive(true).isOk());
+    owner.value().setClockSync(kClockOffsetNs, 1000);
+
+    SdkConfig config;
+    config.device_type = DeviceType::NPLAY;  // latency 0
+    config.autorun = false;
+    auto a = SdkSession::create(config);
+    auto b = SdkSession::create(config);
+    ASSERT_TRUE(a.isOk()) << a.error();
+    ASSERT_TRUE(b.isOk()) << b.error();
+
+    EXPECT_EQ(b.value().getHostClockBiasNs(), 0);  // default
+    const int64_t base = b.value().toLocalTime(kDeviceNs)->time_since_epoch().count();
+
+    a.value().setHostClockBiasNs(80'000);
+    EXPECT_EQ(b.value().getHostClockBiasNs(), 80'000);
+    auto t = b.value().toLocalTime(kDeviceNs);
+    ASSERT_TRUE(t.has_value());
+    EXPECT_EQ(t->time_since_epoch().count(), base - 80'000);
+    int64_t batch;
+    ASSERT_TRUE(b.value().toLocalTimeBatch(-1, &kDeviceNs, &batch, 1));
+    EXPECT_EQ(batch, base - 80'000);
+    EXPECT_EQ(b.value().toDeviceTime(*t), kDeviceNs);  // round trip is exact
+
+    a.value().stop();
+    b.value().stop();
 }

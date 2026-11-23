@@ -72,7 +72,7 @@ constexpr uint32_t NATIVE_cbPKT_SPKCACHELINECNT = NATIVE_NUM_ANALOG_CHANS;      
 /// optiontable/colortable and added segment_uid, shifting clock_offset_ns,
 /// owner_pid and segment_uid by 512 bytes — so a 9.13 CLIENT on a 9.12 segment
 /// takes its clock sync, liveness and supersession state from arbitrary bytes.
-constexpr uint32_t NATIVE_CONFIG_LAYOUT_VERSION = 2;
+constexpr uint32_t NATIVE_CONFIG_LAYOUT_VERSION = 3;  // 3: appended host_clock_bias_ns
 
 /// @brief Pack the layout revision and the protocol version into cfg->version
 ///
@@ -161,6 +161,9 @@ typedef struct {
     // the post-consensus value CLIENT readers should use.
     uint32_t clock_raw_valid;       ///< Non-zero if clock_raw_offset_ns is valid
     int64_t  clock_raw_offset_ns;   ///< This device's own independent estimate (device_ns - steady_clock_ns)
+
+    // Host-side receive-path bias, calibrated per host and settable from any process.
+    int64_t  host_clock_bias_ns;    ///< Host stamps are this many ns late; converted times subtract it (0 = none)
 } NativeConfigBuffer;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

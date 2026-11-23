@@ -253,6 +253,8 @@ class Session:
     Args:
         device_type: Device type (e.g., ``DeviceType.HUB1``).
         callback_queue_depth: Number of packets to buffer (default: 16384).
+        device_latency_ns: Latency subtracted when converting device timestamps
+            to host time (``None`` = per-device default, ``0`` = disabled).
 
     Example::
 
@@ -277,12 +279,17 @@ class Session:
         self,
         device_type: DeviceType = DeviceType.LEGACY_NSP,
         callback_queue_depth: int = 16384,
+        device_latency_ns: int | None = None,
     ):
         _lib = _get_lib()
 
         config = _lib.cbsdk_config_default()
         config.device_type = int(_coerce_enum(DeviceType, device_type))
         config.callback_queue_depth = callback_queue_depth
+        # None = per-device default (NSP 31 us, Hub 44 us); 0 disables.
+        config.device_latency_ns = (
+            -1 if device_latency_ns is None else int(device_latency_ns)
+        )
 
         session_p = ffi.new("cbsdk_session_t *")
         _check(
@@ -1817,6 +1824,38 @@ class Session:
         if result != 0:
             return None
         return uncertainty[0]
+
+    @property
+    def host_clock_bias_ns(self) -> int:
+        """Host clock bias in ns (host stamps are this late; subtracted in time conversions).
+
+        Stored in shared memory: setting it from any process affects all processes sharing
+        the device.  Default 0.
+        """
+        out = ffi.new("int64_t *")
+        _check(
+            _get_lib().cbsdk_session_get_host_clock_bias_ns(self._session, out),
+            "Failed to get host clock bias",
+        )
+        return out[0]
+
+    def set_host_clock_bias_ns(self, ns: int):
+        """Set the host clock bias (ns host stamps are late; calibrate against a physical signal).
+
+        Written to shared memory, so it applies to every process sharing the device.
+        """
+        _check(
+            _get_lib().cbsdk_session_set_host_clock_bias_ns(self._session, int(ns)),
+            "Failed to set host clock bias",
+        )
+
+    @property
+    def proc_version(self) -> int | None:
+        """Protocol library version (procinfo.version, major<<16|minor; Gemini 7.7 = 4.1, 7.8 = 4.2), or None."""
+        out = ffi.new("uint32_t *")
+        if _get_lib().cbsdk_session_get_proc_version(self._session, out) != 0:
+            return None
+        return out[0]
 
     def send_clock_probe(self):
         """Send a clock synchronization probe to the device."""

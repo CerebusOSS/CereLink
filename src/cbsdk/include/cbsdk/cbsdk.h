@@ -127,6 +127,10 @@ typedef struct {
     const char* custom_client_address; ///< Override client IP (NULL = auto)
     uint16_t custom_device_port;       ///< Override device port (0 = auto)
     uint16_t custom_client_port;       ///< Override client port (0 = auto)
+
+    /// Device-timestamp latency (ns) subtracted in cbsdk_session_to_local_time().
+    /// -1 = per-device-type default (NSP 31 us, Hub 44 us, other 0); 0 = disabled.
+    int64_t device_latency_ns;
 } cbsdk_config_t;
 
 /// SDK statistics (C version of SdkStats)
@@ -1217,6 +1221,14 @@ CBSDK_API cbsdk_result_t cbsdk_session_get_clock_offset(
 CBSDK_API cbsdk_result_t cbsdk_session_get_clock_uncertainty(
     cbsdk_session_t session,
     int64_t* uncertainty_ns);
+
+/// Host clock bias (ns host stamps are late; subtracted by time conversions).  Stored in
+/// shared memory, so any process may set it.  Default 0.
+CBSDK_API cbsdk_result_t cbsdk_session_set_host_clock_bias_ns(cbsdk_session_t session, int64_t bias_ns);
+CBSDK_API cbsdk_result_t cbsdk_session_get_host_clock_bias_ns(cbsdk_session_t session, int64_t* bias_ns);
+
+/// Get the device firmware version (procinfo.version); CBSDK_RESULT_NOT_RUNNING if unavailable
+CBSDK_API cbsdk_result_t cbsdk_session_get_proc_version(cbsdk_session_t session, uint32_t* version);
 
 /// Send a clock synchronization probe to the device
 /// @param session Session handle (must not be NULL)

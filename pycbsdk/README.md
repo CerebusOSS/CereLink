@@ -120,6 +120,36 @@ def on_spike(header, data):
 - `session.clock_uncertainty_ns` — uncertainty (half-RTT), or None
 - `session.send_clock_probe()` — send a sync probe
 
+**Timestamp convention.** A device timestamp lags the sample's true sampling instant by a
+fixed, device-dependent latency (measured against a PTP-locked reference edge; this is not a
+clock-sync error): about 1 sample period (~31 us at 30 kHz) on an NSP, about 1.3 sample periods
+(~44 us) on a Hub front end.  Analog and digital samples in the same NSP frame share one stamp.
+Stamps are per-sample PTP times, not a fixed grid (the 30 kHz sample clock runs a few ppm off
+PTP), so do not reconstruct them as `t0 + n / 30000`.
+
+`device_to_monotonic()`, `device_to_monotonic_batch()` (and the C++/C `toLocalTime` /
+`cbsdk_session_to_local_time`) subtract two corrections, so the result approximates the sampling
+instant:
+
+- **Device latency**, built in.  A table of `{device type, protocol version, latency}` keyed by
+  `procinfo.version` (readable as `session.proc_version`; Gemini firmware 7.8 reports 0x00040002 =
+  protocol 4.2; 7.7 is 4.1, 7.9 will be 4.3): NSP 31 us; HUB1/HUB2/HUB3 44 us (identical hub hardware and firmware; measured HUB1 42.6, HUB2 43.7-44.8);
+  other device types 0.  The device reports no firmware release number, so releases sharing a
+  protocol version share the entries; a version not in the table uses the device type's most recent
+  entry and logs once that it is unverified.
+  Override with `Session(..., device_latency_ns=N)` (C++ `SdkConfig::device_latency_ns`, C
+  `cbsdk_config_t.device_latency_ns`; -1 = default); `0` disables it.
+- **Host clock bias**, per host, calibrated by you against a physical signal.  The clock-probe
+  offset makes host times late by a host-dependent amount (measured 40-140 us on macOS, ~0 on
+  Linux).  Set `session.set_host_clock_bias_ns(N)` (ns the host is late; C++ `setHostClockBiasNs`, C
+  `cbsdk_session_set_host_clock_bias_ns`).  It lives in shared memory: any process attached to the
+  device (STANDALONE or CLIENT) can set it and every process applies it.  Default 0; a launcher
+  can set the initial value with env `CBSDK_HOST_CLOCK_BIAS_NS` before the device is opened.  Not
+  available (always 0) under Central-compatible layouts.
+
+Raw timestamps (`header.time`) and `clock_offset_ns` are never modified.  Filter delays
+(headstage, digital filters) are not compensated.
+
 **Statistics**:
 
 ```python

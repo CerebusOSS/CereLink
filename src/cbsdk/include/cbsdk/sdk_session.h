@@ -135,6 +135,12 @@ struct SdkConfig {
     std::optional<std::string> custom_client_address;   ///< Override client IP
     std::optional<uint16_t> custom_device_port;         ///< Override device port
     std::optional<uint16_t> custom_client_port;         ///< Override client port
+
+    /// Fixed latency (ns) between a sample's true sampling instant and its device timestamp,
+    /// subtracted when converting device timestamps to host time (toLocalTime, toLocalTimeBatch).
+    /// Raw device timestamps are never changed.  -1 = per-device-type default (NSP 31 us,
+    /// Hub 44 us, other 0); 0 disables the correction.  See getDeviceLatencyNs().
+    int64_t device_latency_ns = -1;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -548,6 +554,9 @@ public:
     /// @return Result containing the procinfo, or an error if unavailable
     Result<cbPKT_PROCINFO> getProcInfo() const;
 
+    /// Firmware version (procinfo.version), or 0 if unavailable.
+    uint32_t getProcVersion() const;
+
     /// Get the number of channels this device actually has
     ///
     /// Channel ids in this API are always local to the device, so a session is
@@ -877,7 +886,19 @@ public:
     std::optional<std::chrono::steady_clock::time_point>
         toLocalTime(uint64_t device_time_ns) const;
 
-    /// Convert a host steady_clock time_point to device timestamp (nanoseconds).
+    /// Effective device-timestamp latency (ns) applied by the conversions above:
+    /// config.device_latency_ns if >= 0, else the table default for (device_type, firmware).
+    int64_t getDeviceLatencyNs() const;
+
+    /// Host clock bias (ns): host stamps are this many ns late.  Stored in shared memory
+    /// (0 default, or env CBSDK_HOST_CLOCK_BIAS_NS at STANDALONE creation), so it is set by
+    /// any process and applied by all: subtracted in toLocalTime/toLocalTimeBatch, added
+    /// back in toDeviceTime.  Not supported (always 0) under Central-compatible layouts.
+    void setHostClockBiasNs(int64_t bias_ns);
+    int64_t getHostClockBiasNs() const;
+
+    /// Convert a host steady_clock time_point to device timestamp (nanoseconds):
+    /// the inverse of toLocalTime, so it adds getDeviceLatencyNs().
     /// @param local_time Host time
     /// @return Corresponding device timestamp in nanoseconds, or nullopt if no sync data available
     std::optional<uint64_t>

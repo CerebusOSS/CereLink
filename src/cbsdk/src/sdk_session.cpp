@@ -2885,17 +2885,72 @@ Result<void> SdkSession::sync(uint32_t timeout_ms) {
 /// Clock Synchronization
 ///--------------------------------------------------------------------------------------------
 
+uint32_t SdkSession::getProcVersion() const {
+    auto pi = getProcInfo();
+    return pi.isOk() ? pi.value().version : 0;
+}
+
+namespace {
+// Measured (CereLink issue #229) as device stamp minus true sampling instant.
+// Keyed by procinfo.version, the protocol library version (major<<16|minor), which is the only
+// version the device reports.  Gemini bumps the firmware minor version only with a protocol
+// update (7.7 = 4.1, 7.8 = 4.2, 7.9 = 4.3), so it identifies the firmware.
+// Per device type, oldest to newest: the last entry is the fallback for an unlisted version.
+constexpr uint32_t kProtocol_4_2 = 0x00040002;  // measured on Gemini firmware 7.8
+struct LatencyEntry { DeviceType type; uint32_t version; int64_t latency_ns; };
+constexpr LatencyEntry kLatencyTable[] = {
+    {DeviceType::LEGACY_NSP, kProtocol_4_2, 31'000},
+    {DeviceType::NSP,        kProtocol_4_2, 31'000},
+    // Hubs 1-3 share hardware and firmware (only IP and PTP priority differ): one value, from
+    // HUB1 42.6 us and HUB2 43.7-44.8 us.  NSP firmware differs, hence its own entry.
+    {DeviceType::HUB1,       kProtocol_4_2, 44'000},
+    {DeviceType::HUB2,       kProtocol_4_2, 44'000},
+    {DeviceType::HUB3,       kProtocol_4_2, 44'000},
+};
+}  // namespace
+
+int64_t SdkSession::getDeviceLatencyNs() const {
+    if (m_impl->config.device_latency_ns >= 0)
+        return m_impl->config.device_latency_ns;
+    const uint32_t fw = getProcVersion();
+    const LatencyEntry* last = nullptr;
+    for (const auto& e : kLatencyTable) {
+        if (e.type != m_impl->config.device_type) continue;
+        if (e.version == fw) return e.latency_ns;
+        last = &e;
+    }
+    if (!last) return 0;
+    static std::once_flag warned;
+    std::call_once(warned, [fw] {
+        std::cerr << "[cbsdk] device latency is unverified for protocol version " << fw
+                  << "; using the most recent measured value\n";
+    });
+    return last->latency_ns;
+}
+
+void SdkSession::setHostClockBiasNs(int64_t bias_ns) {
+    if (m_impl->shmem_session) m_impl->shmem_session->setHostClockBiasNs(bias_ns);
+}
+
+int64_t SdkSession::getHostClockBiasNs() const {
+    return m_impl->shmem_session ? m_impl->shmem_session->getHostClockBiasNs() : 0;
+}
+
 std::optional<std::chrono::steady_clock::time_point>
 SdkSession::toLocalTime(uint64_t device_time_ns) const {
     // STANDALONE: delegate to device_session's ClockSync
-    if (m_impl->device_session)
-        return m_impl->device_session->toLocalTime(device_time_ns);
+    const auto latency = std::chrono::nanoseconds(getDeviceLatencyNs() + getHostClockBiasNs());
+    if (m_impl->device_session) {
+        auto t = m_impl->device_session->toLocalTime(device_time_ns);
+        if (t) *t -= latency;
+        return t;
+    }
 
     // CLIENT: use clock offset from shmem
     if (m_impl->shmem_session) {
         auto offset = m_impl->shmem_session->getClockOffsetNs();
         if (offset) {
-            const auto local_ns = static_cast<int64_t>(device_time_ns) - *offset;
+            const auto local_ns = static_cast<int64_t>(device_time_ns) - *offset - latency.count();
             return std::chrono::steady_clock::time_point(std::chrono::nanoseconds(local_ns));
         }
     }
@@ -2909,12 +2964,14 @@ bool SdkSession::toLocalTimeBatch(int64_t stream_id,
     if (n == 0) return true;
     if (!device_ns || !out_steady_ns) return false;
 
+    const int64_t latency = getDeviceLatencyNs() + getHostClockBiasNs();
+
     // Stateless fast path: one offset, plain subtraction, no per-stream state.
     if (stream_id < 0) {
         const auto offset = getClockOffsetNs();
         if (!offset) return false;
         for (size_t i = 0; i < n; ++i)
-            out_steady_ns[i] = static_cast<int64_t>(device_ns[i]) - *offset;
+            out_steady_ns[i] = static_cast<int64_t>(device_ns[i]) - *offset - latency;
         return true;
     }
 
@@ -2928,7 +2985,7 @@ bool SdkSession::toLocalTimeBatch(int64_t stream_id,
 
     auto& st = m_impl->mono_streams[stream_id];  // lazy-create (seen == false)
     for (size_t i = 0; i < n; ++i) {
-        const int64_t raw = static_cast<int64_t>(device_ns[i]) - offset;
+        const int64_t raw = static_cast<int64_t>(device_ns[i]) - offset - latency;
         // Reset the floor on the first conversion for this stream or whenever
         // the clock regime changed; otherwise clamp to a non-decreasing floor.
         const int64_t out = (!st.seen || epoch != st.last_epoch)
@@ -2949,9 +3006,14 @@ void SdkSession::resetMonotonic(int64_t stream_id) {
 
 std::optional<uint64_t>
 SdkSession::toDeviceTime(std::chrono::steady_clock::time_point local_time) const {
+    // Inverse of toLocalTime: the stamp a sample taken at local_time would carry.
+    const int64_t latency = getDeviceLatencyNs() + getHostClockBiasNs();
     // STANDALONE: delegate to device_session's ClockSync
-    if (m_impl->device_session)
-        return m_impl->device_session->toDeviceTime(local_time);
+    if (m_impl->device_session) {
+        auto t = m_impl->device_session->toDeviceTime(local_time);
+        if (t) *t += latency;
+        return t;
+    }
 
     // CLIENT: use clock offset from shmem
     if (m_impl->shmem_session) {
@@ -2959,7 +3021,7 @@ SdkSession::toDeviceTime(std::chrono::steady_clock::time_point local_time) const
         if (offset) {
             const auto local_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                 local_time.time_since_epoch()).count();
-            return static_cast<uint64_t>(local_ns + *offset);
+            return static_cast<uint64_t>(local_ns + *offset + latency);
         }
     }
     return std::nullopt;
