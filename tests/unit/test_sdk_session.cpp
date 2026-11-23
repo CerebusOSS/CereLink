@@ -121,6 +121,84 @@ TEST_F(SdkSessionTest, ChannelWindow_ClampsOversizedChancount) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Device timestamp latency (device -> host conversion)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+constexpr int64_t kClockOffsetNs = 5'000'000'000;  // planted device_ns - steady_ns
+constexpr uint64_t kDeviceNs = 10'000'000'000;
+
+/// Own HUB3's native shmem with a known clock offset, attach a CLIENT session with
+/// the given config, and return toLocalTime(kDeviceNs) in steady_clock ns.
+void convertWithLatency(DeviceType type, const char* tag, int64_t latency_cfg, int64_t& latency_out,
+                        int64_t& local_ns, int64_t& batch_ns) {
+    auto owner = cbshm::ShmemSession::create(
+        cbshm::Mode::STANDALONE, cbshm::ShmemLayout::NATIVE, tag,
+        cbproto::InstrumentId::fromIndex(0));
+    ASSERT_TRUE(owner.isOk()) << owner.error();
+    cbPKT_PROCINFO info;
+    std::memset(&info, 0, sizeof(info));
+    info.proc = 1;
+    ASSERT_TRUE(owner.value().setProcInfo(info).isOk());
+    ASSERT_TRUE(owner.value().setInstrumentActive(true).isOk());
+    owner.value().setClockSync(kClockOffsetNs, 1000);
+
+    SdkConfig config;
+    config.device_type = type;
+    config.autorun = false;
+    config.device_latency_ns = latency_cfg;
+    auto result = SdkSession::create(config);
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+    ASSERT_FALSE(session.isStandalone());
+
+    latency_out = session.getDeviceLatencyNs();
+    auto t = session.toLocalTime(kDeviceNs);
+    ASSERT_TRUE(t.has_value());
+    local_ns = t->time_since_epoch().count();
+    ASSERT_TRUE(session.toLocalTimeBatch(-1, &kDeviceNs, &batch_ns, 1));
+    session.stop();
+}
+}  // namespace
+
+TEST_F(SdkSessionTest, DeviceLatency_DefaultsByType) {
+    SdkConfig config;
+    EXPECT_EQ(config.device_latency_ns, -1);  // "use default"
+    int64_t lat, local, batch;
+    convertWithLatency(DeviceType::HUB3, "hub3", -1, lat, local, batch);
+    EXPECT_EQ(lat, 44'000);
+    EXPECT_EQ(local, static_cast<int64_t>(kDeviceNs) - kClockOffsetNs - 44'000);
+    EXPECT_EQ(batch, local);
+}
+
+TEST_F(SdkSessionTest, DeviceLatency_NspAndUnknownDefaults) {
+    int64_t lat, local, batch;
+    convertWithLatency(DeviceType::NSP, "nsp", -1, lat, local, batch);
+    EXPECT_EQ(lat, 31'000);
+    EXPECT_EQ(local, static_cast<int64_t>(kDeviceNs) - kClockOffsetNs - 31'000);
+    convertWithLatency(DeviceType::LEGACY_NSP, "legacy_nsp", -1, lat, local, batch);
+    EXPECT_EQ(lat, 31'000);
+    convertWithLatency(DeviceType::HUB2, "hub2", -1, lat, local, batch);
+    EXPECT_EQ(lat, 44'000);
+    convertWithLatency(DeviceType::NPLAY, "nplay", -1, lat, local, batch);
+    EXPECT_EQ(lat, 0);
+    EXPECT_EQ(local, static_cast<int64_t>(kDeviceNs) - kClockOffsetNs);
+}
+
+TEST_F(SdkSessionTest, DeviceLatency_OverrideAndDisable) {
+    int64_t lat, local, batch;
+    convertWithLatency(DeviceType::HUB3, "hub3", 12'345, lat, local, batch);
+    EXPECT_EQ(lat, 12'345);
+    EXPECT_EQ(local, static_cast<int64_t>(kDeviceNs) - kClockOffsetNs - 12'345);
+    EXPECT_EQ(batch, local);
+
+    convertWithLatency(DeviceType::HUB3, "hub3", 0, lat, local, batch);
+    EXPECT_EQ(lat, 0);
+    EXPECT_EQ(local, static_cast<int64_t>(kDeviceNs) - kClockOffsetNs);  // raw offset only
+    EXPECT_EQ(batch, local);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Session Lifecycle Tests
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 

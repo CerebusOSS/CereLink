@@ -135,6 +135,12 @@ struct SdkConfig {
     std::optional<std::string> custom_client_address;   ///< Override client IP
     std::optional<uint16_t> custom_device_port;         ///< Override device port
     std::optional<uint16_t> custom_client_port;         ///< Override client port
+
+    /// Fixed latency (ns) between a sample's true sampling instant and its device timestamp,
+    /// subtracted when converting device timestamps to host time (toLocalTime, toLocalTimeBatch).
+    /// Raw device timestamps are never changed.  -1 = per-device-type default (NSP 31 us,
+    /// Hub 44 us, other 0); 0 disables the correction.  See getDeviceLatencyNs().
+    int64_t device_latency_ns = -1;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -876,6 +882,10 @@ public:
     /// @return Corresponding host time, or nullopt if no sync data available
     std::optional<std::chrono::steady_clock::time_point>
         toLocalTime(uint64_t device_time_ns) const;
+
+    /// Effective device-timestamp latency (ns) applied by the conversions above:
+    /// config.device_latency_ns if >= 0, else the default for config.device_type.
+    int64_t getDeviceLatencyNs() const;
 
     /// Convert a host steady_clock time_point to device timestamp (nanoseconds).
     /// @param local_time Host time

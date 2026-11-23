@@ -120,6 +120,21 @@ def on_spike(header, data):
 - `session.clock_uncertainty_ns` — uncertainty (half-RTT), or None
 - `session.send_clock_probe()` — send a sync probe
 
+**Timestamp convention.** A device timestamp lags the sample's true sampling instant by a
+fixed, device-dependent latency (measured against a PTP-locked reference edge; this is not a
+clock-sync error): about 1 sample period (~31 us at 30 kHz) on an NSP, about 1.3 sample periods
+(~44 us) on a Hub front end.  Analog and digital samples in the same NSP frame share one stamp.
+Stamps are per-sample PTP times, not a fixed grid (the 30 kHz sample clock runs a few ppm off
+PTP), so do not reconstruct them as `t0 + n / 30000`.
+
+`device_to_monotonic()`, `device_to_monotonic_batch()` (and the C++/C `toLocalTime` /
+`cbsdk_session_to_local_time`) subtract this latency, so the result approximates the sampling
+instant.  Defaults: NSP 31 us; HUB1/HUB2/HUB3 44 us (measured on HUB2; HUB1/HUB3 provisional);
+other device types 0.  Override with `Session(..., device_latency_ns=N)` (C++
+`SdkConfig::device_latency_ns`, C `cbsdk_config_t.device_latency_ns`; -1 = default); `0`
+disables it.  Raw timestamps (`header.time`) and `clock_offset_ns` are never modified.  Filter
+delays (headstage, digital filters) are not compensated.
+
 **Statistics**:
 
 ```python

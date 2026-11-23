@@ -127,6 +127,10 @@ typedef struct {
     const char* custom_client_address; ///< Override client IP (NULL = auto)
     uint16_t custom_device_port;       ///< Override device port (0 = auto)
     uint16_t custom_client_port;       ///< Override client port (0 = auto)
+
+    /// Device-timestamp latency (ns) subtracted in cbsdk_session_to_local_time().
+    /// -1 = per-device-type default (NSP 31 us, Hub 44 us, other 0); 0 = disabled.
+    int64_t device_latency_ns;
 } cbsdk_config_t;
 
 /// SDK statistics (C version of SdkStats)

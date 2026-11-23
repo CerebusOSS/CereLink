@@ -253,6 +253,8 @@ class Session:
     Args:
         device_type: Device type (e.g., ``DeviceType.HUB1``).
         callback_queue_depth: Number of packets to buffer (default: 16384).
+        device_latency_ns: Latency subtracted when converting device timestamps
+            to host time (``None`` = per-device default, ``0`` = disabled).
 
     Example::
 
@@ -277,12 +279,17 @@ class Session:
         self,
         device_type: DeviceType = DeviceType.LEGACY_NSP,
         callback_queue_depth: int = 16384,
+        device_latency_ns: int | None = None,
     ):
         _lib = _get_lib()
 
         config = _lib.cbsdk_config_default()
         config.device_type = int(_coerce_enum(DeviceType, device_type))
         config.callback_queue_depth = callback_queue_depth
+        # None = per-device default (NSP 31 us, Hub 44 us); 0 disables.
+        config.device_latency_ns = (
+            -1 if device_latency_ns is None else int(device_latency_ns)
+        )
 
         session_p = ffi.new("cbsdk_session_t *")
         _check(

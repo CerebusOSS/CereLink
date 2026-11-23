@@ -222,6 +222,7 @@ static cbsdk::SdkConfig to_cpp_config(const cbsdk_config_t* c_config) {
 
     cpp_config.recv_buffer_size = c_config->recv_buffer_size;
     cpp_config.non_blocking = c_config->non_blocking;
+    cpp_config.device_latency_ns = c_config->device_latency_ns;
 
     // Optional custom addresses/ports
     if (c_config->custom_device_address != nullptr) {
@@ -319,6 +320,7 @@ cbsdk_config_t cbsdk_config_default(void) {
     config.custom_client_address = nullptr;
     config.custom_device_port = 0;
     config.custom_client_port = 0;
+    config.device_latency_ns = -1;
     return config;
 }
 

@@ -2885,17 +2885,38 @@ Result<void> SdkSession::sync(uint32_t timeout_ms) {
 /// Clock Synchronization
 ///--------------------------------------------------------------------------------------------
 
+int64_t SdkSession::getDeviceLatencyNs() const {
+    if (m_impl->config.device_latency_ns >= 0)
+        return m_impl->config.device_latency_ns;
+    // Measured (CereLink issue #229) as device stamp minus true sampling instant.
+    switch (m_impl->config.device_type) {
+        case DeviceType::LEGACY_NSP:
+        case DeviceType::NSP:
+            return 31'000;
+        case DeviceType::HUB1:
+        case DeviceType::HUB2:
+        case DeviceType::HUB3:
+            return 44'000;  // measured on HUB2 only; HUB1/HUB3 provisional
+        default:
+            return 0;
+    }
+}
+
 std::optional<std::chrono::steady_clock::time_point>
 SdkSession::toLocalTime(uint64_t device_time_ns) const {
     // STANDALONE: delegate to device_session's ClockSync
-    if (m_impl->device_session)
-        return m_impl->device_session->toLocalTime(device_time_ns);
+    const auto latency = std::chrono::nanoseconds(getDeviceLatencyNs());
+    if (m_impl->device_session) {
+        auto t = m_impl->device_session->toLocalTime(device_time_ns);
+        if (t) *t -= latency;
+        return t;
+    }
 
     // CLIENT: use clock offset from shmem
     if (m_impl->shmem_session) {
         auto offset = m_impl->shmem_session->getClockOffsetNs();
         if (offset) {
-            const auto local_ns = static_cast<int64_t>(device_time_ns) - *offset;
+            const auto local_ns = static_cast<int64_t>(device_time_ns) - *offset - latency.count();
             return std::chrono::steady_clock::time_point(std::chrono::nanoseconds(local_ns));
         }
     }
@@ -2909,12 +2930,14 @@ bool SdkSession::toLocalTimeBatch(int64_t stream_id,
     if (n == 0) return true;
     if (!device_ns || !out_steady_ns) return false;
 
+    const int64_t latency = getDeviceLatencyNs();
+
     // Stateless fast path: one offset, plain subtraction, no per-stream state.
     if (stream_id < 0) {
         const auto offset = getClockOffsetNs();
         if (!offset) return false;
         for (size_t i = 0; i < n; ++i)
-            out_steady_ns[i] = static_cast<int64_t>(device_ns[i]) - *offset;
+            out_steady_ns[i] = static_cast<int64_t>(device_ns[i]) - *offset - latency;
         return true;
     }
 
@@ -2928,7 +2951,7 @@ bool SdkSession::toLocalTimeBatch(int64_t stream_id,
 
     auto& st = m_impl->mono_streams[stream_id];  // lazy-create (seen == false)
     for (size_t i = 0; i < n; ++i) {
-        const int64_t raw = static_cast<int64_t>(device_ns[i]) - offset;
+        const int64_t raw = static_cast<int64_t>(device_ns[i]) - offset - latency;
         // Reset the floor on the first conversion for this stream or whenever
         // the clock regime changed; otherwise clamp to a non-decreasing floor.
         const int64_t out = (!st.seen || epoch != st.last_epoch)
