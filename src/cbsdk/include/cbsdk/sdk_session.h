@@ -301,6 +301,8 @@ enum class ChanInfoField : uint32_t {
     CHANCAPS,       ///< uint32_t — channel capability flags
     BANK,           ///< uint32_t — bank index
     TERM,           ///< uint32_t — terminal index within bank
+    DINPOPTS,       ///< uint32_t — digital input option flags (cbDINP_*)
+    DOUTOPTS,       ///< uint32_t — digital output option flags (cbDOUT_*)
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

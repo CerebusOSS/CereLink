@@ -100,6 +100,8 @@ typedef enum {
     CBSDK_CHANINFO_FIELD_CHANCAPS    = 10,
     CBSDK_CHANINFO_FIELD_BANK        = 11,
     CBSDK_CHANINFO_FIELD_TERM        = 12,
+    CBSDK_CHANINFO_FIELD_DINPOPTS    = 13,
+    CBSDK_CHANINFO_FIELD_DOUTOPTS    = 14,
 } cbsdk_chaninfo_field_t;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -566,6 +568,18 @@ CBSDK_API int32_t cbsdk_session_get_channel_spkthrlevel(cbsdk_session_t session,
 /// @return Analog input options (cbAINP_* flags), or 0 on error
 CBSDK_API uint32_t cbsdk_session_get_channel_ainpopts(cbsdk_session_t session, uint32_t chan_id);
 
+/// Get a channel's digital input options (bit width + capture mode)
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Digital input options (cbDINP_* flags), or 0 on error
+CBSDK_API uint32_t cbsdk_session_get_channel_dinpopts(cbsdk_session_t session, uint32_t chan_id);
+
+/// Get a channel's digital output options
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @return Digital output options (cbDOUT_* flags), or 0 on error
+CBSDK_API uint32_t cbsdk_session_get_channel_doutopts(cbsdk_session_t session, uint32_t chan_id);
+
 /// Get a channel's line noise cancellation adaptation rate
 /// @param session Session handle (must not be NULL)
 /// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
@@ -786,6 +800,31 @@ CBSDK_API cbsdk_result_t cbsdk_session_set_channel_ainpopts(
     cbsdk_session_t session,
     uint32_t chan_id,
     uint32_t ainpopts,
+    int auto_sync);
+
+/// Set a channel's digital input options (bit width + capture mode).
+/// With no capture-mode bit (cbDINP_MASK) set, the device sends no digital-input events.
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param dinpopts Digital input option flags (cbDINP_* flags)
+/// @param auto_sync Non-zero to sync() before the read-modify-write
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_dinpopts(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    uint32_t dinpopts,
+    int auto_sync);
+
+/// Set a channel's digital output options
+/// @param session Session handle (must not be NULL)
+/// @param chan_id 1-based channel ID (1 to cbMAXCHANS)
+/// @param doutopts Digital output option flags (cbDOUT_* flags)
+/// @param auto_sync Non-zero to sync() before the read-modify-write
+/// @return CBSDK_RESULT_SUCCESS on success, error code on failure
+CBSDK_API cbsdk_result_t cbsdk_session_set_channel_doutopts(
+    cbsdk_session_t session,
+    uint32_t chan_id,
+    uint32_t doutopts,
     int auto_sync);
 
 /// Set a channel's line noise cancellation adaptation rate

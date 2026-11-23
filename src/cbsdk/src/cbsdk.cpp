@@ -275,6 +275,8 @@ static cbsdk::ChanInfoField to_cpp_chaninfo_field(cbsdk_chaninfo_field_t c_field
         case CBSDK_CHANINFO_FIELD_CHANCAPS:    return cbsdk::ChanInfoField::CHANCAPS;
         case CBSDK_CHANINFO_FIELD_BANK:        return cbsdk::ChanInfoField::BANK;
         case CBSDK_CHANINFO_FIELD_TERM:        return cbsdk::ChanInfoField::TERM;
+        case CBSDK_CHANINFO_FIELD_DINPOPTS:    return cbsdk::ChanInfoField::DINPOPTS;
+        case CBSDK_CHANINFO_FIELD_DOUTOPTS:    return cbsdk::ChanInfoField::DOUTOPTS;
         default:                               return cbsdk::ChanInfoField::SMPGROUP;
     }
 }
@@ -896,6 +898,22 @@ uint32_t cbsdk_session_get_channel_ainpopts(cbsdk_session_t session, uint32_t ch
     } catch (...) { return 0; }
 }
 
+uint32_t cbsdk_session_get_channel_dinpopts(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().dinpopts : 0;
+    } catch (...) { return 0; }
+}
+
+uint32_t cbsdk_session_get_channel_doutopts(cbsdk_session_t session, uint32_t chan_id) {
+    if (!session || !session->cpp_session) return 0;
+    try {
+        auto info = session->cpp_session->getChanInfo(chan_id);
+        return info.isOk() ? info.value().doutopts : 0;
+    } catch (...) { return 0; }
+}
+
 uint32_t cbsdk_session_get_channel_lncrate(cbsdk_session_t session, uint32_t chan_id) {
     if (!session || !session->cpp_session) return 0;
     try {
@@ -1183,6 +1201,24 @@ cbsdk_result_t cbsdk_session_set_channel_ainpopts(
     return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETAINP,
         [ainpopts](cbPKT_CHANINFO& ci) {
             ci.ainpopts = ainpopts;
+        },
+        auto_sync != 0);
+}
+
+cbsdk_result_t cbsdk_session_set_channel_dinpopts(
+    cbsdk_session_t session, uint32_t chan_id, uint32_t dinpopts, int auto_sync) {
+    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETDINP,
+        [dinpopts](cbPKT_CHANINFO& ci) {
+            ci.dinpopts = dinpopts;
+        },
+        auto_sync != 0);
+}
+
+cbsdk_result_t cbsdk_session_set_channel_doutopts(
+    cbsdk_session_t session, uint32_t chan_id, uint32_t doutopts, int auto_sync) {
+    return modify_and_send_chaninfo(session, chan_id, cbPKTTYPE_CHANSETDOUT,
+        [doutopts](cbPKT_CHANINFO& ci) {
+            ci.doutopts = doutopts;
         },
         auto_sync != 0);
 }

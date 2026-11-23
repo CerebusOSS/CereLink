@@ -405,6 +405,8 @@ FIELD_PATHS = {
     "AMPLREJPOS": ("get_channel_amplrejpos", "amplrejpos"),
     "AMPLREJNEG": ("get_channel_amplrejneg", "amplrejneg"),
     "CHANCAPS": ("get_channel_chancaps", "chancaps"),
+    "DINPOPTS": ("get_channel_dinpopts", "dinpopts"),
+    "DOUTOPTS": ("get_channel_doutopts", "doutopts"),
 }
 
 

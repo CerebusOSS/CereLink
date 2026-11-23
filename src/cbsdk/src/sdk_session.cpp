@@ -2145,6 +2145,8 @@ static int64_t extractChanInfoField(const cbPKT_CHANINFO& ci, ChanInfoField fiel
         case ChanInfoField::CHANCAPS:    return ci.chancaps;
         case ChanInfoField::BANK:        return ci.bank;
         case ChanInfoField::TERM:        return ci.term;
+        case ChanInfoField::DINPOPTS:    return ci.dinpopts;
+        case ChanInfoField::DOUTOPTS:    return ci.doutopts;
         default: return 0;
     }
 }

@@ -122,6 +122,28 @@ class ChanInfoField(enum.IntEnum):
     CHANCAPS = 10
     BANK = 11
     TERM = 12
+    DINPOPTS = 13
+    DOUTOPTS = 14
+
+
+class DigitalInputMode(enum.IntEnum):
+    """Digital-input capture mode: the ``cbDINP_*`` mode bits of ``dinpopts``.
+
+    ``DISABLED`` means no mode bit is set; the device then sends no
+    digital-input event packets.
+    """
+
+    DISABLED = 0
+    ANY_BIT = 0x00001000  # 16-bit on bit changes
+    WORD_STROBE = 0x00002000  # 16-bit on word strobe
+    RISING_EDGE = 0x00020000
+    FALLING_EDGE = 0x00040000
+    STROBE_ANY = 0x00080000  # 8-bit strobe / 8-bit any change
+    STROBE_RISING = 0x00100000  # 8-bit strobe / 8-bit rising edge
+    STROBE_FALLING = 0x00200000  # 8-bit strobe / 8-bit falling edge
+
+
+_DINP_MODE_MASK = 0x003FF000  # cbDINP_MASK
 
 
 _RATE_HZ = {
@@ -828,6 +850,26 @@ class Session:
         """Get a channel's analog input options (cbAINP_* flags)."""
         return _get_lib().cbsdk_session_get_channel_ainpopts(self._session, chan_id)
 
+    def get_channel_dinpopts(self, chan_id: int) -> int:
+        """Get a channel's digital input options (cbDINP_* flags: bit width + mode)."""
+        return _get_lib().cbsdk_session_get_channel_dinpopts(self._session, chan_id)
+
+    def get_channel_doutopts(self, chan_id: int) -> int:
+        """Get a channel's digital output options (cbDOUT_* flags)."""
+        return _get_lib().cbsdk_session_get_channel_doutopts(self._session, chan_id)
+
+    def get_channel_dinp_mode(self, chan_id: int) -> DigitalInputMode | int:
+        """Get a digital-input channel's capture mode.
+
+        Returns the raw mode bits as an int if they match no single
+        :class:`DigitalInputMode` (e.g. packet-capture modes).
+        """
+        bits = self.get_channel_dinpopts(chan_id) & _DINP_MODE_MASK
+        try:
+            return DigitalInputMode(bits)
+        except ValueError:
+            return bits
+
     def get_channel_lncrate(self, chan_id: int) -> int:
         """Get a channel's line noise cancellation adaptation rate."""
         return _get_lib().cbsdk_session_get_channel_lncrate(self._session, chan_id)
@@ -1292,6 +1334,40 @@ class Session:
             "Failed to set channel ainpopts",
         )
 
+    def set_channel_dinpopts(
+        self, chan_id: int, dinpopts: int, auto_sync: bool = False
+    ):
+        """Set a channel's digital input options (cbDINP_* flags: bit width + mode).
+
+        Prefer :meth:`set_channel_dinp_mode`, which keeps the bit-width flags.
+        """
+        _check(
+            _get_lib().cbsdk_session_set_channel_dinpopts(
+                self._session, chan_id, dinpopts, 1 if auto_sync else 0
+            ),
+            "Failed to set channel dinpopts",
+        )
+
+    def set_channel_doutopts(
+        self, chan_id: int, doutopts: int, auto_sync: bool = False
+    ):
+        """Set a channel's digital output options (cbDOUT_* flags)."""
+        _check(
+            _get_lib().cbsdk_session_set_channel_doutopts(
+                self._session, chan_id, doutopts, 1 if auto_sync else 0
+            ),
+            "Failed to set channel doutopts",
+        )
+
+    def set_channel_dinp_mode(
+        self, chan_id: int, mode: DigitalInputMode, auto_sync: bool = False
+    ):
+        """Set a digital-input channel's capture mode, keeping its other flags."""
+        if auto_sync:
+            self.sync()
+        others = self.get_channel_dinpopts(chan_id) & ~_DINP_MODE_MASK
+        self.set_channel_dinpopts(chan_id, others | int(mode))
+
     def set_channel_lncrate(self, chan_id: int, rate: int, auto_sync: bool = False):
         """Set a channel's line noise cancellation adaptation rate."""
         _check(
@@ -1355,6 +1431,9 @@ class Session:
             smpfilter (int): Continuous-time filter ID.
             spkfilter (int): Spike pathway filter ID.
             ainpopts (int): Analog input option flags.
+            dinpopts (int): Digital input option flags.
+            dinp_mode (DigitalInputMode): Digital input capture mode.
+            doutopts (int): Digital output option flags.
             lncrate (int): LNC adaptation rate.
             spkopts (int): Spike processing option flags.
             spkthrlevel (int): Spike threshold level.
@@ -1375,6 +1454,9 @@ class Session:
             "smpfilter",
             "spkfilter",
             "ainpopts",
+            "dinpopts",
+            "dinp_mode",
+            "doutopts",
             "lncrate",
             "spkopts",
             "autothreshold",
@@ -1384,6 +1466,9 @@ class Session:
             "smpfilter": self.set_channel_smpfilter,
             "spkfilter": self.set_channel_spkfilter,
             "ainpopts": self.set_channel_ainpopts,
+            "dinpopts": self.set_channel_dinpopts,
+            "dinp_mode": self.set_channel_dinp_mode,
+            "doutopts": self.set_channel_doutopts,
             "lncrate": self.set_channel_lncrate,
             "spkopts": self.set_channel_spkopts,
             "spkthrlevel": self.set_channel_spkthrlevel,
@@ -2119,6 +2204,8 @@ class Session:
             "spkopts": self.get_channel_spkopts(chan_id),
             "spkthrlevel": self.get_channel_spkthrlevel(chan_id),
             "ainpopts": self.get_channel_ainpopts(chan_id),
+            "dinpopts": self.get_channel_dinpopts(chan_id),
+            "doutopts": self.get_channel_doutopts(chan_id),
             "lncrate": self.get_channel_lncrate(chan_id),
             "refelecchan": self.get_channel_refelecchan(chan_id),
             "amplrejpos": self.get_channel_amplrejpos(chan_id),

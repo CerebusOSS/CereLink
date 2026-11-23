@@ -244,6 +244,8 @@ uint32_t cbsdk_session_get_channel_spkfilter(cbsdk_session_t session, uint32_t c
 uint32_t cbsdk_session_get_channel_spkopts(cbsdk_session_t session, uint32_t chan_id);
 int32_t  cbsdk_session_get_channel_spkthrlevel(cbsdk_session_t session, uint32_t chan_id);
 uint32_t cbsdk_session_get_channel_ainpopts(cbsdk_session_t session, uint32_t chan_id);
+uint32_t cbsdk_session_get_channel_dinpopts(cbsdk_session_t session, uint32_t chan_id);
+uint32_t cbsdk_session_get_channel_doutopts(cbsdk_session_t session, uint32_t chan_id);
 uint32_t cbsdk_session_get_channel_lncrate(cbsdk_session_t session, uint32_t chan_id);
 uint32_t cbsdk_session_get_channel_refelecchan(cbsdk_session_t session, uint32_t chan_id);
 int16_t  cbsdk_session_get_channel_amplrejpos(cbsdk_session_t session, uint32_t chan_id);
@@ -269,6 +271,10 @@ cbsdk_result_t cbsdk_session_set_channel_spkfilter(cbsdk_session_t session,
     uint32_t chan_id, uint32_t filter_id, int auto_sync);
 cbsdk_result_t cbsdk_session_set_channel_ainpopts(cbsdk_session_t session,
     uint32_t chan_id, uint32_t ainpopts, int auto_sync);
+cbsdk_result_t cbsdk_session_set_channel_dinpopts(cbsdk_session_t session,
+    uint32_t chan_id, uint32_t dinpopts, int auto_sync);
+cbsdk_result_t cbsdk_session_set_channel_doutopts(cbsdk_session_t session,
+    uint32_t chan_id, uint32_t doutopts, int auto_sync);
 cbsdk_result_t cbsdk_session_set_channel_lncrate(cbsdk_session_t session,
     uint32_t chan_id, uint32_t lncrate, int auto_sync);
 cbsdk_result_t cbsdk_session_set_channel_spkopts(cbsdk_session_t session,
@@ -293,6 +299,8 @@ typedef enum {
     CBSDK_CHANINFO_FIELD_CHANCAPS    = 10,
     CBSDK_CHANINFO_FIELD_BANK        = 11,
     CBSDK_CHANINFO_FIELD_TERM        = 12,
+    CBSDK_CHANINFO_FIELD_DINPOPTS    = 13,
+    CBSDK_CHANINFO_FIELD_DOUTOPTS    = 14,
 } cbsdk_chaninfo_field_t;
 
 // Generic single-channel field getter
