@@ -129,7 +129,7 @@ PTP), so do not reconstruct them as `t0 + n / 30000`.
 
 `device_to_monotonic()`, `device_to_monotonic_batch()` (and the C++/C `toLocalTime` /
 `cbsdk_session_to_local_time`) subtract this latency, so the result approximates the sampling
-instant.  Defaults: NSP 31 us; HUB1/HUB2/HUB3 44 us (measured on HUB2; HUB1/HUB3 provisional);
+instant.  Defaults: NSP 31 us; HUB1/HUB2/HUB3 44 us (measured: HUB2 43.7-44.8, HUB1 42.6; HUB3 untested);
 other device types 0.  Override with `Session(..., device_latency_ns=N)` (C++
 `SdkConfig::device_latency_ns`, C `cbsdk_config_t.device_latency_ns`; -1 = default); `0`
 disables it.  Raw timestamps (`header.time`) and `clock_offset_ns` are never modified.  Filter

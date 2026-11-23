@@ -2896,7 +2896,7 @@ int64_t SdkSession::getDeviceLatencyNs() const {
         case DeviceType::HUB1:
         case DeviceType::HUB2:
         case DeviceType::HUB3:
-            return 44'000;  // measured on HUB2 only; HUB1/HUB3 provisional
+            return 44'000;  // measured: HUB2 43.7-44.8 us, HUB1 42.6 us; HUB3 untested
         default:
             return 0;
     }
