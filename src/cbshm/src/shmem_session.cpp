@@ -49,6 +49,7 @@
 #include <chrono>
 #include <memory>
 #include <cstring>
+#include <cstdlib>
 #include <numeric>  // std::gcd
 
 namespace cbshm {
@@ -657,6 +658,8 @@ struct ShmemSession::Impl {
             cfg->owner_pid = static_cast<uint32_t>(getpid());
 #endif
             cfg->segment_uid = makeSegmentUid();
+            if (const char* bias = std::getenv("CBSDK_HOST_CLOCK_BIAS_NS"))
+                cfg->host_clock_bias_ns = std::strtoll(bias, nullptr, 10);
 
             // Initialize receive buffer
             std::memset(rec_buffer_raw, 0, rec_buffer_size);
@@ -2261,6 +2264,17 @@ std::optional<int64_t> ShmemSession::getClockUncertaintyNs() const {
             return cfg->clock_uncertainty_ns;
     }
     return std::nullopt;
+}
+
+void ShmemSession::setHostClockBiasNs(int64_t bias_ns) {
+    if (isOpen() && m_impl->layout == ShmemLayout::NATIVE)
+        m_impl->nativeCfg()->host_clock_bias_ns = bias_ns;
+}
+
+int64_t ShmemSession::getHostClockBiasNs() const {
+    if (isOpen() && m_impl->layout == ShmemLayout::NATIVE)
+        return m_impl->nativeCfg()->host_clock_bias_ns;
+    return 0;  // CENTRAL layouts have no field
 }
 
 bool ShmemSession::isOwnerAlive() const {

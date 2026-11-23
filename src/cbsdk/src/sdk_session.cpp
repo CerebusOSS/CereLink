@@ -2885,27 +2885,58 @@ Result<void> SdkSession::sync(uint32_t timeout_ms) {
 /// Clock Synchronization
 ///--------------------------------------------------------------------------------------------
 
+uint32_t SdkSession::getFirmwareVersion() const {
+    auto pi = getProcInfo();
+    return pi.isOk() ? pi.value().version : 0;
+}
+
+namespace {
+// Measured (CereLink issue #229) as device stamp minus true sampling instant.
+// Per device type, oldest to newest: the last entry is the fallback for unlisted firmware.
+// TODO: fill in procinfo.version of the measured firmware (Gemini 7.8).  NOTE: procinfo.version is
+// the protocol library version packed major<<16|minor, not the 7.8 release number.
+constexpr uint32_t kMeasuredFirmware = 0;
+struct LatencyEntry { DeviceType type; uint32_t firmware; int64_t latency_ns; };
+constexpr LatencyEntry kLatencyTable[] = {
+    {DeviceType::LEGACY_NSP, kMeasuredFirmware, 31'000},
+    {DeviceType::NSP,        kMeasuredFirmware, 31'000},
+    {DeviceType::HUB1,       kMeasuredFirmware, 42'600},
+    {DeviceType::HUB2,       kMeasuredFirmware, 44'000},  // measured 43.7-44.8 us
+    {DeviceType::HUB3,       kMeasuredFirmware, 44'000},  // untested; assumed as HUB2
+};
+}  // namespace
+
 int64_t SdkSession::getDeviceLatencyNs() const {
     if (m_impl->config.device_latency_ns >= 0)
         return m_impl->config.device_latency_ns;
-    // Measured (CereLink issue #229) as device stamp minus true sampling instant.
-    switch (m_impl->config.device_type) {
-        case DeviceType::LEGACY_NSP:
-        case DeviceType::NSP:
-            return 31'000;
-        case DeviceType::HUB1:
-        case DeviceType::HUB2:
-        case DeviceType::HUB3:
-            return 44'000;  // measured: HUB2 43.7-44.8 us, HUB1 42.6 us; HUB3 untested
-        default:
-            return 0;
+    const uint32_t fw = getFirmwareVersion();
+    const LatencyEntry* last = nullptr;
+    for (const auto& e : kLatencyTable) {
+        if (e.type != m_impl->config.device_type) continue;
+        if (e.firmware == fw) return e.latency_ns;
+        last = &e;
     }
+    if (!last) return 0;
+    static std::once_flag warned;
+    std::call_once(warned, [fw] {
+        std::cerr << "[cbsdk] device latency is unverified for firmware " << fw
+                  << "; using the most recent measured value\n";
+    });
+    return last->latency_ns;
+}
+
+void SdkSession::setHostClockBiasNs(int64_t bias_ns) {
+    if (m_impl->shmem_session) m_impl->shmem_session->setHostClockBiasNs(bias_ns);
+}
+
+int64_t SdkSession::getHostClockBiasNs() const {
+    return m_impl->shmem_session ? m_impl->shmem_session->getHostClockBiasNs() : 0;
 }
 
 std::optional<std::chrono::steady_clock::time_point>
 SdkSession::toLocalTime(uint64_t device_time_ns) const {
     // STANDALONE: delegate to device_session's ClockSync
-    const auto latency = std::chrono::nanoseconds(getDeviceLatencyNs());
+    const auto latency = std::chrono::nanoseconds(getDeviceLatencyNs() + getHostClockBiasNs());
     if (m_impl->device_session) {
         auto t = m_impl->device_session->toLocalTime(device_time_ns);
         if (t) *t -= latency;
@@ -2930,7 +2961,7 @@ bool SdkSession::toLocalTimeBatch(int64_t stream_id,
     if (n == 0) return true;
     if (!device_ns || !out_steady_ns) return false;
 
-    const int64_t latency = getDeviceLatencyNs();
+    const int64_t latency = getDeviceLatencyNs() + getHostClockBiasNs();
 
     // Stateless fast path: one offset, plain subtraction, no per-stream state.
     if (stream_id < 0) {
@@ -2973,7 +3004,7 @@ void SdkSession::resetMonotonic(int64_t stream_id) {
 std::optional<uint64_t>
 SdkSession::toDeviceTime(std::chrono::steady_clock::time_point local_time) const {
     // Inverse of toLocalTime: the stamp a sample taken at local_time would carry.
-    const int64_t latency = getDeviceLatencyNs();
+    const int64_t latency = getDeviceLatencyNs() + getHostClockBiasNs();
     // STANDALONE: delegate to device_session's ClockSync
     if (m_impl->device_session) {
         auto t = m_impl->device_session->toDeviceTime(local_time);

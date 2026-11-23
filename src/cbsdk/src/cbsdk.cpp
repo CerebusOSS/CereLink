@@ -1771,6 +1771,32 @@ cbsdk_result_t cbsdk_session_get_clock_offset(
     }
 }
 
+cbsdk_result_t cbsdk_session_set_host_clock_bias_ns(cbsdk_session_t session, int64_t bias_ns) {
+    if (!session || !session->cpp_session) return CBSDK_RESULT_INVALID_PARAMETER;
+    try {
+        session->cpp_session->setHostClockBiasNs(bias_ns);
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) { return CBSDK_RESULT_INTERNAL_ERROR; }
+}
+
+cbsdk_result_t cbsdk_session_get_host_clock_bias_ns(cbsdk_session_t session, int64_t* bias_ns) {
+    if (!session || !session->cpp_session || !bias_ns) return CBSDK_RESULT_INVALID_PARAMETER;
+    try {
+        *bias_ns = session->cpp_session->getHostClockBiasNs();
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) { return CBSDK_RESULT_INTERNAL_ERROR; }
+}
+
+cbsdk_result_t cbsdk_session_get_firmware_version(cbsdk_session_t session, uint32_t* version) {
+    if (!session || !session->cpp_session || !version) return CBSDK_RESULT_INVALID_PARAMETER;
+    try {
+        auto info = session->cpp_session->getProcInfo();
+        if (info.isError()) return CBSDK_RESULT_NOT_RUNNING;
+        *version = info.value().version;
+        return CBSDK_RESULT_SUCCESS;
+    } catch (...) { return CBSDK_RESULT_INTERNAL_ERROR; }
+}
+
 cbsdk_result_t cbsdk_session_get_clock_uncertainty(
     cbsdk_session_t session,
     int64_t* uncertainty_ns) {

@@ -1222,6 +1222,14 @@ CBSDK_API cbsdk_result_t cbsdk_session_get_clock_uncertainty(
     cbsdk_session_t session,
     int64_t* uncertainty_ns);
 
+/// Host clock bias (ns host stamps are late; subtracted by time conversions).  Stored in
+/// shared memory, so any process may set it.  Default 0.
+CBSDK_API cbsdk_result_t cbsdk_session_set_host_clock_bias_ns(cbsdk_session_t session, int64_t bias_ns);
+CBSDK_API cbsdk_result_t cbsdk_session_get_host_clock_bias_ns(cbsdk_session_t session, int64_t* bias_ns);
+
+/// Get the device firmware version (procinfo.version); CBSDK_RESULT_NOT_RUNNING if unavailable
+CBSDK_API cbsdk_result_t cbsdk_session_get_firmware_version(cbsdk_session_t session, uint32_t* version);
+
 /// Send a clock synchronization probe to the device
 /// @param session Session handle (must not be NULL)
 /// @return CBSDK_RESULT_SUCCESS on success, error code on failure

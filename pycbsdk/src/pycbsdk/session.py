@@ -1825,6 +1825,35 @@ class Session:
             return None
         return uncertainty[0]
 
+    @property
+    def host_clock_bias_ns(self) -> int:
+        """Host clock bias in ns (host stamps are this late; subtracted in time conversions).
+
+        Stored in shared memory: setting it from any process affects all processes sharing
+        the device.  Default 0.
+        """
+        out = ffi.new("int64_t *")
+        _check(
+            _get_lib().cbsdk_session_get_host_clock_bias_ns(self._session, out),
+            "Failed to get host clock bias",
+        )
+        return out[0]
+
+    @host_clock_bias_ns.setter
+    def host_clock_bias_ns(self, value: int):
+        _check(
+            _get_lib().cbsdk_session_set_host_clock_bias_ns(self._session, int(value)),
+            "Failed to set host clock bias",
+        )
+
+    @property
+    def firmware_version(self) -> int | None:
+        """Device firmware version (procinfo.version), or None if unavailable."""
+        out = ffi.new("uint32_t *")
+        if _get_lib().cbsdk_session_get_firmware_version(self._session, out) != 0:
+            return None
+        return out[0]
+
     def send_clock_probe(self):
         """Send a clock synchronization probe to the device."""
         _check(

@@ -378,6 +378,9 @@ cbsdk_result_t cbsdk_session_set_spike_extraction(
 // Clock synchronization
 cbsdk_result_t cbsdk_session_get_clock_offset(cbsdk_session_t session, int64_t* offset_ns);
 cbsdk_result_t cbsdk_session_get_clock_uncertainty(cbsdk_session_t session, int64_t* uncertainty_ns);
+cbsdk_result_t cbsdk_session_set_host_clock_bias_ns(cbsdk_session_t session, int64_t bias_ns);
+cbsdk_result_t cbsdk_session_get_host_clock_bias_ns(cbsdk_session_t session, int64_t* bias_ns);
+cbsdk_result_t cbsdk_session_get_firmware_version(cbsdk_session_t session, uint32_t* version);
 cbsdk_result_t cbsdk_session_send_clock_probe(cbsdk_session_t session);
 cbsdk_result_t cbsdk_session_to_local_time(
     cbsdk_session_t session, int64_t stream_id,

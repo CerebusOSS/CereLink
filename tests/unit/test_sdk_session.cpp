@@ -668,3 +668,44 @@ TEST_F(SdkSessionTest, ChannelScaling_FullInt32RangeDoesNotOverflow) {
     EXPECT_GT(result.value().scale, 0.0);
     EXPECT_TRUE(std::isfinite(result.value().scale));
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Host clock bias (shared memory, settable from any process)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+TEST_F(SdkSessionTest, HostClockBias_SharedAcrossSessions) {
+    auto owner = cbshm::ShmemSession::create(
+        cbshm::Mode::STANDALONE, cbshm::ShmemLayout::NATIVE, "nplay",
+        cbproto::InstrumentId::fromIndex(0));
+    ASSERT_TRUE(owner.isOk()) << owner.error();
+    cbPKT_PROCINFO info;
+    std::memset(&info, 0, sizeof(info));
+    info.proc = 1;
+    ASSERT_TRUE(owner.value().setProcInfo(info).isOk());
+    ASSERT_TRUE(owner.value().setInstrumentActive(true).isOk());
+    owner.value().setClockSync(kClockOffsetNs, 1000);
+
+    SdkConfig config;
+    config.device_type = DeviceType::NPLAY;  // latency 0
+    config.autorun = false;
+    auto a = SdkSession::create(config);
+    auto b = SdkSession::create(config);
+    ASSERT_TRUE(a.isOk()) << a.error();
+    ASSERT_TRUE(b.isOk()) << b.error();
+
+    EXPECT_EQ(b.value().getHostClockBiasNs(), 0);  // default
+    const int64_t base = b.value().toLocalTime(kDeviceNs)->time_since_epoch().count();
+
+    a.value().setHostClockBiasNs(80'000);
+    EXPECT_EQ(b.value().getHostClockBiasNs(), 80'000);
+    auto t = b.value().toLocalTime(kDeviceNs);
+    ASSERT_TRUE(t.has_value());
+    EXPECT_EQ(t->time_since_epoch().count(), base - 80'000);
+    int64_t batch;
+    ASSERT_TRUE(b.value().toLocalTimeBatch(-1, &kDeviceNs, &batch, 1));
+    EXPECT_EQ(batch, base - 80'000);
+    EXPECT_EQ(b.value().toDeviceTime(*t), kDeviceNs);  // round trip is exact
+
+    a.value().stop();
+    b.value().stop();
+}

@@ -128,12 +128,25 @@ Stamps are per-sample PTP times, not a fixed grid (the 30 kHz sample clock runs 
 PTP), so do not reconstruct them as `t0 + n / 30000`.
 
 `device_to_monotonic()`, `device_to_monotonic_batch()` (and the C++/C `toLocalTime` /
-`cbsdk_session_to_local_time`) subtract this latency, so the result approximates the sampling
-instant.  Defaults: NSP 31 us; HUB1/HUB2/HUB3 44 us (measured: HUB2 43.7-44.8, HUB1 42.6; HUB3 untested);
-other device types 0.  Override with `Session(..., device_latency_ns=N)` (C++
-`SdkConfig::device_latency_ns`, C `cbsdk_config_t.device_latency_ns`; -1 = default); `0`
-disables it.  Raw timestamps (`header.time`) and `clock_offset_ns` are never modified.  Filter
-delays (headstage, digital filters) are not compensated.
+`cbsdk_session_to_local_time`) subtract two corrections, so the result approximates the sampling
+instant:
+
+- **Device latency**, per firmware, baked in.  A table of `{device type, firmware version,
+  latency}` (`procinfo.version`, readable as `session.firmware_version`): NSP 31 us; HUB1 42.6 us;
+  HUB2/HUB3 44 us (measured: HUB2 43.7-44.8; HUB3 untested); other device types 0.  A firmware not
+  in the table uses the device type's most recent entry and logs once that it is unverified.
+  Override with `Session(..., device_latency_ns=N)` (C++ `SdkConfig::device_latency_ns`, C
+  `cbsdk_config_t.device_latency_ns`; -1 = default); `0` disables it.
+- **Host clock bias**, per host, calibrated by you against a physical signal.  The clock-probe
+  offset makes host times late by a host-dependent amount (measured 40-140 us on macOS, ~0 on
+  Linux).  Set `session.host_clock_bias_ns = N` (ns the host is late; C++ `setHostClockBiasNs`, C
+  `cbsdk_session_set_host_clock_bias_ns`).  It lives in shared memory: any process attached to the
+  device (STANDALONE or CLIENT) can set it and every process applies it.  Default 0; a launcher
+  can set the initial value with env `CBSDK_HOST_CLOCK_BIAS_NS` before the device is opened.  Not
+  available (always 0) under Central-compatible layouts.
+
+Raw timestamps (`header.time`) and `clock_offset_ns` are never modified.  Filter delays
+(headstage, digital filters) are not compensated.
 
 **Statistics**:
 

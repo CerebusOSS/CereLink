@@ -289,6 +289,13 @@ public:
     /// @return uncertainty in nanoseconds, or nullopt if no sync data
     std::optional<int64_t> getClockUncertaintyNs() const;
 
+    /// @brief Set the host clock bias (ns the host's stamps are late; subtracted when
+    ///        converting device times to host time).  Any mode; NATIVE layout only.
+    void setHostClockBiasNs(int64_t bias_ns);
+
+    /// @brief Get the host clock bias; 0 if unset or the layout cannot hold it (CENTRAL)
+    int64_t getHostClockBiasNs() const;
+
     /// @brief Check whether the segments this CLIENT mapped are still live and current
     ///
     /// For NATIVE CLIENT mode, applies two checks against the config buffer:
