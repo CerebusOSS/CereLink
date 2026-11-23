@@ -59,6 +59,10 @@ jobs:
             os: ubuntu-latest
             cmake_extra: ""
             lib_pattern: "libcbsdk.so"
+          - name: linux-arm64
+            os: ubuntu-24.04-arm  # glibc 2.39: covers Raspberry Pi OS / Debian 13 (2.41)
+            cmake_extra: ""
+            lib_pattern: "libcbsdk.so"
           - name: macos-universal
             os: macos-latest
             cmake_extra: ""
@@ -106,10 +110,11 @@ jobs:
         run: |
           pip install auditwheel patchelf
           # Detect the compatible manylinux tag for this toolchain
-          PLAT=$(auditwheel show pycbsdk/dist/*.whl 2>&1 | grep -oP 'manylinux_\d+_\d+_x86_64' | head -1)
+          ARCH=$(uname -m)
+          PLAT=$(auditwheel show pycbsdk/dist/*.whl 2>&1 | grep -oP "manylinux_\d+_\d+_${ARCH}" | head -1)
           if [ -z "$PLAT" ]; then
-            echo "auditwheel could not determine a manylinux tag, tagging as linux_x86_64"
-            PLAT="linux_x86_64"
+            echo "auditwheel could not determine a manylinux tag, tagging as linux_${ARCH}"
+            PLAT="linux_${ARCH}"
           fi
           echo "Repairing wheel for platform: $PLAT"
           auditwheel repair pycbsdk/dist/*.whl -w pycbsdk/wheelhouse/ --plat "$PLAT"
