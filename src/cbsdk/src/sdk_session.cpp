@@ -2972,9 +2972,14 @@ void SdkSession::resetMonotonic(int64_t stream_id) {
 
 std::optional<uint64_t>
 SdkSession::toDeviceTime(std::chrono::steady_clock::time_point local_time) const {
+    // Inverse of toLocalTime: the stamp a sample taken at local_time would carry.
+    const int64_t latency = getDeviceLatencyNs();
     // STANDALONE: delegate to device_session's ClockSync
-    if (m_impl->device_session)
-        return m_impl->device_session->toDeviceTime(local_time);
+    if (m_impl->device_session) {
+        auto t = m_impl->device_session->toDeviceTime(local_time);
+        if (t) *t += latency;
+        return t;
+    }
 
     // CLIENT: use clock offset from shmem
     if (m_impl->shmem_session) {
@@ -2982,7 +2987,7 @@ SdkSession::toDeviceTime(std::chrono::steady_clock::time_point local_time) const
         if (offset) {
             const auto local_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                 local_time.time_since_epoch()).count();
-            return static_cast<uint64_t>(local_ns + *offset);
+            return static_cast<uint64_t>(local_ns + *offset + latency);
         }
     }
     return std::nullopt;

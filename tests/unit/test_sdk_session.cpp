@@ -157,6 +157,7 @@ void convertWithLatency(DeviceType type, const char* tag, int64_t latency_cfg, i
     ASSERT_TRUE(t.has_value());
     local_ns = t->time_since_epoch().count();
     ASSERT_TRUE(session.toLocalTimeBatch(-1, &kDeviceNs, &batch_ns, 1));
+    EXPECT_EQ(session.toDeviceTime(*t), kDeviceNs);  // round trip is exact
     session.stop();
 }
 }  // namespace

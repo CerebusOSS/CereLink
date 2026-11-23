@@ -887,7 +887,8 @@ public:
     /// config.device_latency_ns if >= 0, else the default for config.device_type.
     int64_t getDeviceLatencyNs() const;
 
-    /// Convert a host steady_clock time_point to device timestamp (nanoseconds).
+    /// Convert a host steady_clock time_point to device timestamp (nanoseconds):
+    /// the inverse of toLocalTime, so it adds getDeviceLatencyNs().
     /// @param local_time Host time
     /// @return Corresponding device timestamp in nanoseconds, or nullopt if no sync data available
     std::optional<uint64_t>
