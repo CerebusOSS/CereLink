@@ -19,6 +19,7 @@ from pycbsdk import (
     ChanInfoField,
     ChannelType,
     DeviceType,
+    DigitalInputMode,
     ProtocolVersion,
     SampleRate,
     Session,
@@ -635,6 +636,28 @@ class TestPerChannelSetters:
         # Restore
         nplay_session.set_channel_ainpopts(1, orig)
         nplay_session.sync()
+
+    def test_set_channel_dinp_mode(self, nplay_session):
+        ids = nplay_session.get_matching_channel_ids(ChannelType.DIGITAL_IN)
+        if not ids:
+            pytest.skip("no digital-input channel")
+        ch = ids[0]
+        orig = nplay_session.get_channel_dinpopts(ch)
+        width = orig & ~0x003FF000
+        try:
+            nplay_session.set_channel_dinp_mode(ch, DigitalInputMode.RISING_EDGE)
+            nplay_session.sync()
+            assert nplay_session.get_channel_dinp_mode(ch) == DigitalInputMode.RISING_EDGE
+            assert nplay_session.get_channel_dinpopts(ch) & ~0x003FF000 == width
+            assert nplay_session.get_channel_config(ch)["dinpopts"] == (
+                width | DigitalInputMode.RISING_EDGE
+            )
+            assert nplay_session.get_channel_field(
+                ch, ChanInfoField.DINPOPTS
+            ) == (width | DigitalInputMode.RISING_EDGE)
+        finally:
+            nplay_session.set_channel_dinpopts(ch, orig)
+            nplay_session.sync()
 
     def test_set_channel_lncrate(self, nplay_session):
         orig = nplay_session.get_channel_lncrate(1)
