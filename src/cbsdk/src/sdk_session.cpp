@@ -2901,9 +2901,11 @@ struct LatencyEntry { DeviceType type; uint32_t version; int64_t latency_ns; };
 constexpr LatencyEntry kLatencyTable[] = {
     {DeviceType::LEGACY_NSP, kProtocol_4_2, 31'000},
     {DeviceType::NSP,        kProtocol_4_2, 31'000},
-    {DeviceType::HUB1,       kProtocol_4_2, 42'600},
-    {DeviceType::HUB2,       kProtocol_4_2, 44'000},  // measured 43.7-44.8 us
-    {DeviceType::HUB3,       kProtocol_4_2, 44'000},  // untested; assumed as HUB2
+    // Hubs 1-3 share hardware and firmware (only IP and PTP priority differ): one value, from
+    // HUB1 42.6 us and HUB2 43.7-44.8 us.  NSP firmware differs, hence its own entry.
+    {DeviceType::HUB1,       kProtocol_4_2, 44'000},
+    {DeviceType::HUB2,       kProtocol_4_2, 44'000},
+    {DeviceType::HUB3,       kProtocol_4_2, 44'000},
 };
 }  // namespace
 

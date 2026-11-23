@@ -133,7 +133,7 @@ instant:
 
 - **Device latency**, built in.  A table of `{device type, protocol version, latency}` keyed by
   `procinfo.version` (readable as `session.proc_version`; Gemini firmware 7.8 reports 0x00040002 =
-  protocol 4.2; 7.7 is 4.1, 7.9 will be 4.3): NSP 31 us; HUB1 42.6 us; HUB2/HUB3 44 us (measured: HUB2 43.7-44.8; HUB3 untested);
+  protocol 4.2; 7.7 is 4.1, 7.9 will be 4.3): NSP 31 us; HUB1/HUB2/HUB3 44 us (identical hub hardware and firmware; measured HUB1 42.6, HUB2 43.7-44.8);
   other device types 0.  The device reports no firmware release number, so releases sharing a
   protocol version share the entries; a version not in the table uses the device type's most recent
   entry and logs once that it is unverified.
