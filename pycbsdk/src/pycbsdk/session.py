@@ -1839,16 +1839,19 @@ class Session:
         )
         return out[0]
 
-    @host_clock_bias_ns.setter
-    def host_clock_bias_ns(self, value: int):
+    def set_host_clock_bias_ns(self, ns: int):
+        """Set the host clock bias (ns host stamps are late; calibrate against a physical signal).
+
+        Written to shared memory, so it applies to every process sharing the device.
+        """
         _check(
-            _get_lib().cbsdk_session_set_host_clock_bias_ns(self._session, int(value)),
+            _get_lib().cbsdk_session_set_host_clock_bias_ns(self._session, int(ns)),
             "Failed to set host clock bias",
         )
 
     @property
     def proc_version(self) -> int | None:
-        """Device firmware version (procinfo.version), or None if unavailable."""
+        """Protocol library version (procinfo.version, major<<16|minor; Gemini 7.7 = 4.1, 7.8 = 4.2), or None."""
         out = ffi.new("uint32_t *")
         if _get_lib().cbsdk_session_get_proc_version(self._session, out) != 0:
             return None

@@ -133,7 +133,7 @@ instant:
 
 - **Device latency**, built in.  A table of `{device type, protocol version, latency}` keyed by
   `procinfo.version` (readable as `session.proc_version`; Gemini firmware 7.8 reports 0x00040002 =
-  protocol 4.2): NSP 31 us; HUB1 42.6 us; HUB2/HUB3 44 us (measured: HUB2 43.7-44.8; HUB3 untested);
+  protocol 4.2; 7.7 is 4.1, 7.9 will be 4.3): NSP 31 us; HUB1 42.6 us; HUB2/HUB3 44 us (measured: HUB2 43.7-44.8; HUB3 untested);
   other device types 0.  The device reports no firmware release number, so releases sharing a
   protocol version share the entries; a version not in the table uses the device type's most recent
   entry and logs once that it is unverified.
@@ -141,7 +141,7 @@ instant:
   `cbsdk_config_t.device_latency_ns`; -1 = default); `0` disables it.
 - **Host clock bias**, per host, calibrated by you against a physical signal.  The clock-probe
   offset makes host times late by a host-dependent amount (measured 40-140 us on macOS, ~0 on
-  Linux).  Set `session.host_clock_bias_ns = N` (ns the host is late; C++ `setHostClockBiasNs`, C
+  Linux).  Set `session.set_host_clock_bias_ns(N)` (ns the host is late; C++ `setHostClockBiasNs`, C
   `cbsdk_session_set_host_clock_bias_ns`).  It lives in shared memory: any process attached to the
   device (STANDALONE or CLIENT) can set it and every process applies it.  Default 0; a launcher
   can set the initial value with env `CBSDK_HOST_CLOCK_BIAS_NS` before the device is opened.  Not

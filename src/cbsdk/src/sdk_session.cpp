@@ -2893,8 +2893,8 @@ uint32_t SdkSession::getProcVersion() const {
 namespace {
 // Measured (CereLink issue #229) as device stamp minus true sampling instant.
 // Keyed by procinfo.version, the protocol library version (major<<16|minor), which is the only
-// version the device reports.  It does not identify the firmware release: Gemini 7.8 reports 4.2,
-// and other releases with the same protocol match the same entries.
+// version the device reports.  Gemini bumps the firmware minor version only with a protocol
+// update (7.7 = 4.1, 7.8 = 4.2, 7.9 = 4.3), so it identifies the firmware.
 // Per device type, oldest to newest: the last entry is the fallback for an unlisted version.
 constexpr uint32_t kProtocol_4_2 = 0x00040002;  // measured on Gemini firmware 7.8
 struct LatencyEntry { DeviceType type; uint32_t version; int64_t latency_ns; };
