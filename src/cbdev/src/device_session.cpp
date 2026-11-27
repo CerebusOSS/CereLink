@@ -1897,11 +1897,12 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 const auto* nplay = reinterpret_cast<const cbPKT_NPLAY*>(buff_bytes + offset);
                 std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
                 if (m_impl->pending_clock_probe.active) {
-                    // New firmware (>=7.9? with clock sync mod) writes fresh
-                    // clock_gettime(ptp_clkid) into .etime — zero staleness.
-                    // Old firmware echoes the packet unchanged, so .etime stays 0
-                    // (we zero-initialize it). Fall back to header->time which is
-                    // the stale ptptime from the previous main loop iteration.
+                    // Only a custom nPlay build writes a fresh clock_gettime(ptp_clkid)
+                    // into .etime (zero staleness); no released firmware does, so this
+                    // check can go once that build is retired.  Released firmware
+                    // echoes the packet unchanged, so .etime stays 0 (we zero-initialize
+                    // it): fall back to header->time, the stale sample time from the
+                    // device's previous main loop iteration.
                     // 210 us: replayed over recorded probes against PTP ground truth with stock 7.8 Hub1 on Linux,
                     // this centred the estimate (-1 us at 256 channels, +17 us at 1 channel; 165 us read
                     // -56 / -38 us).  A Mac mini read -31..+46 us, depending on traffic and CPU load.
