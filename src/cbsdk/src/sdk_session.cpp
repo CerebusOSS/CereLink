@@ -42,16 +42,11 @@
 
 namespace {
 
-// Device time of an nPlay probe reply (already in ns): the fresh PTP read in .etime when the
-// firmware writes one, else header.time (a sample time from the device's previous main-loop pass)
-// plus a fixed staleness allowance.  Same rule as DeviceSession's STANDALONE probe.
+// Device time of an nPlay probe reply (already in ns): header.time (a sample time from the
+// device's previous main-loop pass) plus a fixed staleness allowance.  Same rule as
+// DeviceSession's STANDALONE probe.
 uint64_t nplayReplyDeviceTimeNs(const cbPKT_GENERIC& pkt) {
     constexpr uint64_t STALENESS_CORRECTION_NS = 210000;  // see DeviceSession's NPLAYREP handling
-    if (pkt.cbpkt_header.dlen * 4 >= offsetof(cbPKT_NPLAY, etime) + sizeof(PROCTIME) - cbPKT_HEADER_SIZE) {
-        cbPKT_NPLAY nplay;
-        std::memcpy(&nplay, &pkt, sizeof(nplay));
-        if (nplay.etime != 0) return nplay.etime;
-    }
     return pkt.cbpkt_header.time + STALENESS_CORRECTION_NS;
 }
 

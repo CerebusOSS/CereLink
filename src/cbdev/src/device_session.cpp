@@ -1974,41 +1974,25 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 }
             }
             else if (header->type == cbPKTTYPE_NPLAYREP) {
-                // Complete pending clock sync probe from nPlay echo.
-                const auto* nplay = reinterpret_cast<const cbPKT_NPLAY*>(buff_bytes + offset);
+                // Complete pending clock sync probe from nPlay echo (devices without
+                // TIMESYNC).  The device time is header->time, the stale sample time
+                // from the device's previous main loop iteration, plus a fixed allowance.
                 std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
                 if (m_impl->pending_clock_probe.active && !m_impl->pending_clock_probe.timesync) {
-                    // Only a custom nPlay build writes a fresh clock_gettime(ptp_clkid)
-                    // into .etime (zero staleness); no released firmware does, so this
-                    // check can go once that build is retired.  Released firmware
-                    // echoes the packet unchanged, so .etime stays 0 (we zero-initialize
-                    // it): fall back to header->time, the stale sample time from the
-                    // device's previous main loop iteration.
                     // 210 us: replayed over recorded probes against PTP ground truth with stock 7.8 Hub1 on Linux,
                     // this centred the estimate (-1 us at 256 channels, +17 us at 1 channel; 165 us read
                     // -56 / -38 us).  A Mac mini read -31..+46 us, depending on traffic and CPU load.
                     constexpr uint64_t STALENESS_CORRECTION_NS = 210000;
-                    // A probe is only usable if it carries a real device timestamp.
-                    // Both sources can be zero: .etime is zero on firmware that
-                    // doesn't write it, and header->time is zero while the device
-                    // clock isn't running yet (e.g. nPlay before playback starts,
-                    // proctime == 0). Such a probe yields offset ~= -host_clock,
-                    // which poisons the estimate (the max-offset/glitch filter then
-                    // strips the later good probes as outliers). Skip it.
-                    uint64_t device_time_ns = 0;
-                    bool have_device_time = true;
-                    if (nplay->etime != 0) {
-                        device_time_ns = nplay->etime;
-                    } else if (header->time != 0) {
-                        device_time_ns = deviceTimestampToNs(
-                                             header->time, m_impl->timestamps_are_nanoseconds,
-                                             m_impl->ts_convert_num, m_impl->ts_convert_den)
-                                       + STALENESS_CORRECTION_NS;
-                    } else {
-                        have_device_time = false;  // device clock not running yet
-                    }
-
-                    if (have_device_time) {
+                    // header->time is zero while the device clock isn't running yet
+                    // (e.g. nPlay before playback starts, proctime == 0). Such a probe
+                    // yields offset ~= -host_clock, which poisons the estimate (the
+                    // glitch filter then strips the later good probes as outliers).
+                    // Skip it.
+                    if (header->time != 0) {
+                        const uint64_t device_time_ns =
+                            deviceTimestampToNs(header->time, m_impl->timestamps_are_nanoseconds,
+                                                m_impl->ts_convert_num, m_impl->ts_convert_den)
+                            + STALENESS_CORRECTION_NS;
                         m_impl->clock_sync.addProbeSample(
                             m_impl->pending_clock_probe.t1_local,
                             device_time_ns,

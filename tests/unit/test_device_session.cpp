@@ -515,8 +515,9 @@ TEST_F(DeviceSessionTest, ClockProbe_TimedByKernelReceiveTimestamp) {
         cbPKT_NPLAY rep{};
         std::memcpy(&rep, wire, sizeof(rep));
         rep.cbpkt_header.type = cbPKTTYPE_NPLAYREP;
-        rep.etime = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count());
+        // header.time + the 210 us staleness allowance = now on the host's steady_clock
+        rep.cbpkt_header.time = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count()) - 210'000;
         ASSERT_TRUE(device.sendTo(recv_port, &rep, sizeof(rep)));
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         receiveOne();
