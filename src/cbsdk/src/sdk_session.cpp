@@ -42,6 +42,19 @@
 
 namespace {
 
+// Device time of an nPlay probe reply (already in ns): the fresh PTP read in .etime when the
+// firmware writes one, else header.time (a sample time from the device's previous main-loop pass)
+// plus a fixed staleness allowance.  Same rule as DeviceSession's STANDALONE probe.
+uint64_t nplayReplyDeviceTimeNs(const cbPKT_GENERIC& pkt) {
+    constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
+    if (pkt.cbpkt_header.dlen * 4 >= offsetof(cbPKT_NPLAY, etime) + sizeof(PROCTIME) - cbPKT_HEADER_SIZE) {
+        cbPKT_NPLAY nplay;
+        std::memcpy(&nplay, &pkt, sizeof(nplay));
+        if (nplay.etime != 0) return nplay.etime;
+    }
+    return pkt.cbpkt_header.time + STALENESS_CORRECTION_NS;
+}
+
 /// Parks the send thread between polls of an empty transmit queue.
 ///
 /// This used to be a QPC busy-wait, and because the queue is empty nearly all
@@ -1571,9 +1584,7 @@ Result<void> SdkSession::start() {
                     if (pkt.cbpkt_header.type != cbPKTTYPE_NPLAYREP) return;
                     const uint32_t inst = pkt.cbpkt_header.instrument;
                     if (inst == self_inst) return;  // own reply: handled below
-                    constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
-                    impl->addPeerProbeReply(inst,
-                                            pkt.cbpkt_header.time + STALENESS_CORRECTION_NS,
+                    impl->addPeerProbeReply(inst, nplayReplyDeviceTimeNs(pkt),
                                             std::chrono::steady_clock::now());
                 });
         }
@@ -1642,15 +1653,9 @@ Result<void> SdkSession::start() {
                             }
                             if (packets[i].cbpkt_header.type == cbPKTTYPE_NPLAYREP) {
                                 // Complete pending clock sync probe
-                                constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
                                 std::lock_guard<std::mutex> lock(impl->clock_probe_mutex);
                                 if (impl->pending_clock_probe.active) {
-                                    // Use header.time as T3 — already converted to ns
-                                    // by readReceiveBuffer for all device types.
-                                    // Add staleness correction (header.time is from the
-                                    // device's previous main-loop iteration).
-                                    uint64_t device_time_ns = packets[i].cbpkt_header.time
-                                                              + STALENESS_CORRECTION_NS;
+                                    const uint64_t device_time_ns = nplayReplyDeviceTimeNs(packets[i]);
                                     impl->client_clock_sync.addProbeSample(
                                         impl->pending_clock_probe.t1_local,
                                         device_time_ns, t4);
@@ -1695,11 +1700,6 @@ Result<void> SdkSession::start() {
                         if (t4 - impl->last_clock_probe_time > std::chrono::seconds(2)) {
                             // Build and enqueue probe via shmem xmt buffer.
                             // Can't call sendClockProbe() (needs SdkSession*), so inline it.
-                            {
-                                std::lock_guard<std::mutex> lock(impl->clock_probe_mutex);
-                                impl->pending_clock_probe.t1_local = t4;
-                                impl->pending_clock_probe.active = true;
-                            }
                             cbPKT_NPLAY probe{};
                             probe.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
                             probe.cbpkt_header.type = cbPKTTYPE_NPLAYSET;
@@ -1721,6 +1721,14 @@ Result<void> SdkSession::start() {
                             // Stamp with current device time (enqueuePacket needs non-zero time)
                             PROCTIME last_t = impl->shmem_session->getLastTime();
                             probe.cbpkt_header.time = (last_t != 0) ? last_t : 1;
+                            {
+                                // t1 as late as this process can know it: just before the
+                                // probe is queued for the owner to send (the batch's read time
+                                // t4 can be well before that).
+                                std::lock_guard<std::mutex> lock(impl->clock_probe_mutex);
+                                impl->pending_clock_probe.t1_local = std::chrono::steady_clock::now();
+                                impl->pending_clock_probe.active = true;
+                            }
                             impl->shmem_session->enqueuePacket(
                                 *reinterpret_cast<const cbPKT_GENERIC*>(&probe));
                             impl->last_clock_probe_time = t4;
