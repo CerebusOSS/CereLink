@@ -11,8 +11,8 @@
 /// Each probe gives T1 (host send), T3 (device timestamp), T4 (host recv).
 /// Offset = T3 - T1 - α * (T4 - T1), where α is the forward delay fraction
 /// (default 0.5 = symmetric NTP midpoint). Probes are detrended for the
-/// host/device clock-rate difference, then the one with the largest offset
-/// (least queuing) among the most recent is selected as the best estimate.
+/// host/device clock-rate difference, then the mean of the largest offsets
+/// (least queuing: the top 1/pick_top_divisor) among the most recent is the estimate.
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -41,10 +41,17 @@ public:
         // different rates (crystal error; NTP slewing of steady_clock), so
         // older probes carry a stale offset.  A robust (Theil-Sen) slope over
         // the last drift_fit_window detrends probes to the newest one's time,
-        // and the max-offset pick then considers only the newest
-        // max_pick_samples.  A zero window disables the fit.
+        // and the pick then considers only the newest max_pick_samples.  A
+        // zero window disables the fit.
         std::chrono::seconds drift_fit_window = std::chrono::seconds{15};
-        size_t max_pick_samples = 40;
+        size_t max_pick_samples = 100;
+
+        // The pick averages the largest 1/pick_top_divisor of those offsets
+        // (at least one).  Replayed over recorded nPlay probes against PTP
+        // ground truth (Mac + Hub3, Linux + Hub1; 1 and 256 channels), the
+        // mean of the top 10 of 100 moved 7-15 us second to second where the
+        // single largest of 40 moved 13-24 us; it reads ~10 us lower.
+        size_t pick_top_divisor = 10;
 
         // A step in the rate difference (e.g. NTP slewing the host clock)
         // makes the slope fit lag for up to drift_fit_window, and the pick
@@ -96,6 +103,14 @@ public:
     /// @param t3_device_ns  Device timestamp from the response (nanoseconds)
     /// @param t4_local  Host time just after receiving the response
     void addProbeSample(time_point t1_local, uint64_t t3_device_ns, time_point t4_local);
+
+    /// Add a four-timestamp exchange (device receive time t2 and send time t3 both known):
+    /// offset = ((t2 - t1) + (t3 - t4)) / 2, delay = (t4 - t1) - (t3 - t2).  Once such samples
+    /// arrive, the estimate is the drift-corrected median of their offsets in the window: with
+    /// both device times accurate, queuing can bias a sample either way, so the max-offset pick
+    /// used for single-timestamp probes would be biased.
+    void addFourTimestampSample(time_point t1_local, uint64_t t2_device_ns, uint64_t t3_device_ns,
+                                time_point t4_local);
 
     /// Convert device timestamp to host steady_clock time_point.
     [[nodiscard]] std::optional<time_point> toLocalTime(uint64_t device_time_ns) const;
@@ -155,8 +170,9 @@ private:
 
     struct ProbeSample {
         int64_t offset_ns;       // T3 - T1 - α * RTT
-        int64_t rtt_ns;          // T4 - T1
+        int64_t rtt_ns;          // T4 - T1, minus the device's time (T3 - T2) when known
         time_point when;
+        bool four_timestamp = false;  // from addFourTimestampSample()
     };
 
     std::deque<ProbeSample> m_probe_samples;
@@ -195,6 +211,7 @@ private:
     bool externalPlausible(int64_t external_ns,
                            const InternalEstimate& internal) const;  // lock held
     void pruneExpired(time_point now);     // called with lock held
+    void addSample(int64_t offset_ns, int64_t rtt_ns, time_point when, bool four_timestamp);  // lock held
     bool probeSpreadOk() const;            // called with lock held
 };
 

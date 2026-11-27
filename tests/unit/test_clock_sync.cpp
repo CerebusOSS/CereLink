@@ -769,3 +769,69 @@ TEST(ClockSyncEpochTest, DeviceWrapBumps) {
     addOffsetProbe(sync, HOST_NOW_NS + 5'000'000LL, TRUE_OFFSET_NS - 2'000'000'000LL);
     EXPECT_GT(sync.syncEpoch(), before_wrap) << "device wrap did not advance the epoch";
 }
+
+TEST(ClockSyncTest, PickAveragesTopDecileOfNewestProbes) {
+    // 100 probes whose offsets are 1..100 us (shuffled); drift fit and cap off.  The estimate is
+    // the mean of the largest 10 (91..100 us), not the single largest.
+    ClockSync::Config cfg;
+    cfg.drift_fit_window = std::chrono::seconds{0};
+    cfg.recent_cap_ns = 0;
+    ClockSync sync(cfg);
+    // A realistic device epoch (PTP ns since 1970) far from steady_clock's: ten such offsets
+    // overflow int64 if summed directly.
+    constexpr int64_t EPOCH = 1'795'000'000'000'000'000LL;
+    for (int i = 0; i < 100; ++i) {
+        const int64_t off_us = 1 + (i * 37) % 100;     // a permutation of 1..100
+        const int64_t t1 = 1'000'000 + i * 10'000'000LL;
+        // symmetric 2 us round trip: offset = T3 - T1 - RTT/2
+        sync.addProbeSample(tp_from_ns(t1), uint64_t(EPOCH + t1 + off_us * 1000 + 1000), tp_from_ns(t1 + 2000));
+    }
+    EXPECT_EQ(*sync.getOffsetNs(), EPOCH + 95'500);
+}
+
+// Four-timestamp exchanges (device receive time t2 and send time t3 both known).
+
+TEST(ClockSyncTest, FourTimestamp_SymmetricPathGivesExactOffset) {
+    ClockSync sync;
+    // Device clock = host + 1e18 ns (a PTP epoch far from steady_clock's); 30 us each way,
+    // 50 us in the device.
+    constexpr int64_t OFFSET = 1'000'000'000'000'000'000LL;
+    sync.addFourTimestampSample(tp_from_ns(1'000'000), uint64_t(OFFSET + 1'030'000),
+                                uint64_t(OFFSET + 1'080'000), tp_from_ns(1'110'000));
+    ASSERT_TRUE(sync.getOffsetNs().has_value());
+    EXPECT_EQ(*sync.getOffsetNs(), OFFSET);
+    EXPECT_EQ(*sync.getUncertaintyNs(), 30'000);  // half of the 60 us network delay
+}
+
+TEST(ClockSyncTest, FourTimestamp_MedianIgnoresQueuingInEitherDirection) {
+    ClockSync sync;
+    constexpr int64_t OFFSET = 5'000'000;
+    // 41 exchanges 100 ms apart.  Most are symmetric (20 us each way); some requests and some
+    // replies sit behind traffic, which biases those samples up or down by half the extra delay.
+    for (int i = 0; i < 41; ++i) {
+        const int64_t t1 = 1'000'000'000LL + i * 100'000'000LL;
+        const int64_t up = (i % 5 == 1) ? 400'000 : 0;    // request delayed: offset reads high
+        const int64_t down = (i % 5 == 3) ? 300'000 : 0;  // reply delayed: offset reads low
+        const int64_t t2 = t1 + 20'000 + up + OFFSET;
+        const int64_t t3 = t2 + 50'000;
+        const int64_t t4 = t3 - OFFSET + 20'000 + down;
+        sync.addFourTimestampSample(tp_from_ns(t1), uint64_t(t2), uint64_t(t3), tp_from_ns(t4));
+    }
+    ASSERT_TRUE(sync.getOffsetNs().has_value());
+    EXPECT_EQ(*sync.getOffsetNs(), OFFSET);
+    EXPECT_EQ(*sync.getUncertaintyNs(), 20'000);
+}
+
+TEST(ClockSyncTest, FourTimestamp_ConstantAsymmetryShowsAsHalfItsSize) {
+    // The estimator can't see a constant path asymmetry: 10 us out, 50 us back reads as
+    // offset - 20 us.  (A host clock bias, configured separately, is how users correct it.)
+    ClockSync sync;
+    for (int i = 0; i < 20; ++i) {
+        const int64_t t1 = i * 100'000'000LL;
+        const int64_t t2 = t1 + 10'000;
+        const int64_t t3 = t2 + 30'000;
+        const int64_t t4 = t3 + 50'000;
+        sync.addFourTimestampSample(tp_from_ns(t1), uint64_t(t2), uint64_t(t3), tp_from_ns(t4));
+    }
+    EXPECT_EQ(*sync.getOffsetNs(), -20'000);
+}

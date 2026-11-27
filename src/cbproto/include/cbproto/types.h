@@ -2084,6 +2084,33 @@ typedef struct {
     char  fname[cbNPLAY_FNAME_LEN];   ///< This is a String with the file name.
 } cbPKT_NPLAY;
 
+// Time synchronization packet (protocol 4.3).  Four-timestamp exchange:
+//     offset = ((t2_server_rx - t1_client_tx) + (t3_server_tx - T4)) / 2
+//     delay  = (T4 - t1_client_tx) - (t3_server_tx - t2_server_rx)
+// id and t1_client_tx are echoed.  Discard replies without cbTIMESYNC_FLAG_TIME_VALID, and
+// re-measure when phc_step_count changes.  Firmware without it echoes the request unchanged
+// (no TIME_VALID flag), which tells the client to fall back to the nPlay probe.
+#define cbPKTTYPE_TIMESYNCREP   0x69 ///< device->PC response
+#define cbPKTTYPE_TIMESYNCSET   0xE9 ///< PC->device request
+#define cbPKTDLEN_TIMESYNC  ((sizeof(cbPKT_TIMESYNC)/4) - cbPKT_HEADER_32SIZE)
+#define cbTIMESYNC_FLAG_TIME_VALID    0x0001 ///< t2_server_rx and t3_server_tx are usable for an offset
+#define cbTIMESYNC_FLAG_EPOCH_UNKNOWN 0x0002 ///< PHC carries no usable wall-clock date
+
+/// @brief PKT Set:0xE9 Rep:0x69 - Time synchronization packet
+typedef struct {
+    cbPKT_HEADER cbpkt_header;
+    uint32_t id;               ///< client request identifier
+    uint16_t flags;            ///< cbTIMESYNC_FLAG_*
+    uint16_t reserved0;
+    PROCTIME t1_client_tx;     ///< client transmit time
+    PROCTIME t2_server_rx;     ///< device PHC when the request was received
+    PROCTIME t3_server_tx;     ///< device PHC when the reply was sent
+    PROCTIME sample_ptptime;   ///< PHC timestamp of the most recently processed sample, 0 if not acquiring
+    uint32_t phc_step_count;   ///< number of PHC steps
+    uint32_t reserved1;
+    int64_t  last_step_ns;     ///< size of the most recent PHC step in nanoseconds
+} cbPKT_TIMESYNC;
+
 /// @}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

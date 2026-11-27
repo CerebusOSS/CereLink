@@ -145,6 +145,10 @@ namespace {
             }
         }
     }
+
+    /// steady_clock just before and just after the most recent sendto() on this thread.  The
+    /// datagram leaves somewhere in between: on macOS sendto() itself takes 20-50 us.
+    thread_local std::chrono::steady_clock::time_point t_sendto_before{}, t_sendto_after{};
 }
 
 namespace cbdev {
@@ -314,9 +318,21 @@ struct DeviceSession::Impl {
     struct PendingClockProbe {
         std::chrono::steady_clock::time_point t1_local;
         bool active = false;
+        bool timesync = false;      // a cbPKT_TIMESYNC request (else an nPlay echo)
+        uint32_t id = 0;            // TIMESYNC: id and t1_client_tx to match the reply
+        uint64_t t1_echo = 0;
     };
     PendingClockProbe pending_clock_probe;
     std::mutex clock_probe_mutex;
+    // Which probe the device answers.  Unknown: try cbPKT_TIMESYNC; firmware without it echoes
+    // the request without TIME_VALID (or ignores it), and the nPlay echo is used from then on.
+    // CBSDK_CLOCK_PROBE=nplay|timesync forces one.  Guarded by clock_probe_mutex.
+    enum class ProbeKind { Unknown, TimeSync, NPlay };
+    ProbeKind probe_kind = ProbeKind::Unknown;
+    int timesync_unanswered = 0;
+    uint32_t timesync_next_id = 1;
+    std::optional<uint32_t> phc_step_count;
+    static constexpr int kTimeSyncMaxUnanswered = 5;
 
     // Start of the REQCONFIGALL burst in flight (epoch when none); guarded by
     // clock_probe_mutex. The device answers with >1000 packets in a few ms, and
@@ -924,6 +940,7 @@ Result<void> DeviceSession::sendRaw(const void* buffer, const size_t size) {
         return Result<void>::error("Invalid buffer or size");
     }
 
+    t_sendto_before = std::chrono::steady_clock::now();
     const int bytes_sent = sendto(
         m_impl->socket,
         (const char*)buffer,
@@ -932,6 +949,7 @@ Result<void> DeviceSession::sendRaw(const void* buffer, const size_t size) {
         reinterpret_cast<SOCKADDR *>(&m_impl->send_addr),
         sizeof(m_impl->send_addr)
     );
+    t_sendto_after = std::chrono::steady_clock::now();
 
     if (bytes_sent == SOCKET_ERROR_VALUE) {
 #ifdef _WIN32
@@ -1231,8 +1249,60 @@ Result<void> DeviceSession::sendClockProbe() {
         // seen here or cancels this probe in beginConfigBurst().
         if (now - m_impl->config_burst_since < Impl::kConfigBurstMaxAge)
             return Result<void>::error("Clock probe skipped: configuration burst in progress");
-        m_impl->pending_clock_probe.t1_local = now;
-        m_impl->pending_clock_probe.active = true;
+        static const std::string forced = [] {
+            const char* v = std::getenv("CBSDK_CLOCK_PROBE");
+            return std::string(v ? v : "");
+        }();
+        auto& kind = m_impl->probe_kind;
+        auto& pending = m_impl->pending_clock_probe;
+        if (kind == Impl::ProbeKind::Unknown) {
+            const bool legacy = m_impl->send_protocol != ProtocolVersion::PROTOCOL_CURRENT &&
+                                m_impl->send_protocol != ProtocolVersion::UNKNOWN;
+            if (forced == "nplay" || (legacy && forced != "timesync"))
+                kind = Impl::ProbeKind::NPlay;
+            else if (pending.active && pending.timesync &&
+                     ++m_impl->timesync_unanswered >= Impl::kTimeSyncMaxUnanswered &&
+                     forced != "timesync")
+                kind = Impl::ProbeKind::NPlay;   // the device ignores TIMESYNC requests
+        }
+        pending.t1_local = now;
+        pending.active = true;
+        pending.timesync = kind != Impl::ProbeKind::NPlay;
+        if (pending.timesync) {
+            pending.id = m_impl->timesync_next_id++;
+            pending.t1_echo = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count());
+        }
+    }
+
+    auto stampT1 = [this, now] {
+        // t1 is the middle of the sendto() call, not the time before sendPacket(): that may wait
+        // up to 200 us for configuration pacing, and the datagram leaves during sendto(), which
+        // takes 20-50 us on macOS (longer when idle: Apple Silicon power states).  Measured
+        // against a gPTP reference on a Mac mini, the midpoint's error stayed within a 3 us range
+        // across CPU load, probe rate and traffic; t1 before sendto moved 6 us, after it 9 us.
+        // If the reply has already been taken (it can't come back within microseconds), keep it.
+        const auto t1 = t_sendto_before + (t_sendto_after - t_sendto_before) / 2;
+        std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
+        if (m_impl->pending_clock_probe.active && m_impl->pending_clock_probe.t1_local == now)
+            m_impl->pending_clock_probe.t1_local = t1;
+    };
+
+    if (m_impl->pending_clock_probe.timesync) {
+        cbPKT_TIMESYNC ts{};
+        ts.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+        ts.cbpkt_header.type = cbPKTTYPE_TIMESYNCSET;
+        ts.cbpkt_header.dlen = cbPKTDLEN_TIMESYNC;
+        {
+            std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
+            ts.id = m_impl->pending_clock_probe.id;
+            ts.t1_client_tx = m_impl->pending_clock_probe.t1_echo;
+        }
+        cbPKT_GENERIC generic{};
+        std::memcpy(&generic, &ts, sizeof(ts));
+        auto result = sendPacket(generic);
+        if (result.isOk()) stampT1();
+        return result;
     }
 
     // Send nPlay packet as clock probe. The host send time goes in .stime;
@@ -1248,7 +1318,9 @@ Result<void> DeviceSession::sendClockProbe() {
         std::chrono::duration_cast<std::chrono::nanoseconds>(
             now.time_since_epoch()).count());
 
-    return sendPacket(*reinterpret_cast<const cbPKT_GENERIC*>(&pkt));
+    auto result = sendPacket(*reinterpret_cast<const cbPKT_GENERIC*>(&pkt));
+    if (result.isOk()) stampT1();
+    return result;
 }
 
 std::optional<std::chrono::steady_clock::time_point>
@@ -1873,38 +1945,54 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                     }
                 }
             }
-            else if (header->type == cbPKTTYPE_NPLAYREP) {
-                // Complete pending clock sync probe from nPlay echo.
-                const auto* nplay = reinterpret_cast<const cbPKT_NPLAY*>(buff_bytes + offset);
+            else if (header->type == cbPKTTYPE_TIMESYNCREP &&
+                     header->dlen >= cbPKTDLEN_TIMESYNC) {
+                // Four-timestamp clock probe.  Only our own request's reply counts (replies are
+                // broadcast to every client); without TIME_VALID it is unusable, and a reply with
+                // no device times at all is the echo of firmware that lacks TIMESYNC.
+                cbPKT_TIMESYNC ts;
+                std::memcpy(&ts, buff_bytes + offset, sizeof(ts));
                 std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
-                if (m_impl->pending_clock_probe.active) {
-                    // New firmware (>=7.9? with clock sync mod) writes fresh
-                    // clock_gettime(ptp_clkid) into .etime — zero staleness.
-                    // Old firmware echoes the packet unchanged, so .etime stays 0
-                    // (we zero-initialize it). Fall back to header->time which is
-                    // the stale ptptime from the previous main loop iteration.
-                    constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
-                    // A probe is only usable if it carries a real device timestamp.
-                    // Both sources can be zero: .etime is zero on firmware that
-                    // doesn't write it, and header->time is zero while the device
-                    // clock isn't running yet (e.g. nPlay before playback starts,
-                    // proctime == 0). Such a probe yields offset ~= -host_clock,
-                    // which poisons the estimate (the max-offset/glitch filter then
-                    // strips the later good probes as outliers). Skip it.
-                    uint64_t device_time_ns = 0;
-                    bool have_device_time = true;
-                    if (nplay->etime != 0) {
-                        device_time_ns = nplay->etime;
-                    } else if (header->time != 0) {
-                        device_time_ns = deviceTimestampToNs(
-                                             header->time, m_impl->timestamps_are_nanoseconds,
-                                             m_impl->ts_convert_num, m_impl->ts_convert_den)
-                                       + STALENESS_CORRECTION_NS;
-                    } else {
-                        have_device_time = false;  // device clock not running yet
+                auto& pending = m_impl->pending_clock_probe;
+                if (pending.active && pending.timesync && ts.id == pending.id &&
+                    ts.t1_client_tx == pending.t1_echo) {
+                    pending.active = false;
+                    if (ts.flags & cbTIMESYNC_FLAG_TIME_VALID) {
+                        m_impl->probe_kind = Impl::ProbeKind::TimeSync;
+                        m_impl->timesync_unanswered = 0;
+                        if (m_impl->phc_step_count && *m_impl->phc_step_count != ts.phc_step_count)
+                            m_impl->clock_sync.reset();   // the device clock stepped
+                        m_impl->phc_step_count = ts.phc_step_count;
+                        m_impl->clock_sync.addFourTimestampSample(
+                            pending.t1_local, ts.t2_server_rx, ts.t3_server_tx,
+                            m_impl->last_recv_timestamp);
+                    } else if (m_impl->probe_kind == Impl::ProbeKind::Unknown &&
+                               ts.t2_server_rx == 0 && ts.t3_server_tx == 0 &&
+                               std::getenv("CBSDK_CLOCK_PROBE") == nullptr) {
+                        m_impl->probe_kind = Impl::ProbeKind::NPlay;
                     }
-
-                    if (have_device_time) {
+                }
+            }
+            else if (header->type == cbPKTTYPE_NPLAYREP) {
+                // Complete pending clock sync probe from nPlay echo (devices without
+                // TIMESYNC).  The device time is header->time, the stale sample time
+                // from the device's previous main loop iteration, plus a fixed allowance.
+                std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
+                if (m_impl->pending_clock_probe.active && !m_impl->pending_clock_probe.timesync) {
+                    // 210 us: replayed over recorded probes against PTP ground truth with stock 7.8 Hub1 on Linux,
+                    // this centred the estimate (-1 us at 256 channels, +17 us at 1 channel; 165 us read
+                    // -56 / -38 us).  A Mac mini read -31..+46 us, depending on traffic and CPU load.
+                    constexpr uint64_t STALENESS_CORRECTION_NS = 210000;
+                    // header->time is zero while the device clock isn't running yet
+                    // (e.g. nPlay before playback starts, proctime == 0). Such a probe
+                    // yields offset ~= -host_clock, which poisons the estimate (the
+                    // glitch filter then strips the later good probes as outliers).
+                    // Skip it.
+                    if (header->time != 0) {
+                        const uint64_t device_time_ns =
+                            deviceTimestampToNs(header->time, m_impl->timestamps_are_nanoseconds,
+                                                m_impl->ts_convert_num, m_impl->ts_convert_den)
+                            + STALENESS_CORRECTION_NS;
                         m_impl->clock_sync.addProbeSample(
                             m_impl->pending_clock_probe.t1_local,
                             device_time_ns,
