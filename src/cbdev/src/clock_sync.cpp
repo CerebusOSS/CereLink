@@ -44,7 +44,23 @@ void ClockSync::addProbeSample(time_point t1_local, uint64_t t3_device_ns, time_
     // offset = T3 - T1 - α * RTT
     const int64_t offset_ns = static_cast<int64_t>(t3_device_ns) - t1_ns
         - static_cast<int64_t>(std::round(m_config.forward_delay_fraction * rtt_ns));
+    addSample(offset_ns, rtt_ns, t4_local, false);
+}
 
+void ClockSync::addFourTimestampSample(time_point t1_local, uint64_t t2_device_ns,
+                                       uint64_t t3_device_ns, time_point t4_local) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const int64_t t1_ns = to_ns(t1_local);
+    const int64_t t4_ns = to_ns(t4_local);
+    const int64_t t2_ns = static_cast<int64_t>(t2_device_ns);
+    const int64_t t3_ns = static_cast<int64_t>(t3_device_ns);
+    // Halve each difference before adding: the device and host epochs can differ by ~1.8e18 ns.
+    const int64_t offset_ns = (t2_ns - t1_ns) / 2 + (t3_ns - t4_ns) / 2;
+    const int64_t rtt_ns = (t4_ns - t1_ns) - (t3_ns - t2_ns);
+    addSample(offset_ns, rtt_ns, t4_local, true);
+}
+
+void ClockSync::addSample(int64_t offset_ns, int64_t rtt_ns, time_point when, bool four_timestamp) {
     // Detect device clock wrap (e.g., nPlayServer file loop).  If the new
     // offset differs from the current estimate by more than 1 second, the
     // device clock has jumped and all old probes are stale.
@@ -63,7 +79,8 @@ void ClockSync::addProbeSample(time_point t1_local, uint64_t t3_device_ns, time_
     ProbeSample sample;
     sample.offset_ns = offset_ns;
     sample.rtt_ns = rtt_ns;
-    sample.when = t4_local;
+    sample.when = when;
+    sample.four_timestamp = four_timestamp;
 
     m_probe_samples.push_back(sample);
 
@@ -72,7 +89,7 @@ void ClockSync::addProbeSample(time_point t1_local, uint64_t t3_device_ns, time_
         m_probe_samples.pop_front();
     }
 
-    pruneExpired(t4_local);
+    pruneExpired(when);
     recomputeEstimate();
 }
 
@@ -212,7 +229,34 @@ void ClockSync::addDataPacketSample(const uint64_t device_time_ns, const time_po
 ClockSync::InternalEstimate ClockSync::computeInternalEstimate() const {
     // Glitch-filtered max-offset probe pick (least-queued probe).  Returns
     // {offset, uncertainty=rtt/2} for the selected probe.
-    const auto bestProbe = [this]() -> InternalEstimate {
+    // Four-timestamp exchanges: the drift-corrected median over the whole window.  The device's
+    // receive and send times are both exact, so a sample's error is half the difference between
+    // its request and reply path delays, which queuing can push either way.  The median is
+    // robust to that; on a Mac mini against a gPTP reference it stayed within 4-8 us of the truth
+    // where single samples scattered by 8-25 us.  Uncertainty: half the shortest delay, which
+    // bounds the error of the best single exchange.
+    const auto medianFourTimestamp = [this]() -> InternalEstimate {
+        const double slope = driftSlope();
+        const int64_t t_last = to_ns(m_probe_samples.back().when);
+        std::vector<int64_t> offsets;
+        int64_t rtt_min = INT64_MAX;
+        for (const auto& p : m_probe_samples) {
+            if (!p.four_timestamp) continue;
+            offsets.push_back(p.offset_ns + static_cast<int64_t>(std::llround(
+                slope * static_cast<double>(t_last - to_ns(p.when)))));
+            rtt_min = std::min(rtt_min, p.rtt_ns);
+        }
+        const auto mid = offsets.begin() + static_cast<std::ptrdiff_t>(offsets.size() / 2);
+        std::nth_element(offsets.begin(), mid, offsets.end());
+        InternalEstimate e;
+        e.offset_ns = *mid;
+        e.uncertainty_ns = std::max<int64_t>(0, rtt_min / 2);
+        return e;
+    };
+
+    const auto bestProbe = [this, &medianFourTimestamp]() -> InternalEstimate {
+        if (m_probe_samples.back().four_timestamp)
+            return medianFourTimestamp();
         // Detrend the newest max_pick_samples probes to the newest probe's
         // time, so a drifting offset doesn't make the oldest probe win.
         const double slope = driftSlope();

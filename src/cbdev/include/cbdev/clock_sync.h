@@ -104,6 +104,14 @@ public:
     /// @param t4_local  Host time just after receiving the response
     void addProbeSample(time_point t1_local, uint64_t t3_device_ns, time_point t4_local);
 
+    /// Add a four-timestamp exchange (device receive time t2 and send time t3 both known):
+    /// offset = ((t2 - t1) + (t3 - t4)) / 2, delay = (t4 - t1) - (t3 - t2).  Once such samples
+    /// arrive, the estimate is the drift-corrected median of their offsets in the window: with
+    /// both device times accurate, queuing can bias a sample either way, so the max-offset pick
+    /// used for single-timestamp probes would be biased.
+    void addFourTimestampSample(time_point t1_local, uint64_t t2_device_ns, uint64_t t3_device_ns,
+                                time_point t4_local);
+
     /// Convert device timestamp to host steady_clock time_point.
     [[nodiscard]] std::optional<time_point> toLocalTime(uint64_t device_time_ns) const;
 
@@ -162,8 +170,9 @@ private:
 
     struct ProbeSample {
         int64_t offset_ns;       // T3 - T1 - α * RTT
-        int64_t rtt_ns;          // T4 - T1
+        int64_t rtt_ns;          // T4 - T1, minus the device's time (T3 - T2) when known
         time_point when;
+        bool four_timestamp = false;  // from addFourTimestampSample()
     };
 
     std::deque<ProbeSample> m_probe_samples;
@@ -202,6 +211,7 @@ private:
     bool externalPlausible(int64_t external_ns,
                            const InternalEstimate& internal) const;  // lock held
     void pruneExpired(time_point now);     // called with lock held
+    void addSample(int64_t offset_ns, int64_t rtt_ns, time_point when, bool four_timestamp);  // lock held
     bool probeSpreadOk() const;            // called with lock held
 };
 

@@ -444,7 +444,7 @@ TEST_F(DeviceSessionTest, ClockProbe_GatedOnRunningAndConfigBurst) {
     deliverSysrep(cbRUNLEVEL_RUNNING);
     ASSERT_TRUE(session->sendClockProbe().isOk());
     ASSERT_GT(device.recvOne(wire, sizeof(wire)), 0);
-    EXPECT_EQ(reinterpret_cast<const cbPKT_HEADER*>(wire)->type, cbPKTTYPE_NPLAYSET);
+    EXPECT_EQ(reinterpret_cast<const cbPKT_HEADER*>(wire)->type, cbPKTTYPE_TIMESYNCSET);
 
     // REQCONFIGALL opens a burst; probes wait for its terminating SYSREP.
     ASSERT_TRUE(session->requestConfiguration().isOk());
@@ -492,10 +492,26 @@ TEST_F(DeviceSessionTest, ClockProbe_TimedByKernelReceiveTimestamp) {
     ASSERT_TRUE(device.sendTo(recv_port, &sysrep, sizeof(sysrep)));
     receiveOne();
 
+    // The first probe is a TIMESYNC request.  Answer like firmware without TIMESYNC (which echoes
+    // unknown packets with the SET bit cleared and nothing filled in): the session must fall back
+    // to the nPlay echo.
+    {
+        ASSERT_TRUE(session->sendClockProbe().isOk());
+        uint8_t wire[cbPKT_MAX_SIZE];
+        ASSERT_GT(device.recvOne(wire, sizeof(wire)), 0);
+        cbPKT_TIMESYNC echo{};
+        std::memcpy(&echo, wire, sizeof(echo));
+        ASSERT_EQ(echo.cbpkt_header.type, cbPKTTYPE_TIMESYNCSET);
+        echo.cbpkt_header.type &= ~0x80;
+        ASSERT_TRUE(device.sendTo(recv_port, &echo, sizeof(echo)));
+        receiveOne();
+    }
+
     for (int i = 0; i < 3; ++i) {
         ASSERT_TRUE(session->sendClockProbe().isOk());
         uint8_t wire[cbPKT_MAX_SIZE];
         ASSERT_GT(device.recvOne(wire, sizeof(wire)), 0);
+        ASSERT_EQ(reinterpret_cast<const cbPKT_HEADER*>(wire)->type, cbPKTTYPE_NPLAYSET);
         cbPKT_NPLAY rep{};
         std::memcpy(&rep, wire, sizeof(rep));
         rep.cbpkt_header.type = cbPKTTYPE_NPLAYREP;
@@ -509,6 +525,68 @@ TEST_F(DeviceSessionTest, ClockProbe_TimedByKernelReceiveTimestamp) {
     const auto offset = session->getOffsetNs();
     ASSERT_TRUE(offset.has_value());
     EXPECT_LT(std::abs(*offset), 5'000'000) << "offset " << *offset << " ns";
+}
+
+// A device that answers TIMESYNC: the four-timestamp exchange is used, and with a device clock
+// equal to the host's steady_clock (plus a large epoch offset) the estimate lands near it even
+// though each reply is read 50 ms late (the kernel receive time is used for t4).
+TEST_F(DeviceSessionTest, ClockProbe_TimeSyncFourTimestamps) {
+    const uint16_t recv_port = 51051;
+    const uint16_t send_port = 51052;
+    auto config = ConnectionParams::custom("127.0.0.1", "0.0.0.0", recv_port, send_port);
+    auto result = createDeviceSession(config, ProtocolVersion::PROTOCOL_CURRENT);
+    ASSERT_TRUE(result.isOk()) << result.error();
+    auto& session = result.value();
+
+    FakeDeviceSocket device(send_port);
+    ASSERT_TRUE(device.ok()) << "Failed to bind fake device socket";
+
+    uint8_t buf[cbPKT_MAX_SIZE * 4];
+    auto receiveOne = [&] {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+        int n = 0;
+        while (n <= 0 && std::chrono::steady_clock::now() < deadline) {
+            auto r = session->receivePackets(buf, sizeof(buf));
+            ASSERT_TRUE(r.isOk()) << r.error();
+            n = r.value();
+        }
+        ASSERT_GT(n, 0) << "datagram not received";
+    };
+    auto deviceNow = [] {
+        constexpr uint64_t EPOCH = 1'700'000'000'000'000'000ULL;
+        return EPOCH + static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                           std::chrono::steady_clock::now().time_since_epoch()).count());
+    };
+
+    cbPKT_SYSINFO sysrep{};
+    sysrep.cbpkt_header.time = 1;
+    sysrep.cbpkt_header.chid = cbPKTCHAN_CONFIGURATION;
+    sysrep.cbpkt_header.type = cbPKTTYPE_SYSREP;
+    sysrep.cbpkt_header.dlen = cbPKTDLEN_SYSINFO;
+    sysrep.runlevel = cbRUNLEVEL_RUNNING;
+    ASSERT_TRUE(device.sendTo(recv_port, &sysrep, sizeof(sysrep)));
+    receiveOne();
+
+    for (int i = 0; i < 5; ++i) {
+        ASSERT_TRUE(session->sendClockProbe().isOk());
+        uint8_t wire[cbPKT_MAX_SIZE];
+        ASSERT_GT(device.recvOne(wire, sizeof(wire)), 0);
+        const uint64_t t2 = deviceNow();
+        cbPKT_TIMESYNC rep{};
+        std::memcpy(&rep, wire, sizeof(rep));
+        ASSERT_EQ(rep.cbpkt_header.type, cbPKTTYPE_TIMESYNCSET);
+        rep.cbpkt_header.type = cbPKTTYPE_TIMESYNCREP;
+        rep.flags = cbTIMESYNC_FLAG_TIME_VALID;
+        rep.t2_server_rx = t2;
+        rep.t3_server_tx = deviceNow();
+        ASSERT_TRUE(device.sendTo(recv_port, &rep, sizeof(rep)));
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        receiveOne();
+    }
+
+    const auto offset = session->getOffsetNs();
+    ASSERT_TRUE(offset.has_value());
+    EXPECT_LT(std::llabs(*offset - 1'700'000'000'000'000'000LL), 1'000'000) << "offset " << *offset;
 }
 #endif
 
