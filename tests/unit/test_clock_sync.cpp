@@ -777,11 +777,14 @@ TEST(ClockSyncTest, PickAveragesTopDecileOfNewestProbes) {
     cfg.drift_fit_window = std::chrono::seconds{0};
     cfg.recent_cap_ns = 0;
     ClockSync sync(cfg);
+    // A realistic device epoch (PTP ns since 1970) far from steady_clock's: ten such offsets
+    // overflow int64 if summed directly.
+    constexpr int64_t EPOCH = 1'795'000'000'000'000'000LL;
     for (int i = 0; i < 100; ++i) {
         const int64_t off_us = 1 + (i * 37) % 100;     // a permutation of 1..100
         const int64_t t1 = 1'000'000 + i * 10'000'000LL;
         // symmetric 2 us round trip: offset = T3 - T1 - RTT/2
-        sync.addProbeSample(tp_from_ns(t1), uint64_t(t1 + off_us * 1000 + 1000), tp_from_ns(t1 + 2000));
+        sync.addProbeSample(tp_from_ns(t1), uint64_t(EPOCH + t1 + off_us * 1000 + 1000), tp_from_ns(t1 + 2000));
     }
-    EXPECT_EQ(*sync.getOffsetNs(), 95'500);
+    EXPECT_EQ(*sync.getOffsetNs(), EPOCH + 95'500);
 }

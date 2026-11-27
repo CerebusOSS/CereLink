@@ -243,11 +243,13 @@ ClockSync::InternalEstimate ClockSync::computeInternalEstimate() const {
 
         const auto& best = picks[indices[top - 1]];
         // Average the largest 1/pick_top_divisor (at least one) of the glitch-filtered offsets.
+        // Sum differences from the largest: the offsets themselves are ~1.8e18 ns (PTP epoch minus
+        // steady_clock), and ten of them overflow int64.
         const size_t n_top = std::max<size_t>(1, top / std::max<size_t>(1, m_config.pick_top_divisor));
-        int64_t top_sum = 0;
+        int64_t below_sum = 0;
         for (size_t k = top - n_top; k < top; ++k)
-            top_sum += picks[indices[k]].offset_ns;
-        const int64_t top_mean = top_sum / static_cast<int64_t>(n_top);
+            below_sum += best.offset_ns - picks[indices[k]].offset_ns;
+        const int64_t top_mean = best.offset_ns - below_sum / static_cast<int64_t>(n_top);
 
         // rtt/2 bounds the error only when transit delay is the sole error
         // source. Offsets legitimately spread when round trips differ -- a
