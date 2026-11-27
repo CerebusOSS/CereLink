@@ -145,6 +145,10 @@ namespace {
             }
         }
     }
+
+    /// steady_clock just before and just after the most recent sendto() on this thread.  The
+    /// datagram leaves somewhere in between: on macOS sendto() itself takes 20-50 us.
+    thread_local std::chrono::steady_clock::time_point t_sendto_before{}, t_sendto_after{};
 }
 
 namespace cbdev {
@@ -924,6 +928,7 @@ Result<void> DeviceSession::sendRaw(const void* buffer, const size_t size) {
         return Result<void>::error("Invalid buffer or size");
     }
 
+    t_sendto_before = std::chrono::steady_clock::now();
     const int bytes_sent = sendto(
         m_impl->socket,
         (const char*)buffer,
@@ -932,6 +937,7 @@ Result<void> DeviceSession::sendRaw(const void* buffer, const size_t size) {
         reinterpret_cast<SOCKADDR *>(&m_impl->send_addr),
         sizeof(m_impl->send_addr)
     );
+    t_sendto_after = std::chrono::steady_clock::now();
 
     if (bytes_sent == SOCKET_ERROR_VALUE) {
 #ifdef _WIN32
@@ -1248,7 +1254,20 @@ Result<void> DeviceSession::sendClockProbe() {
         std::chrono::duration_cast<std::chrono::nanoseconds>(
             now.time_since_epoch()).count());
 
-    return sendPacket(*reinterpret_cast<const cbPKT_GENERIC*>(&pkt));
+    auto result = sendPacket(*reinterpret_cast<const cbPKT_GENERIC*>(&pkt));
+    if (result.isOk()) {
+        // t1 is the middle of the sendto() call, not the time before sendPacket(): that may wait
+        // up to 200 us for configuration pacing, and the datagram leaves during sendto(), which
+        // takes 20-50 us on macOS (longer when idle: Apple Silicon power states).  Measured
+        // against a gPTP reference on a Mac mini, the midpoint's error stayed within a 3 us range
+        // across CPU load, probe rate and traffic; t1 before sendto moved 6 us, after it 9 us.
+        // If the reply has already been taken (it can't come back within microseconds), keep it.
+        const auto t1 = t_sendto_before + (t_sendto_after - t_sendto_before) / 2;
+        std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
+        if (m_impl->pending_clock_probe.active && m_impl->pending_clock_probe.t1_local == now)
+            m_impl->pending_clock_probe.t1_local = t1;
+    }
+    return result;
 }
 
 std::optional<std::chrono::steady_clock::time_point>
