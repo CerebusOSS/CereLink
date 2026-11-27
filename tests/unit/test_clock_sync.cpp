@@ -769,3 +769,19 @@ TEST(ClockSyncEpochTest, DeviceWrapBumps) {
     addOffsetProbe(sync, HOST_NOW_NS + 5'000'000LL, TRUE_OFFSET_NS - 2'000'000'000LL);
     EXPECT_GT(sync.syncEpoch(), before_wrap) << "device wrap did not advance the epoch";
 }
+
+TEST(ClockSyncTest, PickAveragesTopDecileOfNewestProbes) {
+    // 100 probes whose offsets are 1..100 us (shuffled); drift fit and cap off.  The estimate is
+    // the mean of the largest 10 (91..100 us), not the single largest.
+    ClockSync::Config cfg;
+    cfg.drift_fit_window = std::chrono::seconds{0};
+    cfg.recent_cap_ns = 0;
+    ClockSync sync(cfg);
+    for (int i = 0; i < 100; ++i) {
+        const int64_t off_us = 1 + (i * 37) % 100;     // a permutation of 1..100
+        const int64_t t1 = 1'000'000 + i * 10'000'000LL;
+        // symmetric 2 us round trip: offset = T3 - T1 - RTT/2
+        sync.addProbeSample(tp_from_ns(t1), uint64_t(t1 + off_us * 1000 + 1000), tp_from_ns(t1 + 2000));
+    }
+    EXPECT_EQ(*sync.getOffsetNs(), 95'500);
+}

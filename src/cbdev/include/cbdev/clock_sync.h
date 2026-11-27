@@ -11,8 +11,8 @@
 /// Each probe gives T1 (host send), T3 (device timestamp), T4 (host recv).
 /// Offset = T3 - T1 - α * (T4 - T1), where α is the forward delay fraction
 /// (default 0.5 = symmetric NTP midpoint). Probes are detrended for the
-/// host/device clock-rate difference, then the one with the largest offset
-/// (least queuing) among the most recent is selected as the best estimate.
+/// host/device clock-rate difference, then the mean of the largest offsets
+/// (least queuing: the top 1/pick_top_divisor) among the most recent is the estimate.
 ///
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -41,10 +41,17 @@ public:
         // different rates (crystal error; NTP slewing of steady_clock), so
         // older probes carry a stale offset.  A robust (Theil-Sen) slope over
         // the last drift_fit_window detrends probes to the newest one's time,
-        // and the max-offset pick then considers only the newest
-        // max_pick_samples.  A zero window disables the fit.
+        // and the pick then considers only the newest max_pick_samples.  A
+        // zero window disables the fit.
         std::chrono::seconds drift_fit_window = std::chrono::seconds{15};
-        size_t max_pick_samples = 40;
+        size_t max_pick_samples = 100;
+
+        // The pick averages the largest 1/pick_top_divisor of those offsets
+        // (at least one).  Replayed over recorded nPlay probes against PTP
+        // ground truth (Mac + Hub3, Linux + Hub1; 1 and 256 channels), the
+        // mean of the top 10 of 100 moved 7-15 us second to second where the
+        // single largest of 40 moved 13-24 us; it reads ~10 us lower.
+        size_t pick_top_divisor = 10;
 
         // A step in the rate difference (e.g. NTP slewing the host clock)
         // makes the slope fit lag for up to drift_fit_window, and the pick
