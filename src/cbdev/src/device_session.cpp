@@ -1902,7 +1902,10 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                     // Old firmware echoes the packet unchanged, so .etime stays 0
                     // (we zero-initialize it). Fall back to header->time which is
                     // the stale ptptime from the previous main loop iteration.
-                    constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
+                    // 210 us: replayed over recorded probes against PTP ground truth with stock 7.8 Hub1 on Linux,
+                    // this centred the estimate (-1 us at 256 channels, +17 us at 1 channel; 165 us read
+                    // -56 / -38 us).  A Mac mini read -31..+46 us, depending on traffic and CPU load.
+                    constexpr uint64_t STALENESS_CORRECTION_NS = 210000;
                     // A probe is only usable if it carries a real device timestamp.
                     // Both sources can be zero: .etime is zero on firmware that
                     // doesn't write it, and header->time is zero while the device

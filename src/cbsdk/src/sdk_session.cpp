@@ -46,7 +46,7 @@ namespace {
 // firmware writes one, else header.time (a sample time from the device's previous main-loop pass)
 // plus a fixed staleness allowance.  Same rule as DeviceSession's STANDALONE probe.
 uint64_t nplayReplyDeviceTimeNs(const cbPKT_GENERIC& pkt) {
-    constexpr uint64_t STALENESS_CORRECTION_NS = 165000;
+    constexpr uint64_t STALENESS_CORRECTION_NS = 210000;  // see DeviceSession's NPLAYREP handling
     if (pkt.cbpkt_header.dlen * 4 >= offsetof(cbPKT_NPLAY, etime) + sizeof(PROCTIME) - cbPKT_HEADER_SIZE) {
         cbPKT_NPLAY nplay;
         std::memcpy(&nplay, &pkt, sizeof(nplay));
