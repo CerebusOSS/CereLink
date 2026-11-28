@@ -499,6 +499,7 @@ struct SdkSession::Impl {
 
     // Clock sync periodic probing
     std::chrono::steady_clock::time_point last_clock_probe_time{};
+    int clock_burst_probes_remaining = kClockBurstProbes;
 
     // CLIENT-mode clock sync (used when no device_session is available)
     cbdev::ClockSync client_clock_sync;
@@ -521,7 +522,11 @@ struct SdkSession::Impl {
     /// How often clock maintenance (probe, cross-device consensus, publication)
     /// runs.  The estimate it produces cannot change faster than the probes
     /// that feed it, so running it per datagram only burns receive-thread time.
+    /// At cold start, a short burst (15 probes at 25 ms) locks the median and
+    /// drift fit ~4x faster before settling to the 100 ms steady-state cadence.
     static constexpr auto kClockMaintenanceInterval = std::chrono::milliseconds(100);
+    static constexpr auto kClockBurstInterval = std::chrono::milliseconds(25);
+    static constexpr int  kClockBurstProbes = 15;
     /// Retry interval for opening a peer's config segment (see PeerHub).
     static constexpr auto kPeerReopenInterval = std::chrono::seconds(2);
     struct PendingClockProbe {
@@ -1450,8 +1455,14 @@ Result<void> SdkSession::start() {
                 // Nothing here can produce a new answer faster than the probe
                 // interval that feeds it.
                 const auto now = std::chrono::steady_clock::now();
-                if (now - impl->last_clock_probe_time > Impl::kClockMaintenanceInterval) {
+                const auto probe_interval = (impl->clock_burst_probes_remaining > 0)
+                    ? Impl::kClockBurstInterval
+                    : Impl::kClockMaintenanceInterval;
+                if (now - impl->last_clock_probe_time > probe_interval) {
                     impl->last_clock_probe_time = now;
+                    if (impl->clock_burst_probes_remaining > 0) {
+                        --impl->clock_burst_probes_remaining;
+                    }
                     impl->device_session->sendClockProbe();
                     impl->updateClockConsensus(now);
                 }

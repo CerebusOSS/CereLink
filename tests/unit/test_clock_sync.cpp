@@ -835,3 +835,60 @@ TEST(ClockSyncTest, FourTimestamp_ConstantAsymmetryShowsAsHalfItsSize) {
     }
     EXPECT_EQ(*sync.getOffsetNs(), -20'000);
 }
+
+TEST(ClockSyncTest, FourTimestamp_RttFilterRejectsQueuedReplies) {
+    // 60% of replies are delayed by 200 us (queued behind data or Linux RX coalescing),
+    // which inflates RTT and biases those samples negatively by -100 us.
+    // An unfiltered median would pick a biased sample; the lowest-RTT quantile filter
+    // keeps only the unqueued 25% and recovers the true offset.
+    ClockSync sync;
+    constexpr int64_t OFFSET = 10'000'000;
+    for (int i = 0; i < 40; ++i) {
+        const int64_t t1 = 1'000'000'000LL + i * 100'000'000LL;
+        const int64_t down_queue = (i % 5 < 3) ? 200'000 : 0;  // 60% queued replies
+        const int64_t t2 = t1 + 20'000 + OFFSET;
+        const int64_t t3 = t2 + 40'000;
+        const int64_t t4 = t3 - OFFSET + 20'000 + down_queue;
+        sync.addFourTimestampSample(tp_from_ns(t1), uint64_t(t2), uint64_t(t3), tp_from_ns(t4));
+    }
+    ASSERT_TRUE(sync.getOffsetNs().has_value());
+    EXPECT_EQ(*sync.getOffsetNs(), OFFSET);
+}
+
+TEST(ClockSyncTest, DriftSlopeExtrapolatesBetweenProbes) {
+    // Device clock drifts +100 ppm relative to host steady_clock.
+    ClockSync sync;
+    constexpr int64_t BASE_OFFSET = 1'000'000'000LL;
+    constexpr double DRIFT = 100e-6;  // +100 ppm (+100 us/s)
+    // Feed 30 symmetric four-timestamp probes over 3 seconds (100 ms apart).
+    int64_t last_t4 = 0;
+    for (int i = 0; i < 30; ++i) {
+        const int64_t t1 = 10'000'000'000LL + i * 100'000'000LL;
+        const int64_t t4 = t1 + 80'000;
+        const int64_t off_t2 = BASE_OFFSET + static_cast<int64_t>(std::llround(DRIFT * (t1 + 20'000)));
+        const int64_t off_t3 = BASE_OFFSET + static_cast<int64_t>(std::llround(DRIFT * (t1 + 60'000)));
+        sync.addFourTimestampSample(tp_from_ns(t1),
+                                    static_cast<uint64_t>(t1 + 20'000 + off_t2),
+                                    static_cast<uint64_t>(t1 + 60'000 + off_t3),
+                                    tp_from_ns(t4));
+        last_t4 = t4;
+    }
+
+    // 500 ms after the last probe, true offset has drifted by +50 us.
+    const int64_t query_local = last_t4 + 500'000'000LL;
+    const int64_t true_device = query_local + BASE_OFFSET +
+        static_cast<int64_t>(std::llround(DRIFT * query_local));
+
+    auto dev_est = sync.toDeviceTime(tp_from_ns(query_local));
+    ASSERT_TRUE(dev_est.has_value());
+    EXPECT_NEAR(static_cast<double>(*dev_est), static_cast<double>(true_device), 1000.0);
+
+    auto local_est = sync.toLocalTime(static_cast<uint64_t>(true_device));
+    ASSERT_TRUE(local_est.has_value());
+    EXPECT_NEAR(static_cast<double>(tp_to_ns(*local_est)), static_cast<double>(query_local), 1000.0);
+
+    // Round-trip consistency
+    auto roundtrip = sync.toLocalTime(*dev_est);
+    ASSERT_TRUE(roundtrip.has_value());
+    EXPECT_NEAR(static_cast<double>(tp_to_ns(*roundtrip)), static_cast<double>(query_local), 2.0);
+}

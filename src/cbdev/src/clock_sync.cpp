@@ -101,6 +101,8 @@ void ClockSync::reset() {
     m_data_spread_ns = std::nullopt;
     m_current_offset_ns = std::nullopt;
     m_current_uncertainty_ns = std::nullopt;
+    m_offset_anchor_ns = 0;
+    m_current_slope = 0.0;
     resetDiscipline();
     m_committed_from_external = false;
 }
@@ -109,14 +111,33 @@ std::optional<ClockSync::time_point> ClockSync::toLocalTime(uint64_t device_time
     std::lock_guard<std::mutex> lock(m_mutex);
     if (!m_current_offset_ns)
         return std::nullopt;
-    return from_ns(static_cast<int64_t>(device_time_ns) - *m_current_offset_ns);
+    int64_t offset_ns = *m_current_offset_ns;
+    if (m_current_slope != 0.0) {
+        const int64_t max_extrap_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            m_config.max_probe_age).count();
+        const double approx_dt = static_cast<double>(
+            static_cast<int64_t>(device_time_ns) - offset_ns - m_offset_anchor_ns) /
+            (1.0 + m_current_slope);
+        const int64_t dt = std::clamp(
+            static_cast<int64_t>(std::llround(approx_dt)), -max_extrap_ns, max_extrap_ns);
+        offset_ns += static_cast<int64_t>(std::llround(m_current_slope * static_cast<double>(dt)));
+    }
+    return from_ns(static_cast<int64_t>(device_time_ns) - offset_ns);
 }
 
 std::optional<uint64_t> ClockSync::toDeviceTime(time_point local_time) const {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (!m_current_offset_ns)
         return std::nullopt;
-    return static_cast<uint64_t>(to_ns(local_time) + *m_current_offset_ns);
+    const int64_t local_ns = to_ns(local_time);
+    int64_t offset_ns = *m_current_offset_ns;
+    if (m_current_slope != 0.0) {
+        const int64_t max_extrap_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            m_config.max_probe_age).count();
+        const int64_t dt = std::clamp(local_ns - m_offset_anchor_ns, -max_extrap_ns, max_extrap_ns);
+        offset_ns += static_cast<int64_t>(std::llround(m_current_slope * static_cast<double>(dt)));
+    }
+    return static_cast<uint64_t>(local_ns + offset_ns);
 }
 
 bool ClockSync::hasSyncData() const {
@@ -238,19 +259,47 @@ ClockSync::InternalEstimate ClockSync::computeInternalEstimate() const {
     const auto medianFourTimestamp = [this]() -> InternalEstimate {
         const double slope = driftSlope();
         const int64_t t_last = to_ns(m_probe_samples.back().when);
-        std::vector<int64_t> offsets;
+        struct FourTsEntry {
+            int64_t offset_ns;
+            int64_t rtt_ns;
+        };
+        std::vector<FourTsEntry> entries;
+        entries.reserve(m_probe_samples.size());
         int64_t rtt_min = INT64_MAX;
         for (const auto& p : m_probe_samples) {
             if (!p.four_timestamp) continue;
-            offsets.push_back(p.offset_ns + static_cast<int64_t>(std::llround(
-                slope * static_cast<double>(t_last - to_ns(p.when)))));
+            entries.push_back({
+                p.offset_ns + static_cast<int64_t>(std::llround(
+                    slope * static_cast<double>(t_last - to_ns(p.when)))),
+                p.rtt_ns
+            });
             rtt_min = std::min(rtt_min, p.rtt_ns);
         }
+        // Keep the lowest-RTT quantile (at least 3 once 3+ samples exist) to reject
+        // queued Hub replies and Linux RX-coalescing spikes while preserving median
+        // robustness against single-min-RTT bias.
+        const size_t divisor = std::max<size_t>(1, m_config.four_ts_rtt_divisor);
+        size_t n_keep = entries.size();
+        if (divisor > 1 && entries.size() > 3) {
+            n_keep = std::max<size_t>(3, entries.size() / divisor);
+            std::nth_element(entries.begin(),
+                             entries.begin() + static_cast<std::ptrdiff_t>(n_keep),
+                             entries.end(),
+                             [](const FourTsEntry& a, const FourTsEntry& b) {
+                                 return a.rtt_ns < b.rtt_ns;
+                             });
+        }
+        std::vector<int64_t> offsets;
+        offsets.reserve(n_keep);
+        for (size_t i = 0; i < n_keep; ++i)
+            offsets.push_back(entries[i].offset_ns);
         const auto mid = offsets.begin() + static_cast<std::ptrdiff_t>(offsets.size() / 2);
         std::nth_element(offsets.begin(), mid, offsets.end());
         InternalEstimate e;
         e.offset_ns = *mid;
         e.uncertainty_ns = std::max<int64_t>(0, rtt_min / 2);
+        e.anchor_ns = t_last;
+        e.slope = slope;
         return e;
     };
 
@@ -326,6 +375,8 @@ ClockSync::InternalEstimate ClockSync::computeInternalEstimate() const {
         InternalEstimate e;
         e.offset_ns = top_mean;
         e.uncertainty_ns = std::max<int64_t>(best.rtt_ns / 2, unexplained_ns / 2);
+        e.anchor_ns = t_last;
+        e.slope = slope;
         if (m_config.recent_cap_ns > 0 && m_config.recent_cap_probes > 0) {
             const size_t k0 = m_probe_samples.size() -
                               std::min(m_probe_samples.size(), m_config.recent_cap_probes);
@@ -421,6 +472,8 @@ void ClockSync::recomputeEstimate() {
         m_current_uncertainty_ns = m_external_uncertainty_ns
             ? m_external_uncertainty_ns
             : std::optional<int64_t>(internal.uncertainty_ns);
+        m_offset_anchor_ns = 0;
+        m_current_slope = 0.0;
         resetDiscipline();
         m_committed_from_external = true;
         return;
@@ -434,18 +487,24 @@ void ClockSync::recomputeEstimate() {
             if (stepped(internal.offset_ns)) ++m_sync_epoch;
             m_current_offset_ns = *internal.offset_ns;
             m_current_uncertainty_ns = internal.uncertainty_ns;
+            m_offset_anchor_ns = internal.anchor_ns;
+            m_current_slope = internal.slope;
             resetDiscipline();
         } else {
             // commitDisciplined() bumps the epoch itself on its discontinuous
             // (cold-start / stepout / step-persist) paths, and leaves it
             // untouched on a smooth slew or a sub-deadband converge.
             commitDisciplined(*internal.offset_ns, internal.uncertainty_ns);
+            m_offset_anchor_ns = internal.anchor_ns;
+            m_current_slope = internal.slope;
         }
         m_committed_from_external = false;
     } else {
         if (stepped(std::nullopt)) ++m_sync_epoch;
         m_current_offset_ns = std::nullopt;
         m_current_uncertainty_ns = std::nullopt;
+        m_offset_anchor_ns = 0;
+        m_current_slope = 0.0;
         resetDiscipline();
         m_committed_from_external = false;
     }

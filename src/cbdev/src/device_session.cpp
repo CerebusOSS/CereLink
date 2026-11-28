@@ -33,6 +33,8 @@
     #endif
     #ifdef __linux__
         #include <time.h>
+        #include <linux/net_tstamp.h>
+        #include <linux/errqueue.h>
     #endif
     #define CBDEV_KERNEL_RX_TIMESTAMPS 1
     typedef int SOCKET;
@@ -65,6 +67,40 @@
 
 namespace {
 #ifdef CBDEV_KERNEL_RX_TIMESTAMPS
+#ifdef __linux__
+    /// Convert a CLOCK_REALTIME kernel timestamp to std::chrono::steady_clock
+    /// using a bracketed clock-pair read (narrowest of 3 tries) so thread
+    /// preemption between the two clock reads cannot corrupt t1/t4.
+    std::optional<std::chrono::steady_clock::time_point> realtimeToSteady(const timespec& stamp) {
+        int64_t best_span = INT64_MAX;
+        int64_t best_rt_ns = 0;
+        std::chrono::steady_clock::time_point best_steady{};
+        for (int i = 0; i < 3; ++i) {
+            timespec rt0{}, rt1{};
+            clock_gettime(CLOCK_REALTIME, &rt0);
+            const auto st = std::chrono::steady_clock::now();
+            clock_gettime(CLOCK_REALTIME, &rt1);
+            const int64_t ns0 = static_cast<int64_t>(rt0.tv_sec) * 1'000'000'000LL + rt0.tv_nsec;
+            const int64_t ns1 = static_cast<int64_t>(rt1.tv_sec) * 1'000'000'000LL + rt1.tv_nsec;
+            const int64_t span = ns1 - ns0;
+            if (span >= 0 && span < best_span) {
+                best_span = span;
+                best_rt_ns = ns0 + span / 2;
+                best_steady = st;
+            }
+        }
+        if (best_span == INT64_MAX)
+            return std::nullopt;
+        const int64_t stamp_ns =
+            static_cast<int64_t>(stamp.tv_sec) * 1'000'000'000LL + stamp.tv_nsec;
+        const int64_t age_ns = best_rt_ns - stamp_ns;
+        // A CLOCK_REALTIME step between the stamp and now corrupts the age.
+        if (age_ns < -1'000'000 || age_ns > 1'000'000'000)
+            return std::nullopt;
+        return best_steady - std::chrono::nanoseconds(age_ns);
+    }
+#endif
+
     /// Receive time of a datagram from the kernel's timestamp of its arrival,
     /// or nullopt if the message carries none.  The kernel stamps it before
     /// the receive thread wakes, so this excludes the scheduling delay that a
@@ -73,17 +109,20 @@ namespace {
         for (cmsghdr* c = CMSG_FIRSTHDR(&msg); c; c = CMSG_NXTHDR(&msg, c)) {
             if (c->cmsg_level != SOL_SOCKET)
                 continue;
-            // Convert by age: the stamp's clock differs from steady_clock's.
-            int64_t age_ns;
 #ifdef __linux__
-            if (c->cmsg_type != SCM_TIMESTAMPNS)
+            if (c->cmsg_type == SCM_TIMESTAMPING) {
+                scm_timestamping ts{};
+                std::memcpy(&ts, CMSG_DATA(c), sizeof(ts));
+                if (ts.ts[0].tv_sec != 0 || ts.ts[0].tv_nsec != 0)
+                    return realtimeToSteady(ts.ts[0]);
                 continue;
-            timespec stamp{};  // CLOCK_REALTIME
-            std::memcpy(&stamp, CMSG_DATA(c), sizeof(stamp));
-            timespec now{};
-            clock_gettime(CLOCK_REALTIME, &now);
-            age_ns = (static_cast<int64_t>(now.tv_sec) - stamp.tv_sec) * 1'000'000'000LL +
-                     (static_cast<int64_t>(now.tv_nsec) - stamp.tv_nsec);
+            }
+            if (c->cmsg_type == SCM_TIMESTAMPNS) {
+                timespec stamp{};  // CLOCK_REALTIME
+                std::memcpy(&stamp, CMSG_DATA(c), sizeof(stamp));
+                return realtimeToSteady(stamp);
+            }
+            continue;
 #else
             if (c->cmsg_type != SCM_TIMESTAMP_MONOTONIC)
                 continue;
@@ -94,13 +133,13 @@ namespace {
                 mach_timebase_info(&tb);
                 return tb;
             }();
-            age_ns = (static_cast<int64_t>(mach_absolute_time()) - static_cast<int64_t>(stamp)) *
-                     timebase.numer / timebase.denom;
-#endif
-            // A CLOCK_REALTIME step between the stamp and now corrupts the age.
+            const int64_t age_ns =
+                (static_cast<int64_t>(mach_absolute_time()) - static_cast<int64_t>(stamp)) *
+                timebase.numer / timebase.denom;
             if (age_ns < 0 || age_ns > 1'000'000'000)
                 return std::nullopt;
             return std::chrono::steady_clock::now() - std::chrono::nanoseconds(age_ns);
+#endif
         }
         return std::nullopt;
     }
@@ -302,6 +341,7 @@ struct DeviceSession::Impl {
     // bursts drain at a rate the device can sustain. Isolated sends (the gap
     // has already elapsed) and data packets are unaffected.
     std::chrono::steady_clock::time_point last_config_send{};
+    std::mutex config_send_mutex;
 
     // Timestamp conversion for non-Gemini devices
     // Gemini devices, our primary use case, send timestamps in nanoseconds; default to true.
@@ -321,7 +361,15 @@ struct DeviceSession::Impl {
         bool timesync = false;      // a cbPKT_TIMESYNC request (else an nPlay echo)
         uint32_t id = 0;            // TIMESYNC: id and t1_client_tx to match the reply
         uint64_t t1_echo = 0;
+#ifdef __linux__
+        bool has_tx_ts_id = false;
+        uint32_t tx_ts_id = 0;      // SOF_TIMESTAMPING_OPT_ID for matching MSG_ERRQUEUE TX stamp
+#endif
     };
+#ifdef __linux__
+    bool use_so_timestamping = false;
+    uint32_t tx_ts_next_id = 0;     // guarded by clock_probe_mutex
+#endif
     PendingClockProbe pending_clock_probe;
     std::mutex clock_probe_mutex;
     // Which probe the device answers.  Unknown: try cbPKT_TIMESYNC; firmware without it echoes
@@ -526,7 +574,14 @@ Result<DeviceSession> DeviceSession::create(const ConnectionParams& config) {
 #ifdef CBDEV_KERNEL_RX_TIMESTAMPS
     // Best effort: without kernel timestamps, receive times come from user space.
 #ifdef __linux__
-    setsockopt(session.m_impl->socket, SOL_SOCKET, SO_TIMESTAMPNS, &opt_one, sizeof(opt_one));
+    int ts_flags = SOF_TIMESTAMPING_RX_SOFTWARE | SOF_TIMESTAMPING_SOFTWARE |
+                   SOF_TIMESTAMPING_OPT_TSONLY | SOF_TIMESTAMPING_OPT_ID;
+    if (setsockopt(session.m_impl->socket, SOL_SOCKET, SO_TIMESTAMPING,
+                   &ts_flags, sizeof(ts_flags)) == 0) {
+        session.m_impl->use_so_timestamping = true;
+    } else {
+        setsockopt(session.m_impl->socket, SOL_SOCKET, SO_TIMESTAMPNS, &opt_one, sizeof(opt_one));
+    }
 #else
     setsockopt(session.m_impl->socket, SOL_SOCKET, SO_TIMESTAMP_MONOTONIC, &opt_one, sizeof(opt_one));
 #endif
@@ -682,7 +737,7 @@ Result<int> DeviceSession::receivePacketsRaw(void* buffer, const size_t buffer_s
     SOCKADDR_IN sender_addr{};
 #ifdef CBDEV_KERNEL_RX_TIMESTAMPS
     iovec iov{buffer, buffer_size};
-    alignas(cmsghdr) char ctrl[64];  // room for one timestamp
+    alignas(cmsghdr) char ctrl[128];  // room for SCM_TIMESTAMPING / SCM_TIMESTAMP_MONOTONIC
     msghdr msg{};
     msg.msg_name = &sender_addr;
     msg.msg_namelen = sizeof(sender_addr);
@@ -800,9 +855,16 @@ Result<void> DeviceSession::sendPacket(const cbPKT_GENERIC& pkt) {
 
     // Pace bursts of configuration packets so they drain at a rate the device
     // can sustain (see Impl::last_config_send). Only configuration-channel
-    // packets are throttled; streaming/data sends and isolated config sends
-    // (where the gap has already elapsed) incur no delay.
-    if ((pkt.cbpkt_header.chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
+    // packets are throttled; streaming/data sends, clock probes (already
+    // cadence-limited and sent on the receive thread), and isolated config
+    // sends incur no delay.
+    const bool is_clock_probe =
+        pkt.cbpkt_header.type == cbPKTTYPE_TIMESYNCSET ||
+        (pkt.cbpkt_header.type == cbPKTTYPE_NPLAYSET &&
+         reinterpret_cast<const cbPKT_NPLAY&>(pkt).mode == 0xFFFF);
+    if (!is_clock_probe &&
+        (pkt.cbpkt_header.chid & cbPKTCHAN_CONFIGURATION) == cbPKTCHAN_CONFIGURATION) {
+        std::lock_guard<std::mutex> pace_lock(m_impl->config_send_mutex);
         constexpr auto kConfigSendMinInterval = std::chrono::microseconds(200);
         if (m_impl->last_config_send.time_since_epoch().count() != 0) {
             // waitUntil rather than sleep_for: the gap is sub-millisecond, and
@@ -1297,7 +1359,47 @@ Result<void> DeviceSession::sendClockProbe() {
             std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
             ts.id = m_impl->pending_clock_probe.id;
             ts.t1_client_tx = m_impl->pending_clock_probe.t1_echo;
+#ifdef __linux__
+            m_impl->pending_clock_probe.has_tx_ts_id = false;
+#endif
         }
+#ifdef __linux__
+        if (m_impl->use_so_timestamping &&
+            (m_impl->send_protocol == ProtocolVersion::PROTOCOL_CURRENT ||
+             m_impl->send_protocol == ProtocolVersion::UNKNOWN)) {
+            iovec iov{&ts, cbPKT_HEADER_SIZE + (ts.cbpkt_header.dlen * 4)};
+            alignas(cmsghdr) char ctrl[CMSG_SPACE(sizeof(uint32_t))] = {};
+            msghdr msg{};
+            msg.msg_name = &m_impl->send_addr;
+            msg.msg_namelen = sizeof(m_impl->send_addr);
+            msg.msg_iov = &iov;
+            msg.msg_iovlen = 1;
+            msg.msg_control = ctrl;
+            msg.msg_controllen = sizeof(ctrl);
+            cmsghdr* cm = CMSG_FIRSTHDR(&msg);
+            cm->cmsg_level = SOL_SOCKET;
+            cm->cmsg_type = SO_TIMESTAMPING;
+            cm->cmsg_len = CMSG_LEN(sizeof(uint32_t));
+            const uint32_t tx_flags = SOF_TIMESTAMPING_TX_SOFTWARE;
+            std::memcpy(CMSG_DATA(cm), &tx_flags, sizeof(tx_flags));
+            t_sendto_before = std::chrono::steady_clock::now();
+            const ssize_t sent = sendmsg(m_impl->socket, &msg, 0);
+            t_sendto_after = std::chrono::steady_clock::now();
+            if (sent == SOCKET_ERROR_VALUE) {
+                return Result<void>::error("Send failed with error: " + std::string(strerror(errno)));
+            }
+            {
+                std::lock_guard<std::mutex> lock(m_impl->clock_probe_mutex);
+                if (m_impl->pending_clock_probe.active && m_impl->pending_clock_probe.t1_local == now) {
+                    m_impl->pending_clock_probe.t1_local =
+                        t_sendto_before + (t_sendto_after - t_sendto_before) / 2;
+                    m_impl->pending_clock_probe.tx_ts_id = m_impl->tx_ts_next_id++;
+                    m_impl->pending_clock_probe.has_tx_ts_id = true;
+                }
+            }
+            return Result<void>::ok();
+        }
+#endif
         cbPKT_GENERIC generic{};
         std::memcpy(&generic, &ts, sizeof(ts));
         auto result = sendPacket(generic);
@@ -1956,6 +2058,47 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                 auto& pending = m_impl->pending_clock_probe;
                 if (pending.active && pending.timesync && ts.id == pending.id &&
                     ts.t1_client_tx == pending.t1_echo) {
+                    auto t1_local = pending.t1_local;
+#ifdef __linux__
+                    // Drain MSG_ERRQUEUE for kernel TX software timestamp (same CLOCK_REALTIME
+                    // domain as RX t4), falling back to the sendto() midpoint if unavailable.
+                    if (m_impl->use_so_timestamping && pending.has_tx_ts_id) {
+                        for (;;) {
+                            alignas(cmsghdr) char err_ctrl[256];
+                            char err_data[64];
+                            iovec err_iov{err_data, sizeof(err_data)};
+                            msghdr err_msg{};
+                            err_msg.msg_iov = &err_iov;
+                            err_msg.msg_iovlen = 1;
+                            err_msg.msg_control = err_ctrl;
+                            err_msg.msg_controllen = sizeof(err_ctrl);
+                            if (recvmsg(m_impl->socket, &err_msg, MSG_ERRQUEUE | MSG_DONTWAIT) < 0)
+                                break;
+                            timespec tx_sw{};
+                            bool has_id = false;
+                            uint32_t err_id = 0;
+                            for (cmsghdr* c = CMSG_FIRSTHDR(&err_msg); c; c = CMSG_NXTHDR(&err_msg, c)) {
+                                if (c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_TIMESTAMPING) {
+                                    scm_timestamping st{};
+                                    std::memcpy(&st, CMSG_DATA(c), sizeof(st));
+                                    tx_sw = st.ts[0];
+                                } else if (c->cmsg_level == SOL_IP && c->cmsg_type == IP_RECVERR) {
+                                    sock_extended_err serr{};
+                                    std::memcpy(&serr, CMSG_DATA(c), sizeof(serr));
+                                    if (serr.ee_origin == SO_EE_ORIGIN_TIMESTAMPING) {
+                                        has_id = true;
+                                        err_id = serr.ee_data;
+                                    }
+                                }
+                            }
+                            if (has_id && err_id == pending.tx_ts_id &&
+                                (tx_sw.tv_sec != 0 || tx_sw.tv_nsec != 0)) {
+                                if (auto st_t1 = realtimeToSteady(tx_sw))
+                                    t1_local = *st_t1;
+                            }
+                        }
+                    }
+#endif
                     pending.active = false;
                     if (ts.flags & cbTIMESYNC_FLAG_TIME_VALID) {
                         m_impl->probe_kind = Impl::ProbeKind::TimeSync;
@@ -1964,7 +2107,7 @@ void DeviceSession::updateConfigFromBuffer(const void* buffer, const size_t byte
                             m_impl->clock_sync.reset();   // the device clock stepped
                         m_impl->phc_step_count = ts.phc_step_count;
                         m_impl->clock_sync.addFourTimestampSample(
-                            pending.t1_local, ts.t2_server_rx, ts.t3_server_tx,
+                            t1_local, ts.t2_server_rx, ts.t3_server_tx,
                             m_impl->last_recv_timestamp);
                     } else if (m_impl->probe_kind == Impl::ProbeKind::Unknown &&
                                ts.t2_server_rx == 0 && ts.t3_server_tx == 0 &&

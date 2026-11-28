@@ -62,6 +62,12 @@ public:
         int64_t recent_cap_ns = 40'000;
         size_t recent_cap_probes = 10;
 
+        // Four-timestamp exchanges (TIMESYNC): keep the lowest-RTT 1/four_ts_rtt_divisor
+        // of samples (at least 3 once 3+ samples exist) before taking the drift-corrected
+        // median.  Rejects queued Hub replies and Linux RX-coalescing spikes while avoiding
+        // single-min-RTT bias on macOS.  Set to 1 to disable RTT filtering.
+        size_t four_ts_rtt_divisor = 4;
+
         // Minimum number of probes before probesAreReliable() can report true.
         // A single (or a wild pair of) probe is not enough evidence to commit
         // an offset from the probe path.
@@ -187,6 +193,8 @@ private:
 
     std::optional<int64_t> m_current_offset_ns;
     std::optional<int64_t> m_current_uncertainty_ns;
+    int64_t m_offset_anchor_ns = 0;     // steady_clock ns where m_current_offset_ns is anchored
+    double  m_current_slope = 0.0;      // d(offset)/dt for inter-probe extrapolation (0 if external/fallback)
     uint64_t m_sync_epoch = 0;          // bumped on discontinuous offset commits
     int m_pending_step_count = 0;       // consecutive large-jump samples seen
     int m_nonconverged_streak = 0;      // consecutive samples not within deadband
@@ -201,6 +209,8 @@ private:
     struct InternalEstimate {
         std::optional<int64_t> offset_ns;
         int64_t uncertainty_ns = 0;
+        int64_t anchor_ns = 0;
+        double  slope = 0.0;
     };
 
     void recomputeEstimate();              // called with lock held
